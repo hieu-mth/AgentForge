@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "currency": "VND",
+  "opportunities": [
+    {
+      "id": "excel-template",
+      "name": "Template Excel quản lý shop online",
+      "status": "PARK",
+      "evidence_status": "INSUFFICIENT_EVIDENCE",
+      "reason": "Có đối thủ trả phí và nhiều mẫu miễn phí; chưa xác minh nhu cầu chi trả hoặc lợi thế khác biệt.",
+      "next_question": "Có phân khúc shop nào có nhu cầu mà các mẫu miễn phí không đáp ứng?",
+      "spending_authorized": false
+    },
+    {
+      "id": "excel-automation-service",
+      "name": "Dịch vụ tự động hóa Excel cho doanh nghiệp nhỏ",
+      "status": "DISCOVER",
+      "evidence_status": "NOT_RESEARCHED",
+      "reason": "Giả thuyết dịch vụ theo công việc, chưa có bằng chứng khách hàng.",
+      "next_question": "Doanh nghiệp đang trả tiền để xử lý công việc Excel lặp lại nào?",
+      "spending_authorized": false
+    },
+    {
+      "id": "order-profit-reconciliation",
+      "name": "Công cụ đối soát đơn hàng và lợi nhuận",
+      "status": "DISCOVER",
+      "evidence_status": "NOT_RESEARCHED",
+      "reason": "Giả thuyết công cụ chuyên biệt, chưa kiểm chứng nhu cầu hoặc phân phối.",
+      "next_question": "Nhóm người bán nào thường xuyên phải đối soát đơn hàng, phí sàn và lợi nhuận thủ công?",
+      "spending_authorized": false
+    }
+  ]
+}
