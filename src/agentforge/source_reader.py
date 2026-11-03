@@ -7,10 +7,10 @@ from urllib.parse import urlsplit
 
 from lxml import html
 
+
 ROOT = Path(__file__).resolve().parents[2]
 REPORTS = ROOT / "data" / "research"
 
-# Only domains reviewed for this initial test.
 ALLOWED_HOSTS = {
     "quanlynhanuoc.vn",
     "www.quanlynhanuoc.vn",
@@ -22,6 +22,12 @@ ALLOWED_HOSTS = {
     "www.klmarketing.vn",
     "metric.vn",
     "www.metric.vn",
+    "zonetech.com.vn",
+    "www.zonetech.com.vn",
+    "wpro.vn",
+    "www.wpro.vn",
+    "exceltudonghoa.com",
+    "www.exceltudonghoa.com",
 }
 
 MAX_BYTES = 400_000
@@ -35,7 +41,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 OPENER = urllib.request.build_opener(NoRedirect())
 
 
-def fetch_page(url):
+def fetch_page(url: str) -> dict:
     parsed = urlsplit(url)
 
     if (
@@ -45,13 +51,13 @@ def fetch_page(url):
         or parsed.username is not None
         or parsed.password is not None
     ):
-        raise PermissionError("URL is not on the approved HTTPS allowlist")
+        raise PermissionError(
+            "URL is not on the approved HTTPS allowlist"
+        )
 
     request = urllib.request.Request(
         url,
-        headers={
-            "User-Agent": "AgentForgeResearch/0.1"
-        }
+        headers={"User-Agent": "AgentForgeResearch/0.1"}
     )
 
     with OPENER.open(request, timeout=15) as response:
@@ -63,7 +69,8 @@ def fetch_page(url):
         if len(raw) > MAX_BYTES:
             raise ValueError("Page exceeds size limit")
 
-    document = html.fromstring(raw, parser=html.HTMLParser(encoding="utf-8"))
+    parser = html.HTMLParser(encoding="utf-8")
+    document = html.fromstring(raw, parser=parser)
 
     title_parts = document.xpath("//title/text()")
     title = title_parts[0].strip() if title_parts else ""
@@ -110,7 +117,7 @@ def fetch_page(url):
 
     return {
         "title": title,
-        "text_excerpt": text[:5000],
+        "text_excerpt": text[:15000],
         "extracted_characters": len(text),
     }
 
@@ -120,7 +127,7 @@ def main():
     parser.add_argument("research_id")
     args = parser.parse_args()
 
-    research_id = args.research_id
+    research_id = args.research_id.lower()
 
     if len(research_id) != 32 or any(
         char not in "0123456789abcdef" for char in research_id
@@ -150,7 +157,8 @@ def main():
 
             print(
                 "  FETCH: PASS",
-                "| Characters:", result["extracted_characters"]
+                "| Characters:",
+                result["extracted_characters"]
             )
 
         except Exception as error:
@@ -158,17 +166,20 @@ def main():
             record["error"] = (
                 f"{type(error).__name__}: {str(error)[:200]}"
             )
-
             print("  FETCH: FAILED", record["error"])
 
         pages.append(record)
 
+    REPORTS.mkdir(parents=True, exist_ok=True)
+
     output = REPORTS / f"{research_id}_pages.json"
+
     output.write_text(
-        json.dumps({
-            "research_id": research_id,
-            "pages": pages
-        }, ensure_ascii=False, indent=2),
+        json.dumps(
+            {"research_id": research_id, "pages": pages},
+            ensure_ascii=False,
+            indent=2
+        ),
         encoding="utf-8"
     )
 
