@@ -162,6 +162,7 @@ def list_tasks(*, db_path=None, limit=50):
 
 def recover(*, db_path=None):
     """Explicitly mark orphaned RUNNING tasks interrupted, never replay them."""
+    interrupted = 0
     with closing(_connect(db_path)) as conn, conn:
         rows = conn.execute("SELECT task_id FROM tasks WHERE status='RUNNING'").fetchall()
         for row in rows:
@@ -170,9 +171,10 @@ def recover(*, db_path=None):
                                    "WHERE task_id=? AND status='RUNNING'",
                                    (now, row["task_id"]))
             if changed.rowcount == 1:
+                interrupted += 1
                 conn.execute("INSERT INTO events(task_id,at,name,detail_json) VALUES(?,?,?,?)",
                              (row["task_id"], now, "INTERRUPTED", '{"reason":"explicit_recovery"}'))
-    return sum(1 for row in rows if get_task(row["task_id"], db_path=db_path)["status"] == "INTERRUPTED")
+    return interrupted
 
 
 def main():
