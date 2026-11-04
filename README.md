@@ -18,6 +18,7 @@ See **[AgentForge Master Project Context & Strategic Roadmap](docs/AGENTFORGE_MA
 - **Browser validation (C8D):** optional owner-started headless Chromium screenshots at mobile/tablet/desktop sizes; reports overflow, JavaScript errors, and blocked ordinary HTTP requests without changing the product.
 - **Browser-guided fixes (C8E):** local-only triage of C8D reports, optional one-call AI fix proposals for verified issues, and the same owner-gated C8B approval path. Passing browser reports never trigger AI calls.
 - **Bounded workflow (C8F):** immutable local checkpoints coordinate baseline browser test, optional one-model fix proposal, candidate browser test and separate C8B owner approval. A PASS report never triggers a model call.
+- **Intelligence & Analytics (S3):** strict local CSV ingestion for daily performance and owner-recorded finance, source hashes/deduplication, content diagnostics, internal trend/opportunity hypotheses, descriptive A/B evaluation, pending-vs-confirmed cash, and read-only Dashboard overview. Seven S3 skills use existing S1 Task History and Policy Gate. No direct YouTube/TikTok/bank integrations, independently verified profit, or causal winner. See [S3](docs/milestones/S3.md).
 - **Creative & Media Engine (S2):** local portrait PNG promo cards (Pillow), safe non-destructive edits, original WAV ambient, UTF-8 SRT captions, and owner-approved H.264/AAC MP4 via bundled FFmpeg; separately gated Windows/Piper offline TTS and optional one-model draft storyboard. Six reusable S2 skill contracts and real media QA integrated with S1 Task History. See [S2](docs/milestones/S2.md).
 - **Web Design V2:** the same premium kit is now used at initial creation; its separate one-project-handle revision/preview/test/approve commands are for **existing** websites and owner-provided local photos. See [Web Design V2](docs/milestones/Web-Design-V2.md).
 
@@ -44,6 +45,34 @@ Run the tests (no live model credentials or customer interviews required):
 ```
 
 The repository's [GitHub Actions CI](.github/workflows/ci.yml) runs the same suite on Windows and Python 3.13 for pushes/PRs targeting `main`.
+
+## S3 — Offline Intelligence & Analytics acceptance
+
+Source-aware S3 uses the Python standard library and SQLite (no cloud
+analytics dependency). The first run generates ONLY synthetic data,
+distinctly labeled from business results:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m agentforge.skill_registry validate
+$raw = .\.venv\Scripts\python.exe -m agentforge.analytics_pipeline demo
+if ($LASTEXITCODE -ne 0) { throw "S3 demo failed" }
+$s3 = $raw | ConvertFrom-Json
+$s3.dataset
+$s3.reports.content.result.metrics
+$s3.reports.finance.result
+.\.venv\Scripts\python.exe -m agentforge.analytics_pipeline datasets
+```
+
+Expect demo-... dataset, two atomically audited CSV imports, six
+deterministic reports and eight S1 task receipts. The new S3 Dataset view
+in Dashboard V0 is read-only and labels synthetic data explicitly. Restart
+the dashboard to load its updated code. For real files, use the strict
+[CSV contracts and owner's import commands](docs/milestones/S3.md).
+
+Confirmed cash is only owner-entered, **not bank-verified profit**. Never
+treat example metrics, research hypotheses, A/B comparisons or a heuristic
+opportunity score as authorization to spend or publish.
 
 ## S2 — One-command offline video acceptance
 
