@@ -1,0 +1,37 @@
+schema_version = 1
+id = "analytics.trend_report"
+version = "0.1.0"
+description = "Describe trends in imported daily campaign performance without asserting market-wide demand."
+worker_id = "analytics_analyst"
+execution_mode = "read_only"
+required_permissions = ["workspace.read"]
+required_tools = ["filesystem", "sqlite"]
+artifact_types = ["trend_analysis_report"]
+quality_checks = ["timestamp_coverage", "source_provenance"]
+
+[limits]
+timeout_seconds = 30
+estimated_model_calls = 0
+
+[input_schema]
+type = "object"
+required = ["dataset"]
+additional_properties = false
+
+[input_schema.properties]
+dataset = "string"
+campaign = "string"
+
+[output_schema]
+type = "object"
+required = ["status", "dataset", "synthetic", "series", "interpretation", "uncertainty", "sources"]
+additional_properties = true
+
+[output_schema.properties]
+status = "string"
+dataset = "string"
+synthetic = "boolean"
+sources = "object"
+series = "array"
+interpretation = "string"
+uncertainty = "array"
