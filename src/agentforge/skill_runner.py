@@ -248,6 +248,10 @@ def invoke(skill_id, payload, *, grants=(), confirm_model_call=False,
            parent_id=None, db_path=None):
     skill, _ = _contract(skill_id)
     registry.validate_payload(skill, payload)
+    # Reject nested S5 event fields (especially PII) before writing Task History.
+    if skill_id == "growth.record_event":
+        from agentforge.growth_store import validate_event_payload
+        validate_event_payload(payload["kind"], payload["data"])
     # Reject malformed grants before recording a runnable task.
     missing_grants(skill_id, grants, confirm_model_call=confirm_model_call,
                    confirm_browser_run=confirm_browser_run,
@@ -268,6 +272,9 @@ def resume_waiting(task_id, *, grants=(), confirm_model_call=False,
         raise ValueError("Only never-started approval tasks may be resumed")
     skill, _ = _contract(task["skill_id"])
     registry.validate_payload(skill, task["request"])
+    if task["skill_id"] == "growth.record_event":
+        from agentforge.growth_store import validate_event_payload
+        validate_event_payload(task["request"]["kind"], task["request"]["data"])
     return _execute(task_id, task["skill_id"], task["request"], grants=grants,
                     confirm_model_call=confirm_model_call,
                     confirm_browser_run=confirm_browser_run,
