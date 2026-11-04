@@ -10,6 +10,7 @@
 - **Customer validation (C7A–C7C):** anonymous, consent-based interview intake; retain/follow-up/reject decisions; two owner-confirmed accounts can support only the `customer_problem` scope. Neither interviews nor advertised prices prove payments or demand on their own.
 - **AI Product Builder V1 (C8A):** generates one offline, self-contained `index.html` as a **proposal**. Only an owner-approved, digest-matched `apply` creates files in `workspace/products/<slug>/`. No automatic execution, browser automation or deployment.
 - **Product revisions (C8B):** proposes changes to an existing `index.html`, shows a read-only diff, checks the original file fingerprint, and requires explicit digest-matched approval before replacing it. The prior version is backed up locally.
+- **Static quality & preview (C8C):** read-only HTML/accessibility/responsive heuristics and an optional ignored-data preview of a pending revision. No browser is opened or code executed automatically.
 
 All generated text/code is untrusted. No workflow grants autonomous customer outreach, spending, publishing, package installation, or arbitrary shell execution.
 
@@ -79,6 +80,26 @@ $revisionSha = "PASTE_SHA256_FROM_INSPECT"
 
 C8B backs up the prior `index.html` under `data/company/product_builder/backups/`, refuses stale proposals, and never launches a browser or deploys code. See [C8B](docs/milestones/C8B.md).
 
+### Static quality checks and local revision preview (C8C)
+
+```powershell
+# Read-only inspection of an existing product.
+.\.venv\Scripts\python.exe -m agentforge.product_quality check shop-landing
+
+# For a pending, not-yet-applied revision:
+$revisionId = "PASTE_REVISION_ID"
+.\.venv\Scripts\python.exe -m agentforge.product_quality check-revision $revisionId
+.\.venv\Scripts\python.exe -m agentforge.product_quality preview-revision $revisionId
+
+# After reviewing the preview HTML source, YOU may open the preview_path
+# shown above using Invoke-Item. The browser may execute untrusted JavaScript.
+```
+
+`preview-revision` writes only an ignored-data copy; it does **not** replace
+`workspace/products/` or approve a revision. The checks are heuristics,
+not browser tests or a security audit. If the revision is already applied,
+use the `check` command on the current product instead. See [C8C](docs/milestones/C8C.md).
+
 ### Customer interviews
 
 ```powershell
@@ -87,7 +108,7 @@ C8B backs up the prior `index.html` under `data/company/product_builder/backups/
 .\.venv\Scripts\python.exe -m agentforge.customer_evidence_review summary research-d3188c6a
 ```
 
-Only capture real, consented, anonymous interviews. Do **not** capture example or generated interview content as real evidence. See [C7A](docs/milestones/C7A.md), [C7B](docs/milestones/C7B.md), [C7C](docs/milestones/C7C.md), [C8A](docs/milestones/C8A.md), and [C8B](docs/milestones/C8B.md).
+Only capture real, consented, anonymous interviews. Do **not** capture example or generated interview content as real evidence. See [C7A](docs/milestones/C7A.md), [C7B](docs/milestones/C7B.md), [C7C](docs/milestones/C7C.md), [C8A](docs/milestones/C8A.md), [C8B](docs/milestones/C8B.md), and [C8C](docs/milestones/C8C.md).
 
 ## Local data, security and status
 
@@ -95,4 +116,4 @@ Only capture real, consented, anonymous interviews. Do **not** capture example o
 - SHA-256 checks detect later modifications; they are not evidence that an interview truly occurred or that generated code is safe.
 - URL allowlists and path checks are **not** an OS sandbox. Run with minimum OS permissions and review source before execution.
 - No real customer demand, willingness to pay, sales or revenue has been independently verified.
-- Current milestone: **Builder revisions (C8B)**. Next: local preview and safe, explicitly approved checks. No autonomous browser control or deployment.
+- Current milestone: **local quality/preview checks (C8C)**. Next: user-driven browser/device review and targeted fixes. No autonomous browser control or deployment.
