@@ -1,0 +1,7 @@
+id = "product_builder"
+model_ref = "local_primary"
+runtime = "manual"
+
+capabilities = [
+    "propose_static_web_product_files"
+]
