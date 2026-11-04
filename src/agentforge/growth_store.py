@@ -255,11 +255,59 @@ def _event_payload(kind, data):
     return data
 
 
+def validate_event_payload(kind, data):
+    """Reject PII-shaped/unsafe event input BEFORE S1 Task History persists it.
+
+    Campaign/lead references and channel URLs are opaque metadata, not
+    private customer contact information. Nested payload schema is strict.
+    """
+    _event_payload(kind, data)
+    if kind == "lead_new":
+        _identifier(data["campaign"], CAMPAIGN, "campaign")
+        if data["channel"] not in CHANNELS or data["consent_confirmed"] is not True:
+            raise GrowthError("Source and explicit consent attestation required")
+    elif kind == "lead_status":
+        _identifier(data["lead_id"], UUID, "lead ID")
+        if data["status"] not in {"CONTACTED", "QUALIFIED", "WON", "LOST"}:
+            raise GrowthError("Unsupported lead status")
+    elif kind == "post_attest":
+        _identifier(data["package_id"], UUID, "package ID")
+        if data["confirm_owner_posted"] is not True:
+            raise PermissionError("Owner must explicitly attest external manual upload")
+        # Full channel/permalink validation needs the associated package.
+        if not isinstance(data["url"], str) or len(data["url"]) > 300:
+            raise GrowthError("Invalid post URL")
+        parsed = urlsplit(data["url"])
+        if parsed.scheme != "https" or parsed.hostname not in {
+            "youtube.com", "www.youtube.com", "youtu.be",
+            "tiktok.com", "www.tiktok.com"
+        } or parsed.username or parsed.password or parsed.query or parsed.fragment:
+            raise GrowthError("Only public, canonical platform URLs allowed")
+    else:
+        _identifier(data["campaign"], CAMPAIGN, "campaign")
+        _identifier(data["tx_id"], KEY, "transaction ID")
+        if data["kind"] not in {"commission", "cost"} or data["status"] not in {
+            "pending", "owner_confirmed"
+        }:
+            raise GrowthError("Invalid financial kind/status")
+        _amount(data["amount_vnd"])
+        evidence, s3_tx_id = data["evidence_ref"], data["s3_tx_id"]
+        if not isinstance(evidence, str) or not isinstance(s3_tx_id, str):
+            raise GrowthError("Invalid financial provenance")
+        if data["status"] == "owner_confirmed":
+            _identifier(evidence, REF, "owner evidence")
+        elif evidence and not REF.fullmatch(evidence):
+            raise GrowthError("Invalid pending evidence")
+        if s3_tx_id:
+            _identifier(s3_tx_id, KEY, "S3 transaction ID")
+    return data
+
+
 def record_event(kind, data, *, confirm_write=False, db_path=None):
     """Manual business events with hard record schemas; never contact customers."""
     if confirm_write is not True:
         raise PermissionError("Owner confirmation required to record events")
-    data = _event_payload(kind, data)
+    data = validate_event_payload(kind, data)
     if kind == "lead_new":
         campaign = _identifier(data["campaign"], CAMPAIGN, "campaign")
         if data["channel"] not in CHANNELS or data["consent_confirmed"] is not True:
