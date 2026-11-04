@@ -18,6 +18,7 @@ See **[AgentForge Master Project Context & Strategic Roadmap](docs/AGENTFORGE_MA
 - **Browser validation (C8D):** optional owner-started headless Chromium screenshots at mobile/tablet/desktop sizes; reports overflow, JavaScript errors, and blocked ordinary HTTP requests without changing the product.
 - **Browser-guided fixes (C8E):** local-only triage of C8D reports, optional one-call AI fix proposals for verified issues, and the same owner-gated C8B approval path. Passing browser reports never trigger AI calls.
 - **Bounded workflow (C8F):** immutable local checkpoints coordinate baseline browser test, optional one-model fix proposal, candidate browser test and separate C8B owner approval. A PASS report never triggers a model call.
+- **Creative & Media Engine (S2):** local portrait PNG promo cards (Pillow), safe non-destructive edits, original WAV ambient, UTF-8 SRT captions, and owner-approved H.264/AAC MP4 via bundled FFmpeg; separately gated Windows/Piper offline TTS and optional one-model draft storyboard. Six reusable S2 skill contracts and real media QA integrated with S1 Task History. See [S2](docs/milestones/S2.md).
 - **Web Design V2:** the same premium kit is now used at initial creation; its separate one-project-handle revision/preview/test/approve commands are for **existing** websites and owner-provided local photos. See [Web Design V2](docs/milestones/Web-Design-V2.md).
 
 All generated text/code is untrusted. No workflow grants autonomous customer outreach, spending, publishing, package installation, or arbitrary shell execution.
@@ -43,6 +44,33 @@ Run the tests (no live model credentials or customer interviews required):
 ```
 
 The repository's [GitHub Actions CI](.github/workflows/ci.yml) runs the same suite on Windows and Python 3.13 for pushes/PRs targeting `main`.
+
+## S2 — One-command offline video acceptance
+
+S2 is an **explicit opt-in** local media extra. Install dependencies only
+when you choose to use it (Pillow and imageio-ffmpeg include a bundled local
+FFmpeg binary; no cloud media API is involved):
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[media]"
+.\.venv\Scripts\python.exe -m pytest -q
+$raw = .\.venv\Scripts\python.exe -m agentforge.media_pipeline demo nem-s2-pilot --render-video --confirm-media-run
+if ($LASTEXITCODE -ne 0) { throw "S2 video render failed" }
+$demo = $raw | ConvertFrom-Json
+.\.venv\Scripts\python.exe -m agentforge.media_pipeline check $demo.assets.result.run_id
+Invoke-Item $demo.video.result.video_path
+```
+
+Expect playable 9:16 MP4, captioned PNG frames, SRT sidecar and original
+ambient WAV under ignored `workspace/media/<run_id>/`. The ambient sound is
+**not speech**; Vietnamese offline TTS is optional and requires a separately
+installed suitable voice/engine. Video generation runs an external local
+binary **only** with the explicit media-run confirmation.
+
+Owner-provided photos can be used after local rights attestation. No
+automated social publication, cloud image generation, customer revenue
+tracking, legal rights verification or model-generated claim approval.
+See [S2 milestone and advanced commands](docs/milestones/S2.md).
 
 ## Usage
 

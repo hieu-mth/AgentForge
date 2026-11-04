@@ -355,3 +355,20 @@ credential vault, OS sandbox, enforced wall-clock limits, financial ledger
 or authenticated multi-user permission service. Existing C8A owner-approved
 apply and browser confirmation remain separate. A live model/browser
 pilot is still required on Windows. See docs/milestones/S1.md.
+
+
+## Addendum — S2 Creative & Media MVP (2026-11-05)
+
+S2 adds a bounded, reusable local Creative & Media pipeline: original
+portrait PNG frames, non-destructive image edits, captioned storyboards
+and SRT, original WAV ambient, owner-approved FFmpeg MP4 encoding and
+structural/decoding QA. A separately gated offline Windows/Piper TTS
+adapter requires an installed appropriate voice; one-model storyboard
+suggestions are drafts requiring human review. Six new media skills use
+the existing S1 policy, task/audit history and media producer worker.
+No automatic publishing or revenue claims are implied.
+
+This is a usable MVP with a deterministic local no-cloud video pilot, not
+full generative image/video models, universal multilingual speech synthesis,
+a certified rights checker or a general commercial editing suite. Exact
+Windows installation and acceptance: docs/milestones/S2.md.

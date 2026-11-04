@@ -10,3 +10,6 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
+
+# Locally downloaded TTS voice models; never commit licensed model weights.
+models/voices/
