@@ -38,9 +38,33 @@ def _task_public(task):
     )}
 
 
+def _artifact_names(result):
+    """Show only artifact basenames, never full local paths or output bodies."""
+    found = []
+    def visit(value, depth=0):
+        if depth > 4 or len(found) >= 12:
+            return
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key in {"report_path", "proposal_path", "project_path",
+                           "preview_path", "screenshot_path"} and isinstance(item, str):
+                    label = item.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+                    if label and label not in found:
+                        found.append(label[:100])
+                elif key == "screenshots" and isinstance(item, list):
+                    for image in item[:6]:
+                        if isinstance(image, str):
+                            visit({"screenshot_path": image}, depth + 1)
+                elif isinstance(item, dict):
+                    visit(item, depth + 1)
+    visit(result)
+    return found
+
+
 def render_dashboard(*, db_path=None, selected=None):
     tasks = task_history.list_tasks(db_path=db_path, limit=100)
-    skill_count = len(skill_registry.load_registry())
+    registry = skill_registry.load_registry()
+    skill_count = len(registry)
     stats = {name: sum(t["status"] == name for t in tasks)
              for name in ("SUCCEEDED", "RUNNING", "WAITING_APPROVAL", "FAILED", "INTERRUPTED")}
     cards = "".join(
@@ -62,10 +86,19 @@ def render_dashboard(*, db_path=None, selected=None):
             "<tr><td>" + _safe(e["at"]) + "</td><td>" +
             _safe(e["name"]) + "</td></tr>" for e in task["events"]
         )
+        artifacts = _artifact_names(task["result"])
+        artifact_text = ", ".join(_safe(a) for a in artifacts) if artifacts else "None recorded"
         detail = ("<h2>Task " + _safe(task["task_id"]) + "</h2><p>" +
                   _safe(task["status"]) + " · " + _safe(task["skill_id"]) +
-                  "</p><table><tr><th>At</th><th>Event</th></tr>" +
+                  "</p><p>Artifact references (basenames): " + artifact_text + "</p>"
+                  "<table><tr><th>At</th><th>Event</th></tr>" +
                   event_rows + "</table>")
+    skill_rows = "".join(
+        "<tr><td>" + _safe(item["id"]) + "</td><td>" +
+        _safe(item["worker_id"]) + "</td><td>" +
+        _safe(item["execution_mode"]) + "</td></tr>"
+        for item in registry.values()
+    )
     return ("<!doctype html><html lang='vi'><head><meta charset='utf-8'>"
             "<meta name='viewport' content='width=device-width,initial-scale=1'>"
             "<title>AgentForge · Control Center V0</title><style>" + CSS +
@@ -78,6 +111,9 @@ def render_dashboard(*, db_path=None, selected=None):
             "<table><tr><th>Task ID</th><th>Skill / Workflow</th>"
             "<th>Status</th><th>Updated (UTC)</th></tr>" + task_rows +
             "</table>" + detail +
+            "<h2>Skills and Workers</h2>"
+            "<table><tr><th>Skill</th><th>Worker</th><th>Mode</th></tr>" +
+            skill_rows + "</table>"
             "<p class='muted'>Refresh to update. API: /api/tasks · /api/skills</p>"
             "</main></body></html>")
 
@@ -120,6 +156,7 @@ def create_server(port=8765, *, db_path=None):
                     ident = parsed.path.removeprefix("/api/tasks/")
                     data = task_history.get_task(ident, db_path=db_path)
                     data = {**_task_public(data),
+                            "artifacts": _artifact_names(data["result"]),
                             "events": [{"at": e["at"], "name": e["name"]}
                                        for e in data["events"]]}
                     self._reply(200, json.dumps(data), "application/json")
