@@ -151,7 +151,21 @@ class TestS1WorkflowDashboard(unittest.TestCase):
         self.assertNotIn("<img src=x onerror=", result)
         self.assertNotIn("alert(1)", result)
         self.assertIn("web.create", result)
+        self.assertIn("product_builder", result)
         self.assertIn("CREATED", result)
+
+    def test_dashboard_only_renders_artifact_basename(self):
+        task_id = task_history.create_task(
+            "skill", "web.create", {"slug": "nem-tu-van"},
+            db_path=self.db)
+        task_history.transition(task_id, "RUNNING", db_path=self.db)
+        task_history.transition(task_id, "SUCCEEDED", result={
+            "proposal_path": r"D:\Private\Customer\proposal.json",
+        }, db_path=self.db)
+        result = dashboard_v0.render_dashboard(db_path=self.db, selected=task_id)
+        self.assertIn("proposal.json", result)
+        self.assertNotIn("D:\\Private", result)
+        self.assertNotIn("Customer", result)
 
 
 if __name__ == "__main__":
