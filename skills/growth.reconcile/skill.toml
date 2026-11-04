@@ -1,0 +1,35 @@
+schema_version = 1
+id = "growth.reconcile"
+version = "0.1.0"
+description = "Crosscheck S5 owner ledger rows to S3 imported ledger without claiming bank reconciliation."
+worker_id = "growth_operator"
+execution_mode = "read_only"
+required_permissions = ["workspace.read"]
+required_tools = ["sqlite"]
+artifact_types = ["owner_books_crosscheck"]
+quality_checks = ["ledger_linkage", "provenance"]
+
+[limits]
+timeout_seconds = 60
+estimated_model_calls = 0
+
+[input_schema]
+type = "object"
+required = ["campaign"]
+additional_properties = false
+
+[input_schema.properties]
+campaign = "string"
+
+[output_schema]
+type = "object"
+required = ["status", "campaign", "matched", "mismatched", "missing", "bank_reconciled"]
+additional_properties = true
+
+[output_schema.properties]
+status = "string"
+campaign = "string"
+matched = "integer"
+mismatched = "integer"
+missing = "integer"
+bank_reconciled = "boolean"

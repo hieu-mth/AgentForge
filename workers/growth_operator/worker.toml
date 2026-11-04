@@ -1,0 +1,9 @@
+id = "growth_operator"
+model_ref = "local_primary"
+runtime = "manual"
+capabilities = [
+  "owner_approved_local_campaigns",
+  "privacy_preserving_lead_status",
+  "channel_manual_handoff_packages",
+  "owner_recorded_commissions"
+]

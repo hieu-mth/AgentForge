@@ -50,6 +50,18 @@ POLICY = {
                                  frozenset({"workspace.read"})),
     "analytics.opportunity_score": ("analytics_analyst", "read_only",
                                     frozenset({"workspace.read"})),
+    "growth.campaign_create": ("growth_operator", "owner_gated",
+                               frozenset({"workspace.write"})),
+    "growth.bundle_prepare": ("growth_operator", "owner_gated",
+                              frozenset({"workspace.write"})),
+    "growth.record_event": ("growth_operator", "owner_gated",
+                            frozenset({"workspace.write"})),
+    "growth.report": ("growth_operator", "read_only",
+                      frozenset({"workspace.read"})),
+    "growth.quality_check": ("growth_operator", "read_only",
+                             frozenset({"workspace.read"})),
+    "growth.reconcile": ("growth_operator", "read_only",
+                         frozenset({"workspace.read"})),
 }
 
 
@@ -93,6 +105,19 @@ def missing_grants(skill_id, granted=(), *, confirm_model_call=False,
         not isinstance(payload, dict) or payload.get("confirm_write") is not True
     ):
         missing.add("input.confirm_write")
+    if skill_id in {"growth.campaign_create", "growth.bundle_prepare", "growth.record_event"}:
+        if not isinstance(payload, dict) or payload.get("confirm_write") is not True:
+            missing.add("input.confirm_write")
+    if skill_id == "growth.bundle_prepare" and (
+        not isinstance(payload, dict) or payload.get("confirm_rights") is not True
+    ):
+        missing.add("input.confirm_rights")
+    if skill_id == "growth.record_event" and isinstance(payload, dict):
+        if payload.get("kind") == "post_attest" and (
+            not isinstance(payload.get("data"), dict)
+            or payload["data"].get("confirm_owner_posted") is not True
+        ):
+            missing.add("input.confirm_owner_posted")
     return sorted(missing)
 
 
@@ -156,6 +181,28 @@ def _dispatch(skill_id, payload):
             return insights.experiment_report(dataset, campaign)
         if skill_id == "analytics.opportunity_score":
             return insights.opportunity_report(dataset, campaign=campaign)
+    if skill_id == "growth.campaign_create":
+        from agentforge.growth_store import create_campaign
+        return create_campaign(
+            {key: value for key, value in payload.items() if key != "confirm_write"},
+            confirm_write=True)
+    if skill_id == "growth.bundle_prepare":
+        from agentforge.growth_bundle import prepare
+        return prepare(payload["campaign"], payload["channel"], payload["run_id"],
+                       payload["title"], payload["description"],
+                       confirm_rights=True, confirm_write=True)
+    if skill_id == "growth.record_event":
+        from agentforge.growth_store import record_event
+        return record_event(payload["kind"], payload["data"], confirm_write=True)
+    if skill_id.startswith("growth."):
+        from agentforge import growth_reports
+        campaign = payload["campaign"]
+        if skill_id == "growth.report":
+            return growth_reports.report(campaign)
+        if skill_id == "growth.quality_check":
+            return growth_reports.quality_check(campaign)
+        if skill_id == "growth.reconcile":
+            return growth_reports.reconcile(campaign)
     raise PermissionError("No trusted adapter")
 
 
@@ -201,6 +248,10 @@ def invoke(skill_id, payload, *, grants=(), confirm_model_call=False,
            parent_id=None, db_path=None):
     skill, _ = _contract(skill_id)
     registry.validate_payload(skill, payload)
+    # Reject nested S5 event fields (especially PII) before writing Task History.
+    if skill_id == "growth.record_event":
+        from agentforge.growth_store import validate_event_payload
+        validate_event_payload(payload["kind"], payload["data"])
     # Reject malformed grants before recording a runnable task.
     missing_grants(skill_id, grants, confirm_model_call=confirm_model_call,
                    confirm_browser_run=confirm_browser_run,
@@ -221,6 +272,9 @@ def resume_waiting(task_id, *, grants=(), confirm_model_call=False,
         raise ValueError("Only never-started approval tasks may be resumed")
     skill, _ = _contract(task["skill_id"])
     registry.validate_payload(skill, task["request"])
+    if task["skill_id"] == "growth.record_event":
+        from agentforge.growth_store import validate_event_payload
+        validate_event_payload(task["request"]["kind"], task["request"]["data"])
     return _execute(task_id, task["skill_id"], task["request"], grants=grants,
                     confirm_model_call=confirm_model_call,
                     confirm_browser_run=confirm_browser_run,

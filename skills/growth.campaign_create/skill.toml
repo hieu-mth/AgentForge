@@ -1,0 +1,39 @@
+schema_version = 1
+id = "growth.campaign_create"
+version = "0.1.0"
+description = "Create an owner-approved, synthetic-aware local growth campaign with bookkeeping cap."
+worker_id = "growth_operator"
+execution_mode = "owner_gated"
+required_permissions = ["workspace.write"]
+required_tools = ["sqlite", "filesystem"]
+artifact_types = ["campaign"]
+quality_checks = ["source_provenance", "owner_approval"]
+
+[limits]
+timeout_seconds = 60
+estimated_model_calls = 0
+
+[input_schema]
+type = "object"
+required = ["campaign", "title", "analytics_dataset", "budget_vnd", "synthetic", "confirm_write"]
+additional_properties = false
+
+[input_schema.properties]
+campaign = "string"
+title = "string"
+analytics_dataset = "string"
+budget_vnd = "integer"
+synthetic = "boolean"
+confirm_write = "boolean"
+
+[output_schema]
+type = "object"
+required = ["campaign", "status", "synthetic", "budget_vnd", "publishing_authorized"]
+additional_properties = true
+
+[output_schema.properties]
+campaign = "string"
+status = "string"
+synthetic = "boolean"
+budget_vnd = "integer"
+publishing_authorized = "boolean"

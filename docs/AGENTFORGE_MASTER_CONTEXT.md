@@ -412,3 +412,24 @@ estimates, not hard provider-side spending enforcement. S5 requires
 account/platform integration, real revenue reconciliation and explicit
 owner permissions. Existing S1/S2/S3 approvals and artifact guards
 remain in effect. See docs/milestones/S4.md.
+
+
+## Addendum — S5 Revenue & Growth Operations MVP (2026-11-05)
+
+S5 adds a bounded owner-run local business-operations vertical slice:
+campaigns, manual YouTube Shorts/TikTok upload ZIPs built from S2
+VIDEO_PASS assets, consent-attested anonymous lead IDs/state changes,
+owner-attested post permalinks, owner-recorded pending and confirmed
+commissions/costs, a local bookkeeping cost cap and read-only S3 ledger
+cross-check with source uncertainty. Six skills use the S1 policy and
+task history. S4 gains a fixed growth.review template and Dashboard V0
+gains sanitized growth summaries. The one-pass synthetic demo runs
+S2→S3→S4→S5 without cloud accounts or platform publication.
+
+No API/OAuth-based YouTube/TikTok account creation or actual posting,
+bank/affiliate verification, payment execution, provider-enforced spend
+limits or unattended growth optimization is delivered by this MVP.
+All figures are owner-recorded or SYNTHETIC, and verified net profit
+remains null. This preserves the product vision but does not make the
+system an autonomous, real-revenue-producing company. See the
+detailed owner acceptance and boundaries at docs/milestones/S5.md.

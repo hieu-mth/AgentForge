@@ -14,12 +14,14 @@ TEMPLATES = {
     "media.review": ("run_id",),
     "research.discovery": ("topic",),
     "creative.storyboard": ("topic", "audience", "goal"),
+    "growth.review": ("campaign",),
 }
 OPTIONAL = {"campaign", "photo_name", "rights_confirmed"}
 ALIASES = {
     "campaign": "campaign.review", "website": "website.campaign",
     "browser": "website.browser", "media": "media.produce",
     "research": "research.discovery", "storyboard": "creative.storyboard",
+    "growth": "growth.review",
 }
 
 
@@ -67,6 +69,9 @@ def _steps(template, inputs):
         steps = [("media.quality_check", {"run_id": inputs["run_id"]})]
     elif template == "research.discovery":
         steps = [("research.opportunity", {"topic": inputs["topic"]})]
+    elif template == "growth.review":
+        steps = [(skill_id, {"campaign": inputs["campaign"]}) for skill_id in (
+            "growth.quality_check", "growth.report", "growth.reconcile")]
     else:
         steps = [("media.copy_draft", dict(inputs))]
     plan = []
