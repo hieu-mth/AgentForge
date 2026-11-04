@@ -88,6 +88,14 @@ class TestProductRevision(unittest.TestCase):
             revisions.apply(prop["revision_id"], confirm_write=True, sha256="0" * 64)
         self.assertEqual(self.path.read_text(encoding="utf-8"), BASE)
 
+    def test_revision_with_inline_onclick_never_applies(self):
+        unsafe = NEXT.replace("<h1>", '<button onclick="alert(1)">Tư vấn</button><h1>')
+        proposal = self.proposal(content=unsafe)
+        with self.assertRaisesRegex(ValueError, "Static quality gate FAIL: inline_events"):
+            self.apply(proposal)
+        self.assertEqual(self.path.read_text(encoding="utf-8"), BASE)
+        self.assertFalse((self.root / "data" / "company" / "product_builder" / "backups").exists())
+
     def test_apply_creates_verified_backup_and_receipt(self):
         prop = self.proposal()
         result = self.apply(prop)

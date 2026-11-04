@@ -175,6 +175,25 @@ def _validate_files(output):
     return {"summary": summary, "files": sorted(checked, key=lambda x: x["path"])}
 
 
+def _require_static_quality(html):
+    """Reject known C8C FAIL findings before owner-approved writes.
+
+    A PASS/WARN result is still only heuristic QA, not proof of safe code.
+    Lazy import reuses C8C's parser without a module-level circular import.
+    """
+    from agentforge.product_quality import analyze
+    report = analyze(html)
+    if report["status"] == "FAIL":
+        failures = sorted({
+            finding["rule"] for finding in report["findings"]
+            if finding["severity"] == "FAIL"
+        })
+        raise ValueError(
+            "Static quality gate FAIL: " + ", ".join(failures) +
+            ". No product write authorized. Review and repair the HTML."
+        )
+
+
 def _digest(slug, brief, output):
     payload = {"project_slug": slug, "brief": brief, **output}
     raw = json.dumps(payload, sort_keys=True, ensure_ascii=False,
@@ -281,6 +300,11 @@ def propose(slug, brief, *, model_client=None):
             f"PROJECT SLUG: {slug}\nOWNER REQUIREMENT:\n{brief}"
         )
         output = _validate_files(model_client(prompt, SCHEMA, worker_id=WORKER_ID))
+    # A generated proposal must not contain known C8C FAIL findings. In
+    # particular, inline onclick handlers must not reach owner apply.
+    html = next(item["content"] for item in output["files"]
+                if item["path"] == "index.html")
+    _require_static_quality(html)
     proposal_id = uuid4().hex
     document = {
         "schema_version": 1,
@@ -357,6 +381,9 @@ def apply(proposal_id, *, confirm_write=False, sha256=None):
     doc, _ = _read_proposal(proposal_id)
     if not isinstance(sha256, str) or sha256 != doc["sha256"]:
         raise PermissionError("Confirm the exact SHA-256 displayed by inspect")
+    # Protect older, digest-valid proposals that predate the quality gate.
+    _require_static_quality(next(item["content"] for item in doc["files"]
+                                 if item["path"] == "index.html"))
     root = PRODUCTS / doc["project_slug"]
     _check_path_chain(root)
     if root.exists():

@@ -138,6 +138,32 @@ class TestProductBuilderRawHtml(unittest.TestCase):
                         b.propose("shop-landing", self.brief)
         self.assertFalse(b.PROPOSALS.exists())
 
+    def test_inline_onclick_rejected_before_proposal_even_if_model_returns_html(self):
+        unsafe = GOOD.replace("<h1>", '<button onclick="alert(1)">Tư vấn</button><h1>')
+        with patch("agentforge.model.generate", return_value=unsafe) as generate:
+            with self.assertRaisesRegex(ValueError, "Static quality gate FAIL: inline_events"):
+                b.propose("shop-landing", self.brief)
+            generate.assert_called_once()
+        self.assertFalse(b.PROPOSALS.exists())
+        self.assertFalse(b.PRODUCTS.exists())
+
+    def test_old_digest_valid_proposal_with_inline_event_cannot_apply(self):
+        with patch("agentforge.model.generate", return_value=GOOD):
+            proposal = b.propose("shop-landing", self.brief)
+        path = Path(proposal["proposal_path"])
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        doc["files"][0]["content"] = doc["files"][0]["content"].replace(
+            "<h1>", '<button onclick="alert(1)">Tư vấn</button><h1>'
+        )
+        doc["sha256"] = b._digest(
+            doc["project_slug"], doc["brief"],
+            {"summary": doc["summary"], "files": doc["files"]},
+        )
+        path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "Static quality gate FAIL: inline_events"):
+            b.apply(doc["proposal_id"], confirm_write=True, sha256=doc["sha256"])
+        self.assertFalse(b.PRODUCTS.exists())
+
     def test_remote_code_rejected_even_in_valid_html(self):
         bad = GOOD.replace('<h1>', '<script>fetch("https://example.org")</script><h1>')
         with patch("agentforge.model.generate", return_value=bad):

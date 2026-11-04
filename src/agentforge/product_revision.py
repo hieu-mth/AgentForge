@@ -211,6 +211,9 @@ def apply(revision_id, *, confirm_write=False, sha256=None):
     doc, _, receipt = _read_revision(revision_id)
     if not isinstance(sha256, str) or sha256 != doc["sha256"]:
         raise PermissionError("Confirm the exact revision SHA-256 from inspect")
+    # Untrusted revision proposals can still be inspected/diffed, but no
+    # C8C FAIL finding may be written to the live project.
+    builder._require_static_quality(doc["files"][0]["content"])
     root = builder.ROOT / "data" / "company" / "product_builder"
     backup_dir = root / "backups" / doc["project_slug"] / revision_id
     backup_file = backup_dir / "index.html"
