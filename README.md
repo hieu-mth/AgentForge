@@ -12,13 +12,13 @@ See **[AgentForge Master Project Context & Strategic Roadmap](docs/AGENTFORGE_MA
 - **Opportunity research:** two focused searches, source leads, cautious reports and local checkpoints; search snippets are **not** verified facts.
 - **Source/evidence review:** approved HTTPS page reads, quote matching, owner decisions, and separate vendor market-intelligence classifications.
 - **Customer validation (C7A–C7C):** anonymous, consent-based interview intake; retain/follow-up/reject decisions; two owner-confirmed accounts can support only the `customer_problem` scope. Neither interviews nor advertised prices prove payments or demand on their own.
-- **AI Product Builder V1 (C8A):** generates one offline, self-contained `index.html` as a **proposal**. Only an owner-approved, digest-matched `apply` creates files in `workspace/products/<slug>/`. No automatic execution, browser automation or deployment.
+- **AI Product Builder (C8A, premium-first default):** one model call generates an offline, premium-styled `index.html` using the shared V2 design kit as a **proposal**. Only an owner-approved, digest-matched `apply` creates files in `workspace/products/<slug>/`. No automatic execution, browser automation or deployment.
 - **Product revisions (C8B):** proposes changes to an existing `index.html`, shows a read-only diff, checks the original file fingerprint, and requires explicit digest-matched approval before replacing it. The prior version is backed up locally.
 - **Static quality & preview (C8C):** read-only HTML/accessibility/responsive heuristics and an optional ignored-data preview of a pending revision. No browser is opened or code executed automatically.
 - **Browser validation (C8D):** optional owner-started headless Chromium screenshots at mobile/tablet/desktop sizes; reports overflow, JavaScript errors, and blocked ordinary HTTP requests without changing the product.
 - **Browser-guided fixes (C8E):** local-only triage of C8D reports, optional one-call AI fix proposals for verified issues, and the same owner-gated C8B approval path. Passing browser reports never trigger AI calls.
 - **Bounded workflow (C8F):** immutable local checkpoints coordinate baseline browser test, optional one-model fix proposal, candidate browser test and separate C8B owner approval. A PASS report never triggers a model call.
-- **Web Design V2:** optional Luxury style kit, Vietnamese typography, original offline illustration or real local photos; one-project-handle revision/preview/test/approve. See [Web Design V2](docs/milestones/Web-Design-V2.md).
+- **Web Design V2:** the same premium kit is now used at initial creation; its separate one-project-handle revision/preview/test/approve commands are for **existing** websites and owner-provided local photos. See [Web Design V2](docs/milestones/Web-Design-V2.md).
 
 All generated text/code is untrusted. No workflow grants autonomous customer outreach, spending, publishing, package installation, or arbitrary shell execution.
 
@@ -52,23 +52,23 @@ The repository's [GitHub Actions CI](.github/workflows/ci.yml) runs the same sui
 
 Research outputs stay under `data/research/`.
 
-### Product Builder V1 — owner-gated
+### New website: premium-first creation — owner-gated
 
 ```powershell
-# Propose only. May call a paid cloud model if cloud_primary is configured.
-.\.venv\Scripts\python.exe -m agentforge.product_builder propose shop-landing "Tạo landing page tiếng Việt, responsive, giới thiệu dịch vụ tự động hóa Excel và bảng giá minh họa."
+# One model call, premium CSS and offline visuals added on this FIRST draft.
+# Propose only; may incur cloud fees if cloud_primary is configured.
+$draft = .\.venv\Scripts\python.exe -m agentforge.product_builder propose shop-landing "Tạo landing page tiếng Việt responsive, sang trọng cho dịch vụ tự động hóa Excel; không bịa giá hoặc thông tin liên hệ." | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) { throw "Model proposal failed" }
 
-# Copy the ID printed by propose, then inspect the proposal metadata and JSON.
-$proposalId = "PASTE_PROPOSAL_ID"
-.\.venv\Scripts\python.exe -m agentforge.product_builder inspect $proposalId
-notepad ".\data\company\product_builder\proposals\$proposalId.json"
+# Inspect the source and SHA without manually copying an ID.
+.\.venv\Scripts\python.exe -m agentforge.product_builder inspect $draft.proposal_id
+notepad $draft.proposal_path
 
-# Only after inspecting and approving the generated source:
-$sha256 = "PASTE_SHA256_FROM_INSPECT"
-.\.venv\Scripts\python.exe -m agentforge.product_builder apply $proposalId --confirm-write --sha256 $sha256
+# Only after reviewing and accepting the exact source proposal:
+.\.venv\Scripts\python.exe -m agentforge.product_builder apply $draft.proposal_id --confirm-write --sha256 $draft.sha256
 ```
 
-Applying writes `workspace/products/shop-landing/index.html` but does **not** open, execute or deploy it. Review HTML/JS before opening it in a browser. The C8A creation flow never overwrites an existing project.
+Applying writes `workspace/products/shop-landing/index.html` with the premium presentation already included; **do not** run V2 just to improve the first draft. This command does **not** open, execute or deploy it. Review HTML/JS before opening it in a browser. The C8A creation flow never overwrites an existing project.
 
 ### Product revisions (C8B) — owner-gated
 

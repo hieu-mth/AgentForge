@@ -1,4 +1,4 @@
-"""AI Builder V1: propose static web product files, then explicitly apply.
+"""Premium-first AI Builder: propose static web product files, then explicitly apply.
 
 Local-first and deliberately non-executing. Proposals are untrusted generated
 text, not verified safe code. No shell, browser, package install or deployment.
@@ -197,23 +197,32 @@ def propose(slug, brief, *, model_client=None):
         # Production path: a single self-contained HTML document avoids the
         # brittle JSON-escaping of long HTML/CSS/JS source strings.
         from agentforge.model import generate
+        from agentforge.web_design_kit import GENERIC_ART, upgrade_html
         prompt = (
-            "Create ONE small but polished, responsive, offline Vietnamese "
+            "Create ONE high-quality, premium, responsive, offline Vietnamese "
             "landing page as a COMPLETE HTML5 document. Return ONLY raw HTML, "
             "not JSON, no markdown fences, no explanation. Start with "
             "<!doctype html> and end with </html>. Include CSS in an inline "
             "<style> tag; JavaScript is optional, inline only. No external "
-            "resources, third-party fonts, images, iframes, links to payment "
-            "or network calls. Do not include any executable HTML attributes "
-            "such as onclick. Use accessible headings and responsive layout. "
-            "Keep the output under 3800 characters to avoid truncation. "
-            "Do not claim that prices are real or verified. "
+            "resources, third-party fonts, raster images, iframes, links to payment "
+            "or network calls. Create an original inline SVG illustration relevant "
+            "to the business where useful. Otherwise a clearly labeled decorative "
+            "offline illustration will be inserted. Use premium composition, "
+            "mobile-first spacing, clear hierarchy, accessible headings, strong "
+            "contact CTA, and system fonts that support Vietnamese. A local "
+            "design CSS layer will be added after generation. Do not include "
+            "executable HTML attributes such as onclick. Keep the raw response "
+            "under 6500 UTF-8 bytes. Never invent prices, contact details, "
+            "warranties, certifications or testimonials. "
             "This is a source-only draft to be reviewed by the owner.\n\n"
             f"PROJECT SLUG: {slug}\nOWNER REQUIREMENT:\n{brief}"
         )
-        html = _standalone_html(generate(prompt, worker_id=WORKER_ID))
+        # Exactly one model call. Apply the shared V2 kit at first creation,
+        # not a second AI revision solely to improve visual presentation.
+        html = upgrade_html(generate(prompt, worker_id=WORKER_ID), [],
+                            fallback_art=GENERIC_ART)
         output = _validate_files({
-            "summary": "Single-file offline static landing page proposal for owner review",
+            "summary": "Premium single-file offline static landing page proposal for owner review",
             "files": [{"path": "index.html", "content": html}],
         })
     else:
@@ -346,7 +355,7 @@ def apply(proposal_id, *, confirm_write=False, sha256=None):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="AgentForge AI Builder V1 - static web only")
+    parser = argparse.ArgumentParser(description="AgentForge Premium-First AI Builder - static web only")
     sub = parser.add_subparsers(dest="action", required=True)
     p = sub.add_parser("propose", help="Generate a reviewable product proposal using the selected model")
     p.add_argument("slug")
