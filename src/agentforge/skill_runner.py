@@ -48,6 +48,8 @@ POLICY = {
                                     frozenset({"workspace.read"})),
     "analytics.finance_report": ("analytics_analyst", "read_only",
                                  frozenset({"workspace.read"})),
+    "analytics.opportunity_score": ("analytics_analyst", "read_only",
+                                    frozenset({"workspace.read"})),
 }
 
 
@@ -152,6 +154,8 @@ def _dispatch(skill_id, payload):
             return insights.data_quality(dataset, campaign=campaign)
         if skill_id == "analytics.experiment_report":
             return insights.experiment_report(dataset, campaign)
+        if skill_id == "analytics.opportunity_score":
+            return insights.opportunity_report(dataset, campaign=campaign)
     raise PermissionError("No trusted adapter")
 
 

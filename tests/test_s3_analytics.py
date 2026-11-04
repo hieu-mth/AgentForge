@@ -235,6 +235,19 @@ class TestS3Analytics(unittest.TestCase):
         with self.assertRaisesRegex(store.AnalyticsError, "exactly one channel"):
             insights.experiment_report("production", "nem-shorts", db_path=self.db)
 
+    def test_opportunity_score_is_exploratory_and_no_spending(self):
+        self.load(rows=[
+            metrics(day="2024-10-01", variant="A", impressions="200", clicks="20"),
+            metrics(day="2024-10-02", variant="A", impressions="500", clicks="25"),
+        ])
+        report = insights.opportunity_report("production", db_path=self.db)
+        self.assertEqual(report["status"], "EXPLORATORY_ONLY")
+        self.assertTrue(report["score_is_heuristic"])
+        self.assertFalse(report["market_demand_verified"])
+        self.assertFalse(report["scale_authorized"])
+        self.assertIsNone(report["recommended_investment_vnd"])
+        self.assertGreaterEqual(report["signals"][0]["investigation_score_0_100"], 0)
+
     def test_trend_does_not_claim_market_growth(self):
         self.load(rows=[metrics(day=x) for x in (
             "2024-10-01", "2024-10-03", "2024-10-05")])
@@ -267,12 +280,12 @@ class TestS3Analytics(unittest.TestCase):
         self.assertEqual(result["status"], "SUCCEEDED")
         self.assertTrue(result["synthetic"])
         self.assertEqual(len(result["imports"]), 2)
-        self.assertEqual(len(result["reports"]), 5)
+        self.assertEqual(len(result["reports"]), 6)
         for receipt in [*result["imports"], *result["reports"].values()]:
             self.assertEqual(receipt["status"], "SUCCEEDED")
         self.assertIsNone(result["reports"]["finance"]["result"]["verified_net_profit_vnd"])
         self.assertTrue(result["reports"]["experiment"]["result"]["synthetic"])
-        self.assertEqual(len(task_history.list_tasks(db_path=self.task_db)), 7)
+        self.assertEqual(len(task_history.list_tasks(db_path=self.task_db)), 8)
         self.assertEqual(len(store.list_datasets(db_path=self.db)), 1)
 
     def test_dashboard_analytics_is_local_read_only_and_synthetic_labeled(self):

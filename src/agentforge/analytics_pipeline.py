@@ -19,6 +19,7 @@ REPORT_SKILLS = {
     "experiment": "analytics.experiment_report",
     "finance": "analytics.finance_report",
     "quality": "analytics.quality_check",
+    "opportunity": "analytics.opportunity_score",
 }
 
 

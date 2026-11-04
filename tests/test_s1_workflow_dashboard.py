@@ -128,7 +128,7 @@ class TestS1WorkflowDashboard(unittest.TestCase):
 
             conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
             conn.request("GET", "/api/skills")
-            self.assertEqual(len(json.loads(conn.getresponse().read())), 17)
+            self.assertEqual(len(json.loads(conn.getresponse().read())), 18)
             conn.close()
 
             conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)

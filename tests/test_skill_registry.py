@@ -37,7 +37,7 @@ class TestSkillRegistry(unittest.TestCase):
             "media.video_render", "media.tts", "media.copy_draft",
             "analytics.import", "analytics.quality_check", "analytics.content_report",
             "analytics.trend_report", "analytics.experiment_report",
-            "analytics.finance_report",
+            "analytics.finance_report", "analytics.opportunity_score",
         })
         for contract in registry.values():
             self.assertEqual(contract["schema_version"], 1)
@@ -129,7 +129,7 @@ class TestSkillRegistry(unittest.TestCase):
               patch("subprocess.run") as shell,
               patch("urllib.request.urlopen") as network):
             registry = skills.load_registry(root=self.root)
-            self.assertEqual(len(registry), 17)
+            self.assertEqual(len(registry), 18)
             model.assert_not_called()
             shell.assert_not_called()
             network.assert_not_called()
@@ -148,9 +148,9 @@ class TestSkillRegistry(unittest.TestCase):
                         skills.main()
                     result = json.loads(stdout.getvalue())
                     if command == "validate":
-                        self.assertEqual(result["skill_count"], 17)
+                        self.assertEqual(result["skill_count"], 18)
                     elif command == "list":
-                        self.assertEqual(len(result), 17)
+                        self.assertEqual(len(result), 18)
                         self.assertTrue(all(not item["invocation_enabled"] for item in result))
                     else:
                         self.assertFalse(result["invocation_enabled"])
