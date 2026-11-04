@@ -228,7 +228,19 @@ def stage_restore(path, destination, *, confirm_restore=False):
                 p = _safe(target.joinpath(*item["path"].split("/")))
                 p.parent.mkdir(parents=True, exist_ok=True)
                 with p.open("xb") as output, archive.open(item["path"]) as src:
-                    shutil.copyfileobj(src, output, length=1024 * 1024)
+                    checksum = hashlib.sha256()
+                    copied = 0
+                    while True:
+                        chunk = src.read(min(1024 * 1024, item["bytes"] - copied + 1))
+                        if not chunk:
+                            break
+                        copied += len(chunk)
+                        if copied > item["bytes"]:
+                            raise BackupError("ZIP entry exceeded declared size during extraction")
+                        checksum.update(chunk)
+                        output.write(chunk)
+                    if copied != item["bytes"] or checksum.hexdigest() != item["sha256"]:
+                        raise BackupError("Archive changed since verification; staging discarded")
         return {"status": "RESTORED_TO_STAGING_ONLY",
                 "destination": str(target), "files": report["files"],
                 "active_databases_overwritten": False,
