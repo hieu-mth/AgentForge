@@ -67,7 +67,11 @@ def inspect(*, paths=None, backup_dir=None, task_db=None, brain_db=None,
     if running_tasks or running_goals:
         findings.append({"severity": "WARN", "rule": "inflight_tasks_manual_review",
                          "tasks": running_tasks, "goals": running_goals})
-    heartbeat = ops_daemon.read_heartbeat(path=heartbeat_path)
+    try:
+        heartbeat = ops_daemon.read_heartbeat(path=heartbeat_path)
+    except (OSError, ValueError, KeyError, TypeError, PermissionError):
+        heartbeat = {"status": "UNKNOWN", "fresh": False}
+        findings.append({"severity": "WARN", "rule": "scheduler_heartbeat_unreadable"})
     if heartbeat.get("status") == "ERROR":
         findings.append({"severity": "WARN", "rule": "scheduler_last_tick_error"})
     backup_root = Path(backup_dir) if backup_dir is not None else ops_backup.OUT
