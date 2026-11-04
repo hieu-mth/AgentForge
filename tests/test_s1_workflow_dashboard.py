@@ -137,6 +137,13 @@ class TestS1WorkflowDashboard(unittest.TestCase):
             self.assertEqual(response.status, 405)
             response.read()
             conn.close()
+
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+            conn.request("GET", "/api/skills", headers={"Host": "evil.invalid"})
+            response = conn.getresponse()
+            self.assertEqual(response.status, 403)
+            response.read()
+            conn.close()
         finally:
             server.shutdown()
             server.server_close()
