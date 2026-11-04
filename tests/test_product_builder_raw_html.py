@@ -49,6 +49,46 @@ class TestProductBuilderRawHtml(unittest.TestCase):
         self.assertFalse(b.PRODUCTS.exists())
         self.assertFalse(document["execution_authorized"])
 
+    def test_realistic_inline_svg_xmlns_is_not_an_external_request(self):
+        svg = ('<svg xmlns="http://www.w3.org/2000/svg" '
+               'xmlns:xlink="http://www.w3.org/1999/xlink" '
+               'viewBox="0 0 20 20"><circle cx="10" cy="10" r="5"/></svg>')
+        illustrated = GOOD.replace("<h1>Xin chào</h1>",
+                                   "<h1>Xin chào</h1>" + svg)
+        with patch("agentforge.model.generate", return_value=illustrated) as generate:
+            proposal = b.propose("shop-landing", self.brief)
+            generate.assert_called_once()
+        doc = json.loads(Path(proposal["proposal_path"]).read_text(encoding="utf-8"))
+        html = doc["files"][0]["content"]
+        self.assertIn('xmlns="http://www.w3.org/2000/svg"', html)
+        self.assertIn("agentforge-web-design-v2", html)
+        from agentforge import product_quality as quality
+        findings = quality.analyze(html)["findings"]
+        self.assertNotIn("unsafe_content", [item["rule"] for item in findings])
+
+    def test_non_namespace_network_urls_still_rejected(self):
+        examples = [
+            '<img src="https://example.org/tracker.png">',
+            '<svg><image href="http://www.w3.org/2000/svg"/></svg>',
+            '<svg xmlns="http://www.w3.org/2000/svg"><image href="https://example.org/x.png"/></svg>',
+            '<script>fetch("/api")</script>',
+        ]
+        for payload in examples:
+            with self.subTest(payload=payload[:30]):
+                bad = GOOD.replace("<h1>", payload + "<h1>")
+                with patch("agentforge.model.generate", return_value=bad):
+                    with self.assertRaisesRegex(ValueError, "Disallowed active/remote"):
+                        b.propose("shop-landing", self.brief)
+        self.assertFalse(b.PROPOSALS.exists())
+
+    def test_unsafe_error_identifies_category_and_line(self):
+        bad = GOOD.replace("<h1>", "\n<a href='https://example.org'>Link</a>\n<h1>")
+        with patch("agentforge.model.generate", return_value=bad) as generate:
+            with self.assertRaisesRegex(ValueError, r"remote URL at line 2"):
+                b.propose("shop-landing", self.brief)
+            generate.assert_called_once()
+        self.assertFalse(b.PROPOSALS.exists())
+
     def test_model_specific_svg_skips_neutral_fallback(self):
         illustrated = GOOD.replace(
             "<h1>Xin chào</h1>",

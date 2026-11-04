@@ -86,7 +86,7 @@ def analyze(html):
         add('document_complete', 'FAIL', str(exc))
     if not re.match(r'(?is)^\s*<!doctype\s+html\s*>', html):
         add('doctype', 'WARN', 'Add <!doctype html> for standards-mode rendering')
-    if builder.SUSPICIOUS.search(html):
+    if builder._suspicious_match(html):
         add('unsafe_content', 'FAIL', 'Potential remote resource or active API pattern found (heuristic, not a security scan)')
 
     parser = _Document()

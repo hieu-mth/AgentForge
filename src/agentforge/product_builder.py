@@ -39,6 +39,32 @@ SUSPICIOUS = re.compile(
     re.IGNORECASE,
 )
 
+# Standard SVG namespaces describe vocabulary; they don't load a resource.
+# Mask ONLY literal standard namespace attributes on SVG opening tags for the
+# heuristic URL scan. Keep the source HTML unchanged for owner review.
+SVG_START_TAG = re.compile(r"<svg\b[^>]*>", re.IGNORECASE | re.DOTALL)
+SVG_NAMESPACE = re.compile(
+    r""" \bxmlns\s*=\s*(["'])http://www\.w3\.org/2000/svg\1
+        | \bxmlns:xlink\s*=\s*(["'])http://www\.w3\.org/1999/xlink\2
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def _suspicious_match(content):
+    """Return the first disallowed heuristic match (or None)."""
+    def mask_svg_tag(match):
+        return SVG_NAMESPACE.sub(
+            lambda namespace: re.sub(
+                r"(?i)http://", "xxxxxxx", namespace.group(0), count=1
+            ),
+            match.group(0),
+        )
+
+    scan = SVG_START_TAG.sub(mask_svg_tag, content)
+    return SUSPICIOUS.search(scan)
+
+
 SCHEMA = {
     "type": "object",
     "properties": {
@@ -115,8 +141,17 @@ def _validate_files(output):
             raise ValueError("Unexpected or duplicate product filename")
         if not isinstance(content, str) or not content.strip():
             raise ValueError("Product file cannot be empty")
-        if "\x00" in content or SUSPICIOUS.search(content):
-            raise ValueError(f"Disallowed active/remote content in {name}")
+        if "\x00" in content:
+            raise ValueError(f"Disallowed active/remote content in {name}: NUL byte")
+        unsafe = _suspicious_match(content)
+        if unsafe is not None:
+            line = content.count("\n", 0, unsafe.start()) + 1
+            kind = ("remote URL" if unsafe.group(0).lower().startswith(("http://", "https://"))
+                    else "active/embedded content")
+            raise ValueError(
+                f"Disallowed active/remote content in {name}: {kind} at line {line}. "
+                "No proposal created; remove external references or unsafe APIs."
+            )
         if name == "index.html":
             scripts = re.findall(
                 r"<script\b[^>]*\bsrc\s*=\s*([\"\'])(.*?)\1",
@@ -205,7 +240,10 @@ def propose(slug, brief, *, model_client=None):
             "<!doctype html> and end with </html>. Include CSS in an inline "
             "<style> tag; JavaScript is optional, inline only. No external "
             "resources, third-party fonts, raster images, iframes, links to payment "
-            "or network calls. Create an original inline SVG illustration relevant "
+            "or network calls. No external links, remote stylesheets, CDNs, "
+            "analytics, iframe embeds, fetch() or remote font imports. A standard "
+            "xmlns declaration for inline SVG is allowed, but SVG must not link "
+            "to remote images. Create an original inline SVG illustration relevant "
             "to the business where useful. Otherwise a clearly labeled decorative "
             "offline illustration will be inserted. Use premium composition, "
             "mobile-first spacing, clear hierarchy, accessible headings, strong "
