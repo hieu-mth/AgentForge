@@ -136,7 +136,17 @@ def create_server(port=8765, *, db_path=None):
             self.end_headers()
             self.wfile.write(raw)
 
+        def _local_host(self):
+            # Reject DNS-rebinding style Host headers, not just remote binds.
+            host = self.headers.get("Host", "").lower()
+            return host in {"127.0.0.1", "localhost",
+                            f"127.0.0.1:{self.server.server_port}",
+                            f"localhost:{self.server.server_port}"}
+
         def do_GET(self):
+            if not self._local_host():
+                self._reply(403, '{"error":"invalid_host"}', "application/json")
+                return
             parsed = urlsplit(self.path)
             try:
                 if parsed.path == "/":
@@ -166,6 +176,9 @@ def create_server(port=8765, *, db_path=None):
                 self._reply(404, '{"error":"not_found"}', "application/json")
 
         def do_POST(self):
+            if not self._local_host():
+                self._reply(403, '{"error":"invalid_host"}', "application/json")
+                return
             self._reply(405, '{"error":"read_only"}', "application/json")
 
         def log_message(self, format, *args):
