@@ -26,5 +26,8 @@ jobs:
       - name: Install project
         run: python -m pip install -e ".[media]"
 
+      - name: Validate Control Center browser script
+        run: node --check src/agentforge/control_center_static/app.js
+
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
