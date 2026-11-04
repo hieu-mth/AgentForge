@@ -1,0 +1,37 @@
+schema_version = 1
+id = "media.compose"
+version = "0.1.0"
+description = "Compose original local PNG scenes, SRT captions, and soft WAV background audio."
+worker_id = "media_producer"
+execution_mode = "owner_gated"
+required_permissions = ["workspace.write"]
+required_tools = ["filesystem", "raster", "audio"]
+artifact_types = ["media_storyboard", "image", "audio", "captions"]
+quality_checks = ["asset_integrity", "caption_timing"]
+
+[limits]
+timeout_seconds = 100
+estimated_model_calls = 0
+
+[input_schema]
+type = "object"
+required = ["slug", "title", "scenes"]
+additional_properties = false
+
+[input_schema.properties]
+slug = "string"
+title = "string"
+scenes = "array"
+photo_name = "string"
+rights_confirmed = "boolean"
+
+[output_schema]
+type = "object"
+required = ["run_id", "project_slug", "status", "video_rendered"]
+additional_properties = true
+
+[output_schema.properties]
+run_id = "string"
+project_slug = "string"
+status = "string"
+video_rendered = "boolean"

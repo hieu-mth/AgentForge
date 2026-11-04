@@ -1,0 +1,34 @@
+schema_version = 1
+id = "media.video_render"
+version = "0.1.0"
+description = "Encode an MP4 locally from verified storyboard PNGs and WAV through bundled FFmpeg."
+worker_id = "media_producer"
+execution_mode = "owner_gated"
+required_permissions = ["workspace.write", "process.run"]
+required_tools = ["filesystem", "ffmpeg"]
+artifact_types = ["video_mp4"]
+quality_checks = ["mp4_decode", "video_structure"]
+
+[limits]
+timeout_seconds = 180
+estimated_model_calls = 0
+
+[input_schema]
+type = "object"
+required = ["run_id", "confirm_external_run"]
+additional_properties = false
+
+[input_schema.properties]
+run_id = "string"
+confirm_external_run = "boolean"
+
+[output_schema]
+type = "object"
+required = ["run_id", "status", "video_path", "quality_status"]
+additional_properties = true
+
+[output_schema.properties]
+run_id = "string"
+status = "string"
+video_path = "string"
+quality_status = "string"

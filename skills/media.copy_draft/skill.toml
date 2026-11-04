@@ -1,0 +1,36 @@
+schema_version = 1
+id = "media.copy_draft"
+version = "0.1.0"
+description = "Produce an unverified Vietnamese advertising storyboard draft with one owner-approved model call."
+worker_id = "media_producer"
+execution_mode = "owner_gated"
+required_permissions = ["model.invoke", "workspace.propose"]
+required_tools = ["model"]
+artifact_types = ["storyboard_draft"]
+quality_checks = ["schema_validation", "owner_review_required"]
+
+[limits]
+timeout_seconds = 210
+estimated_model_calls = 1
+
+[input_schema]
+type = "object"
+required = ["topic", "audience", "goal"]
+additional_properties = false
+
+[input_schema.properties]
+topic = "string"
+audience = "string"
+goal = "string"
+
+[output_schema]
+type = "object"
+required = ["title", "scenes", "status", "review_required", "verified_claims"]
+additional_properties = true
+
+[output_schema.properties]
+title = "string"
+scenes = "array"
+status = "string"
+review_required = "boolean"
+verified_claims = "boolean"

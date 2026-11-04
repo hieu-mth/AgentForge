@@ -1,0 +1,36 @@
+schema_version = 1
+id = "media.tts"
+version = "0.1.0"
+description = "Generate a local voiceover using separately installed Windows Vietnamese SAPI or Piper."
+worker_id = "media_producer"
+execution_mode = "owner_gated"
+required_permissions = ["workspace.write", "process.run"]
+required_tools = ["filesystem", "tts_engine"]
+artifact_types = ["voiceover_wav"]
+quality_checks = ["voice_waveform", "voice_duration"]
+
+[limits]
+timeout_seconds = 140
+estimated_model_calls = 0
+
+[input_schema]
+type = "object"
+required = ["run_id", "engine", "confirm_external_run"]
+additional_properties = false
+
+[input_schema.properties]
+run_id = "string"
+engine = "string"
+voice = "string"
+confirm_external_run = "boolean"
+
+[output_schema]
+type = "object"
+required = ["run_id", "status", "audio_path", "voice_engine"]
+additional_properties = true
+
+[output_schema.properties]
+run_id = "string"
+status = "string"
+audio_path = "string"
+voice_engine = "string"
