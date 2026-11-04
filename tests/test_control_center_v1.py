@@ -105,6 +105,23 @@ class TestControlCenterV1(unittest.TestCase):
         self.assertEqual(code, 401)
         self.assertFalse(self.brain.exists())
 
+    def test_authenticated_operations_health_is_read_only(self):
+        code, payload, _ = self.req("GET", "/api/ops/health")
+        self.assertEqual(code, 401)
+        self.login()
+        code, result, _ = self.req("GET", "/api/ops/health")
+        self.assertEqual(code, 200)
+        self.assertIn(result["status"], {"PASS", "REVIEW_REQUIRED"})
+        self.assertTrue(result["local_only"])
+        self.assertFalse(result["automatic_recovery_performed"])
+        self.assertFalse(result["external_accounts_connected"])
+        self.assertFalse(result["verified_revenue"])
+        self.assertFalse(self.brain.exists())
+        code, _, _ = self.req("GET", "/api/ops/health", host="evil.invalid")
+        self.assertEqual(code, 403)
+        code, _, _ = self.req("POST", "/api/ops/health", {})
+        self.assertEqual(code, 400)
+
     def test_login_wrong_credentials_rate_limited(self):
         for index in range(5):
             code, _, _ = self.req("POST", "/api/login", {"code": "not-the-code"})
