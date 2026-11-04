@@ -1,0 +1,490 @@
+"""AgentForge Control Center V1 — authenticated, localhost-only owner console.
+
+This is NOT internet-facing multi-user authentication. A fresh console-printed
+owner code logs in to an in-memory HttpOnly session. Every mutation requires
+same-origin JSON, an authenticated session, a per-session CSRF token, an
+explicit owner action phrase and the underlying S1/S4 permission gates.
+
+All existing V0 read-only endpoints and CLIs remain intact.
+"""
+import argparse
+import hmac
+import json
+import secrets
+import threading
+import time
+from http import cookies
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import urlsplit
+
+from agentforge import analytics_insights, analytics_store, brain_planner
+from agentforge import brain_runner, brain_scheduler, brain_store, growth_reports
+from agentforge import growth_store, skill_registry, task_history
+from agentforge.dashboard_v0 import _artifact_names, _task_public
+
+STATIC = Path(__file__).with_name("control_center_static")
+COOKIE = "af_owner_session"
+SESSION_SECONDS = 8 * 60 * 60
+MAX_BODY = 8192
+SENSITIVE_GRANTS = {"model.invoke", "network.read", "network.search",
+                    "browser.run", "process.run"}
+LOCAL_GRANTS = {"workspace.write", "workspace.propose", "workspace.read"}
+
+
+def _read_static(name):
+    path = STATIC / name
+    return path.read_bytes()
+
+
+def _public_task(task):
+    output = _task_public(task)
+    output["artifacts"] = _artifact_names(task.get("result"))
+    if (task.get("skill_id") == "web.create" and task.get("status") == "SUCCEEDED"
+            and isinstance(task.get("result"), dict)):
+        result = task["result"]
+        if (isinstance(result.get("proposal_id"), str)
+                and isinstance(result.get("sha256"), str)):
+            output["web_proposal"] = {
+                "proposal_id": result["proposal_id"],
+                "sha256": result["sha256"],
+                "slug": result.get("project_slug", ""),
+            }
+    return output
+
+
+def _summary(server):
+    tasks = task_history.list_tasks(db_path=server.task_db_path, limit=100)
+    goals = brain_store.list_goals(db_path=server.brain_db_path, limit=60)
+    schedules = brain_scheduler.list_schedules(db_path=server.brain_db_path)
+    datasets = analytics_store.list_datasets(db_path=server.analytics_db_path)
+    campaigns = growth_store.list_campaigns(db_path=server.growth_db_path, limit=30)
+    growth = []
+    for item in campaigns:
+        report = growth_reports.report(item["campaign"], db_path=server.growth_db_path)
+        growth.append({
+            "campaign": item["campaign"], "title": item["title"],
+            "synthetic": bool(item["synthetic"]),
+            "lead_total": report["lead_total"],
+            "package_count": report["package_count"],
+            "owner_reported_posts": report["owner_reported_posts"],
+            "owner_recorded_net_cash_vnd": report["owner_recorded_net_cash_vnd"],
+            "verified_net_profit_vnd": None,
+        })
+    health = {"status": "NOT_RUNNING", "fresh": False}
+    try:
+        from agentforge.ops_daemon import read_heartbeat
+        health = read_heartbeat()
+    except (OSError, ValueError):
+        health = {"status": "UNKNOWN", "fresh": False}
+    states = ("SUCCEEDED", "RUNNING", "WAITING_APPROVAL", "FAILED", "INTERRUPTED")
+    return {
+        "version": "v1", "local_only": True, "authenticated": True,
+        "external_actions_enabled": server.allow_external_actions,
+        "stats": {"tasks": len(tasks), "skills": len(skill_registry.load_registry()),
+                  "goals": len(goals),
+                  **{x.lower(): sum(t["status"] == x for t in tasks) for x in states}},
+        "tasks": [
+            _public_task(
+                task_history.get_task(t["task_id"], db_path=server.task_db_path)
+                if t["skill_id"] == "web.create" and t["status"] == "SUCCEEDED"
+                else t
+            ) for t in tasks[:40]
+        ],
+        "goals": goals, "schedules": schedules,
+        "skills": [{"id": k, "worker": v["worker_id"],
+                    "mode": v["execution_mode"]}
+                   for k, v in skill_registry.load_registry().items()],
+        "datasets": [{"dataset": x["dataset"], "synthetic": bool(x["synthetic"]),
+                      "performance_rows": x["performance_rows"],
+                      "ledger_rows": x["ledger_rows"]} for x in datasets[:30]],
+        "growth": growth, "daemon": health,
+        "templates": {k: list(v) for k, v in brain_planner.TEMPLATES.items()},
+        "connectors": [
+            {"name": "YouTube", "status": "MANUAL_HANDOFF_ONLY",
+             "authenticated": False, "automated_upload": False},
+            {"name": "TikTok", "status": "MANUAL_HANDOFF_ONLY",
+             "authenticated": False, "automated_upload": False},
+            {"name": "Bank / affiliate", "status": "OWNER_RECORDED_ONLY",
+             "authenticated": False, "verified_profit": False},
+        ],
+    }
+
+
+def _owner_action(server, path, request, session=None):
+    """Explicit allowlist; no arbitrary skill invocation or Python execution."""
+    if path.startswith("/api/proposals/") and path.endswith("/apply"):
+        from agentforge import product_builder
+        parts = path.split("/")
+        if len(parts) != 5:
+            raise ValueError("Invalid proposal action")
+        proposal_id = parts[3]
+        metadata = product_builder.inspect(proposal_id)
+        if (request.get("ack") != "APPLY_PROPOSAL"
+                or request.get("sha256") != metadata["sha256"]):
+            raise PermissionError("Explicit matching proposal SHA required")
+        if (session is None or session.get("reviewed_proposals", {}).get(
+                proposal_id) != metadata["sha256"]):
+            raise PermissionError("Inspect original proposal in this session before applying")
+        return product_builder.apply(
+            proposal_id, confirm_write=True, sha256=metadata["sha256"])
+    if path == "/api/goals/propose":
+        if request.get("ack") != "PROPOSE":
+            raise PermissionError("Confirm PROPOSE before making a goal")
+        return brain_planner.propose(
+            request.get("title"), request.get("template"), request.get("inputs"),
+            max_model_calls=request.get("max_model_calls", 0),
+            max_external_runs=request.get("max_external_runs", 0),
+            db_path=server.brain_db_path)
+    if path.startswith("/api/goals/"):
+        parts = path.split("/")
+        if len(parts) != 5 or parts[1:3] != ["api", "goals"]:
+            raise ValueError("Unknown goal operation")
+        ident, action = parts[3], parts[4]
+        goal = brain_store.get_goal(ident, db_path=server.brain_db_path)
+        if request.get("plan_sha256") != goal["plan_sha256"]:
+            raise PermissionError("Goal plan SHA changed; inspect before authorizing")
+        if action == "approve":
+            if request.get("ack") != "APPROVE":
+                raise PermissionError("Explicit APPROVE required")
+            return brain_store.approve_goal(
+                ident, request["plan_sha256"], db_path=server.brain_db_path)
+        if action in {"run", "resume"}:
+            required_status = "APPROVED" if action == "run" else "WAITING_APPROVAL"
+            if goal["status"] != required_status or request.get("ack") != action.upper():
+                raise PermissionError(f"Explicit {action.upper()} on {required_status} goal required")
+            grants = request.get("grants", [])
+            if (not isinstance(grants, list) or len(grants) > 8 or
+                    any(not isinstance(g, str) for g in grants) or
+                    len(set(grants)) != len(grants) or
+                    not set(grants).issubset(skill_registry.PERMISSIONS)):
+                raise ValueError("Invalid tool grants")
+            external = set(grants) & SENSITIVE_GRANTS
+            uses_external = any(
+                set(step["required_permissions"]) & SENSITIVE_GRANTS
+                for step in goal["plan"])
+            if (external or uses_external) and not server.allow_external_actions:
+                raise PermissionError("External tools are disabled in this Control Center")
+            if (external or uses_external) and request.get(
+                    "ack_external") != "AUTHORIZE_EXTERNAL_TOOLS":
+                raise PermissionError("Separate external tool approval required")
+            flags = {}
+            for key in ("confirm_model_call", "confirm_browser_run",
+                        "confirm_external_run"):
+                value = request.get(key, False)
+                if type(value) is not bool:
+                    raise ValueError("Confirmation flags must be boolean")
+                flags[key] = value
+            # No implicit or persistent grants. The S1 runner enforces each step.
+            return brain_runner.execute(
+                ident, grants=grants, brain_db_path=server.brain_db_path,
+                task_db_path=server.task_db_path, **flags)
+        raise ValueError("Unknown goal operation")
+    if path == "/api/schedules/create":
+        if request.get("ack") != "SCHEDULE":
+            raise PermissionError("Explicit SCHEDULE required")
+        return brain_scheduler.create_schedule(
+            request.get("title"), request.get("template"), request.get("inputs"),
+            request.get("next_due"), request.get("frequency_minutes"),
+            confirm_schedule=True, db_path=server.brain_db_path)
+    if path == "/api/schedules/tick":
+        if request.get("ack") != "TICK":
+            raise PermissionError("Explicit TICK required")
+        return brain_scheduler.tick(
+            confirm_tick=True, db_path=server.brain_db_path,
+            task_db_path=server.task_db_path, max_due=3)
+    if path.startswith("/api/schedules/") and path.endswith("/status"):
+        pieces = path.split("/")
+        if len(pieces) != 5 or pieces[1:3] != ["api", "schedules"]:
+            raise ValueError("Unknown schedule operation")
+        target = request.get("status")
+        if target not in ("ACTIVE", "PAUSED") or request.get("ack") != target:
+            raise PermissionError("Explicit schedule status confirmation required")
+        return brain_scheduler.set_schedule_status(
+            pieces[3], target, confirm_write=True, db_path=server.brain_db_path)
+    if path == "/api/campaigns/create":
+        if request.get("ack") != "CREATE_CAMPAIGN":
+            raise PermissionError("Explicit CREATE_CAMPAIGN required")
+        return growth_store.create_campaign(
+            request.get("data"), confirm_write=True,
+            db_path=server.growth_db_path, analytics_db_path=server.analytics_db_path)
+    if path == "/api/campaigns/event":
+        if request.get("ack") != "RECORD_EVENT":
+            raise PermissionError("Explicit RECORD_EVENT required")
+        # Strict nested validation occurs before any storage; does not log PII.
+        growth_store.validate_event_payload(request.get("kind"),
+                                            request.get("data"))
+        return growth_store.record_event(
+            request["kind"], request["data"], confirm_write=True,
+            db_path=server.growth_db_path)
+    if path == "/api/memory/set":
+        if request.get("ack") != "SAVE_NOTE":
+            raise PermissionError("Explicit SAVE_NOTE required")
+        return brain_store.set_memory(
+            request.get("key"), request.get("note"),
+            request.get("evidence_ref"), confirm_write=True,
+            db_path=server.brain_db_path)
+    raise ValueError("Unknown mutation route")
+
+
+class _Handler(BaseHTTPRequestHandler):
+    # No persistent request bodies: malformed Content-Length cannot desync keep-alive.
+    protocol_version = "HTTP/1.0"
+
+    def log_message(self, format, *args):
+        return  # Do not log authentication credentials, URLs or customer data.
+
+    def _origin(self):
+        return f"http://{self.headers.get('Host', '')}"
+
+    def _host_ok(self):
+        host = self.headers.get("Host", "")
+        port = self.server.server_port
+        return (host in (f"127.0.0.1:{port}", f"localhost:{port}") and
+                self.client_address[0] in {"127.0.0.1", "::1"})
+
+    def _reply(self, code, data, *, mime="application/json", headers=()):
+        if isinstance(data, (dict, list)):
+            raw = json.dumps(data, ensure_ascii=False, allow_nan=False).encode("utf-8")
+        elif isinstance(data, bytes):
+            raw = data
+        else:
+            raw = str(data).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(len(raw)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        self.send_header("Content-Security-Policy",
+                         "default-src 'none'; script-src 'self'; style-src 'self'; "
+                         "connect-src 'self'; img-src 'self'; base-uri 'none'; "
+                         "form-action 'none'; frame-ancestors 'none'")
+        for k, v in headers:
+            self.send_header(k, v)
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def _session(self):
+        raw = self.headers.get("Cookie", "")
+        if len(raw) > 2048:
+            return None
+        try:
+            jar = cookies.SimpleCookie()
+            jar.load(raw)
+            item = jar.get(COOKIE)
+        except cookies.CookieError:
+            return None
+        if item is None:
+            return None
+        with self.server.auth_lock:
+            session = self.server.sessions.get(item.value)
+            if session and session["expires"] > time.monotonic():
+                return session
+        return None
+
+    def _blocked(self, code=403, error="forbidden"):
+        self._reply(code, {"error": error})
+
+    def do_GET(self):
+        if not self._host_ok():
+            return self._blocked(error="invalid_host")
+        route = urlsplit(self.path).path
+        if route in ("/", "/app.css", "/app.js"):
+            filename, mime = {
+                "/": ("app.html", "text/html; charset=utf-8"),
+                "/app.css": ("app.css", "text/css; charset=utf-8"),
+                "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+            }[route]
+            return self._reply(200, _read_static(filename), mime=mime)
+        if self._session() is None:
+            return self._blocked(401, "authentication_required")
+        try:
+            if route == "/api/session":
+                session = self._session()
+                return self._reply(200, {
+                    "status": "AUTHENTICATED", "csrf": session["csrf"]})
+            if route == "/api/bootstrap":
+                return self._reply(200, _summary(self.server))
+            if route == "/api/memory":
+                return self._reply(200, brain_store.list_memory(
+                    db_path=self.server.brain_db_path))
+            if route.startswith("/api/proposals/"):
+                from agentforge import product_builder
+                ident = route.removeprefix("/api/proposals/")
+                document, _ = product_builder._read_proposal(ident)
+                if document["status"] != "PROPOSED_NOT_APPLIED":
+                    raise ValueError("Proposal cannot be reviewed")
+                session = self._session()
+                session.setdefault("reviewed_proposals", {})[ident] = document["sha256"]
+                return self._reply(200, {
+                    "proposal_id": ident, "project_slug": document["project_slug"],
+                    "sha256": document["sha256"],
+                    "status": document["status"],
+                    "summary": document["summary"],
+                    "files": [{"path": f["path"], "content": f["content"]}
+                              for f in document["files"]],
+                    "execution_authorized": False,
+                })
+            if route.startswith("/api/goals/"):
+                ident = route.removeprefix("/api/goals/")
+                return self._reply(200, brain_runner.inspect(
+                    ident, brain_db_path=self.server.brain_db_path))
+            if route.startswith("/api/tasks/"):
+                ident = route.removeprefix("/api/tasks/")
+                task = task_history.get_task(ident, db_path=self.server.task_db_path)
+                return self._reply(200, {
+                    **_public_task(task),
+                    "events": [{"at": x["at"], "name": x["name"]}
+                               for x in task["events"]]})
+            if route.startswith("/api/growth/"):
+                return self._reply(200, growth_reports.report(
+                    route.removeprefix("/api/growth/"),
+                    db_path=self.server.growth_db_path))
+            return self._blocked(404, "not_found")
+        except (ValueError, KeyError, PermissionError, TypeError):
+            return self._blocked(404, "not_found")
+
+    def _read_json(self):
+        if self.headers.get("Content-Type", "").lower() != "application/json":
+            raise ValueError("Content-Type must be application/json")
+        length_text = self.headers.get("Content-Length", "")
+        if not length_text.isdecimal():
+            raise ValueError("Content-Length required")
+        length = int(length_text)
+        if not 2 <= length <= MAX_BODY:
+            raise ValueError("Request must be 2–8192 bytes")
+        raw = self.rfile.read(length)
+        if len(raw) != length:
+            raise ValueError("Incomplete request")
+        data = json.loads(raw.decode("utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("JSON object required")
+        return data
+
+    def do_POST(self):
+        if not self._host_ok():
+            return self._blocked(error="invalid_host")
+        origin = self.headers.get("Origin")
+        if origin != self._origin():
+            return self._blocked(error="invalid_origin")
+        if self.headers.get("Sec-Fetch-Site", "same-origin") not in {
+                "same-origin", "none"}:
+            return self._blocked(error="invalid_fetch_site")
+        path = urlsplit(self.path).path
+        try:
+            data = self._read_json()
+        except (UnicodeError, json.JSONDecodeError, ValueError):
+            return self._blocked(400, "bad_json")
+        if path == "/api/login":
+            code = data.get("code")
+            if not isinstance(code, str) or len(code) > 128:
+                return self._blocked(401, "invalid_credentials")
+            with self.server.auth_lock:
+                now = time.monotonic()
+                self.server.failed_logins = [
+                    at for at in self.server.failed_logins if now - at < 60]
+                if len(self.server.failed_logins) >= 5:
+                    return self._blocked(429, "login_rate_limited")
+                if not hmac.compare_digest(code, self.server.owner_code):
+                    self.server.failed_logins.append(now)
+                    return self._blocked(401, "invalid_credentials")
+                session_id = secrets.token_urlsafe(32)
+                csrf = secrets.token_urlsafe(32)
+                self.server.sessions[session_id] = {
+                    "csrf": csrf, "expires": now + SESSION_SECONDS}
+            return self._reply(200, {"status": "AUTHENTICATED", "csrf": csrf},
+                               headers=(("Set-Cookie", f"{COOKIE}={session_id}; "
+                                         "HttpOnly; SameSite=Strict; Path=/; "
+                                         f"Max-Age={SESSION_SECONDS}"),))
+        session = self._session()
+        if session is None:
+            return self._blocked(401, "authentication_required")
+        header = self.headers.get("X-CSRF-Token", "")
+        if not hmac.compare_digest(header, session["csrf"]):
+            return self._blocked(403, "invalid_csrf")
+        if path == "/api/logout":
+            with self.server.auth_lock:
+                jar = cookies.SimpleCookie()
+                jar.load(self.headers.get("Cookie", ""))
+                item = jar.get(COOKIE)
+                if item:
+                    self.server.sessions.pop(item.value, None)
+            return self._reply(200, {"status": "LOGGED_OUT"},
+                               headers=(("Set-Cookie", f"{COOKIE}=; "
+                                         "HttpOnly; SameSite=Strict; Path=/; Max-Age=0"),))
+        try:
+            output = _owner_action(self.server, path, data, session)
+            return self._reply(200, output)
+        except (ValueError, KeyError, TypeError, PermissionError, FileExistsError) as exc:
+            # Do not echo arbitrary input or secrets into an error response.
+            msg = str(exc)[:180]
+            return self._reply(400, {"error": type(exc).__name__,
+                                     "message": msg})
+        except Exception:
+            return self._reply(500, {"error": "internal_error",
+                                     "message": "Inspect local task/goal status; no automatic retry"})
+
+    def do_PUT(self):
+        return self._blocked(405, "method_not_allowed")
+
+    def do_DELETE(self):
+        return self._blocked(405, "method_not_allowed")
+
+    def do_OPTIONS(self):
+        return self._blocked(405, "no_cors")
+
+
+def create_server(port=8780, *, owner_code=None, allow_external_actions=False,
+                  task_db_path=None, brain_db_path=None, analytics_db_path=None,
+                  growth_db_path=None):
+    if type(port) is not int or not 0 <= port <= 65535:
+        raise ValueError("Invalid port")
+    if owner_code is not None and (
+            not isinstance(owner_code, str) or not 12 <= len(owner_code) <= 128):
+        raise ValueError("Owner code must be 12-128 characters")
+    server = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
+    server.daemon_threads = True
+    server.owner_code = owner_code or secrets.token_urlsafe(24)
+    server.sessions = {}
+    server.failed_logins = []
+    server.auth_lock = threading.RLock()
+    server.task_db_path = task_db_path
+    server.brain_db_path = brain_db_path
+    server.analytics_db_path = analytics_db_path
+    server.growth_db_path = growth_db_path
+    server.allow_external_actions = allow_external_actions is True
+    return server
+
+
+def main():
+    cli = argparse.ArgumentParser(
+        description="Owner-authenticated localhost AgentForge Control Center V1")
+    cli.add_argument("--port", type=int, default=8780)
+    cli.add_argument("--allow-external-tools", action="store_true",
+                     help="Explicitly enable gated model/network/browser/process workflows")
+    args = cli.parse_args()
+    server = create_server(args.port, allow_external_actions=args.allow_external_tools)
+    print(f"Control Center V1: http://127.0.0.1:{server.server_port}/", flush=True)
+    print("ONE-TIME OWNER CODE (do not share, paste into Git or logs):",
+          server.owner_code, flush=True)
+    print("Localhost only. Session expires in 8h; Ctrl+C to stop.", flush=True)
+    if args.allow_external_tools:
+        print("External-capable tools are ENABLED but still require per-action approvals.",
+              flush=True)
+    else:
+        print("External-capable tools DISABLED. Read-only and owner-gated local actions only.",
+              flush=True)
+    try:
+        server.serve_forever(poll_interval=.3)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+
+
+if __name__ == "__main__":
+    main()

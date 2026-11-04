@@ -9,12 +9,15 @@ from agentforge import brain_store, skill_registry, skill_runner
 TEMPLATES = {
     "campaign.review": ("dataset",),
     "website.campaign": ("slug", "dataset"),
+    "website.draft": ("slug", "brief"),
     "website.browser": ("slug",),
     "media.produce": ("slug", "title", "scenes"),
     "media.review": ("run_id",),
     "research.discovery": ("topic",),
     "creative.storyboard": ("topic", "audience", "goal"),
     "growth.review": ("campaign",),
+    "growth.launch_local": ("campaign", "slug", "title", "scenes",
+                            "description", "rights_attested"),
 }
 OPTIONAL = {"campaign", "photo_name", "rights_confirmed"}
 ALIASES = {
@@ -43,6 +46,12 @@ def _steps(template, inputs):
         steps = [(name, dict(payload)) for name in (
             "analytics.quality_check", "analytics.content_report",
             "analytics.opportunity_score", "analytics.finance_report")]
+    elif template == "website.draft":
+        from agentforge.product_builder import _check_slug, _bounded_text
+        _check_slug(inputs["slug"])
+        _bounded_text(inputs["brief"], "brief", 20, 600)
+        steps = [("web.create", {
+            "slug": inputs["slug"], "brief": inputs["brief"]})]
     elif template == "website.campaign":
         payload = {"dataset": inputs["dataset"]}
         if "campaign" in inputs:
@@ -72,6 +81,34 @@ def _steps(template, inputs):
     elif template == "growth.review":
         steps = [(skill_id, {"campaign": inputs["campaign"]}) for skill_id in (
             "growth.quality_check", "growth.report", "growth.reconcile")]
+    elif template == "growth.launch_local":
+        # Prepare for both channels; NO network publication or account access.
+        # The owner must explicitly attest rights in the reviewed plan.
+        from agentforge.media_assets import _scenes, _slug, _text
+        from agentforge.growth_store import _identifier, CAMPAIGN, _text as growth_text
+        _identifier(inputs["campaign"], CAMPAIGN, "campaign")
+        _slug(inputs["slug"])
+        _text(inputs["title"], "title", 88)
+        _scenes(inputs["scenes"])
+        growth_text(inputs["description"], max_length=1200, field="description")
+        if inputs["rights_attested"] is not True:
+            raise brain_store.BrainError("Owner must attest original/licensed media rights")
+        binding = {"from_step": 0, "field": "run_id"}
+        steps = [
+            ("media.compose", {
+                "slug": inputs["slug"], "title": inputs["title"],
+                "scenes": inputs["scenes"]}),
+            ("media.quality_check", {"run_id": binding}),
+            ("media.video_render", {
+                "run_id": binding, "confirm_external_run": True}),
+        ]
+        for channel in ("youtube", "tiktok"):
+            steps.append(("growth.bundle_prepare", {
+                "campaign": inputs["campaign"], "channel": channel,
+                "run_id": binding, "title": inputs["title"],
+                "description": inputs["description"],
+                "confirm_rights": True, "confirm_write": True}))
+        steps.append(("growth.quality_check", {"campaign": inputs["campaign"]}))
     else:
         steps = [("media.copy_draft", dict(inputs))]
     plan = []

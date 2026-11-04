@@ -433,3 +433,40 @@ All figures are owner-recorded or SYNTHETIC, and verified net profit
 remains null. This preserves the product vision but does not make the
 system an autonomous, real-revenue-producing company. See the
 detailed owner acceptance and boundaries at docs/milestones/S5.md.
+
+
+## Addendum — Control Center V1 & Local Operations (2026-11-05)
+
+Post-S5 local-first operational consolidation adds a full-width,
+responsive owner-authenticated localhost Control Center V1 alongside
+the retained read-only V0. V1 integrates SHA-reviewed S4 goals,
+explicit plan/skill permission acknowledgements, sanitized S1 task
+history, S3 datasets, S5 growth records, local schedule management
+and owner evidence notes. A separately owner-started scheduler daemon
+provides bounded READ-ONLY polling, OS-exclusive locking and heartbeat,
+without silently becoming a background service or replaying ambiguous
+actions. The new six-step S4 growth.launch_local template prepares an
+S2 MP4 plus manual YouTube/TikTok handoff ZIPs through existing S1/S5
+gates; it does NOT publish content or connect social accounts.
+
+Code-level permissions remain unchanged; the Skill Registry remains
+24 skills. Model/network/browser/process execution is disabled by
+default through V1 and needs a separate server opt-in plus explicit
+owner per-step grants. The one-time local owner code is generated in
+RAM, and the interface is not suitable for WAN exposure or
+multi-user use. Real OAuth platform connection, paid spending
+enforcement, verified revenue, Windows service installation, encrypted
+secret management and production disaster recovery remain distinct
+production-integration gates. See docs/milestones/CONTROL_CENTER_V1.md.
+
+
+## Addendum — owner-reviewed web creation from Control Center V1
+
+The trusted website.draft template invokes the existing S1 web.create
+proposal skill only with an explicit owner model-call cap and grant.
+The V1 Websites section shows raw HTML as escaped text before the
+owner can SHA-apply it, and apply requires a source review in the
+authenticated session. Existing product_builder path, digest, static
+quality and no-overwrite guards remain unchanged. Applying a proposal
+does not run HTML or deploy/publish the site. This expands practical
+owner workflow in V1; it does not confer new autonomous permissions.

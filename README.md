@@ -18,6 +18,7 @@ See **[AgentForge Master Project Context & Strategic Roadmap](docs/AGENTFORGE_MA
 - **Browser validation (C8D):** optional owner-started headless Chromium screenshots at mobile/tablet/desktop sizes; reports overflow, JavaScript errors, and blocked ordinary HTTP requests without changing the product.
 - **Browser-guided fixes (C8E):** local-only triage of C8D reports, optional one-call AI fix proposals for verified issues, and the same owner-gated C8B approval path. Passing browser reports never trigger AI calls.
 - **Bounded workflow (C8F):** immutable local checkpoints coordinate baseline browser test, optional one-model fix proposal, candidate browser test and separate C8B owner approval. A PASS report never triggers a model call.
+- **Control Center V1 & local operations:** responsive authenticated localhost owner UI (default port 8780), SHA-reviewed S4 goal creation/approval/dispatch, one-run permission grants, sanitized tasks/S3/S5, read-only schedule management, local opt-in foreground scheduler with lock and heartbeat. New six-step growth.launch_local plan creates S2 video and two S5 manual-upload ZIPs; website.draft and a source-reviewed, SHA-gated apply flow create offline websites without repeating CLI commands. Default UI blocks model/network/browser/process tools until explicitly enabled; no public auth, real YouTube/TikTok API connection or bank verified revenue. See [Control Center V1 milestone](docs/milestones/CONTROL_CENTER_V1.md).
 - **Revenue & Growth Operations (S5):** local campaign records, owner-approved S2 MP4/SRT manual-upload packages for YouTube/TikTok, consent-attested anonymous lead pipeline, immutable owner-reported commissions/costs with local booked-cost cap, S3 cross-ledger check, S4 read-only growth.review delegation, and a Dashboard growth table. **Not** authenticated channel creation/upload, bank reconciliation, verified profit or live provider budget enforcement. See [S5](docs/milestones/S5.md).
 - **Company Brain & Delegation (S4):** bounded owner-governed goal templates, immutable SHA-reviewed plans, existing S1 skill/worker dispatch with per-step approval, durable step markers/no-replay recovery, local read-only scheduler, owner-owned memory and read-only Dashboard goal queue. NOT unrestricted AI planning, authenticated multi-user delegation, unattended 24/7 or hard money spending metering. See [S4 milestone](docs/milestones/S4.md).
 - **Intelligence & Analytics (S3):** strict local CSV ingestion for daily performance and owner-recorded finance, source hashes/deduplication, content diagnostics, internal trend/opportunity hypotheses, descriptive A/B evaluation, pending-vs-confirmed cash, and read-only Dashboard overview. Seven S3 skills use existing S1 Task History and Policy Gate. No direct YouTube/TikTok/bank integrations, independently verified profit, or causal winner. See [S3](docs/milestones/S3.md).
@@ -47,6 +48,39 @@ Run the tests (no live model credentials or customer interviews required):
 ```
 
 The repository's [GitHub Actions CI](.github/workflows/ci.yml) runs the same suite on Windows and Python 3.13 for pushes/PRs targeting `main`.
+
+## Control Center V1 — owner-operated local interface
+
+After updating main and installing project extras, run:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[media]"
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m agentforge.control_center_v1 --port 8780
+```
+
+Open http://127.0.0.1:8780/ and enter the one-time owner code printed
+to the *local terminal*. Never commit, upload or share the code. The
+old read-only Dashboard V0 remains available separately on port 8765.
+
+Owner actions in V1 require an authenticated in-memory session,
+same-origin JSON+CSRF, exact SHA approval, and per-run S1 grants.
+External-capable tools are OFF by default. To explicitly opt in to a
+bounded model/network/browser/FFmpeg workflow, restart V1 with
+--allow-external-tools and still approve the grants per execution.
+Never expose this single-user HTTP service outside localhost.
+
+For opt-in recurring *read-only* goals on an always-on local machine,
+use a separate terminal:
+
+```powershell
+.\.venv\Scripts\python.exe -m agentforge.ops_daemon run --confirm-unattended --interval 60
+```
+
+This is a foreground process, not a registered Windows service or
+an automatic 24/7 cloud deployment. The scheduler never grants model,
+posting or spending authority. See [Control Center V1 and acceptance
+instructions](docs/milestones/CONTROL_CENTER_V1.md).
 
 ## S5 — Manual channel handoff & owner-recorded growth pilot
 
