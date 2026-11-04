@@ -1,0 +1,35 @@
+schema_version = 1
+id = "research.source_review"
+version = "0.1.0"
+description = "Review source quotes only from explicitly approved public HTTPS hosts."
+worker_id = "source_reviewer"
+execution_mode = "owner_gated"
+required_permissions = ["workspace.read", "workspace.write", "model.invoke", "network.read"]
+required_tools = ["filesystem", "model", "https_reader"]
+artifact_types = ["quote_review"]
+quality_checks = ["quote_match", "source_provenance"]
+
+[limits]
+timeout_seconds = 360
+estimated_model_calls = 4
+
+[input_schema]
+type = "object"
+required = ["task_id", "allowed_hosts", "approve_read_only"]
+additional_properties = false
+
+[input_schema.properties]
+task_id = "string"
+allowed_hosts = "array"
+approve_read_only = "boolean"
+max_pages = "integer"
+
+[output_schema]
+type = "object"
+required = ["task_id", "review_status", "matched_quotes"]
+additional_properties = true
+
+[output_schema.properties]
+task_id = "string"
+review_status = "string"
+matched_quotes = "integer"

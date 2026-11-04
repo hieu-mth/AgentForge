@@ -331,3 +331,9 @@ Khi đưa tài liệu này vào chat mới, assistant cần:
 ---
 
 **End of snapshot — 2026-11-04.**
+
+## Addendum — S1.1 Skill Foundation (2026-11-05)
+
+Following the real `nem-tu-van` Web Builder pilot, AgentForge adds a **declarative-only S1.1 Skill Registry** with five contracts: `web.create`, `web.quality_check`, `web.browser_test`, `research.opportunity`, `research.source_review`. Each declares schema, worker, permissions, tools, artifact types, quality checks and resource hints. Commands `skill_registry list / inspect / validate` are read-only. This is a **new implementation addendum**, not a revision of the original 2026-11-04 strategy snapshot.
+
+**Not yet implemented:** skill dispatch/invocation, runtime permission enforcement, persistent task history, Dashboard V0 or autonomous execution. S1.2 should wrap existing functions behind explicit owner-gated adapters; S1.3 should persist tasks/checkpoints before any broader delegation. See [S1.1](milestones/S1.1.md).

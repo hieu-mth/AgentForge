@@ -1,0 +1,33 @@
+schema_version = 1
+id = "web.quality_check"
+version = "0.1.0"
+description = "Analyze an existing static website with the C8C read-only quality checker."
+worker_id = "product_builder"
+execution_mode = "read_only"
+required_permissions = ["workspace.read"]
+required_tools = ["filesystem"]
+artifact_types = ["quality_report"]
+quality_checks = ["report_status"]
+
+[limits]
+timeout_seconds = 30
+estimated_model_calls = 0
+
+[input_schema]
+type = "object"
+required = ["slug"]
+additional_properties = false
+
+[input_schema.properties]
+slug = "string"
+
+[output_schema]
+type = "object"
+required = ["status", "failures", "warnings", "findings"]
+additional_properties = true
+
+[output_schema.properties]
+status = "string"
+failures = "integer"
+warnings = "integer"
+findings = "array"
