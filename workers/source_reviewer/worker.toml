@@ -1,0 +1,8 @@
+﻿id = "source_reviewer"
+model_ref = "local_qwen"
+runtime = "manual"
+
+capabilities = [
+    "source_review",
+    "quote_validation"
+]

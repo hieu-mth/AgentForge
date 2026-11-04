@@ -1,0 +1,8 @@
+﻿id = "opportunity_researcher"
+model_ref = "local_qwen"
+runtime = "langgraph"
+
+capabilities = [
+    "web_research",
+    "evidence_analysis"
+]
