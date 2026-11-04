@@ -13,6 +13,23 @@ CANDIDATE_RE = re.compile(r"C[1-9][0-9]{0,3}\Z")
 # Quote-matched page text is not sufficient for willingness-to-pay or KILL.
 REVIEWABLE_SCOPES = frozenset(REQUIRED) - {"willingness_to_pay"}
 
+# Page quotes alone do not establish customer demand, payments or unit economics.
+# Preserve the existing paid-alternative/differentiation handoff while limiting
+# quote-only registrations to these narrow, owner-reviewed scopes.
+QUOTE_SCOPE_BY_FIELD = {
+    "paid_alternative": frozenset({"differentiation"}),
+    "acquisition_channel": frozenset({"distribution"}),
+}
+
+# Catalog entries are market intelligence, never evaluation evidence.
+MARKET_CLASS_BY_FIELD = {
+    "price": "ADVERTISED_PRICE",
+    "customer_pain": "VENDOR_CLAIM",
+    "paid_alternative": "VENDOR_CLAIM",
+    "acquisition_channel": "VENDOR_CLAIM",
+    "other": "VENDOR_CLAIM",
+}
+
 
 def load_candidates(task_id):
     task = task_inbox.read_task(task_id)
@@ -42,10 +59,10 @@ def load_candidates(task_id):
     return document
 
 
-def decide(task_id, candidate_id, decision, note, *, scope=None, confirm=False):
+def decide(task_id, candidate_id, decision, note, *, scope=None, confirm=False, classification=None):
     if not isinstance(candidate_id, str) or not CANDIDATE_RE.fullmatch(candidate_id):
         raise ValueError("Invalid candidate ID")
-    if decision not in ("approve", "reject"):
+    if decision not in ("approve", "reject", "catalog"):
         raise ValueError("Unknown decision")
     if not isinstance(note, str) or len(note.strip()) < 12:
         raise ValueError("A meaningful review note (12+ characters) is required")
@@ -54,14 +71,27 @@ def decide(task_id, candidate_id, decision, note, *, scope=None, confirm=False):
             raise PermissionError("Explicit manual source review confirmation required")
         if scope not in REVIEWABLE_SCOPES:
             raise ValueError("Scope not eligible for quote-only evidence")
-    elif scope is not None:
-        raise ValueError("Rejected candidates must not have a scope")
+        if classification is not None:
+            raise ValueError("Approval cannot set market classification")
+    elif decision == "catalog":
+        if confirm is not True:
+            raise PermissionError("Explicit owner review confirmation required")
+        if scope is not None:
+            raise ValueError("Market intelligence must not support evaluation scopes")
+        if classification not in ("VENDOR_CLAIM", "ADVERTISED_PRICE"):
+            raise ValueError("Invalid market intelligence classification")
+    elif scope is not None or classification is not None:
+        raise ValueError("Rejected candidates must not have a scope or classification")
 
     document = load_candidates(task_id)
     selected = [x for x in document["candidates"] if x["candidate_id"] == candidate_id]
     if len(selected) != 1:
         raise ValueError("Candidate not found")
     item = selected[0]
+    if decision == "approve" and scope not in QUOTE_SCOPE_BY_FIELD.get(item.get("field"), ()):
+        raise ValueError("Quote-only source field cannot support this evaluation scope")
+    if decision == "catalog" and classification != MARKET_CLASS_BY_FIELD.get(item.get("field")):
+        raise ValueError("Market classification does not match the quoted field")
     if (
         item.get("quote_status") != "MATCHED_IN_PAGE"
         or item.get("independently_verified") is not False
@@ -114,17 +144,37 @@ def decide(task_id, candidate_id, decision, note, *, scope=None, confirm=False):
     result = {
         "task_id": task_id,
         "candidate_id": candidate_id,
-        "decision": "APPROVED_FOR_REGISTRATION" if decision == "approve" else "REJECTED",
+        "decision": (
+            "APPROVED_FOR_REGISTRATION" if decision == "approve"
+            else "CATALOGUED_MARKET_INTELLIGENCE" if decision == "catalog"
+            else "REJECTED"
+        ),
         "scope": scope if decision == "approve" else None,
         "source_url": item["source_url"],
         "quote": item["quote"],
         "review_note": note.strip()[:500],
-        "manual_review_confirmed": confirm is True if decision == "approve" else False,
+        "manual_review_confirmed": confirm is True if decision in ("approve", "catalog") else False,
         "decided_at": datetime.now(timezone.utc).isoformat(),
         "registered": False,
         "execution_authorized": False,
         "spending_authorized": False,
     }
+    if decision == "catalog":
+        # A single owner decision file is the catalog record. It is NOT inserted
+        # into the evidence index, and cannot be registered as business proof.
+        result.update({
+            "opportunity_id": document["opportunity_id"],
+            "classification": classification,
+            "field": item["field"],
+            "statement": item["statement"],
+            "quote_status": item["quote_status"],
+            "owner_reviewed": True,
+            "independently_verified": False,
+            "evidence_eligible": False,
+            "supports": [],
+            "customer_demand_verified": False,
+            "revenue_verified": False,
+        })
     with output.open("x", encoding="utf-8") as file:
         json.dump(result, file, ensure_ascii=False, indent=2)
     return output
@@ -135,13 +185,19 @@ def main():
     commands = parser.add_subparsers(dest="action", required=True)
     show = commands.add_parser("show")
     show.add_argument("task_id")
-    for action in ("approve", "reject"):
+    for action in ("approve", "reject", "catalog"):
         command = commands.add_parser(action)
         command.add_argument("task_id")
         command.add_argument("candidate_id")
         command.add_argument("--note", required=True)
         if action == "approve":
             command.add_argument("--scope", required=True, choices=sorted(REVIEWABLE_SCOPES))
+            command.add_argument("--confirm-manual-review", action="store_true")
+        elif action == "catalog":
+            command.add_argument(
+                "--classification", required=True,
+                choices=("ADVERTISED_PRICE", "VENDOR_CLAIM"),
+            )
             command.add_argument("--confirm-manual-review", action="store_true")
     args = parser.parse_args()
     if args.action == "show":
@@ -151,6 +207,7 @@ def main():
             args.task_id, args.candidate_id, args.action, args.note,
             scope=getattr(args, "scope", None),
             confirm=getattr(args, "confirm_manual_review", False),
+            classification=getattr(args, "classification", None),
         )
         print("DECISION SAVED:", output)
         print("EVIDENCE REGISTERED: False")

@@ -55,6 +55,7 @@ def register_evidence(task_id, candidate_id, *, opportunities_dir=None):
         or decision.get("execution_authorized") is not False
         or decision.get("spending_authorized") is not False
         or scope not in owner_review.REVIEWABLE_SCOPES
+        or scope not in owner_review.QUOTE_SCOPE_BY_FIELD.get(candidate.get("field"), ())
         or decision.get("source_url") != candidate.get("source_url")
         or decision.get("quote") != candidate.get("quote")
         or not isinstance(decision.get("review_note"), str)
