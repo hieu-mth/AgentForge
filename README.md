@@ -18,6 +18,7 @@ See **[AgentForge Master Project Context & Strategic Roadmap](docs/AGENTFORGE_MA
 - **Browser validation (C8D):** optional owner-started headless Chromium screenshots at mobile/tablet/desktop sizes; reports overflow, JavaScript errors, and blocked ordinary HTTP requests without changing the product.
 - **Browser-guided fixes (C8E):** local-only triage of C8D reports, optional one-call AI fix proposals for verified issues, and the same owner-gated C8B approval path. Passing browser reports never trigger AI calls.
 - **Bounded workflow (C8F):** immutable local checkpoints coordinate baseline browser test, optional one-model fix proposal, candidate browser test and separate C8B owner approval. A PASS report never triggers a model call.
+- **Revenue & Growth Operations (S5):** local campaign records, owner-approved S2 MP4/SRT manual-upload packages for YouTube/TikTok, consent-attested anonymous lead pipeline, immutable owner-reported commissions/costs with local booked-cost cap, S3 cross-ledger check, S4 read-only growth.review delegation, and a Dashboard growth table. **Not** authenticated channel creation/upload, bank reconciliation, verified profit or live provider budget enforcement. See [S5](docs/milestones/S5.md).
 - **Company Brain & Delegation (S4):** bounded owner-governed goal templates, immutable SHA-reviewed plans, existing S1 skill/worker dispatch with per-step approval, durable step markers/no-replay recovery, local read-only scheduler, owner-owned memory and read-only Dashboard goal queue. NOT unrestricted AI planning, authenticated multi-user delegation, unattended 24/7 or hard money spending metering. See [S4 milestone](docs/milestones/S4.md).
 - **Intelligence & Analytics (S3):** strict local CSV ingestion for daily performance and owner-recorded finance, source hashes/deduplication, content diagnostics, internal trend/opportunity hypotheses, descriptive A/B evaluation, pending-vs-confirmed cash, and read-only Dashboard overview. Seven S3 skills use existing S1 Task History and Policy Gate. No direct YouTube/TikTok/bank integrations, independently verified profit, or causal winner. See [S3](docs/milestones/S3.md).
 - **Creative & Media Engine (S2):** local portrait PNG promo cards (Pillow), safe non-destructive edits, original WAV ambient, UTF-8 SRT captions, and owner-approved H.264/AAC MP4 via bundled FFmpeg; separately gated Windows/Piper offline TTS and optional one-model draft storyboard. Six reusable S2 skill contracts and real media QA integrated with S1 Task History. See [S2](docs/milestones/S2.md).
@@ -46,6 +47,39 @@ Run the tests (no live model credentials or customer interviews required):
 ```
 
 The repository's [GitHub Actions CI](.github/workflows/ci.yml) runs the same suite on Windows and Python 3.13 for pushes/PRs targeting `main`.
+
+## S5 — Manual channel handoff & owner-recorded growth pilot
+
+S5 completes the bounded S1–S5 local-first MVP series by joining
+the existing S2 media video, S3 source-labeled analytics and S4 Company
+Brain with lead/commission records and upload preparation. It does not
+connect social or banking accounts; it **never** claims a handoff ZIP
+was published on YouTube or TikTok.
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[media]"
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m agentforge.skill_registry validate
+$raw = .\.venv\Scripts\python.exe -m agentforge.growth_pipeline demo --confirm-local-media
+if ($LASTEXITCODE -ne 0) { throw "S5 pilot failed" }
+$s5 = $raw | ConvertFrom-Json
+$s5.campaign
+$s5.packages
+$s5.reports.report
+```
+
+The isolated SYNTHETIC demo runs a local real FFmpeg video pipeline,
+creates two ZIP packages, a dummy anonymous consent-attested lead and
+pending commission, and completes a 3-step S4 read-only review. It never
+makes a cloud call, uses real customer data, posts to a channel or
+receives money. Actual publishing requires a licensed owner to upload
+manually through an account they control. All financial statements
+remain owner-recorded and verified net profit is null.
+
+After restarting Dashboard V0, S5 campaign summaries appear with
+clearly labeled SYNTHETIC DEMO data. Real owner-driven scenarios,
+exact JSON input contracts and limitations:
+[S5 technical milestone](docs/milestones/S5.md).
 
 ## S4 — Company Brain (bounded local-first pilot)
 
