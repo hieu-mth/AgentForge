@@ -95,6 +95,15 @@ def _execute(task_id, skill_id, payload, *, grants, confirm_model_call,
             history.transition(task_id, "WAITING_APPROVAL", result=result, db_path=db_path)
         return result
     history.transition(task_id, "RUNNING", db_path=db_path)
+    # Only permission NAMES/booleans enter audit, never tokens or payloads.
+    _, required = _contract(skill_id)
+    history.checkpoint(
+        task_id, "POLICY_GRANTED",
+        {"required": sorted(required),
+         "model_confirmed": confirm_model_call is True,
+         "browser_confirmed": confirm_browser_run is True},
+        db_path=db_path,
+    )
     try:
         result = _dispatch(skill_id, payload)
         registry.validate_payload(registry.load_skill(skill_id), result, direction="output")
