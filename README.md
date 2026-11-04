@@ -13,6 +13,7 @@
 - **Static quality & preview (C8C):** read-only HTML/accessibility/responsive heuristics and an optional ignored-data preview of a pending revision. No browser is opened or code executed automatically.
 - **Browser validation (C8D):** optional owner-started headless Chromium screenshots at mobile/tablet/desktop sizes; reports overflow, JavaScript errors, and blocked ordinary HTTP requests without changing the product.
 - **Browser-guided fixes (C8E):** local-only triage of C8D reports, optional one-call AI fix proposals for verified issues, and the same owner-gated C8B approval path. Passing browser reports never trigger AI calls.
+- **Bounded workflow (C8F):** immutable local checkpoints coordinate baseline browser test, optional one-model fix proposal, candidate browser test and separate C8B owner approval. A PASS report never triggers a model call.
 
 All generated text/code is untrusted. No workflow grants autonomous customer outreach, spending, publishing, package installation, or arbitrary shell execution.
 
@@ -152,6 +153,43 @@ C8E converts only known browser issue codes and numeric data into a bounded
 change request, then uses the existing C8B proposal flow. No automatic apply,
 browser execution, retry or deployment. See [C8E](docs/milestones/C8E.md).
 
+### Bounded Build → Test → Fix cycle (C8F)
+
+C8F coordinates C8A/B/C/D/E and records **immutable local checkpoints**.
+No autonomous browser execution, AI spending, retry, product write, or deploy.
+
+For your already-PASS Microsoft Edge C8D report:
+
+```powershell
+# Reuse verified C8D output without rerunning Chromium or contacting an AI model.
+.\.venv\Scripts\python.exe -m agentforge.product_cycle start shop-landing --report-run-id 2c6ef3dca9454cde92980d91ba518d8a
+
+$cycleId = "PASTE_RETURNED_CYCLE_ID"
+.\.venv\Scripts\python.exe -m agentforge.product_cycle inspect $cycleId
+# Expected: NO_FIX_NEEDED
+```
+
+For future products, start a fresh cycle and explicitly authorize the baseline
+browser run:
+
+```powershell
+.\.venv\Scripts\python.exe -m agentforge.product_cycle start shop-landing
+$cycleId = "PASTE_RETURNED_CYCLE_ID"
+.\.venv\Scripts\python.exe -m agentforge.product_cycle test $cycleId --confirm-browser-run --browser-channel msedge
+
+# Only if C8D found recognized issues AND you authorize an AI request:
+.\.venv\Scripts\python.exe -m agentforge.product_cycle propose $cycleId --confirm-model-call
+
+# Only after a pending revision has been created, confirm its browser run:
+.\.venv\Scripts\python.exe -m agentforge.product_cycle test-revision $cycleId --confirm-browser-run --browser-channel msedge
+```
+
+The final approval and file replacement **must** use the separate C8B
+`product_revision apply --confirm-write --sha256 ...` command.
+Each cycle allows at most one baseline browser, one model attempt and one
+candidate browser attempt; a failed attempt is not retried automatically.
+See [C8F](docs/milestones/C8F.md).
+
 ### Customer interviews
 
 ```powershell
@@ -160,7 +198,7 @@ browser execution, retry or deployment. See [C8E](docs/milestones/C8E.md).
 .\.venv\Scripts\python.exe -m agentforge.customer_evidence_review summary research-d3188c6a
 ```
 
-Only capture real, consented, anonymous interviews. Do **not** capture example or generated interview content as real evidence. See [C7A](docs/milestones/C7A.md), [C7B](docs/milestones/C7B.md), [C7C](docs/milestones/C7C.md), [C8A](docs/milestones/C8A.md), [C8B](docs/milestones/C8B.md), [C8C](docs/milestones/C8C.md), [C8D](docs/milestones/C8D.md), and [C8E](docs/milestones/C8E.md).
+Only capture real, consented, anonymous interviews. Do **not** capture example or generated interview content as real evidence. See [C7A](docs/milestones/C7A.md), [C7B](docs/milestones/C7B.md), [C7C](docs/milestones/C7C.md), [C8A](docs/milestones/C8A.md), [C8B](docs/milestones/C8B.md), [C8C](docs/milestones/C8C.md), [C8D](docs/milestones/C8D.md), [C8E](docs/milestones/C8E.md), and [C8F](docs/milestones/C8F.md).
 
 ## Local data, security and status
 
@@ -168,4 +206,4 @@ Only capture real, consented, anonymous interviews. Do **not** capture example o
 - SHA-256 checks detect later modifications; they are not evidence that an interview truly occurred or that generated code is safe.
 - URL allowlists and path checks are **not** an OS sandbox. Run with minimum OS permissions and review source before execution.
 - No real customer demand, willingness to pay, sales or revenue has been independently verified.
-- Current milestone: **browser-guided owner-reviewed fixes (C8E)**. Next: bounded Build → Test → Fix workflow (C8F), without auto-apply or deployment.
+- Current milestone: **bounded, owner-gated static Web Builder workflow (C8F MVP)**. Next: test on a real customer problem, review product quality and business value before expanding worker types.
