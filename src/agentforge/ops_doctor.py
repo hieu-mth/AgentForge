@@ -53,8 +53,8 @@ def inspect(*, paths=None, backup_dir=None, task_db=None, brain_db=None,
             findings.append({"severity": "INFO", "rule": "database_not_initialized",
                              "name": name})
     try:
-        registry = skill_registry.validate_registry()
-        registry_valid = registry.get("status") == "VALID"
+        registry = skill_registry.load_registry()
+        registry_valid = bool(registry)
     except (ValueError, PermissionError, OSError, KeyError, TypeError):
         registry_valid = False
     if not registry_valid:
