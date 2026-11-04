@@ -1,0 +1,40 @@
+schema_version = 1
+id = "analytics.import"
+version = "0.1.0"
+description = "Import bounded daily metrics or owner-recorded cash ledger CSV with auditable source hashes."
+worker_id = "analytics_analyst"
+execution_mode = "owner_gated"
+required_permissions = ["workspace.write"]
+required_tools = ["filesystem", "sqlite"]
+artifact_types = ["analytics_import"]
+quality_checks = ["input_schema", "deduplication", "source_integrity"]
+
+[limits]
+timeout_seconds = 90
+estimated_model_calls = 0
+
+[input_schema]
+type = "object"
+required = ["dataset", "kind", "filename", "source_kind", "synthetic", "confirm_write"]
+additional_properties = false
+
+[input_schema.properties]
+dataset = "string"
+kind = "string"
+filename = "string"
+source_kind = "string"
+synthetic = "boolean"
+confirm_write = "boolean"
+
+[output_schema]
+type = "object"
+required = ["status", "dataset", "import_id", "rows", "source_sha256", "synthetic"]
+additional_properties = true
+
+[output_schema.properties]
+status = "string"
+dataset = "string"
+import_id = "string"
+rows = "integer"
+source_sha256 = "string"
+synthetic = "boolean"

@@ -36,6 +36,20 @@ POLICY = {
                   frozenset({"workspace.write", "process.run"})),
     "media.copy_draft": ("media_producer", "owner_gated",
                          frozenset({"model.invoke", "workspace.propose"})),
+    "analytics.import": ("analytics_analyst", "owner_gated",
+                         frozenset({"workspace.write"})),
+    "analytics.quality_check": ("analytics_analyst", "read_only",
+                                frozenset({"workspace.read"})),
+    "analytics.content_report": ("analytics_analyst", "read_only",
+                                 frozenset({"workspace.read"})),
+    "analytics.trend_report": ("analytics_analyst", "read_only",
+                               frozenset({"workspace.read"})),
+    "analytics.experiment_report": ("analytics_analyst", "read_only",
+                                    frozenset({"workspace.read"})),
+    "analytics.finance_report": ("analytics_analyst", "read_only",
+                                 frozenset({"workspace.read"})),
+    "analytics.opportunity_score": ("analytics_analyst", "read_only",
+                                    frozenset({"workspace.read"})),
 }
 
 
@@ -75,6 +89,10 @@ def missing_grants(skill_id, granted=(), *, confirm_model_call=False,
             missing.add("confirm_external_run")
         if not isinstance(payload, dict) or payload.get("confirm_external_run") is not True:
             missing.add("input.confirm_external_run")
+    if skill_id == "analytics.import" and (
+        not isinstance(payload, dict) or payload.get("confirm_write") is not True
+    ):
+        missing.add("input.confirm_write")
     return sorted(missing)
 
 
@@ -118,6 +136,26 @@ def _dispatch(skill_id, payload):
     if skill_id == "media.copy_draft":
         from agentforge.media_pipeline import suggest_copy
         return suggest_copy(payload["topic"], payload["audience"], payload["goal"])
+    if skill_id == "analytics.import":
+        from agentforge.analytics_store import import_csv
+        return import_csv(payload["dataset"], payload["kind"], payload["filename"],
+                          source_kind=payload["source_kind"],
+                          synthetic=payload["synthetic"], confirm_write=True)
+    if skill_id.startswith("analytics."):
+        from agentforge import analytics_insights as insights
+        dataset, campaign = payload["dataset"], payload.get("campaign")
+        if skill_id == "analytics.content_report":
+            return insights.content_report(dataset, campaign=campaign)
+        if skill_id == "analytics.trend_report":
+            return insights.trend_report(dataset, campaign=campaign)
+        if skill_id == "analytics.finance_report":
+            return insights.finance_report(dataset, campaign=campaign)
+        if skill_id == "analytics.quality_check":
+            return insights.data_quality(dataset, campaign=campaign)
+        if skill_id == "analytics.experiment_report":
+            return insights.experiment_report(dataset, campaign)
+        if skill_id == "analytics.opportunity_score":
+            return insights.opportunity_report(dataset, campaign=campaign)
     raise PermissionError("No trusted adapter")
 
 

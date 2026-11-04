@@ -372,3 +372,22 @@ This is a usable MVP with a deterministic local no-cloud video pilot, not
 full generative image/video models, universal multilingual speech synthesis,
 a certified rights checker or a general commercial editing suite. Exact
 Windows installation and acceptance: docs/milestones/S2.md.
+
+
+## Addendum — S3 Intelligence & Analytics MVP (2026-11-05)
+
+S3 adds seven read-only/owner-gated analytics skills atop S1: strict
+daily CSV and cash-ledger import, atomic SQLite provenance with SHA-256
+and rejection of overlaps, content/funnel metrics, descriptive internal
+trend/opportunity signals, non-causal A/B comparisons, and owner-recorded
+cash analysis with pending revenue kept separate. No arbitrary external
+API, model usage, social posting, bank reconciliation or market-demand
+claims are made. Dashboard V0 gains a synthetic-aware, read-only
+analytics dataset overview.
+
+The S3 vertical-slice demo creates only explicitly labeled SYNTHETIC
+datasets and cannot establish real marketing effectiveness or net profit.
+Theoretical Verified Net Profit remains null until genuine financial
+reconciliation and completeness checks exist. This is an implementation
+addendum, not a rewrite of the original strategy snapshot. See
+docs/milestones/S3.md for evidence, limits and one-pass Windows acceptance.

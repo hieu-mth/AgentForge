@@ -1,0 +1,36 @@
+schema_version = 1
+id = "analytics.opportunity_score"
+version = "0.1.0"
+description = "Produce a conservative heuristic investigation score from internal traffic, never market demand proof."
+worker_id = "analytics_analyst"
+execution_mode = "read_only"
+required_permissions = ["workspace.read"]
+required_tools = ["filesystem", "sqlite"]
+artifact_types = ["opportunity_signal_report"]
+quality_checks = ["sample_coverage", "uncertainty", "source_provenance"]
+
+[limits]
+timeout_seconds = 30
+estimated_model_calls = 0
+
+[input_schema]
+type = "object"
+required = ["dataset"]
+additional_properties = false
+
+[input_schema.properties]
+dataset = "string"
+campaign = "string"
+
+[output_schema]
+type = "object"
+required = ["status", "dataset", "synthetic", "signals", "score_is_heuristic", "sources"]
+additional_properties = true
+
+[output_schema.properties]
+status = "string"
+dataset = "string"
+synthetic = "boolean"
+signals = "array"
+score_is_heuristic = "boolean"
+sources = "object"

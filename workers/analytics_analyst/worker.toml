@@ -1,0 +1,4 @@
+id = "analytics_analyst"
+model_ref = "local_primary"
+runtime = "manual"
+capabilities = ["local_metric_import", "content_analytics", "experiment_evaluation", "owner_recorded_finance"]
