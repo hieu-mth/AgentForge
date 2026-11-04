@@ -21,6 +21,9 @@ VIEWPORTS = (
     ("desktop", 1440, 900),
 )
 MAX_CAPTURE_HEIGHT = 12000
+# "bundled" is Playwright's downloaded Chromium. The other two channels use
+# browsers already installed on the host; no installation or download occurs.
+BROWSER_CHANNELS = ("bundled", "msedge", "chrome")
 EVALUATE_METRICS = """() => {
   const root = document.documentElement;
   const body = document.body;
@@ -85,7 +88,7 @@ def _issue(issues, rule, viewport, message, severity="FAIL"):
     })
 
 
-def validate(kind, identifier, *, confirm_browser_run=False, playwright_factory=None):
+def validate(kind, identifier, *, confirm_browser_run=False, playwright_factory=None, browser_channel="bundled"):
     """Run once only after explicit approval; save screenshots/report to ignored data.
 
     playwright_factory is injectable for unit tests. It never creates a web server
@@ -93,6 +96,8 @@ def validate(kind, identifier, *, confirm_browser_run=False, playwright_factory=
     """
     if confirm_browser_run is not True:
         raise PermissionError("Explicit --confirm-browser-run is required")
+    if browser_channel not in BROWSER_CHANNELS:
+        raise ValueError("Unsupported browser channel; use bundled, msedge or chrome")
     target = _read_target(kind, identifier)
     factory = playwright_factory if playwright_factory is not None else _playwright()
 
@@ -111,7 +116,12 @@ def validate(kind, identifier, *, confirm_browser_run=False, playwright_factory=
     html = target["html"]
     source_bytes = html.encode("utf-8")
     with factory() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        launch_args = {"headless": True}
+        if browser_channel != "bundled":
+            launch_args["channel"] = browser_channel
+        # Chrome/Edge channels use an installed browser, not an automatic
+        # download. Keep the bundled default for users who installed Chromium.
+        browser = playwright.chromium.launch(**launch_args)
         try:
             # Each viewport uses a separate incognito context. No cookies,
             # service workers, downloads or persistent browser profile.
@@ -211,6 +221,7 @@ def validate(kind, identifier, *, confirm_browser_run=False, playwright_factory=
         "identifier": identifier,
         "project_slug": target["project_slug"],
         "source_sha256": target["source_sha256"],
+        "browser_channel": browser_channel,
         "status": status,
         "failures": failures,
         "warnings": warnings + target["static_warnings"],
@@ -232,6 +243,7 @@ def validate(kind, identifier, *, confirm_browser_run=False, playwright_factory=
     return {
         "status": status,
         "run_id": run_id,
+        "browser_channel": browser_channel,
         "report_path": str(report_path),
         "screenshots": [x["screenshot_path"] for x in screens if x["screenshot_path"]],
         "failures": failures,
@@ -249,9 +261,14 @@ def main():
         cmd = sub.add_parser(kind)
         cmd.add_argument("identifier", help="Project slug or pending revision ID")
         cmd.add_argument("--confirm-browser-run", action="store_true")
+        cmd.add_argument(
+            "--browser-channel", choices=BROWSER_CHANNELS, default="bundled",
+            help="bundled Chromium (needs download), or locally installed msedge/chrome",
+        )
     args = parser.parse_args()
     result = validate(args.target, args.identifier,
-                      confirm_browser_run=args.confirm_browser_run)
+                      confirm_browser_run=args.confirm_browser_run,
+                      browser_channel=args.browser_channel)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     if result["status"] == "FAIL":
         parser.exit(2)

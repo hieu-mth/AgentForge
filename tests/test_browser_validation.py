@@ -122,6 +122,7 @@ class FakePlaywright:
         self.browser = FakeBrowser(self)
         self.chromium = self
         self.entered = False
+        self.channel = None
 
     def __call__(self):
         return self
@@ -133,8 +134,9 @@ class FakePlaywright:
     def __exit__(self, *args):
         pass
 
-    def launch(self, *, headless):
+    def launch(self, *, headless, channel=None):
         assert headless is True
+        self.channel = channel
         return self.browser
 
 
@@ -295,6 +297,53 @@ class TestBrowserValidation(unittest.TestCase):
             model.assert_not_called()
             urlopen.assert_not_called()
             shell.assert_not_called()
+
+    def test_bundled_remains_default_with_no_channel(self):
+        result, fake = self.run_project()
+        self.assertEqual(result["browser_channel"], "bundled")
+        self.assertIsNone(fake.channel)
+
+    def test_installed_microsoft_edge_channel(self):
+        fake = FakePlaywright()
+        result = bv.validate(
+            "project", "shop-landing", confirm_browser_run=True,
+            playwright_factory=fake, browser_channel="msedge",
+        )
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(fake.channel, "msedge")
+        self.assertEqual(result["browser_channel"], "msedge")
+        report = json.loads(Path(result["report_path"]).read_text(encoding="utf-8"))
+        self.assertEqual(report["browser_channel"], "msedge")
+        self.assertTrue(report["browser_rendered"])
+
+    def test_installed_google_chrome_channel(self):
+        fake = FakePlaywright()
+        result = bv.validate(
+            "project", "shop-landing", confirm_browser_run=True,
+            playwright_factory=fake, browser_channel="chrome",
+        )
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(fake.channel, "chrome")
+        self.assertEqual(len(result["screenshots"]), 3)
+
+    def test_unsupported_browser_channel_rejected_before_browser(self):
+        fake = FakePlaywright()
+        with self.assertRaisesRegex(ValueError, "Unsupported browser channel"):
+            bv.validate(
+                "project", "shop-landing", confirm_browser_run=True,
+                playwright_factory=fake, browser_channel="custom-binary",
+            )
+        self.assertFalse(fake.entered)
+        self.assertFalse((self.root / "data").exists())
+
+    def test_browser_channel_does_not_bypass_owner_consent(self):
+        fake = FakePlaywright()
+        with self.assertRaises(PermissionError):
+            bv.validate(
+                "project", "shop-landing",
+                playwright_factory=fake, browser_channel="msedge",
+            )
+        self.assertFalse(fake.entered)
 
     def test_browser_import_is_lazy(self):
         with patch.object(bv, "_playwright", side_effect=RuntimeError("install Playwright")):

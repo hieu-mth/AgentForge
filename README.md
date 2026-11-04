@@ -103,7 +103,7 @@ use the `check` command on the current product instead. See [C8C](docs/milestone
 
 ### Opt-in Chromium browser validation (C8D)
 
-**Optional download/install, with your approval** (not part of baseline dependencies):
+**Optional installation, with your approval** (not part of baseline dependencies). If your PC already has Edge or Chrome, you need only the Playwright Python package, not a separate Chromium download:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install playwright
@@ -113,11 +113,18 @@ use the `check` command on the current product instead. See [C8C](docs/milestone
 After reading the HTML, explicitly start browser validation:
 
 ```powershell
-.\.venv\Scripts\python.exe -m agentforge.browser_validation project shop-landing --confirm-browser-run
+.\.venv\Scripts\python.exe -m agentforge.browser_validation project shop-landing --confirm-browser-run --browser-channel msedge
 
 # For a pending, unapplied revision instead:
-.\.venv\Scripts\python.exe -m agentforge.browser_validation revision PASTE_REVISION_ID --confirm-browser-run
+.\.venv\Scripts\python.exe -m agentforge.browser_validation revision PASTE_REVISION_ID --confirm-browser-run --browser-channel msedge
 ```
+
+The `--browser-channel msedge` option uses Microsoft Edge already installed
+on Windows; use `chrome` for installed Google Chrome instead. **You can skip
+`playwright install chromium`** if the Playwright download times out and
+your installed Edge/Chrome can launch. No browser download is initiated by
+the validation command. The default without `--browser-channel` continues
+to use downloaded Playwright Chromium.
 
 C8D creates screenshots (`mobile.png`, `tablet.png`, `desktop.png`) and
 `report.json` under ignored `data/company/product_builder/browser_checks/`.

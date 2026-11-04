@@ -18,6 +18,27 @@ cd E:\Projects\AgentForge
 Both commands download software and require your approval. You can run baseline
 unit tests **without** Playwright and Chromium. Do not run as Administrator.
 
+### Avoid a timed-out Chromium download: use installed Edge/Chrome
+
+If `playwright install chromium` fails with `connect ETIMEDOUT`, the
+Playwright Python package is still installed. You can use Microsoft Edge
+(already installed on most Windows machines) or Google Chrome instead:
+
+```powershell
+# Use the Microsoft Edge already installed on Windows (no browser download):
+.\.venv\Scripts\python.exe -m agentforge.browser_validation project shop-landing --confirm-browser-run --browser-channel msedge
+
+# Or use Chrome already installed on Windows:
+.\.venv\Scripts\python.exe -m agentforge.browser_validation project shop-landing --confirm-browser-run --browser-channel chrome
+```
+
+Playwright supports installed `msedge` and `chrome` channels. Selecting
+a channel **does not install or download a browser**. The browser must already
+exist and be launchable; enterprise policy or browser-version differences may
+prevent automation. If it is missing, install one through a trusted source.
+The default (no `--browser-channel`) still uses downloaded Playwright Chromium.
+
+
 ## Check the currently applied product
 
 ```powershell
@@ -94,6 +115,6 @@ the single HTML file, C8D does **not** load them. Use a self-contained
 .\.venv\Scripts\python.exe -m unittest discover -s tests -q
 ```
 
-C8D adds **17 isolated unit tests** using a fake Playwright adapter; the regular
+C8D adds **22 isolated unit tests** using a fake Playwright adapter; the regular
 GitHub Actions suite does not run a real Chromium browser. You must complete
 the owner-started Chromium check locally to validate actual rendering.
