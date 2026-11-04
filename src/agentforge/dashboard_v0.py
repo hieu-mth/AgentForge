@@ -9,7 +9,7 @@ import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
-from agentforge import skill_registry, task_history
+from agentforge import analytics_store, analytics_insights, skill_registry, task_history
 
 CSS = """body{margin:0;background:#101827;color:#e5eaf2;font:16px/1.55 system-ui,Segoe UI,Tahoma,sans-serif}
 main{max-width:1160px;margin:auto;padding:28px 20px}
@@ -62,7 +62,24 @@ def _artifact_names(result):
     return found
 
 
-def render_dashboard(*, db_path=None, selected=None):
+def analytics_overview(*, analytics_db_path=None):
+    """Small read-only overview, no raw CSV rows or financial evidence refs."""
+    output = []
+    for row in analytics_store.list_datasets(db_path=analytics_db_path)[:20]:
+        finance = analytics_insights.finance_report(
+            row["dataset"], db_path=analytics_db_path)
+        output.append({
+            "dataset": row["dataset"],
+            "synthetic": bool(row["synthetic"]),
+            "performance_rows": row["performance_rows"],
+            "ledger_rows": row["ledger_rows"],
+            "owner_recorded_net_cash_vnd": finance["owner_recorded_net_cash_vnd"],
+            "verified_net_profit_vnd": None,
+        })
+    return output
+
+
+def render_dashboard(*, db_path=None, selected=None, analytics_db_path=None):
     tasks = task_history.list_tasks(db_path=db_path, limit=100)
     registry = skill_registry.load_registry()
     skill_count = len(registry)
@@ -100,6 +117,14 @@ def render_dashboard(*, db_path=None, selected=None):
         _safe(item["execution_mode"]) + "</td></tr>"
         for item in registry.values()
     )
+    analytics_rows = "".join(
+        "<tr><td>" + _safe(item["dataset"]) + "</td><td>" +
+        ("SYNTHETIC DEMO" if item["synthetic"] else "USER SUPPLIED") +
+        "</td><td>" + str(item["performance_rows"]) +
+        "</td><td>" + str(item["ledger_rows"]) +
+        "</td><td>" + _safe(item["owner_recorded_net_cash_vnd"]) +
+        "</td></tr>" for item in analytics_overview(analytics_db_path=analytics_db_path)
+    )
     return ("<!doctype html><html lang='vi'><head><meta charset='utf-8'>"
             "<meta name='viewport' content='width=device-width,initial-scale=1'>"
             "<title>AgentForge · Control Center V0</title><style>" + CSS +
@@ -115,11 +140,17 @@ def render_dashboard(*, db_path=None, selected=None):
             "<h2>Skills and Workers</h2>"
             "<table><tr><th>Skill</th><th>Worker</th><th>Mode</th></tr>" +
             skill_rows + "</table>"
-            "<p class='muted'>Refresh to update. API: /api/tasks · /api/skills</p>"
+            "<h2>S3 Analytics datasets</h2>"
+            "<p class='muted'>Synthetic examples are not real performance. Cash is "
+            "owner-recorded, never independently bank-verified.</p>"
+            "<table><tr><th>Dataset</th><th>Provenance</th><th>Performance rows</th>"
+            "<th>Ledger rows</th><th>Owner-recorded net cash (VND)</th></tr>" +
+            analytics_rows + "</table>"
+            "<p class='muted'>Refresh to update. API: /api/tasks · /api/skills · /api/analytics</p>"
             "</main></body></html>")
 
 
-def create_server(port=8765, *, db_path=None):
+def create_server(port=8765, *, db_path=None, analytics_db_path=None):
     if type(port) is not int or not 0 <= port <= 65535:
         raise ValueError("Port must be between 0 and 65535")
 
@@ -153,7 +184,8 @@ def create_server(port=8765, *, db_path=None):
                 if parsed.path == "/":
                     params = parse_qs(parsed.query)
                     selected = params.get("task", [None])[0]
-                    self._reply(200, render_dashboard(db_path=db_path, selected=selected),
+                    self._reply(200, render_dashboard(db_path=db_path, selected=selected,
+                                                         analytics_db_path=analytics_db_path),
                                 "text/html")
                 elif parsed.path == "/api/tasks":
                     data = [_task_public(t) for t in task_history.list_tasks(db_path=db_path)]
@@ -163,6 +195,10 @@ def create_server(port=8765, *, db_path=None):
                              "execution_mode": v["execution_mode"]}
                             for k, v in skill_registry.load_registry().items()]
                     self._reply(200, json.dumps(data), "application/json")
+                elif parsed.path == "/api/analytics":
+                    self._reply(200, json.dumps(
+                        analytics_overview(analytics_db_path=analytics_db_path)),
+                        "application/json")
                 elif parsed.path.startswith("/api/tasks/"):
                     ident = parsed.path.removeprefix("/api/tasks/")
                     data = task_history.get_task(ident, db_path=db_path)
