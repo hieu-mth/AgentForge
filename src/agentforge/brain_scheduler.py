@@ -4,6 +4,7 @@ No timers, daemon, background work, account access, cost-bearing jobs,
 or silent authorization. A schedule slot is recorded before execution,
 so crashes cannot cause automatic repeat of the same due event.
 """
+import hashlib
 import json
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
@@ -14,6 +15,11 @@ from agentforge import brain_store as store
 from agentforge import brain_runner
 
 UTC = timezone.utc
+
+
+def _digest_plan(plan):
+    raw = store._json(plan)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def _time(value):
@@ -39,18 +45,20 @@ def create_schedule(title, template, inputs, next_due,
         raise store.BrainError("Invalid scheduled goal title")
     if not planner.read_only_plan(template, inputs):
         raise PermissionError("Only 100% read-only no-model plans may be scheduled")
+    digest = _digest_plan(planner.make_plan(template, inputs))
     due = _time(next_due)
     current = now or datetime.now(UTC)
     if due <= current or due > current + timedelta(days=365):
         raise store.BrainError("First due must be future and within one year")
     schedule_id = uuid4().hex
     with closing(store._connect(db_path, create=True)) as conn, conn:
-        conn.execute("INSERT INTO schedules VALUES (?,?,?,?,?,?,?,?)",
+        conn.execute("INSERT INTO schedules VALUES (?,?,?,?,?,?,?,?,?)",
                      (schedule_id, title.strip(), template, store._json(inputs),
-                      frequency_minutes, due.isoformat(),
+                      digest, frequency_minutes, due.isoformat(),
                       "ACTIVE", store._now()))
     return {"schedule_id": schedule_id, "status": "ACTIVE",
             "next_due_utc": due.isoformat(), "frequency_minutes": frequency_minutes,
+            "plan_sha256": digest,
             "read_only_only": True, "owner_approved": True,
             "background_execution_enabled": False}
 
@@ -109,6 +117,9 @@ def tick(*, confirm_tick=False, db_path=None, task_db_path=None,
                 if not planner.read_only_plan(row["template"], inputs):
                     raise PermissionError("Schedule template gained side effects")
                 plan = planner.make_plan(row["template"], inputs)
+                if _digest_plan(plan) != row["plan_sha256"]:
+                    raise store.BrainError(
+                        "Scheduled plan changed since owner approval; create a new schedule")
                 recorded_inputs = {**inputs, "_limits": {
                     "max_model_calls": 0, "max_external_runs": 0}}
                 goal = store.create_goal(

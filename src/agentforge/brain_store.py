@@ -91,6 +91,7 @@ def _connect(db_path=None, *, create=False):
           CREATE TABLE IF NOT EXISTS schedules(
             schedule_id TEXT PRIMARY KEY, title TEXT NOT NULL,
             template TEXT NOT NULL, inputs_json TEXT NOT NULL,
+            plan_sha256 TEXT NOT NULL,
             frequency_minutes INTEGER NOT NULL, next_due_utc TEXT NOT NULL,
             status TEXT NOT NULL, created_at TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS slots(

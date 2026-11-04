@@ -2,6 +2,7 @@
 import hashlib
 import json
 import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -194,7 +195,7 @@ class TestS4Brain(unittest.TestCase):
     def test_tampered_plan_detected_before_creating_task(self):
         goal = self._plan()
         self._approve(goal)
-        with sqlite3.connect(self.brain_db) as conn:
+        with closing(sqlite3.connect(self.brain_db)) as conn, conn:
             conn.execute("UPDATE goals SET plan_json=? WHERE goal_id=?",
                          ('[{"skill_id":"web.create"}]', goal["goal_id"]))
         with self.assertRaisesRegex(store.BrainError, "SHA"):
@@ -281,6 +282,24 @@ class TestS4Brain(unittest.TestCase):
         with self.assertRaises(PermissionError):
             scheduler.set_schedule_status(result["schedule_id"], "ACTIVE",
                                           db_path=self.brain_db)
+
+    def test_schedule_digest_blocks_template_changes_without_reapproval(self):
+        future = datetime(2026, 11, 6, 9, 0, tzinfo=timezone.utc)
+        schedule = scheduler.create_schedule(
+            "Review campaign", "campaign.review", {"dataset": "demo-test"},
+            future.isoformat(), 60, confirm_schedule=True, db_path=self.brain_db,
+            now=future - timedelta(hours=1))
+        with closing(sqlite3.connect(self.brain_db)) as conn, conn:
+            conn.execute("UPDATE schedules SET plan_sha256=? WHERE schedule_id=?",
+                         ("0" * 64, schedule["schedule_id"]))
+        with patch.object(runner, "execute") as execute:
+            with self.assertRaisesRegex(store.BrainError, "plan changed"):
+                scheduler.tick(confirm_tick=True, db_path=self.brain_db,
+                               task_db_path=self.task_db, now=future)
+            execute.assert_not_called()
+        self.assertEqual(store.list_goals(db_path=self.brain_db), [])
+        self.assertEqual(scheduler.list_schedules(
+            db_path=self.brain_db)[0]["next_due_utc"], future.isoformat())
 
     def test_owner_memory_is_explicit_and_revisioned(self):
         with self.assertRaises(PermissionError):
