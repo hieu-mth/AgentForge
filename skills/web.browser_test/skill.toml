@@ -1,0 +1,33 @@
+schema_version = 1
+id = "web.browser_test"
+version = "0.1.0"
+description = "Run a consented C8D browser validation on an existing static website."
+worker_id = "product_builder"
+execution_mode = "owner_gated"
+required_permissions = ["workspace.read", "browser.run"]
+required_tools = ["browser", "filesystem"]
+artifact_types = ["browser_report", "screenshot"]
+quality_checks = ["browser_rendered", "browser_failures"]
+
+[limits]
+timeout_seconds = 240
+estimated_model_calls = 0
+
+[input_schema]
+type = "object"
+required = ["slug", "confirm_browser_run"]
+additional_properties = false
+
+[input_schema.properties]
+slug = "string"
+confirm_browser_run = "boolean"
+browser_channel = "string"
+
+[output_schema]
+type = "object"
+required = ["run_id", "status"]
+additional_properties = true
+
+[output_schema.properties]
+run_id = "string"
+status = "string"

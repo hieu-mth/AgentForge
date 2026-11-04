@@ -46,6 +46,20 @@ The repository's [GitHub Actions CI](.github/workflows/ci.yml) runs the same sui
 
 ## Usage
 
+### S1.1 Skill Registry — discovery only
+
+The new [S1.1 registry](docs/milestones/S1.1.md) lists five declarative contracts
+for existing research and web capabilities. It validates skill metadata and
+shallow input/output schemas without calling any model, network, browser or
+product writer. **Skills are not yet invocable through this registry.**
+Permissions and budgets are metadata only until a gated execution engine exists.
+
+```powershell
+.\.venv\Scripts\python.exe -m agentforge.skill_registry list
+.\.venv\Scripts\python.exe -m agentforge.skill_registry inspect web.create
+.\.venv\Scripts\python.exe -m agentforge.skill_registry validate
+```
+
 ### Research
 
 ```powershell

@@ -1,0 +1,31 @@
+schema_version = 1
+id = "research.opportunity"
+version = "0.1.0"
+description = "Research an opportunity with search leads and a cautious local report."
+worker_id = "opportunity_researcher"
+execution_mode = "owner_gated"
+required_permissions = ["model.invoke", "network.search", "workspace.write"]
+required_tools = ["model", "search", "filesystem"]
+artifact_types = ["research_report"]
+quality_checks = ["source_provenance", "evidence_disclaimer"]
+
+[limits]
+timeout_seconds = 360
+estimated_model_calls = 2
+
+[input_schema]
+type = "object"
+required = ["topic"]
+additional_properties = false
+
+[input_schema.properties]
+topic = "string"
+
+[output_schema]
+type = "object"
+required = ["research_id", "status"]
+additional_properties = true
+
+[output_schema.properties]
+research_id = "string"
+status = "string"
