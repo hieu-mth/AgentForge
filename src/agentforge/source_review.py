@@ -146,7 +146,11 @@ def analyze_page(text):
         "When there are no relevant observations, return an empty array.\n\n"
         "SOURCE PAGE TEXT:\n" + text[:12000]
     )
-    model_output = generate_json(prompt, SCHEMA)
+    model_output = generate_json(
+        prompt,
+        SCHEMA,
+        worker_id="source_reviewer",
+    )
     if not isinstance(model_output, dict):
         raise ValueError("Model response is not an object")
     return review_quotes(text, model_output.get("observations"))
