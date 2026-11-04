@@ -458,3 +458,15 @@ multi-user use. Real OAuth platform connection, paid spending
 enforcement, verified revenue, Windows service installation, encrypted
 secret management and production disaster recovery remain distinct
 production-integration gates. See docs/milestones/CONTROL_CENTER_V1.md.
+
+
+## Addendum — owner-reviewed web creation from Control Center V1
+
+The trusted website.draft template invokes the existing S1 web.create
+proposal skill only with an explicit owner model-call cap and grant.
+The V1 Websites section shows raw HTML as escaped text before the
+owner can SHA-apply it, and apply requires a source review in the
+authenticated session. Existing product_builder path, digest, static
+quality and no-overwrite guards remain unchanged. Applying a proposal
+does not run HTML or deploy/publish the site. This expands practical
+owner workflow in V1; it does not confer new autonomous permissions.

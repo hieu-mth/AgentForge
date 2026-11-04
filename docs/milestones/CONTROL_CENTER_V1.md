@@ -60,6 +60,30 @@ The plan SHA approval never automatically runs skills. Per-run grants
 remain separate. Model/network/browser/FFmpeg actions are disabled in
 the default V1 startup mode.
 
+### Website Builder via V1 — no copy/paste of proposal IDs
+
+Choose Websites -> Tạo website draft. The browser navigates to Goals
+with the trusted website.draft template. Supply a NEW project slug and
+a Vietnamese brief of 20–600 characters; set max_model_calls=1.
+To run this plan, restart the server with --allow-external-tools,
+review the plan SHA and explicitly grant model.invoke plus
+workspace.propose and the confirm_model_call checkbox.
+
+This skill proposes source only; it does NOT create website files. Go
+to Task History, open the completed web.create task, then use Websites
+-> Kiểm tra source to view the complete raw HTML displayed as ESCAPED
+plain text. The authenticated server records that this exact proposal
+SHA was inspected in this session. Apply only if you review the source,
+claims, accessibility and layout. Confirm the displayed SHA explicitly
+with the separate apply action. The S1 Product Builder validates source
+and writes exclusively into workspace/products/<slug>/ without
+overwriting existing products, executing HTML or deploying it.
+
+The browser cannot apply a proposal without prior authenticated review
+in the same session; the existing S1 digest and file/path checks remain
+the final authority. A code-level quality check is NOT a human review of
+commercial claims, images or business conversion quality.
+
 ### Local scheduler / daemon
 
 One-off tick:
