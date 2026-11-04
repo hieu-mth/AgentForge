@@ -46,6 +46,37 @@ The repository's [GitHub Actions CI](.github/workflows/ci.yml) runs the same sui
 
 ## Usage
 
+### S1 — Executable Skill Foundation (bounded local-first slice)
+
+The [S1 foundation milestone](docs/milestones/S1.md) adds code-level
+allowlisted skill adapters (five skills), explicit per-invocation owner
+grants, SQLite Task History + events, a checkpointed web.audit workflow
+and a read-only Dashboard V0 bound to 127.0.0.1. Unlike the declarative
+registry, the separate skill_runner **can invoke existing modules**, but
+will not invoke models, browsers, or network tools without explicit grants
+and confirmations. No automatic product apply, publishing or spending.
+
+Quick local smoke test after pulling the latest commit:
+
+~~~powershell
+.\.venv\Scripts\python.exe -m agentforge.skill_registry validate
+.\.venv\Scripts\python.exe -m agentforge.skill_runner invoke web.quality_check --slug nem-tu-van
+.\.venv\Scripts\python.exe -m agentforge.workflow_runner run nem-tu-van
+.\.venv\Scripts\python.exe -m agentforge.task_history list
+.\.venv\Scripts\python.exe -m agentforge.dashboard_v0 --port 8765
+~~~
+
+Open http://127.0.0.1:8765/ in a local browser while the dashboard is running.
+The quick test reads your existing local website; it requires neither a
+model call nor Playwright. Source changes after checkpoint block a deferred
+browser check. Use task_history recover --confirm-recover to mark abandoned
+running tasks interrupted (never re-execute them).
+
+S1 is a bounded vertical slice, not a general planner, hardened sandbox,
+authenticated cloud API or financial budget engine. Task inputs are stored
+locally in an unencrypted SQLite file. Never store secrets in inputs, and
+never expose the localhost dashboard remotely.
+
 ### S1.1 Skill Registry — discovery only
 
 The new [S1.1 registry](docs/milestones/S1.1.md) lists five declarative contracts
