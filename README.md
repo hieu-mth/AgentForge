@@ -1,22 +1,20 @@
 # AgentForge
 
-A **local-first, human-controlled AI business research prototype** built with Python, LangGraph and SQLite. Current scope: opportunity research, controlled source review, owner decisions, market intelligence classification, and local customer interview intake/review. **Not** an autonomous operating company, desktop controller, or revenue-generating product.
+**Local-first, human-controlled AI business research and product prototyping.** AgentForge is a Python 3.13 prototype built with LangGraph and SQLite. It can research opportunities, manage owner-reviewed market/customer evidence, and propose small static web products. It is **not** an autonomous company, hardened sandbox, or production deployment system.
 
-## Current capabilities
+## Capabilities
 
-- **Model profiles:** Ollama (`local_primary`) or an opt-in Anthropic-compatible cloud gateway (`cloud_primary`) via environment variables.
-- **Research:** two web searches, lead collection, analysis, local reports in `data/research/`.
-- **Source review:** explicit public HTTPS host approval, page quote matching, owner review. Matching a quote does **not** verify that the claim is true.
-- **Market intelligence:** owner-catalogued vendor claims and advertised prices remain separate from Evaluation evidence.
-- **Customer intake (C7A):** anonymized, consent-based interview notes marked `CAPTURED_UNVERIFIED`.
-- **Customer corroboration (C7C):** two distinct owner-reviewed first-hand interviews can support only `customer_problem`, not verified demand/payment; source fingerprints checked on evaluation.
-- **Customer review (C7B):** manual retain/follow-up/reject decisions and source fingerprinting. Even retained first-hand accounts are **not** independently verified evidence of demand or payment, and are **not** registered for GO/KILL.
+- **Model routing:** local Ollama (`local_primary`, `qwen3:8b`) or an opt-in Anthropic-compatible gateway (`cloud_primary`).
+- **Opportunity research:** two focused searches, source leads, cautious reports and local checkpoints; search snippets are **not** verified facts.
+- **Source/evidence review:** approved HTTPS page reads, quote matching, owner decisions, and separate vendor market-intelligence classifications.
+- **Customer validation (C7A–C7C):** anonymous, consent-based interview intake; retain/follow-up/reject decisions; two owner-confirmed accounts can support only the `customer_problem` scope. Neither interviews nor advertised prices prove payments or demand on their own.
+- **AI Product Builder V1 (C8A):** generates one offline, self-contained `index.html` as a **proposal**. Only an owner-approved, digest-matched `apply` creates files in `workspace/products/<slug>/`. No automatic execution, edits of existing products, browser automation or deployment.
 
-No autonomous customer outreach, publishing, payment, installation, unrestricted code execution, or desktop control is authorized by the research workflow.
+All generated text/code is untrusted. No workflow grants autonomous customer outreach, spending, publishing, package installation, or arbitrary shell execution.
 
-## Local setup
+## Local setup — Windows PowerShell
 
-Requires Python **3.13+** on Windows PowerShell:
+Requires **Python 3.13+**.
 
 ```powershell
 py -3.13 -m venv .venv
@@ -24,21 +22,45 @@ py -3.13 -m venv .venv
 Copy-Item .env.example .env
 ```
 
-The default model uses local Ollama (`qwen3:8b`); make sure Ollama is installed and running with the configured model. To use an approved cloud gateway, fill in your **local ignored** `.env` file with `AGENTFORGE_MODEL_REF=cloud_primary`, `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN`. **Never commit tokens or interview data.** Cloud calls can incur charges.
+Default model: local Ollama (`qwen3:8b`), which must be installed and running. For an approved cloud gateway, set `AGENTFORGE_MODEL_REF=cloud_primary`, `ANTHROPIC_BASE_URL`, and `ANTHROPIC_AUTH_TOKEN` in the **gitignored** `.env`. Cloud requests may incur charges; never commit credentials.
 
-Run tests:
+Run the tests (no live model credentials or customer interviews required):
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-Research example (uses configured model and live search):
+The repository's [GitHub Actions CI](.github/workflows/ci.yml) runs the same suite on Windows and Python 3.13 for pushes/PRs targeting `main`.
+
+## Usage
+
+### Research
 
 ```powershell
 .\.venv\Scripts\python.exe -m agentforge.research "Nhu cầu tự động hóa Excel cho shop online nhỏ tại Việt Nam"
 ```
 
-Customer interview tools (local, **no network**):
+Research outputs stay under `data/research/`.
+
+### Product Builder V1 — owner-gated
+
+```powershell
+# Propose only. May call a paid cloud model if cloud_primary is configured.
+.\.venv\Scripts\python.exe -m agentforge.product_builder propose shop-landing "Tạo landing page tiếng Việt, responsive, giới thiệu dịch vụ tự động hóa Excel và bảng giá minh họa."
+
+# Copy the ID printed by propose, then inspect the proposal metadata and JSON.
+$proposalId = "PASTE_PROPOSAL_ID"
+.\.venv\Scripts\python.exe -m agentforge.product_builder inspect $proposalId
+notepad ".\data\company\product_builder\proposals\$proposalId.json"
+
+# Only after inspecting and approving the generated source:
+$sha256 = "PASTE_SHA256_FROM_INSPECT"
+.\.venv\Scripts\python.exe -m agentforge.product_builder apply $proposalId --confirm-write --sha256 $sha256
+```
+
+Applying writes `workspace/products/shop-landing/index.html` but does **not** open, execute or deploy it. Review HTML/JS before opening it in a browser. To build a different version in C8A, use a new slug; existing projects are not overwritten.
+
+### Customer interviews
 
 ```powershell
 .\.venv\Scripts\python.exe -m agentforge.customer_validation questions
@@ -46,15 +68,12 @@ Customer interview tools (local, **no network**):
 .\.venv\Scripts\python.exe -m agentforge.customer_evidence_review summary research-d3188c6a
 ```
 
-Interview records require *real* first-hand conversations and consent; don't capture sample JSON. See [C7A](docs/milestones/C7A.md) and [C7B](docs/milestones/C7B.md) for detailed commands, constraints and trust boundaries.
+Only capture real, consented, anonymous interviews. Do **not** capture example or generated interview content as real evidence. See [C7A](docs/milestones/C7A.md), [C7B](docs/milestones/C7B.md), [C7C](docs/milestones/C7C.md), and [C8A](docs/milestones/C8A.md).
 
-## Data and security
+## Local data, security and status
 
-- Generated data is stored in `data/` and ignored by Git. This is **not encryption**; protect the local disk and backups.
-- `.env` is ignored by Git, while `.env.example` is safe to share.
-- Owner approval is required for source reads and evidence decisions; C7B does not grant spending or execution permissions.
-- Path validation and command allowlisting are **not a hardened OS sandbox**. Do not let generated code run with unrestricted system permissions.
-
-## Project status
-
-C7A and C7B are early validation infrastructure. Customer demand, willingness to pay, and paid transactions remain unverified until independently corroborated under a later, explicitly approved workflow.
+- `data/`, `workspace/`, and `.env` are ignored by Git, **not encrypted**. Protect local disks and backups.
+- SHA-256 checks detect later modifications; they are not evidence that an interview truly occurred or that generated code is safe.
+- URL allowlists and path checks are **not** an OS sandbox. Run with minimum OS permissions and review source before execution.
+- No real customer demand, willingness to pay, sales or revenue has been independently verified.
+- Next milestone: **Builder V2** for owner-reviewed revisions and preview/test workflows.

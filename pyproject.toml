@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agentforge"
 version = "0.1.0"
-description = "Local-first autonomous business agent platform"
+description = "Local-first, human-controlled AI research and product prototyping"
 requires-python = ">=3.13"
 dependencies = [
     "langgraph==1.2.19",
