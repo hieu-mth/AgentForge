@@ -84,7 +84,13 @@ def _summary(server):
         "stats": {"tasks": len(tasks), "skills": len(skill_registry.load_registry()),
                   "goals": len(goals),
                   **{x.lower(): sum(t["status"] == x for t in tasks) for x in states}},
-        "tasks": [_public_task(t) for t in tasks[:40]],
+        "tasks": [
+            _public_task(
+                task_history.get_task(t["task_id"], db_path=server.task_db_path)
+                if t["skill_id"] == "web.create" and t["status"] == "SUCCEEDED"
+                else t
+            ) for t in tasks[:40]
+        ],
         "goals": goals, "schedules": schedules,
         "skills": [{"id": k, "worker": v["worker_id"],
                     "mode": v["execution_mode"]}

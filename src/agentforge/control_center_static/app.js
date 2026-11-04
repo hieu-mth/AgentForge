@@ -432,11 +432,8 @@ async function handleClick(event){
   if(button.dataset.applyProposal){
    const p=state.proposal;
    if(!p||p.proposal_id!==button.dataset.applyProposal)throw Error("Hãy kiểm tra proposal trước");
-   if(!confirm("ĐÃ ĐỌC SOURCE? Áp dụng website local bằng SHA:
-"+p.sha256+
-    "
-
-Không deploy, không ghi đè website đang có."))return;
+   if(!confirm("ĐÃ ĐỌC SOURCE? Áp dụng website local bằng SHA:\n"+p.sha256+
+    "\n\nKhông deploy, không ghi đè website đang có."))return;
    const output=await mutate("/api/proposals/"+p.proposal_id+"/apply",{
     ack:"APPLY_PROPOSAL",sha256:p.sha256},
     "Website đã ghi vào workspace/products");
