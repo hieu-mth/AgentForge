@@ -1,0 +1,176 @@
+"""S4 bounded company planner: fixed, auditable plans and skill selection.
+
+No prompt-driven arbitrary code or unbounded recursive agents. Owner may
+choose a business goal; only trusted templates produce executable steps.
+"""
+import json
+from agentforge import brain_store, skill_registry, skill_runner
+
+TEMPLATES = {
+    "campaign.review": ("dataset",),
+    "website.campaign": ("slug", "dataset"),
+    "website.browser": ("slug",),
+    "media.produce": ("slug", "title", "scenes"),
+    "media.review": ("run_id",),
+    "research.discovery": ("topic",),
+    "creative.storyboard": ("topic", "audience", "goal"),
+}
+OPTIONAL = {"campaign", "photo_name", "rights_confirmed"}
+ALIASES = {
+    "campaign": "campaign.review", "website": "website.campaign",
+    "browser": "website.browser", "media": "media.produce",
+    "research": "research.discovery", "storyboard": "creative.storyboard",
+}
+
+
+def _steps(template, inputs):
+    if template not in TEMPLATES:
+        raise brain_store.BrainError("Unknown goal template; no arbitrary skill plan")
+    required = set(TEMPLATES[template])
+    if not isinstance(inputs, dict) or required - set(inputs):
+        raise brain_store.BrainError("Required goal inputs missing")
+    allowed = required | (
+        {"campaign"} if template in {"campaign.review", "website.campaign"} else
+        {"photo_name", "rights_confirmed"} if template == "media.produce" else set())
+    if set(inputs) - allowed:
+        raise brain_store.BrainError("Unexpected goal input fields")
+    if template == "campaign.review":
+        payload = {"dataset": inputs["dataset"]}
+        if "campaign" in inputs:
+            payload["campaign"] = inputs["campaign"]
+        steps = [(name, dict(payload)) for name in (
+            "analytics.quality_check", "analytics.content_report",
+            "analytics.opportunity_score", "analytics.finance_report")]
+    elif template == "website.campaign":
+        payload = {"dataset": inputs["dataset"]}
+        if "campaign" in inputs:
+            payload["campaign"] = inputs["campaign"]
+        steps = [("web.quality_check", {"slug": inputs["slug"]})]
+        steps += [(name, dict(payload)) for name in (
+            "analytics.quality_check", "analytics.content_report",
+            "analytics.opportunity_score", "analytics.finance_report")]
+    elif template == "website.browser":
+        steps = [("web.quality_check", {"slug": inputs["slug"]}),
+                 ("web.browser_test", {"slug": inputs["slug"],
+                                       "confirm_browser_run": True})]
+    elif template == "media.produce":
+        from agentforge.media_assets import _scenes, _slug, _text
+        _slug(inputs["slug"])
+        _text(inputs["title"], "title", 88)
+        _scenes(inputs["scenes"])
+        image = dict(inputs)
+        steps = [("media.compose", image),
+                 ("media.quality_check", {"run_id": {"from_step": 0, "field": "run_id"}}),
+                 ("media.video_render", {"run_id": {"from_step": 0, "field": "run_id"},
+                                          "confirm_external_run": True})]
+    elif template == "media.review":
+        steps = [("media.quality_check", {"run_id": inputs["run_id"]})]
+    elif template == "research.discovery":
+        steps = [("research.opportunity", {"topic": inputs["topic"]})]
+    else:
+        steps = [("media.copy_draft", dict(inputs))]
+    plan = []
+    for skill_id, payload in steps:
+        skill, required_permissions = skill_runner._contract(skill_id)
+        for key, value in payload.items():
+            if isinstance(value, dict) and set(value) == {"from_step", "field"}:
+                if not (key == "run_id" and value["field"] == "run_id"
+                        and type(value["from_step"]) is int
+                        and 0 <= value["from_step"] < len(plan)):
+                    raise brain_store.BrainError("Invalid output binding")
+                check_payload = {**payload, key: "0" * 32}
+                skill_registry.validate_payload(skill, check_payload)
+            else:
+                # Validate the whole payload below only after references filled.
+                pass
+        if not any(isinstance(v, dict) and "from_step" in v for v in payload.values()):
+            skill_registry.validate_payload(skill, payload)
+        plan.append({
+            "skill_id": skill_id, "worker_id": skill["worker_id"],
+            "payload": payload,
+            "required_permissions": sorted(required_permissions),
+            "estimated_model_calls": skill["limits"]["estimated_model_calls"],
+            "external_process": "process.run" in required_permissions,
+        })
+    return plan
+
+
+def make_plan(template, inputs, *, max_model_calls=0, max_external_runs=0):
+    """Validate budgets at plan time; runtime still checks each action."""
+    if type(max_model_calls) is not int or not 0 <= max_model_calls <= 3:
+        raise brain_store.BrainError("Invalid model-call cap")
+    if type(max_external_runs) is not int or not 0 <= max_external_runs <= 3:
+        raise brain_store.BrainError("Invalid external-process cap")
+    plan = _steps(template, inputs)
+    estimated_model = sum(x["estimated_model_calls"] for x in plan)
+    expected_external = sum(x["external_process"] for x in plan)
+    if estimated_model > max_model_calls or expected_external > max_external_runs:
+        raise brain_store.BrainError(
+            "Declared model/process use exceeds goal cap; explicit owner cap needed")
+    return plan
+
+
+def propose(title, template, inputs, *, max_model_calls=0,
+            max_external_runs=0, db_path=None):
+    """Create draft for SHA-reviewed owner approval; cannot execute yet."""
+    if template in ALIASES:
+        template = ALIASES[template]
+    plan = make_plan(template, inputs, max_model_calls=max_model_calls,
+                     max_external_runs=max_external_runs)
+    recorded = {**inputs, "_limits": {
+        "max_model_calls": max_model_calls,
+        "max_external_runs": max_external_runs,
+    }}
+    # Limits are stored in goal metadata, not passed to underlying skill.
+    result = brain_store.create_goal(title, template, recorded, plan, db_path=db_path)
+    result.update({
+        "plan": [{"index": i, "skill_id": x["skill_id"],
+                  "worker_id": x["worker_id"],
+                  "required_permissions": x["required_permissions"]}
+                 for i, x in enumerate(plan)],
+        "limits": recorded["_limits"],
+        "owner_approval_required": True,
+        "execution_authorized": False,
+        "spending_authorized": False,
+    })
+    return result
+
+
+def resolve_payload(goal, index, *, task_db_path=None):
+    """Only allow hardcoded reference to a successful previous run_id."""
+    from agentforge import task_history
+    plan = goal["plan"]
+    step = plan[index]
+    result = {}
+    for key, value in step["payload"].items():
+        if not isinstance(value, dict):
+            result[key] = value
+            continue
+        if set(value) != {"from_step", "field"} or value["field"] != "run_id":
+            raise brain_store.BrainError("Unsupported dataflow binding")
+        source_index = value["from_step"]
+        if type(source_index) is not int or source_index >= index or source_index < 0:
+            raise brain_store.BrainError("Forward/cyclic dataflow reference forbidden")
+        previous = next((x for x in goal["steps"]
+                         if x["step_index"] == source_index), None)
+        if previous is None or previous["status"] != "SUCCEEDED":
+            raise brain_store.BrainError("Dependent step has not succeeded")
+        from agentforge import task_history
+        child = task_history.get_task(previous["child_task_id"], db_path=task_db_path)
+        if child["status"] != "SUCCEEDED" or not isinstance(child["result"], dict):
+            raise brain_store.BrainError("Missing immutable task result")
+        inner = child["result"]
+        run_id = inner.get("run_id")
+        if (not isinstance(run_id, str) or len(run_id) != 32
+                or not all(c in "0123456789abcdef" for c in run_id)):
+            raise brain_store.BrainError("Malformed produced run_id")
+        result[key] = run_id
+    skill, _ = skill_runner._contract(step["skill_id"])
+    skill_registry.validate_payload(skill, result)
+    return result
+
+
+def read_only_plan(template, inputs):
+    plan = _steps(template, inputs)
+    return all(skill_runner._contract(x["skill_id"])[0]["execution_mode"] == "read_only"
+               for x in plan)
