@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from agentforge.source_reader import REPORTS
-from agentforge.evidence_registry import valid_references
+from agentforge.evidence_registry import valid_references_for_opportunity
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -21,6 +21,7 @@ REQUIRED = {
 def default_inputs():
     return {
         "opportunity": "Excel tracker for small online shops in Vietnam",
+        "opportunity_id": None,  # Must match the registered evidence opportunity.
         "checks": {
             key: {
                 "status": "UNKNOWN",
@@ -39,17 +40,18 @@ def default_inputs():
     }
 
 
-def supported(item, scope, evidence_index, evidence_dir):
+def supported(item, scope, evidence_index, evidence_dir, opportunity_id):
     if not isinstance(item, dict):
         return False
 
     return (
         item.get("status") == "SUPPORTED"
-        and valid_references(
+        and valid_references_for_opportunity(
             item.get("evidence_refs", []),
             scope,
             evidence_index,
             evidence_dir,
+            opportunity_id,
         )
     )
 
@@ -58,12 +60,15 @@ def evaluate(inputs, competitor_data, evidence_index=None, evidence_dir=None):
     if evidence_dir is None:
         evidence_dir = EVIDENCE_DIR
 
+    opportunity_id = inputs.get("opportunity_id")
     checks = inputs.get("checks", {})
 
     missing = [
         key
         for key in REQUIRED
-        if not supported(checks.get(key), key, evidence_index, evidence_dir)
+        if not supported(
+            checks.get(key), key, evidence_index, evidence_dir, opportunity_id
+        )
     ]
 
     blocker = inputs.get("hard_blocker", {})
@@ -73,11 +78,12 @@ def evaluate(inputs, competitor_data, evidence_index=None, evidence_dir=None):
 
     blocker_confirmed = (
         blocker_claimed
-        and valid_references(
+        and valid_references_for_opportunity(
             blocker_refs,
             "hard_blocker",
             evidence_index,
             evidence_dir,
+            opportunity_id,
         )
     )
 

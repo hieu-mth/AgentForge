@@ -1,4 +1,4 @@
-﻿import re
+import re
 from pathlib import Path
 
 
@@ -63,3 +63,15 @@ def valid_references(refs, scope, registry, evidence_dir):
             return False
 
     return True
+
+
+def valid_references_for_opportunity(refs, scope, registry, evidence_dir, opportunity_id):
+    """Require both local evidence integrity and the matching opportunity ID."""
+    if not isinstance(opportunity_id, str) or not opportunity_id.strip():
+        return False
+    if not valid_references(refs, scope, registry, evidence_dir):
+        return False
+    return all(
+        registry["records"][ref].get("opportunity_id") == opportunity_id
+        for ref in refs
+    )

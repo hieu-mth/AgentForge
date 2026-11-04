@@ -1,4 +1,4 @@
-﻿import tempfile
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -15,6 +15,7 @@ class TestEvaluation(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.evidence_dir = Path(self.temp.name)
         self.refs = {}
+        self.opportunity_id = "research-test-001"
         self.registry = {"records": {}}
 
         for check in REQUIRED:
@@ -31,6 +32,7 @@ class TestEvaluation(unittest.TestCase):
                 "owner_reviewed": True,
                 "supports": [check],
                 "source_file": filename,
+                "opportunity_id": self.opportunity_id,
             }
             self.refs[check] = ref
 
@@ -44,6 +46,7 @@ class TestEvaluation(unittest.TestCase):
             "owner_reviewed": True,
             "supports": ["hard_blocker"],
             "source_file": "blocker-001.txt",
+            "opportunity_id": self.opportunity_id,
         }
 
         self.competitors = {
@@ -71,6 +74,7 @@ class TestEvaluation(unittest.TestCase):
 
     def go_inputs(self):
         inputs = default_inputs()
+        inputs["opportunity_id"] = self.opportunity_id
 
         for check in REQUIRED:
             inputs["checks"][check] = {
@@ -93,6 +97,7 @@ class TestEvaluation(unittest.TestCase):
 
     def test_evidenced_hard_blocker_kills(self):
         inputs = default_inputs()
+        inputs["opportunity_id"] = self.opportunity_id
         inputs["hard_blocker"] = {
             "confirmed": True,
             "evidence_refs": [self.blocker_ref],
@@ -194,6 +199,30 @@ class TestEvaluation(unittest.TestCase):
         )
 
         self.assertEqual(result["decision"], "RESEARCH_MORE")
+
+    def test_cross_opportunity_reference_is_rejected(self):
+        inputs = self.go_inputs()
+        inputs["opportunity_id"] = "different-opportunity"
+        result = self.check(inputs)
+        self.assertEqual(result["decision"], "RESEARCH_MORE")
+        self.assertIn("differentiation", result["missing_requirements"])
+
+    def test_missing_opportunity_id_rejects_go(self):
+        inputs = self.go_inputs()
+        inputs["opportunity_id"] = None
+        result = self.check(inputs)
+        self.assertEqual(result["decision"], "RESEARCH_MORE")
+
+    def test_cross_opportunity_blocker_cannot_kill(self):
+        inputs = default_inputs()
+        inputs["opportunity_id"] = "different-opportunity"
+        inputs["hard_blocker"] = {
+            "confirmed": True,
+            "evidence_refs": [self.blocker_ref],
+        }
+        result = self.check(inputs)
+        self.assertEqual(result["decision"], "RESEARCH_MORE")
+        self.assertIn("hard_blocker_evidence", result["missing_requirements"])
 
 
 if __name__ == "__main__":
