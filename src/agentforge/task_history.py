@@ -106,9 +106,13 @@ def transition(task_id, status, *, result=None, error=None, db_path=None):
         if status not in TRANSITIONS[previous]:
             raise ValueError(f"Invalid task transition: {previous} -> {status}")
         now = _now()
-        conn.execute("UPDATE tasks SET status=?, result_json=COALESCE(?,result_json), "
-                     "error=?, updated_at=? WHERE task_id=?",
-                     (status, raw_result, error, now, task_id))
+        changed = conn.execute(
+            "UPDATE tasks SET status=?, result_json=COALESCE(?,result_json), "
+            "error=?, updated_at=? WHERE task_id=? AND status=?",
+            (status, raw_result, error, now, task_id, previous),
+        )
+        if changed.rowcount != 1:
+            raise RuntimeError("Task state changed concurrently")
         conn.execute("INSERT INTO events(task_id,at,name,detail_json) VALUES(?,?,?,?)",
                      (task_id, now, status, "{}"))
 
@@ -162,11 +166,13 @@ def recover(*, db_path=None):
         rows = conn.execute("SELECT task_id FROM tasks WHERE status='RUNNING'").fetchall()
         for row in rows:
             now = _now()
-            conn.execute("UPDATE tasks SET status='INTERRUPTED', updated_at=? "
-                         "WHERE task_id=? AND status='RUNNING'", (now, row["task_id"]))
-            conn.execute("INSERT INTO events(task_id,at,name,detail_json) VALUES(?,?,?,?)",
-                         (row["task_id"], now, "INTERRUPTED", '{"reason":"explicit_recovery"}'))
-    return len(rows)
+            changed = conn.execute("UPDATE tasks SET status='INTERRUPTED', updated_at=? "
+                                   "WHERE task_id=? AND status='RUNNING'",
+                                   (now, row["task_id"]))
+            if changed.rowcount == 1:
+                conn.execute("INSERT INTO events(task_id,at,name,detail_json) VALUES(?,?,?,?)",
+                             (row["task_id"], now, "INTERRUPTED", '{"reason":"explicit_recovery"}'))
+    return sum(1 for row in rows if get_task(row["task_id"], db_path=db_path)["status"] == "INTERRUPTED")
 
 
 def main():
