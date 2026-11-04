@@ -391,3 +391,24 @@ Theoretical Verified Net Profit remains null until genuine financial
 reconciliation and completeness checks exist. This is an implementation
 addendum, not a rewrite of the original strategy snapshot. See
 docs/milestones/S3.md for evidence, limits and one-pass Windows acceptance.
+
+
+## Addendum — S4 Company Brain & Delegation MVP (2026-11-05)
+
+S4 now has an owner-governed coordination layer over the existing
+skills, not a second arbitrary tool executor: durable goal records,
+deterministic/fixed skill plan templates, SHA-256-reviewed approval,
+step-by-step S1 child task execution and permission escalation, safe
+media output binding, manual crash interruption (never silent replay),
+once-only manual local scheduler ticks for read-only plans,
+owner-managed evidence notes and a read-only Dashboard goal queue.
+The technical demonstration uses an explicitly synthetic S3 dataset
+and executes real read-only S1 analytics skills.
+
+S4 does NOT supply an open-ended autonomous planner, token-accurate
+cost ledger, authorized channel publishing, authenticated multi-user
+delegation or a 24/7 process. Model/process call caps are preflight
+estimates, not hard provider-side spending enforcement. S5 requires
+account/platform integration, real revenue reconciliation and explicit
+owner permissions. Existing S1/S2/S3 approvals and artifact guards
+remain in effect. See docs/milestones/S4.md.
