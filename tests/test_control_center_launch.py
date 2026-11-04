@@ -81,6 +81,7 @@ class TestLaunchLocalTemplate(unittest.TestCase):
                                side_effect=fake_bundle):
                         with patch("agentforge.growth_reports.quality_check",
                                    return_value={"status": "REVIEW_REQUIRED",
+                                                 "campaign": "nem-pilot",
                                                  "failures": 0,
                                                  "warnings": 2,
                                                  "findings": []}):
