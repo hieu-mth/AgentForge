@@ -12,6 +12,7 @@
 - **Product revisions (C8B):** proposes changes to an existing `index.html`, shows a read-only diff, checks the original file fingerprint, and requires explicit digest-matched approval before replacing it. The prior version is backed up locally.
 - **Static quality & preview (C8C):** read-only HTML/accessibility/responsive heuristics and an optional ignored-data preview of a pending revision. No browser is opened or code executed automatically.
 - **Browser validation (C8D):** optional owner-started headless Chromium screenshots at mobile/tablet/desktop sizes; reports overflow, JavaScript errors, and blocked ordinary HTTP requests without changing the product.
+- **Browser-guided fixes (C8E):** local-only triage of C8D reports, optional one-call AI fix proposals for verified issues, and the same owner-gated C8B approval path. Passing browser reports never trigger AI calls.
 
 All generated text/code is untrusted. No workflow grants autonomous customer outreach, spending, publishing, package installation, or arbitrary shell execution.
 
@@ -132,6 +133,25 @@ It executes the HTML's JavaScript in a temporary browser context. HTTP routing
 blocks ordinary off-document requests, but **this is not an OS/network security
 sandbox**. No file is applied or deployed. See [C8D](docs/milestones/C8D.md).
 
+### Browser-guided fix proposals (C8E)
+
+For a completed C8D **project** run, inspect its findings first without a
+model call or modifications:
+
+```powershell
+$runId = "PASTE_C8D_RUN_ID"
+.\.venv\Scripts\python.exe -m agentforge.browser_fix plan $runId
+
+# Only for FIX_PROPOSAL_AVAILABLE and if you approve a model call:
+.\.venv\Scripts\python.exe -m agentforge.browser_fix propose $runId --confirm-model-call
+```
+
+The current `shop-landing` passed Edge and Chrome validation, so those
+runs should report `NO_FIX_NEEDED` without a new AI request. For failures,
+C8E converts only known browser issue codes and numeric data into a bounded
+change request, then uses the existing C8B proposal flow. No automatic apply,
+browser execution, retry or deployment. See [C8E](docs/milestones/C8E.md).
+
 ### Customer interviews
 
 ```powershell
@@ -140,7 +160,7 @@ sandbox**. No file is applied or deployed. See [C8D](docs/milestones/C8D.md).
 .\.venv\Scripts\python.exe -m agentforge.customer_evidence_review summary research-d3188c6a
 ```
 
-Only capture real, consented, anonymous interviews. Do **not** capture example or generated interview content as real evidence. See [C7A](docs/milestones/C7A.md), [C7B](docs/milestones/C7B.md), [C7C](docs/milestones/C7C.md), [C8A](docs/milestones/C8A.md), [C8B](docs/milestones/C8B.md), [C8C](docs/milestones/C8C.md), and [C8D](docs/milestones/C8D.md).
+Only capture real, consented, anonymous interviews. Do **not** capture example or generated interview content as real evidence. See [C7A](docs/milestones/C7A.md), [C7B](docs/milestones/C7B.md), [C7C](docs/milestones/C7C.md), [C8A](docs/milestones/C8A.md), [C8B](docs/milestones/C8B.md), [C8C](docs/milestones/C8C.md), [C8D](docs/milestones/C8D.md), and [C8E](docs/milestones/C8E.md).
 
 ## Local data, security and status
 
@@ -148,4 +168,4 @@ Only capture real, consented, anonymous interviews. Do **not** capture example o
 - SHA-256 checks detect later modifications; they are not evidence that an interview truly occurred or that generated code is safe.
 - URL allowlists and path checks are **not** an OS sandbox. Run with minimum OS permissions and review source before execution.
 - No real customer demand, willingness to pay, sales or revenue has been independently verified.
-- Current milestone: **opt-in real browser validation (C8D)**. Next: owner-reviewed fix proposals from browser reports (C8E). No autonomous deployment.
+- Current milestone: **browser-guided owner-reviewed fixes (C8E)**. Next: bounded Build → Test → Fix workflow (C8F), without auto-apply or deployment.
