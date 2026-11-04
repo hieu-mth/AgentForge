@@ -148,7 +148,7 @@ def _photo_path(name, rights_confirmed):
     return source
 
 
-def render_scene(path, scene, index, *, photo=None):
+def render_scene(path, scene, index, *, photo=None, title="Creative Media"):
     """Rasterize a portrait card with Vietnamese copy; no remote image loads."""
     from PIL import Image, ImageDraw, ImageOps
     w, h = SIZE
@@ -193,7 +193,12 @@ def render_scene(path, scene, index, *, photo=None):
                 x=46, y=body_y, width=w-92, fill=(231, 222, 212),
                 spacing=9, max_lines=5)
     draw.rounded_rectangle((46, 856, w-46, 917), radius=16, fill=accent)
-    draw.text((64, 873), "AGENTFORGE  /  S2", font=font_note, fill=(27, 35, 51))
+    footer = title
+    while footer and draw.textbbox((0, 0), footer, font=font_note)[2] > w - 140:
+        footer = footer[:-2]
+    if footer != title:
+        footer = footer.rstrip() + "…"
+    draw.text((64, 873), footer, font=font_note, fill=(27, 35, 51))
     image.save(path, format="PNG", optimize=True)
 
 
@@ -277,7 +282,7 @@ def make_assets(payload):
         names = []
         for index, scene in enumerate(scenes):
             name = f"scene_{index+1:02}.png"
-            render_scene(stage / name, scene, index, photo=photo)
+            render_scene(stage / name, scene, index, photo=photo, title=title)
             names.append(name)
         write_captions(stage / "captions.srt", scenes)
         duration = sum(x["duration_seconds"] for x in scenes)
