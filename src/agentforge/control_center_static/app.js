@@ -5,9 +5,9 @@ const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v === null || v === undefined ? "—" : v)
   .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
   .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
-const state = {csrf:null, data:null, view:"overview", goal:null, task:null, memory:null};
+const state = {csrf:null, data:null, view:"overview", goal:null, task:null, memory:null, proposal:null};
 const viewNames = {overview:"Tổng quan",goals:"Goals & Phê duyệt",tasks:"Task History",
- skills:"AI Workforce",analytics:"Intelligence",growth:"Growth & Revenue",
+ skills:"AI Workforce",websites:"Websites",analytics:"Intelligence",growth:"Growth & Revenue",
  schedules:"Schedules",integrations:"Integrations",memory:"Owner Memory"};
 function notice(message,bad=false){
  const node=document.createElement("div");
@@ -205,6 +205,8 @@ function renderTasks(){
   '<div class="detail-header"><h2>'+short(state.task.task_id)+'</h2>'+badge(state.task.status)+'</div>'+
   '<p class="small muted">'+esc(state.task.skill_id)+'</p>'+
   '<div class="callout">Artifacts: '+esc((state.task.artifacts||[]).join(", ")||"None")+'</div>'+
+  (state.task.web_proposal?'<div class="form-actions"><button class="btn btn-primary" data-view-proposal="'+
+    esc(state.task.web_proposal.proposal_id)+'">Xem và duyệt website proposal</button></div>':"")+
   table(["AT","EVENT"],(state.task.events||[]).map(x=>
    '<tr><td>'+esc(x.at)+'</td><td>'+esc(x.name)+'</td></tr>')))+
  '</div>':"";
@@ -222,6 +224,33 @@ function renderSkills(){
  '<div class="callout section">Skill Registry có '+fmt(state.data.stats.skills)+
  ' contracts. Không thể tự tạo executor hoặc bypass quyền qua giao diện.</div>'+
  '<div class="flow-grid section">'+cards+'</div>';
+}
+function renderWebsites(){
+ const proposals=state.data.tasks.filter(x=>x.web_proposal);
+ const rows=proposals.map(t=>
+  '<tr><td>'+esc(t.web_proposal.slug)+'</td><td>'+short(t.web_proposal.proposal_id)+
+  '</td><td><span class="mono">'+short(t.web_proposal.sha256)+'</span></td><td>'+
+  '<button class="btn btn-small btn-outline" data-view-proposal="'+
+  esc(t.web_proposal.proposal_id)+'">Kiểm tra source</button></td></tr>');
+ const p=state.proposal;
+ const preview=p?
+  '<div class="detail-header"><div><h2>Proposal: '+esc(p.project_slug)+'</h2>'+
+  '<span class="small muted">'+esc(p.summary)+'</span></div>'+badge(p.status)+'</div>'+
+  '<p class="small muted section">Source SHA-256 (cần so khớp):</p>'+
+  '<div class="mono callout">'+esc(p.sha256)+'</div>'+
+  '<div class="callout warning section">Source được hiển thị dưới dạng VĂN BẢN, không chạy script hoặc nhúng HTML. Áp dụng chỉ ghi tệp local, KHÔNG triển khai website hay thu tiền.</div>'+
+  (p.files||[]).map(f=>'<details class="section" open><summary>'+esc(f.path)+
+   '</summary><pre class="code-box">'+esc(f.content)+'</pre></details>').join("")+
+  '<div class="form-actions"><button class="btn btn-primary" data-apply-proposal="'+
+  esc(p.proposal_id)+'">Duyệt SHA và ghi website local</button></div>':
+  empty("Chọn proposal đã tạo qua Goal website.draft để xem toàn bộ source.");
+ return header("PRODUCT BUILDER","Websites",
+  "Tạo proposal website bằng model, kiểm tra source và áp dụng có kiểm soát mà không cần chép lệnh PowerShell.",
+  '<button class="btn btn-primary" data-new-website>+ Tạo website draft</button>')+
+ '<div class="callout">Workflow website.draft tạo PROPOSAL, không ghi đè file. Owner phải đọc source, xác nhận SHA và bấm Áp dụng riêng. Mô hình AI chỉ được gọi khi bật external tools và cấp quyền rõ ràng.</div>'+
+ '<div class="section">'+card("Proposals trong Task History",
+   table(["PROJECT","PROPOSAL ID","SHA-256","THAO TÁC"],rows))+'</div>'+
+ '<div class="section">'+card("Review & Apply",preview)+'</div>';
 }
 function renderAnalytics(){
  const rows=state.data.datasets.map(d=>
@@ -339,7 +368,7 @@ function render(){
  document.querySelectorAll(".nav-link").forEach(x=>x.classList.toggle(
   "active",x.dataset.view===state.view));
  const output={overview:renderOverview,goals:renderGoals,tasks:renderTasks,
-  skills:renderSkills,analytics:renderAnalytics,growth:renderGrowth,
+  skills:renderSkills,websites:renderWebsites,analytics:renderAnalytics,growth:renderGrowth,
   schedules:renderSchedules,integrations:renderIntegrations,memory:renderMemory};
  $("content").innerHTML=(output[state.view]||renderOverview)();
  if(state.view==="goals"){
@@ -349,7 +378,8 @@ function render(){
     dataset:"demo-example",campaign:"nem-shorts",slug:"nem-tu-van",
     title:"Tư vấn nệm",scenes:[],run_id:"0".repeat(32),
     topic:"Nghiên cứu nhu cầu nệm",audience:"Khách hàng",goal:"Tư vấn",
-    description:"Lời khuyên cơ bản khi lựa chọn nệm.",rights_attested:true}
+    description:"Lời khuyên cơ bản khi lựa chọn nệm.",rights_attested:true,
+    brief:"Tạo website tư vấn nệm tiếng Việt chuyên nghiệp, đẹp trên điện thoại, không bịa giá hay số điện thoại."}
    )[k]||"";});
    $("goal-json").value=JSON.stringify(values,null,2);
   });
@@ -373,6 +403,12 @@ async function showTask(id){
  try{state.task=await api("/api/tasks/"+encodeURIComponent(id));selectView("tasks");}
  catch(e){notice(e.message,true);}
 }
+async function showProposal(id){
+ try{
+  state.proposal=await api("/api/proposals/"+encodeURIComponent(id));
+  selectView("websites");
+ }catch(e){notice(e.message,true);}
+}
 function formJson(id){try{return JSON.parse($(id).value);}catch{throw Error("JSON không hợp lệ trong "+id);}}
 async function mutate(path,payload,success){
  const result=await api(path,"POST",payload);
@@ -386,6 +422,27 @@ async function handleClick(event){
  try{
   if(button.dataset.detailGoal){await showGoal(button.dataset.detailGoal);return;}
   if(button.dataset.detailTask){await showTask(button.dataset.detailTask);return;}
+  if(button.dataset.newWebsite!==undefined){selectView("goals");
+   const field=$("goal-template");field.value="website.draft";
+   field.dispatchEvent(new Event("change"));
+   $("goal-title").value="Website tư vấn nệm";
+   return;
+  }
+  if(button.dataset.viewProposal){await showProposal(button.dataset.viewProposal);return;}
+  if(button.dataset.applyProposal){
+   const p=state.proposal;
+   if(!p||p.proposal_id!==button.dataset.applyProposal)throw Error("Hãy kiểm tra proposal trước");
+   if(!confirm("ĐÃ ĐỌC SOURCE? Áp dụng website local bằng SHA:
+"+p.sha256+
+    "
+
+Không deploy, không ghi đè website đang có."))return;
+   const output=await mutate("/api/proposals/"+p.proposal_id+"/apply",{
+    ack:"APPLY_PROPOSAL",sha256:p.sha256},
+    "Website đã ghi vào workspace/products");
+   notice("Đã tạo website local: "+(output.project_path||""));
+   state.proposal=null;return;
+  }
   if(button.dataset.detailGrowth){
     const x=await api("/api/growth/"+encodeURIComponent(button.dataset.detailGrowth));
     notice("Report: "+x.campaign+" · "+x.status);return;
