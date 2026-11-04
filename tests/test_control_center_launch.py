@@ -67,14 +67,16 @@ class TestLaunchLocalTemplate(unittest.TestCase):
                     "channel": channel, "package_id": "b" * 32,
                     "archive_path": "local.zip", "published": False}
         with patch("agentforge.media_assets.make_assets",
-                   return_value={"run_id": RUN_ID, "status": "ASSETS_READY"}):
+                   return_value={"run_id": RUN_ID, "project_slug": "nem-pilot",
+                                 "status": "ASSETS_READY", "video_rendered": False}):
             with patch("agentforge.media_quality.check",
                        return_value={"run_id": RUN_ID, "status": "ASSETS_PASS",
                                      "failures": 0, "warnings": 0, "findings": []}):
                 with patch("agentforge.media_render.render_video",
                            return_value={"run_id": RUN_ID,
                                          "status": "VIDEO_RENDERED",
-                                         "video_path": "local.mp4"}) as ffmpeg:
+                                         "video_path": "local.mp4",
+                                         "quality_status": "VIDEO_PASS"}) as ffmpeg:
                     with patch("agentforge.growth_bundle.prepare",
                                side_effect=fake_bundle):
                         with patch("agentforge.growth_reports.quality_check",

@@ -36,11 +36,16 @@ class TestControlCenterV1(unittest.TestCase):
         self.host = f"127.0.0.1:{self.server.server_port}"
         self.cookie = None
         self.csrf = None
+        # Underlying trusted S1 adapters use the local default database paths.
+        # Patch them to the isolated fixture when testing browser delegation.
+        self.store_patch = patch.object(growth_store, "DB", self.growth)
+        self.store_patch.start()
 
     def tearDown(self):
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(4)
+        self.store_patch.stop()
         self.tmp.cleanup()
 
     def req(self, method, path, data=None, *, host=None, origin=None,
@@ -192,7 +197,7 @@ class TestControlCenterV1(unittest.TestCase):
             "ack": "PROPOSE", "title": "Research a market",
             "template": "research.discovery",
             "inputs": {"topic": "Nghiên cứu thị trường nệm"},
-            "max_model_calls": 1})
+            "max_model_calls": 2})
         self.assertEqual(code, 200)
         id = output["goal_id"]
         self.req("POST", f"/api/goals/{id}/approve", {
