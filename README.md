@@ -11,6 +11,7 @@
 - **AI Product Builder V1 (C8A):** generates one offline, self-contained `index.html` as a **proposal**. Only an owner-approved, digest-matched `apply` creates files in `workspace/products/<slug>/`. No automatic execution, browser automation or deployment.
 - **Product revisions (C8B):** proposes changes to an existing `index.html`, shows a read-only diff, checks the original file fingerprint, and requires explicit digest-matched approval before replacing it. The prior version is backed up locally.
 - **Static quality & preview (C8C):** read-only HTML/accessibility/responsive heuristics and an optional ignored-data preview of a pending revision. No browser is opened or code executed automatically.
+- **Browser validation (C8D):** optional owner-started headless Chromium screenshots at mobile/tablet/desktop sizes; reports overflow, JavaScript errors, and blocked ordinary HTTP requests without changing the product.
 
 All generated text/code is untrusted. No workflow grants autonomous customer outreach, spending, publishing, package installation, or arbitrary shell execution.
 
@@ -100,6 +101,30 @@ $revisionId = "PASTE_REVISION_ID"
 not browser tests or a security audit. If the revision is already applied,
 use the `check` command on the current product instead. See [C8C](docs/milestones/C8C.md).
 
+### Opt-in Chromium browser validation (C8D)
+
+**Optional download/install, with your approval** (not part of baseline dependencies):
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install playwright
+.\.venv\Scripts\python.exe -m playwright install chromium
+```
+
+After reading the HTML, explicitly start browser validation:
+
+```powershell
+.\.venv\Scripts\python.exe -m agentforge.browser_validation project shop-landing --confirm-browser-run
+
+# For a pending, unapplied revision instead:
+.\.venv\Scripts\python.exe -m agentforge.browser_validation revision PASTE_REVISION_ID --confirm-browser-run
+```
+
+C8D creates screenshots (`mobile.png`, `tablet.png`, `desktop.png`) and
+`report.json` under ignored `data/company/product_builder/browser_checks/`.
+It executes the HTML's JavaScript in a temporary browser context. HTTP routing
+blocks ordinary off-document requests, but **this is not an OS/network security
+sandbox**. No file is applied or deployed. See [C8D](docs/milestones/C8D.md).
+
 ### Customer interviews
 
 ```powershell
@@ -108,7 +133,7 @@ use the `check` command on the current product instead. See [C8C](docs/milestone
 .\.venv\Scripts\python.exe -m agentforge.customer_evidence_review summary research-d3188c6a
 ```
 
-Only capture real, consented, anonymous interviews. Do **not** capture example or generated interview content as real evidence. See [C7A](docs/milestones/C7A.md), [C7B](docs/milestones/C7B.md), [C7C](docs/milestones/C7C.md), [C8A](docs/milestones/C8A.md), [C8B](docs/milestones/C8B.md), and [C8C](docs/milestones/C8C.md).
+Only capture real, consented, anonymous interviews. Do **not** capture example or generated interview content as real evidence. See [C7A](docs/milestones/C7A.md), [C7B](docs/milestones/C7B.md), [C7C](docs/milestones/C7C.md), [C8A](docs/milestones/C8A.md), [C8B](docs/milestones/C8B.md), [C8C](docs/milestones/C8C.md), and [C8D](docs/milestones/C8D.md).
 
 ## Local data, security and status
 
@@ -116,4 +141,4 @@ Only capture real, consented, anonymous interviews. Do **not** capture example o
 - SHA-256 checks detect later modifications; they are not evidence that an interview truly occurred or that generated code is safe.
 - URL allowlists and path checks are **not** an OS sandbox. Run with minimum OS permissions and review source before execution.
 - No real customer demand, willingness to pay, sales or revenue has been independently verified.
-- Current milestone: **local quality/preview checks (C8C)**. Next: user-driven browser/device review and targeted fixes. No autonomous browser control or deployment.
+- Current milestone: **opt-in real browser validation (C8D)**. Next: owner-reviewed fix proposals from browser reports (C8E). No autonomous deployment.
