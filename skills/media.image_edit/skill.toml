@@ -1,0 +1,35 @@
+schema_version = 1
+id = "media.image_edit"
+version = "0.1.0"
+description = "Make a non-destructive local color edit of an existing S2 generated PNG frame."
+worker_id = "media_producer"
+execution_mode = "owner_gated"
+required_permissions = ["workspace.write"]
+required_tools = ["filesystem", "raster"]
+artifact_types = ["image_edit"]
+quality_checks = ["source_integrity"]
+
+[limits]
+timeout_seconds = 45
+estimated_model_calls = 0
+
+[input_schema]
+type = "object"
+required = ["run_id", "scene_index", "operation"]
+additional_properties = false
+
+[input_schema.properties]
+run_id = "string"
+scene_index = "integer"
+operation = "string"
+
+[output_schema]
+type = "object"
+required = ["run_id", "status", "image_path", "sha256"]
+additional_properties = true
+
+[output_schema.properties]
+run_id = "string"
+status = "string"
+image_path = "string"
+sha256 = "string"

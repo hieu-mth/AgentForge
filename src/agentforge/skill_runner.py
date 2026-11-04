@@ -24,6 +24,18 @@ POLICY = {
     "research.source_review": ("source_reviewer", "owner_gated",
                                frozenset({"workspace.read", "workspace.write",
                                           "model.invoke", "network.read"})),
+    "media.compose": ("media_producer", "owner_gated",
+                      frozenset({"workspace.write"})),
+    "media.image_edit": ("media_producer", "owner_gated",
+                         frozenset({"workspace.write"})),
+    "media.quality_check": ("media_producer", "read_only",
+                            frozenset({"workspace.read"})),
+    "media.video_render": ("media_producer", "owner_gated",
+                           frozenset({"workspace.write", "process.run"})),
+    "media.tts": ("media_producer", "owner_gated",
+                  frozenset({"workspace.write", "process.run"})),
+    "media.copy_draft": ("media_producer", "owner_gated",
+                         frozenset({"model.invoke", "workspace.propose"})),
 }
 
 
@@ -39,7 +51,8 @@ def _contract(skill_id):
 
 
 def missing_grants(skill_id, granted=(), *, confirm_model_call=False,
-                   confirm_browser_run=False, payload=None):
+                   confirm_browser_run=False, confirm_external_run=False,
+                   payload=None):
     _, needed = _contract(skill_id)
     granted = frozenset(granted)
     if not granted.issubset(registry.PERMISSIONS):
@@ -57,6 +70,11 @@ def missing_grants(skill_id, granted=(), *, confirm_model_call=False,
         not isinstance(payload, dict) or payload.get("approve_read_only") is not True
     ):
         missing.add("input.approve_read_only")
+    if "process.run" in needed:
+        if confirm_external_run is not True:
+            missing.add("confirm_external_run")
+        if not isinstance(payload, dict) or payload.get("confirm_external_run") is not True:
+            missing.add("input.confirm_external_run")
     return sorted(missing)
 
 
@@ -81,13 +99,34 @@ def _dispatch(skill_id, payload):
             return run_review(payload["task_id"], payload["allowed_hosts"],
                               max_pages=payload.get("max_pages", 4),
                               approve_read_only=True)
+    if skill_id == "media.compose":
+        from agentforge.media_assets import make_assets
+        return make_assets(payload)
+    if skill_id == "media.quality_check":
+        from agentforge.media_quality import check
+        return check(payload["run_id"])
+    if skill_id == "media.image_edit":
+        from agentforge.media_quality import edit_image
+        return edit_image(payload["run_id"], payload["scene_index"], payload["operation"])
+    if skill_id == "media.video_render":
+        from agentforge.media_render import render_video
+        return render_video(payload["run_id"], confirm_external_run=True)
+    if skill_id == "media.tts":
+        from agentforge.media_render import make_voiceover
+        return make_voiceover(payload["run_id"], payload["engine"],
+                              voice=payload.get("voice"), confirm_external_run=True)
+    if skill_id == "media.copy_draft":
+        from agentforge.media_pipeline import suggest_copy
+        return suggest_copy(payload["topic"], payload["audience"], payload["goal"])
     raise PermissionError("No trusted adapter")
 
 
 def _execute(task_id, skill_id, payload, *, grants, confirm_model_call,
-             confirm_browser_run, db_path):
-    missing = missing_grants(skill_id, grants, confirm_model_call=confirm_model_call,
-                             confirm_browser_run=confirm_browser_run, payload=payload)
+             confirm_browser_run, confirm_external_run, db_path):
+    missing = missing_grants(
+        skill_id, grants, confirm_model_call=confirm_model_call,
+        confirm_browser_run=confirm_browser_run,
+        confirm_external_run=confirm_external_run, payload=payload)
     if missing:
         result = {"task_id": task_id, "skill_id": skill_id,
                   "status": "WAITING_APPROVAL", "missing": missing, "executed": False}
@@ -101,7 +140,8 @@ def _execute(task_id, skill_id, payload, *, grants, confirm_model_call,
         task_id, "POLICY_GRANTED",
         {"required": sorted(required),
          "model_confirmed": confirm_model_call is True,
-         "browser_confirmed": confirm_browser_run is True},
+         "browser_confirmed": confirm_browser_run is True,
+         "external_confirmed": confirm_external_run is True},
         db_path=db_path,
     )
     try:
@@ -119,21 +159,25 @@ def _execute(task_id, skill_id, payload, *, grants, confirm_model_call,
 
 
 def invoke(skill_id, payload, *, grants=(), confirm_model_call=False,
-           confirm_browser_run=False, parent_id=None, db_path=None):
+           confirm_browser_run=False, confirm_external_run=False,
+           parent_id=None, db_path=None):
     skill, _ = _contract(skill_id)
     registry.validate_payload(skill, payload)
     # Reject malformed grants before recording a runnable task.
     missing_grants(skill_id, grants, confirm_model_call=confirm_model_call,
-                   confirm_browser_run=confirm_browser_run, payload=payload)
+                   confirm_browser_run=confirm_browser_run,
+                   confirm_external_run=confirm_external_run, payload=payload)
     task_id = history.create_task("skill", skill_id, payload,
                                   parent_id=parent_id, db_path=db_path)
     return _execute(task_id, skill_id, payload, grants=grants,
                     confirm_model_call=confirm_model_call,
-                    confirm_browser_run=confirm_browser_run, db_path=db_path)
+                    confirm_browser_run=confirm_browser_run,
+                    confirm_external_run=confirm_external_run, db_path=db_path)
 
 
 def resume_waiting(task_id, *, grants=(), confirm_model_call=False,
-                   confirm_browser_run=False, db_path=None):
+                   confirm_browser_run=False, confirm_external_run=False,
+                   db_path=None):
     task = history.get_task(task_id, db_path=db_path)
     if task["kind"] != "skill" or task["status"] != "WAITING_APPROVAL":
         raise ValueError("Only never-started approval tasks may be resumed")
@@ -141,7 +185,8 @@ def resume_waiting(task_id, *, grants=(), confirm_model_call=False,
     registry.validate_payload(skill, task["request"])
     return _execute(task_id, task["skill_id"], task["request"], grants=grants,
                     confirm_model_call=confirm_model_call,
-                    confirm_browser_run=confirm_browser_run, db_path=db_path)
+                    confirm_browser_run=confirm_browser_run,
+                    confirm_external_run=confirm_external_run, db_path=db_path)
 
 
 def main():
@@ -158,11 +203,13 @@ def main():
         cmd.add_argument("--grant", action="append", default=[])
         cmd.add_argument("--confirm-model-call", action="store_true")
         cmd.add_argument("--confirm-browser-run", action="store_true")
+        cmd.add_argument("--confirm-external-run", action="store_true")
     args = parser.parse_args()
     if args.command == "resume":
         result = resume_waiting(args.task_id, grants=args.grant,
                                 confirm_model_call=args.confirm_model_call,
-                                confirm_browser_run=args.confirm_browser_run)
+                                confirm_browser_run=args.confirm_browser_run,
+                                confirm_external_run=args.confirm_external_run)
     else:
         if sum(x is not None for x in (args.slug, args.input_json, args.input_file)) != 1:
             parser.error("Use exactly one of --slug, --input-json, --input-file")
@@ -182,7 +229,8 @@ def main():
             payload = json.loads(args.input_json)
         result = invoke(args.skill_id, payload, grants=args.grant,
                         confirm_model_call=args.confirm_model_call,
-                        confirm_browser_run=args.confirm_browser_run)
+                        confirm_browser_run=args.confirm_browser_run,
+                        confirm_external_run=args.confirm_external_run)
     print(json.dumps(result, indent=2, ensure_ascii=False))
     if result["status"] == "FAILED":
         parser.exit(2)

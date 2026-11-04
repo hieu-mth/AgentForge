@@ -47,7 +47,8 @@ def _artifact_names(result):
         if isinstance(value, dict):
             for key, item in value.items():
                 if key in {"report_path", "proposal_path", "project_path",
-                           "preview_path", "screenshot_path"} and isinstance(item, str):
+                           "preview_path", "screenshot_path", "image_path",
+                           "video_path", "audio_path", "caption_path"} and isinstance(item, str):
                     label = item.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
                     if label and label not in found:
                         found.append(label[:100])

@@ -1,0 +1,8 @@
+id = "media_producer"
+model_ref = "local_primary"
+runtime = "manual"
+
+capabilities = [
+    "draft_media_storyboards",
+    "compose_local_images_audio_subtitles_video"
+]

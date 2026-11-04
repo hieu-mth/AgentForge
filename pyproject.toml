@@ -15,6 +15,14 @@ dependencies = [
     "python-dotenv==1.2.4"
 ]
 
+[project.optional-dependencies]
+# Explicit opt-in: local graphics + a bundled FFmpeg executable (~40 MB on Windows).
+# Never install engines or fetch cloud assets from inside the running agent.
+media = [
+    "Pillow==13.0.0",
+    "imageio-ffmpeg==0.8.1",
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
