@@ -5,7 +5,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v === null || v === undefined ? "—" : v)
   .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
   .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
-const state = {csrf:null, data:null, view:"overview", goal:null, task:null, memory:null, proposal:null};
+const state = {csrf:null, data:null, view:"overview", goal:null, task:null, memory:null, proposal:null, ops:null};
 const viewNames = {overview:"Tổng quan",goals:"Goals & Phê duyệt",tasks:"Task History",
  skills:"AI Workforce",websites:"Websites",analytics:"Intelligence",growth:"Growth & Revenue",
  schedules:"Schedules",integrations:"Integrations",memory:"Owner Memory"};
@@ -329,6 +329,23 @@ function renderSchedules(){
  '</div></div></div>')+'</div>'+
  '<div class="section">'+card("Lịch đã tạo",table(["TÊN","TEMPLATE","STATUS","NEXT DUE UTC","THAO TÁC"],rows))+'</div>';
 }
+function renderOperations(){
+ const d=state.ops;
+ if(!d)return card("System Health","<p class=\"muted\">Chọn Integrations để đọc tình trạng SQLite, backup và scheduler. Không thực thi công việc.</p>");
+ const db=Object.entries(d.databases||{}).map(([name,v])=>
+ '<tr><td>'+esc(name)+'</td><td>'+badge(v.status)+'</td><td>'+fmt(v.size_bytes)+'</td></tr>');
+ const findings=(d.findings||[]).map(f=>
+ '<div class="goal-tile"><div class="goal-main"><strong>'+esc(f.rule)+'</strong>'+
+ '<small>'+esc(f.severity)+' · '+esc(f.name||"Vận hành local")+'</small></div></div>').join("");
+ return card("Local System Health",
+  '<div class="callout warning">Backup có dữ liệu nhạy cảm và chưa mã hóa. Chỉ lưu local, không upload công khai. Restore chỉ vào thư mục staging mới.</div>'+
+  '<p>Kiểm tra: '+badge(d.status)+' · Backup: '+fmt(d.backup_count)+
+  ' · Đang chạy: '+fmt(d.running_goals)+' goals / '+fmt(d.running_tasks)+' tasks</p>'+
+  table(["DB","Integrity","Bytes"],db)+
+  (findings||'<p class="muted">Không có cảnh báo nào.</p>')+
+  '<p class="muted">Lệnh backup an toàn: <code>python -m agentforge.ops_backup create --confirm-backup</code>.'+
+  ' Kiểm tra bằng <code>python -m agentforge.ops_backup verify &lt;archive&gt;</code>. Không tự restore dữ liệu đang hoạt động.</p>');
+}
 function renderIntegrations(){
  const cards=state.data.connectors.map(c=>
  '<div class="channel-card"><div class="channel-mark">⎔</div><div class="channel-name">'+
@@ -339,6 +356,7 @@ function renderIntegrations(){
   "Các kết nối cần tài khoản chính chủ và quyền API chính thức trước khi tự động vận hành.")+
  '<div class="callout warning">Công cụ đã có thể chuẩn bị video/upload kit và quản lý chiến dịch. Chưa có connector trực tiếp tới YouTube, TikTok, ngân hàng hay cổng affiliate. Trạng thái CONNECTED không được suy đoán.</div>'+
  '<div class="grid-3 section">'+cards+'</div>'+
+ '<div class="section">'+renderOperations()+'</div>'+
  '<div class="section">'+card("Điều kiện cho tích hợp thực tế",
  '<div class="stack"><div class="goal-tile"><span class="goal-mark">1</span><div class="goal-main"><strong>Owner sở hữu tài khoản</strong><small>Tự xác thực theo điều khoản nền tảng; không đưa mật khẩu vào chat hoặc SQLite.</small></div></div>'+
  '<div class="goal-tile"><span class="goal-mark">2</span><div class="goal-main"><strong>OAuth / Scope tối thiểu</strong><small>Chỉ các API và quyền đã được nhà cung cấp cấp phép.</small></div></div>'+
@@ -391,6 +409,10 @@ function selectView(view){
  $("sidebar")?.classList.remove("open");$("mobile-overlay").hidden=true;
  if(view==="memory"){
   api("/api/memory").then(m=>{state.memory=m;render();})
+   .catch(e=>notice(e.message,true));
+ }
+ if(view==="integrations"){
+  api("/api/ops/health").then(m=>{state.ops=m;render();})
    .catch(e=>notice(e.message,true));
  }
  render();window.scrollTo({top:0,behavior:"smooth"});
