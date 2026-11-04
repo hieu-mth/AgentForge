@@ -1,5 +1,5 @@
-﻿id = "opportunity_researcher"
-model_ref = "local_qwen"
+id = "opportunity_researcher"
+model_ref = "local_primary"
 runtime = "langgraph"
 
 capabilities = [

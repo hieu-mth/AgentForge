@@ -1,5 +1,5 @@
-﻿id = "source_reviewer"
-model_ref = "local_qwen"
+id = "source_reviewer"
+model_ref = "local_primary"
 runtime = "manual"
 
 capabilities = [

@@ -1,4 +1,4 @@
-﻿import tempfile
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -13,7 +13,7 @@ class TestWorkerRegistry(unittest.TestCase):
     def create_fixture(
         self,
         root,
-        model_ref="local_qwen",
+        model_ref="local_primary",
         enabled=True,
         instructions="Test instructions",
         extra="",
@@ -30,7 +30,7 @@ class TestWorkerRegistry(unittest.TestCase):
         flag = "true" if enabled else "false"
 
         (config / "models.toml").write_text(
-            '[models.local_qwen]\n'
+            '[models.local_primary]\n'
             'provider = "ollama"\n'
             'model = "qwen3:8b"\n'
             'base_url = "http://127.0.0.1:11434"\n'
@@ -56,7 +56,7 @@ class TestWorkerRegistry(unittest.TestCase):
 
     def test_opportunity_researcher(self):
         profile = load_worker("opportunity_researcher")
-        self.assertEqual(profile["model_ref"], "local_qwen")
+        self.assertEqual(profile["model_ref"], "local_primary")
         self.assertEqual(profile["model"]["model"], "qwen3:8b")
         self.assertEqual(profile["runtime"], "langgraph")
 
