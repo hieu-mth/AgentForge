@@ -197,7 +197,8 @@ def _owner_action(server, path, request):
 
 
 class _Handler(BaseHTTPRequestHandler):
-    protocol_version = "HTTP/1.1"
+    # No persistent request bodies: malformed Content-Length cannot desync keep-alive.
+    protocol_version = "HTTP/1.0"
 
     def log_message(self, format, *args):
         return  # Do not log authentication credentials, URLs or customer data.
@@ -271,6 +272,10 @@ class _Handler(BaseHTTPRequestHandler):
         if self._session() is None:
             return self._blocked(401, "authentication_required")
         try:
+            if route == "/api/session":
+                session = self._session()
+                return self._reply(200, {
+                    "status": "AUTHENTICATED", "csrf": session["csrf"]})
             if route == "/api/bootstrap":
                 return self._reply(200, _summary(self.server))
             if route == "/api/memory":

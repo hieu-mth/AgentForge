@@ -23,6 +23,9 @@ media = [
     "imageio-ffmpeg==0.8.1",
 ]
 
+[tool.setuptools.package-data]
+agentforge = ["control_center_static/*.html", "control_center_static/*.css", "control_center_static/*.js"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
