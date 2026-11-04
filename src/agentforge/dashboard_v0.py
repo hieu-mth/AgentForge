@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
 from agentforge import analytics_store, analytics_insights, skill_registry, task_history
+from agentforge import brain_store, brain_scheduler
 
 CSS = """body{margin:0;background:#101827;color:#e5eaf2;font:16px/1.55 system-ui,Segoe UI,Tahoma,sans-serif}
 main{max-width:1160px;margin:auto;padding:28px 20px}
@@ -79,7 +80,15 @@ def analytics_overview(*, analytics_db_path=None):
     return output
 
 
-def render_dashboard(*, db_path=None, selected=None, analytics_db_path=None):
+def brain_overview(*, brain_db_path=None):
+    """Sanitized goals/schedules: no task payloads, full results or owner notes."""
+    goals = brain_store.list_goals(db_path=brain_db_path, limit=30)
+    schedules = brain_scheduler.list_schedules(db_path=brain_db_path)
+    return {"goals": goals, "schedules": schedules}
+
+
+def render_dashboard(*, db_path=None, selected=None, analytics_db_path=None,
+                     brain_db_path=None, selected_goal=None):
     tasks = task_history.list_tasks(db_path=db_path, limit=100)
     registry = skill_registry.load_registry()
     skill_count = len(registry)
@@ -117,6 +126,35 @@ def render_dashboard(*, db_path=None, selected=None, analytics_db_path=None):
         _safe(item["execution_mode"]) + "</td></tr>"
         for item in registry.values()
     )
+    brain = brain_overview(brain_db_path=brain_db_path)
+    pending_goals = sum(g["status"] == "WAITING_APPROVAL" for g in brain["goals"])
+    goal_rows = "".join(
+        "<tr><td><a href='/?goal=" + _safe(g["goal_id"]) + "'><code>" +
+        _safe(g["goal_id"][:12]) + "</code></a></td><td>" +
+        _safe(g["title"]) + "</td><td>" + _safe(g["template"]) +
+        "</td><td>" + _safe(g["status"]) + "</td><td>" +
+        str(g["current_step"]) + "</td></tr>" for g in brain["goals"]
+    )
+    schedule_rows = "".join(
+        "<tr><td>" + _safe(g["title"]) + "</td><td>" +
+        _safe(g["template"]) + "</td><td>" + _safe(g["status"]) +
+        "</td><td>" + _safe(g["next_due_utc"]) + "</td></tr>"
+        for g in brain["schedules"]
+    )
+    goal_detail = ""
+    if selected_goal:
+        g = brain_store.get_goal(selected_goal, db_path=brain_db_path)
+        step_rows = "".join(
+            "<tr><td>" + str(x["step_index"]) + "</td><td>" +
+            _safe(x["skill_id"]) + "</td><td>" + _safe(x["status"]) +
+            "</td></tr>" for x in g["steps"]
+        )
+        goal_detail = (
+            "<h3>Goal " + _safe(g["goal_id"]) + "</h3>"
+            "<p>" + _safe(g["title"]) + " · " + _safe(g["status"]) + "</p>"
+            "<table><tr><th>Step</th><th>Skill</th><th>Status</th></tr>" +
+            step_rows + "</table>"
+        )
     analytics_rows = "".join(
         "<tr><td>" + _safe(item["dataset"]) + "</td><td>" +
         ("SYNTHETIC DEMO" if item["synthetic"] else "USER SUPPLIED") +
@@ -146,11 +184,26 @@ def render_dashboard(*, db_path=None, selected=None, analytics_db_path=None):
             "<table><tr><th>Dataset</th><th>Provenance</th><th>Performance rows</th>"
             "<th>Ledger rows</th><th>Owner-recorded net cash (VND)</th></tr>" +
             analytics_rows + "</table>"
-            "<p class='muted'>Refresh to update. API: /api/tasks · /api/skills · /api/analytics</p>"
+            "<h2>S4 Company Goals · " + str(len(brain["goals"])) +
+            " visible · " + str(pending_goals) + " awaiting approval</h2>"
+            "<p class='muted'>Plan approval and execution remain owner-CLI only."
+            " The dashboard cannot grant permissions or start jobs.</p>"
+            "<table><tr><th>Goal ID</th><th>Goal</th><th>Template</th>"
+            "<th>Status</th><th>Completed steps</th></tr>" +
+            goal_rows + "</table>" + goal_detail +
+            "<h2>Local schedules</h2>"
+            "<p class='muted'>Read-only schedules do not tick themselves."
+            " No unattended service is running unless installed separately.</p>"
+            "<table><tr><th>Title</th><th>Template</th>"
+            "<th>Status</th><th>Next due UTC</th></tr>" +
+            schedule_rows + "</table>"
+            "<p class='muted'>Refresh to update. Read-only APIs:"
+            " /api/tasks · /api/skills · /api/analytics · /api/goals · /api/schedules</p>"
             "</main></body></html>")
 
 
-def create_server(port=8765, *, db_path=None, analytics_db_path=None):
+def create_server(port=8765, *, db_path=None, analytics_db_path=None,
+                  brain_db_path=None):
     if type(port) is not int or not 0 <= port <= 65535:
         raise ValueError("Port must be between 0 and 65535")
 
@@ -184,9 +237,11 @@ def create_server(port=8765, *, db_path=None, analytics_db_path=None):
                 if parsed.path == "/":
                     params = parse_qs(parsed.query)
                     selected = params.get("task", [None])[0]
-                    self._reply(200, render_dashboard(db_path=db_path, selected=selected,
-                                                         analytics_db_path=analytics_db_path),
-                                "text/html")
+                    goal = params.get("goal", [None])[0]
+                    self._reply(200, render_dashboard(
+                        db_path=db_path, selected=selected,
+                        analytics_db_path=analytics_db_path,
+                        brain_db_path=brain_db_path, selected_goal=goal), "text/html")
                 elif parsed.path == "/api/tasks":
                     data = [_task_public(t) for t in task_history.list_tasks(db_path=db_path)]
                     self._reply(200, json.dumps(data, ensure_ascii=False), "application/json")
@@ -199,6 +254,28 @@ def create_server(port=8765, *, db_path=None, analytics_db_path=None):
                     self._reply(200, json.dumps(
                         analytics_overview(analytics_db_path=analytics_db_path)),
                         "application/json")
+                elif parsed.path == "/api/goals":
+                    self._reply(200, json.dumps(
+                        brain_overview(brain_db_path=brain_db_path)["goals"],
+                        ensure_ascii=False), "application/json")
+                elif parsed.path == "/api/schedules":
+                    self._reply(200, json.dumps(
+                        brain_overview(brain_db_path=brain_db_path)["schedules"],
+                        ensure_ascii=False), "application/json")
+                elif parsed.path.startswith("/api/goals/"):
+                    g = brain_store.get_goal(
+                        parsed.path.removeprefix("/api/goals/"),
+                        db_path=brain_db_path)
+                    self._reply(200, json.dumps({
+                        "goal_id": g["goal_id"], "title": g["title"],
+                        "template": g["template"], "status": g["status"],
+                        "current_step": g["current_step"],
+                        "plan_sha256": g["plan_sha256"],
+                        "steps": [{"step_index": x["step_index"],
+                                   "skill_id": x["skill_id"],
+                                   "status": x["status"]}
+                                  for x in g["steps"]],
+                    }, ensure_ascii=False), "application/json")
                 elif parsed.path.startswith("/api/tasks/"):
                     ident = parsed.path.removeprefix("/api/tasks/")
                     data = task_history.get_task(ident, db_path=db_path)
