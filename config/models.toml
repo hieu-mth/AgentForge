@@ -1,0 +1,11 @@
+﻿[models.local_qwen]
+provider = "ollama"
+model = "qwen3:8b"
+base_url = "http://127.0.0.1:11434"
+enabled = true
+
+[models.cloud_optional]
+provider = "openai"
+model = "SET_MODEL_ID_LATER"
+api_key_env = "OPENAI_API_KEY"
+enabled = false
