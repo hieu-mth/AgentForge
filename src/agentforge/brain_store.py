@@ -154,7 +154,7 @@ def get_goal(goal_id, *, db_path=None):
         result["events"] = [
             {"at": e["at"], "name": e["name"], "detail": json.loads(e["detail_json"])}
             for e in db.execute("SELECT at,name,detail_json FROM goal_events "
-                                "WHERE goal_id=? ORDER BY event_id", (goal_id,))]
+                                "WHERE goal_id=? ORDER BY event_id", (goal_id,))
         ]
         return result
 
