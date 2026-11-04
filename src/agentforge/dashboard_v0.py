@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from agentforge import analytics_store, analytics_insights, skill_registry, task_history
 from agentforge import brain_store, brain_scheduler
+from agentforge import growth_store, growth_reports
 
 CSS = """body{margin:0;background:#101827;color:#e5eaf2;font:16px/1.55 system-ui,Segoe UI,Tahoma,sans-serif}
 main{max-width:1160px;margin:auto;padding:28px 20px}
@@ -87,8 +88,26 @@ def brain_overview(*, brain_db_path=None):
     return {"goals": goals, "schedules": schedules}
 
 
+def growth_overview(*, growth_db_path=None):
+    """Local aggregates only; no customer identifiers or private receipts."""
+    output = []
+    for entry in growth_store.list_campaigns(db_path=growth_db_path, limit=20):
+        summary = growth_reports.report(entry["campaign"], db_path=growth_db_path)
+        output.append({
+            "campaign": entry["campaign"], "title": entry["title"],
+            "synthetic": bool(entry["synthetic"]),
+            "lead_total": summary["lead_total"],
+            "package_count": summary["package_count"],
+            "owner_reported_posts": summary["owner_reported_posts"],
+            "owner_recorded_net_cash_vnd": summary["owner_recorded_net_cash_vnd"],
+            "verified_net_profit_vnd": None,
+            "bank_reconciled": False, "platform_verified_posts": 0,
+        })
+    return output
+
+
 def render_dashboard(*, db_path=None, selected=None, analytics_db_path=None,
-                     brain_db_path=None, selected_goal=None):
+                     brain_db_path=None, selected_goal=None, growth_db_path=None):
     tasks = task_history.list_tasks(db_path=db_path, limit=100)
     registry = skill_registry.load_registry()
     skill_count = len(registry)
@@ -163,6 +182,16 @@ def render_dashboard(*, db_path=None, selected=None, analytics_db_path=None,
         "</td><td>" + _safe(item["owner_recorded_net_cash_vnd"]) +
         "</td></tr>" for item in analytics_overview(analytics_db_path=analytics_db_path)
     )
+    growth_rows = "".join(
+        "<tr><td>" + _safe(g["campaign"]) + "</td><td>" +
+        _safe(g["title"]) + "</td><td>" +
+        ("SYNTHETIC DEMO" if g["synthetic"] else "OWNER-RECORDED") +
+        "</td><td>" + str(g["lead_total"]) +
+        "</td><td>" + str(g["package_count"]) +
+        "</td><td>" + str(g["owner_reported_posts"]) +
+        "</td><td>" + _safe(g["owner_recorded_net_cash_vnd"]) + "</td></tr>"
+        for g in growth_overview(growth_db_path=growth_db_path)
+    )
     return ("<!doctype html><html lang='vi'><head><meta charset='utf-8'>"
             "<meta name='viewport' content='width=device-width,initial-scale=1'>"
             "<title>AgentForge · Control Center V0</title><style>" + CSS +
@@ -197,13 +226,22 @@ def render_dashboard(*, db_path=None, selected=None, analytics_db_path=None,
             "<table><tr><th>Title</th><th>Template</th>"
             "<th>Status</th><th>Next due UTC</th></tr>" +
             schedule_rows + "</table>"
+            "<h2>S5 Revenue & Growth Operations</h2>"
+            "<p class='muted'>Manual channel handoffs are NOT verified uploads. "
+            "Lead counts have no personal contact details. Owner-recorded net cash "
+            "is NOT bank-verified profit; demo values are synthetic.</p>"
+            "<table><tr><th>Campaign</th><th>Title</th><th>Data class</th>"
+            "<th>Leads</th><th>Bundles</th><th>Owner-reported posts</th>"
+            "<th>Owner-recorded net cash (VND)</th></tr>" +
+            growth_rows + "</table>"
             "<p class='muted'>Refresh to update. Read-only APIs:"
-            " /api/tasks · /api/skills · /api/analytics · /api/goals · /api/schedules</p>"
+            " /api/tasks · /api/skills · /api/analytics · /api/goals · /api/schedules"
+            " · /api/growth</p>"
             "</main></body></html>")
 
 
 def create_server(port=8765, *, db_path=None, analytics_db_path=None,
-                  brain_db_path=None):
+                  brain_db_path=None, growth_db_path=None):
     if type(port) is not int or not 0 <= port <= 65535:
         raise ValueError("Port must be between 0 and 65535")
 
@@ -241,7 +279,8 @@ def create_server(port=8765, *, db_path=None, analytics_db_path=None,
                     self._reply(200, render_dashboard(
                         db_path=db_path, selected=selected,
                         analytics_db_path=analytics_db_path,
-                        brain_db_path=brain_db_path, selected_goal=goal), "text/html")
+                        brain_db_path=brain_db_path, selected_goal=goal,
+                        growth_db_path=growth_db_path), "text/html")
                 elif parsed.path == "/api/tasks":
                     data = [_task_public(t) for t in task_history.list_tasks(db_path=db_path)]
                     self._reply(200, json.dumps(data, ensure_ascii=False), "application/json")
@@ -254,6 +293,15 @@ def create_server(port=8765, *, db_path=None, analytics_db_path=None,
                     self._reply(200, json.dumps(
                         analytics_overview(analytics_db_path=analytics_db_path)),
                         "application/json")
+                elif parsed.path == "/api/growth":
+                    self._reply(200, json.dumps(
+                        growth_overview(growth_db_path=growth_db_path),
+                        ensure_ascii=False), "application/json")
+                elif parsed.path.startswith("/api/growth/"):
+                    name = parsed.path.removeprefix("/api/growth/")
+                    data = growth_reports.report(name, db_path=growth_db_path)
+                    self._reply(200, json.dumps(data, ensure_ascii=False),
+                                "application/json")
                 elif parsed.path == "/api/goals":
                     self._reply(200, json.dumps(
                         brain_overview(brain_db_path=brain_db_path)["goals"],
