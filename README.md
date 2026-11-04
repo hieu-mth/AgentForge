@@ -49,6 +49,33 @@ Run the tests (no live model credentials or customer interviews required):
 
 The repository's [GitHub Actions CI](.github/workflows/ci.yml) runs the same suite on Windows and Python 3.13 for pushes/PRs targeting `main`.
 
+## Local Operations — backup, health and recovery staging
+
+Existing Control Center V1 remains the owner-operated interface. Local
+production-readiness tools add **consistent SQLite backup** (optional
+website/video/channel artifacts), explicit checksum/SQLite verification
+and a **non-destructive staged restore**; no active database overwrite.
+
+```powershell
+.\.venv\Scripts\python.exe -m agentforge.ops_doctor
+$raw = .\.venv\Scripts\python.exe -m agentforge.ops_backup create --confirm-backup
+if ($LASTEXITCODE -ne 0) { throw "Backup failed" }
+$backup = $raw | ConvertFrom-Json
+.\.venv\Scripts\python.exe -m agentforge.ops_backup verify $backup.archive
+```
+
+Run `python -m agentforge.control_center_v1 --port 8780`, log in using
+the locally printed one-time code (never share it), then go to
+**Integrations → Local System Health**. This owner-authenticated view
+displays SQLite integrity, backup inventory and scheduler status.
+Backups in ignored `workspace/backups/` are **unencrypted** and are not
+automatically uploaded, rotated, or restored.
+
+See [Operations Readiness](docs/milestones/OPS_READINESS.md) for safe
+staged restore and explicit limitations. No official YouTube/TikTok
+publication, authenticated revenue reconciliation or public SaaS
+hosting is implied.
+
 ## Control Center V1 — owner-operated local interface
 
 After updating main and installing project extras, run:

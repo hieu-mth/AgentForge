@@ -470,3 +470,23 @@ authenticated session. Existing product_builder path, digest, static
 quality and no-overwrite guards remain unchanged. Applying a proposal
 does not run HTML or deploy/publish the site. This expands practical
 owner workflow in V1; it does not confer new autonomous permissions.
+
+
+## Addendum — Local operations reliability (2026-11-05)
+
+Control Center V1 already provides an owner-authenticated responsive
+local interface to S1–S5, SHA-approved plans, reviewed website source,
+S4/S5 workflows and an opt-in read-only scheduler foreground process.
+A subsequent additive Operations Readiness layer introduces consistent
+SQLite backup via sqlite3 backup(), optional local generated artifacts,
+SHA-256/manifest/archive traversal checks, explicit verification and
+non-destructive staged restore. Read-only Operations Doctor reports
+database integrity, in-flight task/goal recovery warnings, registry,
+scheduler and backup inventory; Control Center V1's owner-authenticated
+Integrations view surfaces that health. Original task/history data and
+all S1–S5 schemas are left unchanged.
+
+This is backup integrity and recovery *staging*, not an automatic cutover,
+encrypted storage, public authenticated deployment, real OAuth
+publishers, hard provider-side budget control, verified bank payments
+or a fully autonomous 24/7 company. See docs/milestones/OPS_READINESS.md.
