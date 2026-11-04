@@ -82,9 +82,14 @@ class TestProductBuilderRawHtml(unittest.TestCase):
         self.assertFalse(b.PROPOSALS.exists())
 
     def test_unsafe_error_identifies_category_and_line(self):
+        from agentforge.web_design_kit import GENERIC_ART, upgrade_html
         bad = GOOD.replace("<h1>", "\n<a href='https://example.org'>Link</a>\n<h1>")
+        rendered = upgrade_html(bad, [], fallback_art=GENERIC_ART)
+        expected_line = rendered[:rendered.index("https://example.org")].count("\n") + 1
         with patch("agentforge.model.generate", return_value=bad) as generate:
-            with self.assertRaisesRegex(ValueError, r"remote URL at line 2"):
+            with self.assertRaisesRegex(
+                ValueError, rf"remote URL at line {expected_line}"
+            ):
                 b.propose("shop-landing", self.brief)
             generate.assert_called_once()
         self.assertFalse(b.PROPOSALS.exists())
