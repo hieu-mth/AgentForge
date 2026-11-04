@@ -40,6 +40,16 @@ def _read_static(name):
 def _public_task(task):
     output = _task_public(task)
     output["artifacts"] = _artifact_names(task.get("result"))
+    if (task.get("skill_id") == "web.create" and task.get("status") == "SUCCEEDED"
+            and isinstance(task.get("result"), dict)):
+        result = task["result"]
+        if (isinstance(result.get("proposal_id"), str)
+                and isinstance(result.get("sha256"), str)):
+            output["web_proposal"] = {
+                "proposal_id": result["proposal_id"],
+                "sha256": result["sha256"],
+                "slug": result.get("project_slug", ""),
+            }
     return output
 
 
@@ -95,8 +105,23 @@ def _summary(server):
     }
 
 
-def _owner_action(server, path, request):
+def _owner_action(server, path, request, session=None):
     """Explicit allowlist; no arbitrary skill invocation or Python execution."""
+    if path.startswith("/api/proposals/") and path.endswith("/apply"):
+        from agentforge import product_builder
+        parts = path.split("/")
+        if len(parts) != 5:
+            raise ValueError("Invalid proposal action")
+        proposal_id = parts[3]
+        metadata = product_builder.inspect(proposal_id)
+        if (request.get("ack") != "APPLY_PROPOSAL"
+                or request.get("sha256") != metadata["sha256"]):
+            raise PermissionError("Explicit matching proposal SHA required")
+        if (session is None or session.get("reviewed_proposals", {}).get(
+                proposal_id) != metadata["sha256"]):
+            raise PermissionError("Inspect original proposal in this session before applying")
+        return product_builder.apply(
+            proposal_id, confirm_write=True, sha256=metadata["sha256"])
     if path == "/api/goals/propose":
         if request.get("ack") != "PROPOSE":
             raise PermissionError("Confirm PROPOSE before making a goal")
@@ -281,6 +306,23 @@ class _Handler(BaseHTTPRequestHandler):
             if route == "/api/memory":
                 return self._reply(200, brain_store.list_memory(
                     db_path=self.server.brain_db_path))
+            if route.startswith("/api/proposals/"):
+                from agentforge import product_builder
+                ident = route.removeprefix("/api/proposals/")
+                document, _ = product_builder._read_proposal(ident)
+                if document["status"] != "PROPOSED_NOT_APPLIED":
+                    raise ValueError("Proposal cannot be reviewed")
+                session = self._session()
+                session.setdefault("reviewed_proposals", {})[ident] = document["sha256"]
+                return self._reply(200, {
+                    "proposal_id": ident, "project_slug": document["project_slug"],
+                    "sha256": document["sha256"],
+                    "status": document["status"],
+                    "summary": document["summary"],
+                    "files": [{"path": f["path"], "content": f["content"]}
+                              for f in document["files"]],
+                    "execution_authorized": False,
+                })
             if route.startswith("/api/goals/"):
                 ident = route.removeprefix("/api/goals/")
                 return self._reply(200, brain_runner.inspect(
@@ -369,9 +411,9 @@ class _Handler(BaseHTTPRequestHandler):
                                headers=(("Set-Cookie", f"{COOKIE}=; "
                                          "HttpOnly; SameSite=Strict; Path=/; Max-Age=0"),))
         try:
-            output = _owner_action(self.server, path, data)
+            output = _owner_action(self.server, path, data, session)
             return self._reply(200, output)
-        except (ValueError, KeyError, TypeError, PermissionError) as exc:
+        except (ValueError, KeyError, TypeError, PermissionError, FileExistsError) as exc:
             # Do not echo arbitrary input or secrets into an error response.
             msg = str(exc)[:180]
             return self._reply(400, {"error": type(exc).__name__,
