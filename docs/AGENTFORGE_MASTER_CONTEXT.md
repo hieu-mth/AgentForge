@@ -337,3 +337,21 @@ Khi đưa tài liệu này vào chat mới, assistant cần:
 Following the real `nem-tu-van` Web Builder pilot, AgentForge adds a **declarative-only S1.1 Skill Registry** with five contracts: `web.create`, `web.quality_check`, `web.browser_test`, `research.opportunity`, `research.source_review`. Each declares schema, worker, permissions, tools, artifact types, quality checks and resource hints. Commands `skill_registry list / inspect / validate` are read-only. This is a **new implementation addendum**, not a revision of the original 2026-11-04 strategy snapshot.
 
 **Not yet implemented:** skill dispatch/invocation, runtime permission enforcement, persistent task history, Dashboard V0 or autonomous execution. S1.2 should wrap existing functions behind explicit owner-gated adapters; S1.3 should persist tasks/checkpoints before any broader delegation. See [S1.1](milestones/S1.1.md).
+
+
+## Addendum — S1.2–S1.7 bounded local execution foundation (2026-11-05)
+
+S1 now has a minimum local-first implementation covering the five
+allowlisted skill adapters, an explicit code-level grant/confirmation gate,
+SQLite Task History with append-only events and manual interruption
+recovery, a checkpointed web.audit workflow (static check followed by
+optional approved browser validation with SHA staleness check), and a
+read-only localhost Dashboard V0. This supersedes the S1.1 addendum's
+statement that those pieces had not yet been implemented.
+
+This is **not** an unrestricted Skill Runtime or autonomous company:
+there is no generalized multi-agent planning, dynamic tool installation,
+credential vault, OS sandbox, enforced wall-clock limits, financial ledger
+or authenticated multi-user permission service. Existing C8A owner-approved
+apply and browser confirmation remain separate. A live model/browser
+pilot is still required on Windows. See docs/milestones/S1.md.
