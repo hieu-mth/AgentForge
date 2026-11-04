@@ -169,52 +169,51 @@ builder.add_edge("collect", "analyze")
 builder.add_edge("analyze", END)
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("topic")
-    args = parser.parse_args()
+def run(topic, *, db_path=None, reports_dir=None):
+    """Run existing C7 research graph once, returning a structured receipt.
 
+    This function does not grant permission to use a model or the network;
+    S1's runner checks owner grants before calling it.
+    """
+    if not isinstance(topic, str) or not 10 <= len(topic.strip()) <= 600:
+        raise ValueError("Research topic must be 10-600 characters")
+    database = Path(db_path) if db_path is not None else DB
+    reports = Path(reports_dir) if reports_dir is not None else REPORTS
     run_id = uuid4().hex
-    DB.parent.mkdir(parents=True, exist_ok=True)
-    REPORTS.mkdir(parents=True, exist_ok=True)
-
-    config = {
-        "configurable": {
-            "thread_id": run_id
-        }
-    }
-
-    with SqliteSaver.from_conn_string(str(DB)) as saver:
+    database.parent.mkdir(parents=True, exist_ok=True)
+    reports.mkdir(parents=True, exist_ok=True)
+    config = {"configurable": {"thread_id": run_id}}
+    with SqliteSaver.from_conn_string(str(database)) as saver:
         graph = builder.compile(checkpointer=saver)
-
         result = graph.invoke({
-            "topic": args.topic,
+            "topic": topic,
             "queries": [],
             "sources": [],
             "search_errors": [],
             "analysis": "",
-            "status": "pending"
+            "status": "pending",
         }, config=config)
+    report = {"research_id": run_id,
+              "created_at": datetime.now(timezone.utc).isoformat(), **result}
+    output = reports / f"{run_id}.json"
+    with output.open("x", encoding="utf-8") as handle:
+        json.dump(report, handle, ensure_ascii=False, indent=2)
+    return {"research_id": run_id, "status": result["status"],
+            "report_path": str(output)}
 
-    report = {
-        "research_id": run_id,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        **result
-    }
 
-    output = REPORTS / f"{run_id}.json"
-
-    output.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2),
-        encoding="utf-8"
-    )
-
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("topic")
+    args = parser.parse_args()
+    receipt = run(args.topic)
+    report = json.loads(Path(receipt["report_path"]).read_text(encoding="utf-8"))
     print("\nRESEARCH GRAPH: PASS")
-    print("RESEARCH ID:", run_id)
-    print("STATUS:", result["status"])
-    print("REPORT:", output)
+    print("RESEARCH ID:", receipt["research_id"])
+    print("STATUS:", receipt["status"])
+    print("REPORT:", receipt["report_path"])
     print("\nANALYSIS:\n")
-    print(result["analysis"])
+    print(report["analysis"])
 
 
 if __name__ == "__main__":
