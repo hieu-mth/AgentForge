@@ -20,6 +20,7 @@ DB = ROOT / "data" / "company" / "s3_analytics.sqlite3"
 DATASET = re.compile(r"[a-z][a-z0-9-]{2,39}\Z")
 FILENAME = re.compile(r"[a-z][a-z0-9_-]{1,59}\.csv\Z")
 IDENT = re.compile(r"[a-zA-Z][a-zA-Z0-9_-]{1,49}\Z")
+VARIANT = re.compile(r"[a-zA-Z][a-zA-Z0-9_-]{0,29}\Z")
 REF = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_./:-]{1,119}\Z")
 CHANNELS = {"youtube", "tiktok", "website", "affiliate", "other"}
 SOURCE_KINDS = {"manual", "user_platform_export"}
@@ -117,7 +118,7 @@ def _performance(row):
         "campaign": _name(row["campaign"], IDENT, "campaign ID"),
         "channel": row["channel"],
         "content": _name(row["content"], IDENT, "content ID"),
-        "variant": _name(row["variant"], IDENT, "variant"),
+        "variant": _name(row["variant"], VARIANT, "variant"),
     }
     if output["channel"] not in CHANNELS:
         raise AnalyticsError("Unsupported channel")
