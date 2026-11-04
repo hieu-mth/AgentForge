@@ -113,6 +113,9 @@ def invoke(skill_id, payload, *, grants=(), confirm_model_call=False,
            confirm_browser_run=False, parent_id=None, db_path=None):
     skill, _ = _contract(skill_id)
     registry.validate_payload(skill, payload)
+    # Reject malformed grants before recording a runnable task.
+    missing_grants(skill_id, grants, confirm_model_call=confirm_model_call,
+                   confirm_browser_run=confirm_browser_run, payload=payload)
     task_id = history.create_task("skill", skill_id, payload,
                                   parent_id=parent_id, db_path=db_path)
     return _execute(task_id, skill_id, payload, grants=grants,
