@@ -348,7 +348,8 @@ function render(){
    const values={};required.forEach(k=>{values[k]=({
     dataset:"demo-example",campaign:"nem-shorts",slug:"nem-tu-van",
     title:"Tư vấn nệm",scenes:[],run_id:"0".repeat(32),
-    topic:"Nghiên cứu nhu cầu nệm",audience:"Khách hàng",goal:"Tư vấn"}
+    topic:"Nghiên cứu nhu cầu nệm",audience:"Khách hàng",goal:"Tư vấn",
+    description:"Lời khuyên cơ bản khi lựa chọn nệm.",rights_attested:true}
    )[k]||"";});
    $("goal-json").value=JSON.stringify(values,null,2);
   });
