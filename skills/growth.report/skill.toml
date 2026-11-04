@@ -23,13 +23,12 @@ campaign = "string"
 
 [output_schema]
 type = "object"
-required = ["status", "campaign", "synthetic", "verified_net_profit_vnd", "lead_total", "package_count"]
+required = ["status", "campaign", "synthetic", "lead_total", "package_count"]
 additional_properties = true
 
 [output_schema.properties]
 status = "string"
 campaign = "string"
 synthetic = "boolean"
-verified_net_profit_vnd = "string"
 lead_total = "integer"
 package_count = "integer"
