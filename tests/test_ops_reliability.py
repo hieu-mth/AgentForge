@@ -5,6 +5,7 @@ import sqlite3
 import tempfile
 import unittest
 import zipfile
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
@@ -22,7 +23,7 @@ class TestOperationsRecovery(unittest.TestCase):
         self.data.mkdir(parents=True)
         self.products.mkdir(parents=True)
         self.sqlite_path = self.data / "s1_tasks.sqlite3"
-        with sqlite3.connect(self.sqlite_path) as conn:
+        with closing(sqlite3.connect(self.sqlite_path)) as conn, conn:
             conn.execute("CREATE TABLE check_value(id INTEGER PRIMARY KEY, text TEXT)")
             conn.execute("INSERT INTO check_value(text) VALUES('already-stored')")
         (self.products / "index.html").write_text("<h1>Existing content</h1>",
@@ -48,7 +49,7 @@ class TestOperationsRecovery(unittest.TestCase):
 
     def test_live_sqlite_snapshot_and_restore_only_to_new_staging(self):
         # WAL mode, live writer: backup should see committed data without touching DB.
-        with sqlite3.connect(self.sqlite_path) as db:
+        with closing(sqlite3.connect(self.sqlite_path)) as db, db:
             db.execute("PRAGMA journal_mode=WAL")
             db.execute("INSERT INTO check_value(text) VALUES('committed')")
         created = ops_backup.create(include_workspace=True, confirm_backup=True)
@@ -67,7 +68,7 @@ class TestOperationsRecovery(unittest.TestCase):
             archive, staged, confirm_restore=True)
         self.assertEqual(result["status"], "RESTORED_TO_STAGING_ONLY")
         self.assertFalse(result["active_databases_overwritten"])
-        with sqlite3.connect(staged / "data/company/s1_tasks.sqlite3") as db:
+        with closing(sqlite3.connect(staged / "data/company/s1_tasks.sqlite3")) as db:
             rows = db.execute("SELECT text FROM check_value ORDER BY id").fetchall()
         self.assertEqual(rows, [("already-stored",), ("committed",)])
         self.assertEqual(
@@ -142,7 +143,7 @@ class TestOperationsRecovery(unittest.TestCase):
         self.assertEqual(result["running_goals"], 1)
         self.assertEqual(result["backup_count"], 0)
         self.assertFalse(result["automatic_recovery_performed"])
-        with sqlite3.connect(self.sqlite_path) as db:
+        with closing(sqlite3.connect(self.sqlite_path)) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM check_value").fetchone()[0], 1)
 
     def test_doctor_detects_corrupt_sqlite_and_reports_failure_without_write(self):
