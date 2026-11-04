@@ -14,6 +14,11 @@ from agentforge.worker_registry import load_worker
 DOTENV_PATH = ROOT / ".env"
 DEFAULT_MODEL_REF = "local_primary"
 
+# Higher cap only for the product builder: a complete HTML document plus any
+# gateway-internal reasoning needs more space than a short research answer.
+# This is an upper bound, not a request to consume all tokens. No auto-retry.
+BUILDER_CLOUD_TEXT_MAX_TOKENS = 8192
+
 DEFAULT_TEXT_SYSTEM = (
     "You are an AI Company research worker. "
     "Be accurate. Do not fabricate evidence. "
@@ -119,7 +124,7 @@ def _ollama_chat(runtime, prompt, schema):
     return answer.strip()
 
 
-def _anthropic_chat(runtime, prompt, schema):
+def _anthropic_chat(runtime, prompt, schema, *, worker_id=None):
     system_prompt = runtime["system_prompt"]
     if schema is not None:
         system_prompt += (
@@ -128,9 +133,12 @@ def _anthropic_chat(runtime, prompt, schema):
             + json.dumps(schema, ensure_ascii=False)
         )
 
+    max_tokens = (4096 if schema is not None else
+                  BUILDER_CLOUD_TEXT_MAX_TOKENS if worker_id == "product_builder"
+                  else 2048)
     payload = {
         "model": runtime["model"],
-        "max_tokens": 4096 if schema is not None else 2048,
+        "max_tokens": max_tokens,
         "system": system_prompt,
         "messages": [{"role": "user", "content": prompt}],
     }
@@ -147,9 +155,35 @@ def _anthropic_chat(runtime, prompt, schema):
     with urllib.request.urlopen(request, timeout=180) as response:
         raw = json.load(response)
 
-    blocks = raw.get("content") if isinstance(raw, dict) else None
+    if not isinstance(raw, dict):
+        raise RuntimeError("Gateway response must be a JSON object")
+    blocks = raw.get("content")
+    stop_reason = raw.get("stop_reason")
+    usage = raw.get("usage")
+    output_tokens = (
+        usage.get("output_tokens")
+        if isinstance(usage, dict) and type(usage.get("output_tokens")) is int
+        else None
+    )
+    block_types = (
+        sorted({
+            item["type"] for item in blocks
+            if isinstance(item, dict) and isinstance(item.get("type"), str)
+        })[:8]
+        if isinstance(blocks, list) else []
+    )
+    # Never log response text, the user's prompt, URL or the API key.
+    diagnostic = (
+        f"stop_reason={stop_reason!r}, block_types={block_types!r}, "
+        f"output_tokens={output_tokens!r}, max_tokens={max_tokens}"
+    )
+    if stop_reason == "max_tokens":
+        raise RuntimeError(
+            "Gateway response stopped at max_tokens (" + diagnostic
+            + "). Incomplete output rejected; no automatic retry."
+        )
     if not isinstance(blocks, list):
-        raise RuntimeError("Gateway response has no content blocks")
+        raise RuntimeError("Gateway response has no content blocks (" + diagnostic + ")")
     parts = [
         item["text"]
         for item in blocks
@@ -159,7 +193,10 @@ def _anthropic_chat(runtime, prompt, schema):
     ]
     answer = "\n".join(parts).strip()
     if not answer:
-        raise RuntimeError("Gateway returned no text content")
+        raise RuntimeError(
+            "Gateway returned no text content (" + diagnostic
+            + "). No automatic retry; no generated files saved."
+        )
     return answer
 
 
@@ -169,7 +206,7 @@ def _chat(prompt, *, worker_id=None, schema=None):
     if runtime["provider"] == "ollama":
         return _ollama_chat(runtime, prompt, schema)
     if runtime["provider"] == "anthropic":
-        return _anthropic_chat(runtime, prompt, schema)
+        return _anthropic_chat(runtime, prompt, schema, worker_id=worker_id)
     raise NotImplementedError("Model adapter is not implemented")
 
 

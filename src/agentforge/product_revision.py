@@ -76,7 +76,7 @@ def propose(slug, request, *, model_client=None):
         "You are revising an EXISTING offline static HTML landing page. "
         "Return ONE complete HTML5 document only; no Markdown fence, JSON, or notes. "
         "Start with <!doctype html> and end with </html>. Keep the whole "
-        "document under 3800 characters. Keep inline CSS and optional small "
+        "document compact and within 9000 UTF-8 bytes. Keep inline CSS and optional small "
         "inline JS; no remote URLs, network access, payment links, tracking, "
         "external scripts, CDNs or executable HTML attributes. "
         "Keep the existing functionality unless the owner explicitly requests a change. "

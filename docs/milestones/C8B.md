@@ -59,3 +59,22 @@ Tests:
 ```
 
 Expected count after 228 tests from C8A: **256**. Confirm on Windows/CI.
+
+## Gateway text-response diagnostics (2026-11-04)
+
+For cloud-only **product_builder** text generation, the Anthropic-compatible
+adapter now allows up to 8,192 output tokens rather than 2,048. This is a
+ceiling, not a guaranteed response length; models that use internal reasoning
+may consume part of it. It may increase cost when cloud output is long.
+Research text requests stay at 2,048; structured JSON requests stay at 4,096.
+
+If the provider replies with only non-text content, AgentForge reports the
+provider's stop_reason, block type names, output-token usage (when available),
+and token ceiling, **not** the API token, prompt, or generated content.
+A response marked `stop_reason=max_tokens` is rejected even if it includes
+partial HTML. Failed generations do not create revision proposals. There is
+**no automatic retry** and no write to the product.
+
+This improves diagnosis and gives full HTML more room, but cannot establish
+that a specific third-party gateway will return complete text. Check the error
+and provider behavior before another paid call.
