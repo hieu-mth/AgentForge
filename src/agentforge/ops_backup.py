@@ -127,6 +127,9 @@ def create(*, include_workspace=False, confirm_backup=False, out_dir=None):
         return {"status": "CREATED_AND_VERIFIED", "archive": str(destination),
                 "files": len(manifest["contents"]), "total_bytes": total,
                 "unencrypted": True, "external_upload": False}
+    except FileExistsError:
+        # Exclusive-create failure: never remove a prior owner's archive.
+        raise
     except BaseException:
         destination.unlink(missing_ok=True)
         raise
