@@ -1,5 +1,7 @@
 import argparse
 import json
+import ipaddress
+import re
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,7 +13,7 @@ from lxml import html
 ROOT = Path(__file__).resolve().parents[2]
 REPORTS = ROOT / "data" / "research"
 
-ALLOWED_HOSTS = {
+ALLOWED_HOSTS = frozenset({
     "quanlynhanuoc.vn",
     "www.quanlynhanuoc.vn",
     "advertisingvietnam.com",
@@ -28,9 +30,57 @@ ALLOWED_HOSTS = {
     "www.wpro.vn",
     "exceltudonghoa.com",
     "www.exceltudonghoa.com",
-}
+})
 
 MAX_BYTES = 400_000
+
+
+HOST_RE = re.compile(
+    r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+    r"(?:[.][a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+"
+)
+
+
+def validate_public_https_url(url):
+    if (
+        not isinstance(url, str)
+        or not 1 <= len(url) <= 2048
+        or url != url.strip()
+        or "\\" in url
+        or any(ord(char) < 32 or ord(char) == 127 for char in url)
+    ):
+        raise ValueError("Invalid URL")
+
+    try:
+        parsed = urlsplit(url)
+        host = (parsed.hostname or "").lower()
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("Invalid URL") from exc
+
+    if (
+        parsed.scheme != "https"
+        or port not in (None, 443)
+        or parsed.username is not None
+        or parsed.password is not None
+        or not HOST_RE.fullmatch(host)
+    ):
+        raise ValueError("Only public HTTPS hostnames are allowed")
+
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    else:
+        raise ValueError("IP literals are not allowed")
+
+    if host.endswith(
+        (".local", ".internal", ".localhost", ".test", ".invalid")
+    ):
+        raise ValueError("Reserved hostname is not allowed")
+
+    return host
+
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -41,16 +91,18 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 OPENER = urllib.request.build_opener(NoRedirect())
 
 
-def fetch_page(url: str) -> dict:
-    parsed = urlsplit(url)
+def fetch_page(url: str, *, allowed_hosts=None) -> dict:
+    host = validate_public_https_url(url)
 
-    if (
-        parsed.scheme != "https"
-        or parsed.hostname not in ALLOWED_HOSTS
-        or parsed.port not in (None, 443)
-        or parsed.username is not None
-        or parsed.password is not None
-    ):
+    allowlist = ALLOWED_HOSTS if allowed_hosts is None else allowed_hosts
+
+    if not isinstance(allowlist, (set, frozenset, list, tuple)):
+        raise ValueError("Invalid host allowlist")
+
+    if not all(isinstance(item, str) for item in allowlist):
+        raise ValueError("Invalid host allowlist entries")
+
+    if host not in allowlist:
         raise PermissionError(
             "URL is not on the approved HTTPS allowlist"
         )

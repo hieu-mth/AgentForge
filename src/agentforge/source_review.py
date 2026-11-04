@@ -6,13 +6,10 @@ quote-matching lead, not independently verified business evidence.
 """
 
 import argparse
-import ipaddress
 import json
-import re
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlsplit
 
 from agentforge import source_reader, task_inbox
 from agentforge.model import generate_json
@@ -44,7 +41,7 @@ SCHEMA = {
     "required": ["observations"],
 }
 
-HOST_RE = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+\Z")
+HOST_RE = source_reader.HOST_RE
 FIELDS = {"customer_pain", "paid_alternative", "acquisition_channel", "price", "other"}
 
 
@@ -57,32 +54,7 @@ def normalize(value):
 
 
 def safe_host(url):
-    """Validate a prospective public HTTPS page, without performing a request."""
-    if not isinstance(url, str) or len(url) > 2048:
-        raise ValueError("Invalid URL")
-    parts = urlsplit(url)
-    host = (parts.hostname or "").lower()
-    try:
-        port = parts.port
-    except ValueError as exc:
-        raise ValueError("Invalid URL port") from exc
-    if (
-        parts.scheme != "https"
-        or port not in (None, 443)
-        or parts.username is not None
-        or parts.password is not None
-        or not HOST_RE.fullmatch(host)
-    ):
-        raise ValueError("Only ordinary public HTTPS hostnames are allowed")
-    try:
-        ipaddress.ip_address(host)
-    except ValueError:
-        pass
-    else:
-        raise ValueError("IP literals are not allowed")
-    if host.endswith((".local", ".internal", ".localhost", ".test", ".invalid")):
-        raise ValueError("Private or reserved hostname is not allowed")
-    return host
+    return source_reader.validate_public_https_url(url)
 
 
 def get_task_urls(task_id):
@@ -157,13 +129,11 @@ def analyze_page(text):
 
 
 def fetch_for_one_host(url, host):
-    """Reuse Source Reader's HTTPS/no-redirect guard for one CLI-approved host."""
-    previous = source_reader.ALLOWED_HOSTS
-    try:
-        source_reader.ALLOWED_HOSTS = frozenset({host})
-        return source_reader.fetch_page(url)
-    finally:
-        source_reader.ALLOWED_HOSTS = previous
+    """Fetch using this call's approved host only."""
+    return source_reader.fetch_page(
+        url,
+        allowed_hosts=frozenset({host}),
+    )
 
 
 def run_review(task_id, allowed_hosts, max_pages=4, approve_read_only=False):
