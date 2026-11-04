@@ -9,6 +9,7 @@ A **local-first, human-controlled AI business research prototype** built with Py
 - **Source review:** explicit public HTTPS host approval, page quote matching, owner review. Matching a quote does **not** verify that the claim is true.
 - **Market intelligence:** owner-catalogued vendor claims and advertised prices remain separate from Evaluation evidence.
 - **Customer intake (C7A):** anonymized, consent-based interview notes marked `CAPTURED_UNVERIFIED`.
+- **Customer corroboration (C7C):** two distinct owner-reviewed first-hand interviews can support only `customer_problem`, not verified demand/payment; source fingerprints checked on evaluation.
 - **Customer review (C7B):** manual retain/follow-up/reject decisions and source fingerprinting. Even retained first-hand accounts are **not** independently verified evidence of demand or payment, and are **not** registered for GO/KILL.
 
 No autonomous customer outreach, publishing, payment, installation, unrestricted code execution, or desktop control is authorized by the research workflow.
