@@ -27,8 +27,10 @@ MODES = {"read_only", "owner_gated"}
 PERMISSIONS = {
     "workspace.read", "workspace.propose", "workspace.write",
     "model.invoke", "network.search", "network.read", "browser.run",
+    "process.run",
 }
-TOOLS = {"filesystem", "model", "search", "https_reader", "browser"}
+TOOLS = {"filesystem", "model", "search", "https_reader", "browser",
+         "raster", "audio", "ffmpeg", "tts_engine"}
 FIELD_TYPES = {"string", "integer", "number", "boolean", "array", "object"}
 MAX_MANIFEST_BYTES = 12_000
 
@@ -109,7 +111,7 @@ def _contract(data, requested_id):
             or type(calls) is not int or not 0 <= calls <= 20):
         raise SkillConfigError("Invalid skill resource hints")
     if data["execution_mode"] == "read_only" and any(
-        p in data["required_permissions"] for p in ("workspace.write", "workspace.propose", "model.invoke", "network.read", "network.search", "browser.run")
+        p in data["required_permissions"] for p in ("workspace.write", "workspace.propose", "model.invoke", "network.read", "network.search", "browser.run", "process.run")
     ):
         raise SkillConfigError("Read-only skill cannot declare side-effect permissions")
     _schema(data["input_schema"], "input_schema")
