@@ -48,7 +48,7 @@ def _run_process(args, *, cwd, timeout=180, input_text=None):
     outcome = subprocess.run(
         args, cwd=cwd, input=input_text, capture_output=True, text=True,
         encoding="utf-8", errors="replace", shell=False, timeout=timeout,
-        check=False, stdin=subprocess.PIPE if False else None,
+        check=False,
     )
     if outcome.returncode:
         # Don't copy model/source text or input paths into an error message.
@@ -60,12 +60,12 @@ def render_video(run_id, *, confirm_external_run=False):
     """Encode a captioned slideshow + WAV into MP4, verify both tracks."""
     if confirm_external_run is not True:
         raise PermissionError("Explicit media subprocess confirmation required")
-    report = quality.check(run_id)
-    if report["status"] != "ASSETS_PASS" or report["failures"]:
-        raise assets.MediaError("Media assets must pass QA before video rendering")
     folder, data = assets.load_manifest(run_id)
     if data.get("video") is not None or (folder / "video.mp4").exists():
         raise FileExistsError("Video already exists; no overwrite/re-encode")
+    report = quality.check(run_id)
+    if report["status"] != "ASSETS_PASS" or report["failures"]:
+        raise assets.MediaError("Media assets must pass QA before video rendering")
     if data.get("voiceover") is not None:
         audio = "voiceover.wav"
     else:
