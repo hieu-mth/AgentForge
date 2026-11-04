@@ -1,6 +1,6 @@
 # Web Design V2 — Luxury websites with local photos
 
-This additive capability upgrades the C8B–C8D static website workflow. It does **not** turn AgentForge into a fully autonomous web designer or e-commerce platform.
+This additive capability upgrades the C8B–C8D static website workflow. As of premium-first Product Builder, the same shared offline design kit also runs during the **first** C8A proposal in one model call; `web_design_v2 prepare` remains an optional revision tool for existing websites. It does **not** turn AgentForge into a fully autonomous web designer or e-commerce platform.
 
 **Implemented**
 - An offline CSS design layer (ivory/beige/brown, responsive type, Segoe UI/Tahoma/Arial supporting Vietnamese, keyboard focus, subtle motion and reduced-motion support).
@@ -59,3 +59,20 @@ Approval requires a passing C8D report, matching photo fingerprints and source S
 .\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_web_design_v2.py" -v
 .\.venv\Scripts\python.exe -m unittest discover -s tests -q
 ```
+
+## Premium-first creation (no extra V2 model call)
+
+A new website now starts with the premium design kit in the **first** Product Builder proposal. A real website still requires review and digest-gated owner apply. Generated HTML is untrusted. No second model call or V2 `prepare` step is necessary just to obtain V2 styling.
+
+```powershell
+cd D:\AgentForge
+$draft = .\.venv\Scripts\python.exe -m agentforge.product_builder propose nem-tu-van "Tạo website tư vấn nệm tiếng Việt sang trọng, có CTA liên hệ và nội dung không bịa đặt." | ConvertFrom-Json
+.\.venv\Scripts\python.exe -m agentforge.product_builder inspect $draft.proposal_id
+notepad $draft.proposal_path
+# Only after owner review:
+.\.venv\Scripts\python.exe -m agentforge.product_builder apply $draft.proposal_id --confirm-write --sha256 $draft.sha256
+# Optional real browser validation after reviewing HTML/JS:
+.\.venv\Scripts\python.exe -m agentforge.browser_validation project nem-tu-van --confirm-browser-run --browser-channel msedge
+```
+
+Real local photos can still be imported to an existing product and applied through an approved V2 revision. A generic labeled illustration or model-created inline SVG is used without photos; no real product photograph is fabricated. Browser testing uses optional Playwright, which is not installed by baseline dependencies.

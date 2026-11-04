@@ -40,15 +40,43 @@ class TestProductBuilderRawHtml(unittest.TestCase):
             generate_json.assert_not_called()
         document = json.loads(Path(proposal["proposal_path"]).read_text(encoding="utf-8"))
         self.assertEqual([x["path"] for x in document["files"]], ["index.html"])
-        self.assertEqual(document["files"][0]["content"], GOOD)
+        html = document["files"][0]["content"]
+        self.assertIn("<h1>Xin chào</h1>", html)
+        self.assertIn("agentforge-web-design-v2", html)
+        self.assertIn("Segoe UI", html)
+        self.assertIn("prefers-reduced-motion", html)
+        self.assertIn("Minh họa đồ họa trang trí", html)
         self.assertFalse(b.PRODUCTS.exists())
         self.assertFalse(document["execution_authorized"])
+
+    def test_model_specific_svg_skips_neutral_fallback(self):
+        illustrated = GOOD.replace(
+            "<h1>Xin chào</h1>",
+            "<h1>Xin chào</h1><svg role='img' viewBox='0 0 20 20'></svg>",
+        )
+        with patch("agentforge.model.generate", return_value=illustrated) as generate:
+            proposal = b.propose("shop-landing", self.brief)
+            generate.assert_called_once()
+        doc = json.loads(Path(proposal["proposal_path"]).read_text(encoding="utf-8"))
+        html = doc["files"][0]["content"]
+        self.assertIn("viewBox='0 0 20 20'", html)
+        self.assertNotIn("Minh họa đồ họa trang trí", html)
+        self.assertIn("agentforge-web-design-v2", html)
+
+    def test_premium_output_still_respects_file_size_limit(self):
+        enormous = GOOD.replace("</body>", "<p>" + "x" * 15000 + "</p></body>")
+        with patch("agentforge.model.generate", return_value=enormous) as generate:
+            with self.assertRaisesRegex(ValueError, "too large"):
+                b.propose("shop-landing", self.brief)
+            generate.assert_called_once()
+        self.assertFalse(b.PROPOSALS.exists())
 
     def test_optional_single_markdown_html_fence(self):
         with patch("agentforge.model.generate", return_value="```html\n" + GOOD + "\n```"):
             proposal = b.propose("shop-landing", self.brief)
         doc = json.loads(Path(proposal["proposal_path"]).read_text(encoding="utf-8"))
-        self.assertEqual(doc["files"][0]["content"], GOOD)
+        self.assertIn("<h1>Xin chào</h1>", doc["files"][0]["content"])
+        self.assertIn("agentforge-web-design-v2", doc["files"][0]["content"])
 
     def test_incomplete_html_rejected_without_proposal(self):
         with patch("agentforge.model.generate", return_value=GOOD[:75]):
@@ -93,7 +121,9 @@ class TestProductBuilderRawHtml(unittest.TestCase):
             proposal = b.propose("shop-landing", self.brief)
         res = b.apply(proposal["proposal_id"], confirm_write=True, sha256=proposal["sha256"])
         self.assertEqual(res["status"], "FILES_WRITTEN_NOT_EXECUTED")
-        self.assertEqual((Path(res["project_path"]) / "index.html").read_text(encoding="utf-8"), GOOD)
+        applied_html = (Path(res["project_path"]) / "index.html").read_text(encoding="utf-8")
+        self.assertIn("agentforge-web-design-v2", applied_html)
+        self.assertIn("<h1>Xin chào</h1>", applied_html)
         self.assertFalse(res["execution_authorized"])
 
 
