@@ -309,6 +309,17 @@ class _Handler(BaseHTTPRequestHandler):
                     "status": "AUTHENTICATED", "csrf": session["csrf"]})
             if route == "/api/bootstrap":
                 return self._reply(200, _summary(self.server))
+            if route == "/api/ops/health":
+                from agentforge import ops_doctor
+                source_paths = {
+                    "S1 tasks": self.server.task_db_path or task_history.DEFAULT_DB,
+                    "S3 analytics": self.server.analytics_db_path or analytics_store.DB,
+                    "S4 goals": self.server.brain_db_path or brain_store.DB,
+                    "S5 growth": self.server.growth_db_path or growth_store.DB,
+                }
+                return self._reply(200, ops_doctor.inspect(
+                    paths=source_paths, task_db=self.server.task_db_path,
+                    brain_db=self.server.brain_db_path))
             if route == "/api/memory":
                 return self._reply(200, brain_store.list_memory(
                     db_path=self.server.brain_db_path))
