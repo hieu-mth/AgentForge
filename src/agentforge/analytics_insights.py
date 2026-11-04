@@ -245,3 +245,51 @@ def finance_report(dataset, *, campaign=None, db_path=None):
         "bank_reconciled": False, "uncertainty": warnings,
         "sources": _lineage(data),
     }
+
+
+def opportunity_report(dataset, *, campaign=None, db_path=None):
+    """Rank *investigation hypotheses* from own traffic, not market demand.
+
+    Heuristic score (0-100): CTR component 40%, leads/click 35%,
+    sample-coverage component 25%, with a conservative exposure factor.
+    Never mix this up with opportunity validation, revenue, or causal evidence.
+    """
+    content = content_report(dataset, campaign=campaign, db_path=db_path)
+    scored = []
+    for channel, metrics in content["by_channel"].items():
+        impressions, clicks, leads = (
+            metrics["impressions"], metrics["clicks"], metrics["leads"])
+        if impressions < 100:
+            score = None
+            flag = "INSUFFICIENT_EXPOSURE"
+        else:
+            ctr_component = min(1.0, (clicks/impressions)/.05)
+            lead_component = min(1.0, (leads/clicks)/.20) if clicks else 0.0
+            coverage = min(1.0, impressions/1000)
+            score = round(100 * (.40*ctr_component + .35*lead_component +
+                                  .25*coverage) * coverage)
+            flag = "EXPLORATORY_HEURISTIC"
+        scored.append({
+            "channel": channel, "investigation_score_0_100": score,
+            "classification": flag, "impressions": impressions,
+            "clicks": clicks, "leads": leads, "orders": metrics["orders"],
+            "hypothesis": (
+                "Review tracking, offer and audience before prioritizing this channel; "
+                "channel algorithms and definitions differ."
+            ),
+        })
+    scored.sort(key=lambda x: (
+        x["investigation_score_0_100"] is None,
+        -(x["investigation_score_0_100"] or 0), x["channel"]))
+    return {
+        "status": "EXPLORATORY_ONLY", "dataset": dataset, "campaign": campaign,
+        "synthetic": content["synthetic"], "signals": scored,
+        "score_is_heuristic": True, "market_demand_verified": False,
+        "scale_authorized": False, "recommended_investment_vnd": None,
+        "uncertainty": content["uncertainty"] + [
+            "Score uses recorded CTR/lead rate and sample coverage, not "
+            "independent market demand, customer interviews or profit evidence.",
+            "No cross-platform causal comparison or spending decision is justified.",
+        ],
+        "sources": content["sources"],
+    }
