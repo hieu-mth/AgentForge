@@ -62,6 +62,14 @@ def valid_references(refs, scope, registry, evidence_dir):
         except OSError:
             return False
 
+        # C7C: customer-problem references must still match the captured interview
+        # and owner-review fingerprints at the time of evaluation.
+        if (record.get("source_type") == "TWO_OWNER_REVIEWED_CUSTOMER_CLAIMS"
+                or re.fullmatch(r"owner-reviewed:customer-[0-9a-f]{32}", ref) is not None):
+            from agentforge.customer_problem_evidence import validate_registered_artifact
+            if not validate_registered_artifact(ref, record, path):
+                return False
+
     return True
 
 
