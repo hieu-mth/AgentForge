@@ -21,6 +21,8 @@ See **[AgentForge Master Project Context & Strategic Roadmap](docs/AGENTFORGE_MA
 - **Web Design V2:** the same premium kit is now used at initial creation; its separate one-project-handle revision/preview/test/approve commands are for **existing** websites and owner-provided local photos. See [Web Design V2](docs/milestones/Web-Design-V2.md).
 
 All generated text/code is untrusted. No workflow grants autonomous customer outreach, spending, publishing, package installation, or arbitrary shell execution.
+Known C8C static FAIL findings (including `onclick` inline event handlers) now block new C8A proposals and both C8A/C8B applies. `PASS` means only these heuristics passed, not that the generated code or visual design is verified safe. Existing projects are not edited automatically; use reviewed revisions or local manual edits to repair a prior FAIL.
+
 
 ## Local setup — Windows PowerShell
 
