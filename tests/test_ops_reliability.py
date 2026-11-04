@@ -146,6 +146,22 @@ class TestOperationsRecovery(unittest.TestCase):
         with closing(sqlite3.connect(self.sqlite_path)) as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM check_value").fetchone()[0], 1)
 
+    def test_unreadable_heartbeat_degrades_to_warning(self):
+        with patch.object(ops_doctor.skill_registry, "load_registry",
+                          return_value={"web.quality_check": {}}):
+            with patch.object(ops_doctor.ops_daemon, "read_heartbeat",
+                              side_effect=ValueError("corrupt local heartbeat")):
+                with patch.object(ops_doctor.task_history, "list_tasks",
+                                  return_value=[]):
+                    with patch.object(ops_doctor.brain_store, "list_goals",
+                                      return_value=[]):
+                        result = ops_doctor.inspect(
+                            paths={"test": self.sqlite_path},
+                            backup_dir=self.backups)
+        self.assertEqual(result["status"], "REVIEW_REQUIRED")
+        self.assertIn("scheduler_heartbeat_unreadable",
+                      [f["rule"] for f in result["findings"]])
+
     def test_doctor_detects_corrupt_sqlite_and_reports_failure_without_write(self):
         damaged = self.data / "corrupt.sqlite3"
         damaged.write_bytes(b"not a sqlite database")
