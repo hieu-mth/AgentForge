@@ -2,6 +2,10 @@
 
 **Local-first, human-controlled AI business research and product prototyping.** AgentForge is a Python 3.13 prototype built with LangGraph and SQLite. It can research opportunities, manage owner-reviewed market/customer evidence, and propose small static web products. It is **not** an autonomous company, hardened sandbox, or production deployment system.
 
+## Strategic direction and context
+
+See **[AgentForge Master Project Context & Strategic Roadmap](docs/AGENTFORGE_MASTER_CONTEXT.md)** for the long-term Autonomous AI Company vision, skill-first roadmap (S1–S5), delegated autonomy principles, and the C8F technical snapshot. The master context describes **future goals separately from implemented functionality**; this README and the source code document the current MVP.
+
 ## Capabilities
 
 - **Model routing:** local Ollama (`local_primary`, `qwen3:8b`) or an opt-in Anthropic-compatible gateway (`cloud_primary`).
