@@ -162,6 +162,9 @@ def main():
     top = result if "status" in result else result["video"]
     if top["status"] == "FAILED":
         parser.exit(2)
+    if args.command == "check" and top["status"] == "SUCCEEDED":
+        if top["result"]["status"] == "FAIL":
+            parser.exit(2)
     if top["status"] == "WAITING_APPROVAL":
         parser.exit(3)
 

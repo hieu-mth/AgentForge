@@ -60,8 +60,7 @@ def check(run_id):
 
     try:
         scenes = assets._scenes(manifest.get("scenes"))
-        if [assets._slug(manifest.get("slug"))] is None:
-            raise assets.MediaError("Invalid slug")
+        assets._slug(manifest.get("slug"))
         if manifest.get("size") != list(assets.SIZE):
             raise assets.MediaError("Incorrect media dimensions")
         if manifest.get("duration_seconds") != sum(x["duration_seconds"] for x in scenes):

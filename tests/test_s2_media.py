@@ -223,6 +223,21 @@ class TestS2Media(unittest.TestCase):
         self.assertEqual(quality.check(receipt["run_id"])["status"], "ASSETS_PASS")
         self.assertTrue((self.output / receipt["run_id"] / "voiceover.wav").is_file())
 
+    def test_cli_quality_fail_is_not_a_false_success(self):
+        receipt = self.build()
+        bad_report = {"run_id": receipt["run_id"], "status": "FAIL",
+                      "failures": 1, "warnings": 0,
+                      "findings": [{"rule": "artifact_integrity",
+                                    "severity": "FAIL", "message": "mismatch"}]}
+        with patch("agentforge.media_quality.check", return_value=bad_report):
+            with patch("sys.argv", ["media_pipeline", "check", receipt["run_id"]]):
+                with redirect_stdout(StringIO()) as stdout:
+                    with self.assertRaises(SystemExit) as exit_call:
+                        pipeline.main()
+        self.assertEqual(exit_call.exception.code, 2)
+        output = json.loads(stdout.getvalue())
+        self.assertEqual(output["result"]["status"], "FAIL")
+
     def test_cli_single_command_produces_real_video_with_task_history(self):
         args = ["media_pipeline", "demo", "nem-s2-cli",
                 "--render-video", "--confirm-media-run"]
