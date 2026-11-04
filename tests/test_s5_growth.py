@@ -115,6 +115,20 @@ class TestS5Growth(unittest.TestCase):
             task_history.get_task(new["task_id"], db_path=self.task_db)["status"],
             "SUCCEEDED")
 
+    def test_malformed_nested_lead_never_enters_task_history(self):
+        self.create()
+        with self.assertRaises(store.GrowthError):
+            skill_runner.invoke(
+                "growth.record_event", {
+                    "kind": "lead_new",
+                    "data": {"campaign": "nem-growth", "channel": "youtube",
+                             "consent_confirmed": True, "phone": "PRIVATE-NUMBER"},
+                    "confirm_write": True,
+                },
+                grants=("workspace.write",), db_path=self.task_db)
+        self.assertFalse(self.task_db.exists())
+        self.assertNotIn(b"PRIVATE-NUMBER", self.growth_db.read_bytes())
+
     def test_consented_anonymous_lead_state_machine(self):
         self.create()
         with self.assertRaises(store.GrowthError):
