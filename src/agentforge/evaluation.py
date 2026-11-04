@@ -2,10 +2,12 @@ import json
 from pathlib import Path
 
 from agentforge.source_reader import REPORTS
+from agentforge.evidence_registry import valid_references
 
 
 ROOT = Path(__file__).resolve().parents[2]
 OPPORTUNITIES = ROOT / "data" / "opportunities"
+EVIDENCE_DIR = OPPORTUNITIES / "evidence"
 
 REQUIRED = {
     "customer_problem": "Problem confirmed by target customers",
@@ -37,37 +39,50 @@ def default_inputs():
     }
 
 
-def supported(item):
+def supported(item, scope, evidence_index, evidence_dir):
     if not isinstance(item, dict):
         return False
 
-    refs = item.get("evidence_refs", [])
-
     return (
         item.get("status") == "SUPPORTED"
-        and isinstance(refs, list)
-        and any(isinstance(ref, str) and ref.strip() for ref in refs)
+        and valid_references(
+            item.get("evidence_refs", []),
+            scope,
+            evidence_index,
+            evidence_dir,
+        )
     )
 
 
-def evaluate(inputs, competitor_data):
+def evaluate(inputs, competitor_data, evidence_index=None, evidence_dir=None):
+    if evidence_dir is None:
+        evidence_dir = EVIDENCE_DIR
+
     checks = inputs.get("checks", {})
 
     missing = [
         key
         for key in REQUIRED
-        if not supported(checks.get(key))
+        if not supported(checks.get(key), key, evidence_index, evidence_dir)
     ]
 
     blocker = inputs.get("hard_blocker", {})
     blocker_refs = blocker.get("evidence_refs", [])
 
+    blocker_claimed = blocker.get("confirmed") is True
+
     blocker_confirmed = (
-        blocker.get("confirmed") is True
-        and isinstance(blocker_refs, list)
-        and any(isinstance(ref, str) and ref.strip()
-                for ref in blocker_refs)
+        blocker_claimed
+        and valid_references(
+            blocker_refs,
+            "hard_blocker",
+            evidence_index,
+            evidence_dir,
+        )
     )
+
+    if blocker_claimed and not blocker_confirmed:
+        missing.append("hard_blocker_evidence")
 
     experiment = inputs.get("experiment", {})
     budget = experiment.get("budget_cap_vnd")
@@ -98,10 +113,10 @@ def evaluate(inputs, competitor_data):
 
     if blocker_confirmed:
         decision = "KILL"
-        reason = "An evidenced hard blocker was supplied"
+        reason = "An owner-reviewed hard blocker reference was resolved"
     elif not missing:
         decision = "GO_TO_EXPERIMENT"
-        reason = "All required evidence checks were marked supported"
+        reason = "All required checks have owner-reviewed local evidence"
     else:
         decision = "RESEARCH_MORE"
         reason = "Insufficient evidence for a controlled experiment"
@@ -143,7 +158,15 @@ def main():
         competitor_path.read_text(encoding="utf-8")
     )
 
-    result = evaluate(inputs, competitor_data)
+    evidence_index_path = OPPORTUNITIES / "evidence_index.json"
+
+    evidence_index = (
+        json.loads(evidence_index_path.read_text(encoding="utf-8"))
+        if evidence_index_path.is_file()
+        else {}
+    )
+
+    result = evaluate(inputs, competitor_data, evidence_index)
 
     output_path.write_text(
         json.dumps(result, ensure_ascii=False, indent=2),
