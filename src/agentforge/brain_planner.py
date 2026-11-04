@@ -9,6 +9,7 @@ from agentforge import brain_store, skill_registry, skill_runner
 TEMPLATES = {
     "campaign.review": ("dataset",),
     "website.campaign": ("slug", "dataset"),
+    "website.draft": ("slug", "brief"),
     "website.browser": ("slug",),
     "media.produce": ("slug", "title", "scenes"),
     "media.review": ("run_id",),
@@ -45,6 +46,12 @@ def _steps(template, inputs):
         steps = [(name, dict(payload)) for name in (
             "analytics.quality_check", "analytics.content_report",
             "analytics.opportunity_score", "analytics.finance_report")]
+    elif template == "website.draft":
+        from agentforge.product_builder import _check_slug, _bounded_text
+        _check_slug(inputs["slug"])
+        _bounded_text(inputs["brief"], "brief", 20, 600)
+        steps = [("web.create", {
+            "slug": inputs["slug"], "brief": inputs["brief"]})]
     elif template == "website.campaign":
         payload = {"dataset": inputs["dataset"]}
         if "campaign" in inputs:
