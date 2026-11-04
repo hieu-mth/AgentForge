@@ -133,6 +133,8 @@ def _connect(db_path=None, *, create=False):
             record_ref TEXT NOT NULL, detail_json TEXT NOT NULL);
           CREATE INDEX IF NOT EXISTS ix_leads_campaign ON leads(campaign,status);
           CREATE INDEX IF NOT EXISTS ix_money_campaign ON money(campaign,kind,status);
+          CREATE UNIQUE INDEX IF NOT EXISTS ux_money_s3_tx
+            ON money(campaign,s3_tx_id) WHERE s3_tx_id<>'';
         """)
         db.commit()
     return db
