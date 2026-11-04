@@ -11,6 +11,7 @@ from html.parser import HTMLParser
 
 from agentforge import product_builder as builder
 from agentforge import product_revision as revision
+from agentforge import web_assets
 
 
 class _Document(HTMLParser):
@@ -99,8 +100,13 @@ def analyze(html):
         add('inline_events', 'FAIL', 'Inline HTML event handlers found: ' + ', '.join(sorted(set(parser.events))[:5]))
     if parser.dangerous_uris:
         add('unsafe_uris', 'FAIL', 'Active or remote HTML URI attributes found: ' + ', '.join(sorted(set(parser.dangerous_uris))[:5]))
-    if parser.local_assets:
-        add('local_assets', 'WARN', 'Preview copy will not include linked local assets: ' + ', '.join(sorted(set(parser.local_assets))[:5]))
+    # V2 previews copy approved raster assets; other local scripts/styles
+    # are still outside the C8B single-file revision contract.
+    unsupported = [ref for ref in parser.local_assets
+                   if not (ref.startswith('assets/') and
+                           web_assets.NAME_RE.fullmatch(ref[7:]))]
+    if unsupported:
+        add('local_assets', 'WARN', 'Unsupported local asset reference: ' + ', '.join(sorted(set(unsupported))[:5]))
     if not parser.lang:
         add('html_lang', 'WARN', 'Set the html lang attribute, e.g. lang="vi"')
     if not parser.viewport:
@@ -135,6 +141,20 @@ def analyze(html):
             'deployment_authorized': False}
 
 
+def _checked_assets(result, slug, html):
+    # C8D must refuse broken local images instead of reporting a false PASS.
+    try:
+        images = web_assets.verify_references(slug, html)
+    except (OSError, ValueError, PermissionError) as exc:
+        result['findings'].append({'rule': 'local_image_invalid', 'severity': 'FAIL',
+                                   'message': 'Referenced local image missing or invalid: ' + str(exc)[:180]})
+        result['failures'] += 1
+        result['status'] = 'FAIL'
+        return result
+    result['local_image_count'] = len(images)
+    return result
+
+
 def check_project(slug):
     """Read the existing product without writing any files; report broken HTML."""
     slug = builder._check_slug(slug)
@@ -146,7 +166,7 @@ def check_project(slug):
     if not raw or len(raw) > builder.MAX_FILE_BYTES:
         raise ValueError('Product index.html is empty or too large for static checking')
     html = raw.decode('utf-8')
-    result = analyze(html)
+    result = _checked_assets(analyze(html), slug, html)
     return {'target': 'project', 'project_slug': slug, 'file': 'index.html',
             'sha256': revision._hash(raw), **result}
 
@@ -158,7 +178,7 @@ def check_revision(revision_id):
         raise RuntimeError('Revision already applied; use check project_slug')
     revision._require_current(doc)
     html = doc['files'][0]['content']
-    result = analyze(html)
+    result = _checked_assets(analyze(html), doc['project_slug'], html)
     return {'target': 'revision', 'revision_id': revision_id,
             'project_slug': doc['project_slug'], 'file': 'index.html',
             'sha256': doc['sha256'], 'base_sha256': doc['base_sha256'], **result}
@@ -190,6 +210,22 @@ def preview_revision(revision_id):
         state = 'PREVIEW_FILE_CREATED_NOT_EXECUTED'
     if path.read_bytes() != contents:
         raise IOError('Preview integrity verification failed')
+    # Include only referenced, validated local raster assets. Never copy
+    # arbitrary paths or execute source during a preview.
+    for name in web_assets.references(html):
+        data, _ = web_assets.read_image(doc['project_slug'], name)
+        photo = root / 'assets' / name
+        builder._check_path_chain(photo)
+        photo.parent.mkdir(parents=True, exist_ok=True)
+        builder._check_path_chain(photo)
+        if photo.exists():
+            if photo.read_bytes() != data:
+                raise FileExistsError('Existing preview asset differs: ' + name)
+        else:
+            with photo.open('xb') as output:
+                output.write(data)
+        if photo.read_bytes() != data:
+            raise IOError('Preview asset integrity verification failed')
     return {'status': state, 'preview_path': str(path), 'revision_id': revision_id,
             'project_slug': doc['project_slug'], 'sha256': revision._hash(contents),
             'quality_status': result['status'], 'warnings': result['warnings'],

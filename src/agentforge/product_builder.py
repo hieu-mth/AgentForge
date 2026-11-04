@@ -23,8 +23,9 @@ PROJECT_RE = re.compile(r"[a-z][a-z0-9-]{2,39}\Z")
 PROPOSAL_RE = re.compile(r"[a-f0-9]{32}\Z")
 SHA_RE = re.compile(r"[a-f0-9]{64}\Z")
 ALLOWED_FILES = frozenset({"index.html", "styles.css", "app.js", "README.md"})
-MAX_TOTAL_BYTES = 16_000
-MAX_FILE_BYTES = 9_000
+MAX_TOTAL_BYTES = 24_000
+# V2 premium HTML may include inline CSS/artwork; C8A still requests compact HTML.
+MAX_FILE_BYTES = 16_000
 MAX_PROPOSAL_BYTES = 30_000
 # Reject obvious active network access / remote code. Not a security scanner.
 SUSPICIOUS = re.compile(

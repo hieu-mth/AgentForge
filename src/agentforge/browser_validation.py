@@ -12,6 +12,7 @@ from uuid import uuid4
 from agentforge import product_builder as builder
 from agentforge import product_quality as quality
 from agentforge import product_revision as revision
+from agentforge import web_assets
 
 
 DOCUMENT_URL = "http://agentforge.invalid/"
@@ -31,7 +32,9 @@ EVALUATE_METRICS = """() => {
     viewport_width: root.clientWidth,
     document_width: Math.max(root.scrollWidth, body ? body.scrollWidth : 0),
     document_height: Math.max(root.scrollHeight, body ? body.scrollHeight : 0),
-    title_present: Boolean(document.title.trim())
+    title_present: Boolean(document.title.trim()),
+    image_total: document.images.length,
+    broken_image_count: Array.from(document.images).filter(i => !i.complete || i.naturalWidth === 0).length
   };
 }"""
 
@@ -144,6 +147,19 @@ def validate(kind, identifier, *, confirm_browser_run=False, playwright_factory=
                             route.fulfill(status=200,
                                           content_type="text/html; charset=utf-8",
                                           body=source_bytes)
+                        elif (request.method == "GET" and
+                              request.url.startswith(DOCUMENT_URL + "assets/")):
+                            # Only approved flat product raster names can be
+                            # loaded; other HTTP, file, font or script URLs are blocked.
+                            name = request.url.removeprefix(DOCUMENT_URL + "assets/")
+                            try:
+                                data, mime = web_assets.read_image(target["project_slug"], name)
+                            except (OSError, ValueError, PermissionError):
+                                blocked.append(request.resource_type)
+                                route.abort("blockedbyclient")
+                            else:
+                                route.fulfill(status=200, content_type=mime,
+                                              body=data)
                         else:
                             blocked.append(request.resource_type)
                             route.abort("blockedbyclient")
@@ -168,6 +184,12 @@ def validate(kind, identifier, *, confirm_browser_run=False, playwright_factory=
                     if blocked:
                         _issue(findings, "blocked_requests", label,
                                f"{len(blocked)} off-document request(s) blocked")
+                    broken_images = metrics.get("broken_image_count", 0)
+                    if type(broken_images) is not int or broken_images < 0:
+                        raise RuntimeError("Invalid image load measurements")
+                    if broken_images:
+                        _issue(findings, "image_load_failures", label,
+                               f"{broken_images} image(s) failed to render")
                     screenshot = None
                     if metrics["document_height"] > MAX_CAPTURE_HEIGHT:
                         _issue(findings, "capture_height", label,
@@ -186,6 +208,8 @@ def validate(kind, identifier, *, confirm_browser_run=False, playwright_factory=
                         "document_height": metrics["document_height"],
                         "javascript_error_count": len(errors),
                         "blocked_request_count": len(blocked),
+                        "image_count": metrics.get("image_total", 0),
+                        "broken_image_count": broken_images,
                         "screenshot_path": screenshot,
                     })
                 finally:
