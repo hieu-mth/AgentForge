@@ -127,6 +127,20 @@ class TestS2Media(unittest.TestCase):
             render.render_video(result["run_id"], confirm_external_run=True)
         self.assertFalse((folder / "video.mp4").exists())
 
+    def test_srt_timing_mismatch_cannot_pass_even_with_updated_checksum(self):
+        result = self.build()
+        folder, manifest = assets.load_manifest(result["run_id"])
+        file = folder / "captions.srt"
+        source = file.read_text(encoding="utf-8")
+        file.write_text(source.replace("00:00:03,000", "00:00:04,000", 1),
+                        encoding="utf-8")
+        manifest["artifacts"]["captions.srt"] = assets._sha(file)
+        (folder / "manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+        report = quality.check(result["run_id"])
+        self.assertEqual(report["status"], "FAIL")
+        self.assertIn("media_decode", [x["rule"] for x in report["findings"]])
+
     def test_video_consent_blocks_external_tool_and_no_overwrite(self):
         receipt = self.build()
         with patch.object(render, "_run_process") as process:

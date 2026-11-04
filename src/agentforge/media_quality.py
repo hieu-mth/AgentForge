@@ -117,10 +117,8 @@ def check(run_id):
                         raise assets.MediaError("Audio duration outside allowed bounds")
             elif filename == "captions.srt":
                 text = path.read_text(encoding="utf-8")
-                if (text.count(" --> ") != len(scenes)
-                        or not re.search(r"\A1\n00:00:00,000 --> ", text)
-                        or not text.strip()):
-                    raise assets.MediaError("SRT caption count/timing invalid")
+                if text != assets.caption_text(scenes):
+                    raise assets.MediaError("SRT captions/timing differ from storyboard")
             elif filename == "video.mp4":
                 _mp4_structural(path)
         except (OSError, UnicodeError, EOFError, ValueError, assets.MediaError) as exc:

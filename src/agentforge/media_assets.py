@@ -202,7 +202,8 @@ def render_scene(path, scene, index, *, photo=None, title="Creative Media"):
     image.save(path, format="PNG", optimize=True)
 
 
-def write_captions(path, scenes):
+def caption_text(scenes):
+    """Deterministic SRT body used by generation AND independent QA."""
     elapsed = 0
     entries = []
     def timestamp(seconds):
@@ -213,7 +214,11 @@ def write_captions(path, scenes):
         entries.append(f"{index}\n{timestamp(elapsed)} --> {timestamp(end)}\n"
                        f"{scene['caption']}\n")
         elapsed = end
-    path.write_text("\n".join(entries) + "\n", encoding="utf-8")
+    return "\n".join(entries) + "\n"
+
+
+def write_captions(path, scenes):
+    path.write_text(caption_text(scenes), encoding="utf-8")
 
 
 def write_ambient(path, seconds):
