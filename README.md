@@ -18,6 +18,7 @@ See **[AgentForge Master Project Context & Strategic Roadmap](docs/AGENTFORGE_MA
 - **Browser validation (C8D):** optional owner-started headless Chromium screenshots at mobile/tablet/desktop sizes; reports overflow, JavaScript errors, and blocked ordinary HTTP requests without changing the product.
 - **Browser-guided fixes (C8E):** local-only triage of C8D reports, optional one-call AI fix proposals for verified issues, and the same owner-gated C8B approval path. Passing browser reports never trigger AI calls.
 - **Bounded workflow (C8F):** immutable local checkpoints coordinate baseline browser test, optional one-model fix proposal, candidate browser test and separate C8B owner approval. A PASS report never triggers a model call.
+- **Company Brain & Delegation (S4):** bounded owner-governed goal templates, immutable SHA-reviewed plans, existing S1 skill/worker dispatch with per-step approval, durable step markers/no-replay recovery, local read-only scheduler, owner-owned memory and read-only Dashboard goal queue. NOT unrestricted AI planning, authenticated multi-user delegation, unattended 24/7 or hard money spending metering. See [S4 milestone](docs/milestones/S4.md).
 - **Intelligence & Analytics (S3):** strict local CSV ingestion for daily performance and owner-recorded finance, source hashes/deduplication, content diagnostics, internal trend/opportunity hypotheses, descriptive A/B evaluation, pending-vs-confirmed cash, and read-only Dashboard overview. Seven S3 skills use existing S1 Task History and Policy Gate. No direct YouTube/TikTok/bank integrations, independently verified profit, or causal winner. See [S3](docs/milestones/S3.md).
 - **Creative & Media Engine (S2):** local portrait PNG promo cards (Pillow), safe non-destructive edits, original WAV ambient, UTF-8 SRT captions, and owner-approved H.264/AAC MP4 via bundled FFmpeg; separately gated Windows/Piper offline TTS and optional one-model draft storyboard. Six reusable S2 skill contracts and real media QA integrated with S1 Task History. See [S2](docs/milestones/S2.md).
 - **Web Design V2:** the same premium kit is now used at initial creation; its separate one-project-handle revision/preview/test/approve commands are for **existing** websites and owner-provided local photos. See [Web Design V2](docs/milestones/Web-Design-V2.md).
@@ -45,6 +46,32 @@ Run the tests (no live model credentials or customer interviews required):
 ```
 
 The repository's [GitHub Actions CI](.github/workflows/ci.yml) runs the same suite on Windows and Python 3.13 for pushes/PRs targeting `main`.
+
+## S4 — Company Brain (bounded local-first pilot)
+
+S4 coordinates the existing 18 S1–S3 skills into strictly bounded,
+immutable, owner-approved plans. It does NOT grant new tool authority.
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m agentforge.skill_registry validate
+$raw = .\.venv\Scripts\python.exe -m agentforge.company_brain demo --confirm-demo
+if ($LASTEXITCODE -ne 0) { throw "S4 demo failed" }
+$s4 = $raw | ConvertFrom-Json
+$s4
+.\.venv\Scripts\python.exe -m agentforge.company_brain inspect $s4.goal_id
+.\.venv\Scripts\python.exe -m agentforge.company_brain list
+```
+
+The explicit demo creates **only synthetic S3 metrics** then delegates
+four real read-only analytics skills through S1 Task History. Goal plans
+must be reviewed and approved with their SHA before separate execution;
+model, browser and FFmpeg actions stop for explicit owner grants. The
+local scheduler executes only owner-approved read-only templates when a
+manual confirmed tick occurs. No auto retry after ambiguous crashes.
+
+Restart Dashboard V0 to view S4 Goals and Schedules; all APIs remain
+read-only and localhost-only. See [S4 usage and limitations](docs/milestones/S4.md).
 
 ## S3 — Offline Intelligence & Analytics acceptance
 
