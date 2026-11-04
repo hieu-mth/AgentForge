@@ -28,9 +28,9 @@ POLICY = {
 
 
 def _contract(skill_id):
-    skill = registry.load_skill(skill_id)
     if skill_id not in POLICY:
         raise PermissionError("Skill has no trusted adapter")
+    skill = registry.load_skill(skill_id)
     worker, mode, grants = POLICY[skill_id]
     if (skill["worker_id"] != worker or skill["execution_mode"] != mode
             or set(skill["required_permissions"]) != grants):
