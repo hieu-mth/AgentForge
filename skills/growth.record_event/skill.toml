@@ -1,0 +1,33 @@
+schema_version = 1
+id = "growth.record_event"
+version = "0.1.0"
+description = "Record a consented anonymous lead, safe status transition, owner-post attestation or bookkeeping transaction."
+worker_id = "growth_operator"
+execution_mode = "owner_gated"
+required_permissions = ["workspace.write"]
+required_tools = ["sqlite"]
+artifact_types = ["growth_event"]
+quality_checks = ["privacy_schema", "consent", "source_provenance"]
+
+[limits]
+timeout_seconds = 60
+estimated_model_calls = 0
+
+[input_schema]
+type = "object"
+required = ["kind", "data", "confirm_write"]
+additional_properties = false
+
+[input_schema.properties]
+kind = "string"
+data = "object"
+confirm_write = "boolean"
+
+[output_schema]
+type = "object"
+required = ["status", "kind"]
+additional_properties = true
+
+[output_schema.properties]
+status = "string"
+kind = "string"

@@ -1,0 +1,40 @@
+schema_version = 1
+id = "growth.bundle_prepare"
+version = "0.1.0"
+description = "Create an offline YouTube/TikTok upload ZIP from a verified local S2 video; never publish."
+worker_id = "growth_operator"
+execution_mode = "owner_gated"
+required_permissions = ["workspace.write"]
+required_tools = ["filesystem"]
+artifact_types = ["channel_upload_package"]
+quality_checks = ["s2_video_integrity", "rights_attestation"]
+
+[limits]
+timeout_seconds = 60
+estimated_model_calls = 0
+
+[input_schema]
+type = "object"
+required = ["campaign", "channel", "run_id", "title", "description", "confirm_rights", "confirm_write"]
+additional_properties = false
+
+[input_schema.properties]
+campaign = "string"
+channel = "string"
+run_id = "string"
+title = "string"
+description = "string"
+confirm_rights = "boolean"
+confirm_write = "boolean"
+
+[output_schema]
+type = "object"
+required = ["package_id", "campaign", "status", "archive_path", "published"]
+additional_properties = true
+
+[output_schema.properties]
+package_id = "string"
+campaign = "string"
+status = "string"
+archive_path = "string"
+published = "boolean"

@@ -1,0 +1,35 @@
+schema_version = 1
+id = "growth.report"
+version = "0.1.0"
+description = "Read an S5 campaign funnel and owner-recorded cash, never claim verified profit or platform publication."
+worker_id = "growth_operator"
+execution_mode = "read_only"
+required_permissions = ["workspace.read"]
+required_tools = ["sqlite"]
+artifact_types = ["growth_report"]
+quality_checks = ["consent_summary", "cash_classification"]
+
+[limits]
+timeout_seconds = 60
+estimated_model_calls = 0
+
+[input_schema]
+type = "object"
+required = ["campaign"]
+additional_properties = false
+
+[input_schema.properties]
+campaign = "string"
+
+[output_schema]
+type = "object"
+required = ["status", "campaign", "synthetic", "verified_net_profit_vnd", "lead_total", "package_count"]
+additional_properties = true
+
+[output_schema.properties]
+status = "string"
+campaign = "string"
+synthetic = "boolean"
+verified_net_profit_vnd = "string"
+lead_total = "integer"
+package_count = "integer"

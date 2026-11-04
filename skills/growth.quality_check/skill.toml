@@ -1,0 +1,34 @@
+schema_version = 1
+id = "growth.quality_check"
+version = "0.1.0"
+description = "Validate local channel-package checksum, synthetic evidence labels and publication uncertainty."
+worker_id = "growth_operator"
+execution_mode = "read_only"
+required_permissions = ["workspace.read"]
+required_tools = ["sqlite", "filesystem"]
+artifact_types = ["growth_quality_report"]
+quality_checks = ["bundle_sha256", "provenance"]
+
+[limits]
+timeout_seconds = 60
+estimated_model_calls = 0
+
+[input_schema]
+type = "object"
+required = ["campaign"]
+additional_properties = false
+
+[input_schema.properties]
+campaign = "string"
+
+[output_schema]
+type = "object"
+required = ["status", "campaign", "failures", "warnings", "findings"]
+additional_properties = true
+
+[output_schema.properties]
+status = "string"
+campaign = "string"
+failures = "integer"
+warnings = "integer"
+findings = "array"
