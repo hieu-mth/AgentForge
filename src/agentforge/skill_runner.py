@@ -166,6 +166,29 @@ def _dispatch(skill_id, payload):
         return import_csv(payload["dataset"], payload["kind"], payload["filename"],
                           source_kind=payload["source_kind"],
                           synthetic=payload["synthetic"], confirm_write=True)
+    if skill_id == "web.create":
+        # Stable categories only: NEVER include model text, local paths or tokens.
+        import socket
+        from urllib.error import HTTPError, URLError
+        if isinstance(exc, HTTPError):
+            return "MODEL_HTTP_ERROR: Ollama/model endpoint returned HTTP error."
+        if isinstance(exc, (TimeoutError, socket.timeout)):
+            return "MODEL_TIMEOUT: Model request exceeded time limit."
+        if isinstance(exc, URLError):
+            return "MODEL_UNAVAILABLE: Cannot connect to model endpoint."
+        if isinstance(exc, FileExistsError):
+            return "PROJECT_EXISTS: Use another project slug."
+        if isinstance(exc, ValueError):
+            value = str(exc)
+            if any(x in value for x in ("truncated", "incomplete", "complete HTML document",
+                                         "incomplete code fence")):
+                return "HTML_INCOMPLETE: Model output was not a complete document."
+            if "Static quality gate FAIL" in value:
+                return "HTML_QUALITY_FAILED: Static source rejected by quality gate."
+            if any(x in value for x in ("too large", "exceeds", "byte limit")):
+                return "HTML_TOO_LARGE: Generated HTML exceeded safe size limits."
+            return "BUILDER_INVALID_OUTPUT: Generated website failed validation."
+        return "BUILDER_EXECUTION_FAILED: Check model runtime and builder contracts."
     if skill_id.startswith("analytics."):
         from agentforge import analytics_insights as insights
         dataset, campaign = payload["dataset"], payload.get("campaign")
