@@ -186,6 +186,24 @@ def _owner_action(server, path, request, session=None):
         return autopilot_v13.configure(
             enabled=request["enabled"], daily_cap=request["daily_cap"],
             confirm=True)
+    if path.startswith("/api/videos/") and path.endswith("/decide"):
+        from agentforge import media_workflow_v15
+        parts = path.split("/")
+        if len(parts) != 5:
+            raise ValueError("Invalid video review route")
+        ident = parts[3]
+        if set(request) != {"ack", "decision", "video_sha", "watched_local_file"}:
+            raise ValueError("Only bounded video approval fields accepted")
+        decision = request["decision"]
+        if decision not in ("APPROVE", "REJECT") or request["ack"] != "VIDEO_" + decision:
+            raise PermissionError("Explicit video decision required")
+        if request["watched_local_file"] is not True:
+            raise PermissionError("Owner must confirm watching local MP4")
+        if (session is None or
+                session.get("inspected_video", {}).get(ident) != request["video_sha"]):
+            raise PermissionError("Inspect exact MP4 metadata in this session first")
+        return media_workflow_v15.decide(
+            ident, decision, request["video_sha"], confirm_review=True)
     if path.startswith("/api/drafts/") and path.endswith("/decide"):
         from agentforge import quality_v14
         parts = path.split("/")
@@ -464,6 +482,24 @@ class _Handler(BaseHTTPRequestHandler):
                               for f in document["files"]],
                     "execution_authorized": False,
                 })
+            if route.startswith("/api/videos/"):
+                from agentforge import media_workflow_v15, media_quality
+                ident = route.removeprefix("/api/videos/")
+                record = media_workflow_v15._row(ident)
+                if record["status"] != "VIDEO_READY":
+                    raise PermissionError("Only completed MP4 can be reviewed")
+                _, manifest = media_workflow_v15._verify_storyboard_manifest(record)
+                qa = media_quality.check(record["run_id"])
+                if (qa["status"] != "VIDEO_PASS" or qa["failures"] or
+                        not qa["video_verified"] or
+                        manifest["artifacts"].get("video.mp4") != record["video_sha"]):
+                    raise PermissionError("MP4 integrity/quality is not verified")
+                self._session().setdefault("inspected_video", {})[ident] = record["video_sha"]
+                return self._reply(200, {
+                    "production_id": ident, "run_id": record["run_id"],
+                    "video_sha": record["video_sha"], "quality": qa["status"],
+                    "relative_path": "workspace/media/" + record["run_id"] + "/video.mp4",
+                    "published": False, "review_requires_playback": True})
             if route.startswith("/api/drafts/"):
                 from agentforge import quality_v14
                 ident = route.removeprefix("/api/drafts/")
