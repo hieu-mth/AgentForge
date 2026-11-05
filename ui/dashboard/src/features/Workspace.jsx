@@ -75,7 +75,7 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, busy, externalE
       <Title level={5}>Quyền cho lần chạy này</Title>
       <Alert type="warning" showIcon message="Phê duyệt riêng từng quyền; không cấp quyền vĩnh viễn."/>
       <Checkbox.Group value={grants} onChange={setGrants}
-        options={['workspace.write','workspace.propose','model.invoke','network.search','network.read','browser.run','process.run']
+        options={['workspace.read','workspace.write','workspace.propose','model.invoke','network.search','network.read','browser.run','process.run']
           .map(value=>({label:value,value}))} className="grants"/>
       <Space direction="vertical" style={{marginTop:16,display:'flex'}}>
         <Checkbox checked={confirmModel} onChange={e=>setConfirmModel(e.target.checked)}>Cho phép gọi model</Checkbox>

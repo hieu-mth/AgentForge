@@ -1,3 +1,23 @@
+# AgentForge V3.3 — Architecture & Owner Workspace Freeze
+
+Implementation milestones **V2.9 → V3.3** are now represented by canonical
+Python packages and an independent React/Ant Design dashboard.
+
+- Dashboard: `http://127.0.0.1:8780/dashboard/` after a local Vite build.
+- Python runtime: `src/agentforge/ai/`, `core/`, `domains/`, `storage/`.
+- Owner products: `workspace/`; durable SQLite/audit: `data/`. Never reset.
+- Safe retention: React **Backups & Retention** or
+  `python -m agentforge.storage.retention` (snapshot/verify/reversible quarantine).
+- Existing company-wide SQLite backup: `python -m agentforge.ops_backup`.
+
+Read [the V3.3 acceptance/freeze plan](docs/architecture/ACCEPTANCE_FREEZE_V33.md)
+and [retention safety guide](docs/milestones/RETENTION_V33.md). This is an
+**engineering milestone, not verified business autonomy**: public deployment,
+customer conversions, bank-verified profit, paid provider usage, YouTube/TikTok
+OAuth and real GPU image quality still require owner testing.
+
+After V3.3, **feature development is paused for owner review**.
+
 ## V2.8 — Canonical structure and safe module migration
 
 The **source of truth** for repository structure is

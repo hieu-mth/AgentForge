@@ -109,3 +109,16 @@ acceptance. Once V3.3 is merged, feature development **stops** until the
 owner completes hands-on review. A green CI does not prove conversion,
 YouTube/TikTok OAuth, public deployment, realistic model images, model billing,
 or bank-verified profit. Discuss those only after actual pilot evidence.
+
+
+## Final React retention integration
+
+The retention backend is now available at
+`/dashboard/ → Backups & Retention`, authenticated by the same session and
+CSRF policy as all other owner actions. GET inspection/verification binds the
+exact source/backup SHA to the current owner session before any mutation.
+No SQL table or product directory is migrated during UI updates.
+
+After this final PR merges, do not continue feature implementation until the
+owner completes local review and decides how to prioritize actual product
+quality, model capacity, channels and financial verification.

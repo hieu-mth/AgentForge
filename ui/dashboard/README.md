@@ -92,3 +92,25 @@ does not claim parity with all 24 legacy skills.
 Windows CI builds the React app and runs Python static route tests.
 End-user validation is still required on the local Windows machine for modal
 interaction, responsive layout, actual preview output and real model calls.
+
+
+## V3.2–V3.3 native owner workflows
+
+Native React now includes Projects & local AI Image Studio (including a
+SHA-verified PNG preview), AI Draft/Video owner review, Schedules, Operations,
+Intelligence, Growth, Settings, Owner Memory and Backups & Retention. All
+writes use the existing authenticated Python API with explicit owner
+confirmations. The React header also supports Owner logout.
+
+In **Backups & Retention**:
+1. Inspect one applied website or media run to bind its tree SHA to the
+   current owner session.
+2. Create its local ZIP snapshot, leaving the live source untouched.
+3. Explicitly verify ZIP and per-file SHA in this owner session.
+4. Pause Operations before any quarantine/restore.
+5. Confirm reversible quarantine or non-overwriting restore.
+6. There is deliberately **no permanent-delete button**.
+
+These screens do not establish OAuth or public site deployment. The legacy
+control panel stays at `/` only as a diagnostic/fallback path pending
+hands-on acceptance; it is not another data store.

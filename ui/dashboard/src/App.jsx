@@ -15,6 +15,7 @@ import { Workspace, GoalDrawer } from './features/Workspace.jsx';
 import { Websites, ProposalDrawer } from './features/Websites.jsx';
 import { Overview, ReadOnlyPage } from './features/Operations.jsx';
 import { Projects } from './features/Projects.jsx';
+import { Retention } from './features/Retention.jsx';
 import { Reviews } from './features/Reviews.jsx';
 import { Schedules, OperationsControl, Intelligence, Growth, OwnerSettings, OwnerMemory } from './features/Management.jsx';
 
@@ -75,6 +76,14 @@ export default function App() {
   const post=(path,body)=>api(path,{method:'POST',body,csrf});
   const mutate=(path,body)=>runAction(()=>post(path,body));
   const ask=(title,content,onOk)=>modal.confirm({title,content,okText:'Xác nhận',cancelText:'Hủy',onOk});
+  const logout=()=>ask('Đăng xuất khỏi Owner Workspace?',
+    'Kết thúc phiên local hiện tại và yêu cầu mã Owner khi vào lại.',
+    async()=>{
+      const out=await runAction(()=>post('/api/logout',{}),{refreshData:false});
+      if(out){setCsrf(null);setData(null);setLoginNeeded(true);
+        setGoal(null);setProposal(null);setTask(null);}
+    });
+
   const openGoal=async id => {
     try{setGoal(await api('/api/goals/'+encodeURIComponent(id)));}catch(e){authError(e);}
   };
@@ -125,6 +134,7 @@ export default function App() {
     {key:'reviews',icon:<CheckCircleOutlined/>,label:'AI & Video Review'},
     {key:'websites',icon:<GlobalOutlined/>,label:'Websites'},
     {key:'projects',icon:<FolderOpenOutlined/>,label:'Projects & AI Images'},
+    {key:'retention',icon:<SafetyCertificateOutlined/>,label:'Backups & Retention'},
     {type:'divider'},
     {key:'team',icon:<TeamOutlined/>,label:'Team & Roles'},
     {key:'intelligence',icon:<AppstoreOutlined/>,label:'Intelligence'},
@@ -138,6 +148,7 @@ export default function App() {
   ];
   const titles={workspace:'Giao việc',overview:'Tổng quan',goals:'Kế hoạch',tasks:'Task History',
     reviews:'AI & Video Review',websites:'Websites',projects:'Projects & AI Images',
+    retention:'Backups & Retention',
     team:'Team & Roles',intelligence:'Intelligence',growth:'Growth & Revenue',
     schedules:'Schedules',operations:'Operations',channels:'Channels',
     finance:'Finance',settings:'Settings',memory:'Owner Memory'};
@@ -159,7 +170,8 @@ export default function App() {
       <Header className="app-header">
         <div><Text type="secondary">Workspace / </Text><Text strong>{title}</Text></div>
         <Space><Button icon={<ReloadOutlined/>} loading={busy} onClick={()=>runAction(refresh,{refreshData:false})}>Làm mới</Button>
-          <Button href="/" target="_blank" icon={<CodeOutlined/>}>Giao diện cũ</Button></Space>
+          <Button href="/" target="_blank" icon={<CodeOutlined/>}>Chế độ chẩn đoán</Button>
+          <Button icon={<LogoutOutlined/>} onClick={logout}>Đăng xuất</Button></Space>
       </Header>
       <Content className="app-content">
         <div className="page-heading"><div><div className="eyebrow">AGENTFORGE / OWNER WORKSPACE</div>
@@ -177,6 +189,7 @@ export default function App() {
             {title:'Hành động',render:(_,t)=><Button onClick={()=>api('/api/tasks/'+t.task_id).then(setTask).catch(authError)}>Chi tiết</Button>}]}/></Card>}
         {section==='websites'&&<Websites data={data} showProposal={openProposal}/>}
         {section==='projects'&&<Projects mutate={mutate}/>}
+        {section==='retention'&&<Retention data={data} mutate={mutate}/>}
         {section==='reviews'&&<Reviews data={data} mutate={mutate} onReload={refresh}/>}
         {section==='schedules'&&<Schedules data={data} mutate={mutate} onReload={refresh}/>}
         {section==='operations'&&<OperationsControl data={data} mutate={mutate} onReload={refresh}/>}

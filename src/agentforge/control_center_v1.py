@@ -809,6 +809,9 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             output = _owner_action(self.server, path, data, session)
             return self._reply(200, output)
+        except FileNotFoundError:
+            return self._reply(404, {"error": "local_artifact_not_found",
+                                     "message": "The selected local artifact no longer exists"})
         except (ValueError, KeyError, TypeError, PermissionError, FileExistsError) as exc:
             # Do not echo arbitrary input or secrets into an error response.
             msg = str(exc)[:180]
