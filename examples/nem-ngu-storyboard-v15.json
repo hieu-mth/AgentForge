@@ -1,0 +1,26 @@
+{
+  "slug": "nem-ngu-v15",
+  "title": "Chọn nệm ngủ phù hợp",
+  "scenes": [
+    {
+      "headline": "Chọn nệm thế nào?",
+      "caption": "Nệm mềm hay chắc? Hãy bắt đầu từ thói quen ngủ của bạn.",
+      "duration_seconds": 5
+    },
+    {
+      "headline": "Hiểu nhu cầu gia đình",
+      "caption": "Cân nhắc kích thước nệm và không gian phòng ngủ.",
+      "duration_seconds": 5
+    },
+    {
+      "headline": "So sánh chất liệu",
+      "caption": "Tìm hiểu nệm foam, cao su và lò xo trước khi chọn.",
+      "duration_seconds": 5
+    },
+    {
+      "headline": "Cần tư vấn chọn nệm?",
+      "caption": "Chia sẻ nhu cầu và ngân sách để nhận gợi ý phù hợp.",
+      "duration_seconds": 5
+    }
+  ]
+}
