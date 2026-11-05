@@ -28,11 +28,10 @@ def request_revision(proposal_id, sha256, feedback, *, brain_db_path=None,
 
     slug = "rev-" + uuid4().hex[:12]
     # Keep complete feedback, avoid leaking full original HTML into the model.
-    brief = (
-        "Tạo phiên bản landing page mới để owner xem, giữ chủ đề yêu cầu gốc. "
-        "Yêu cầu gốc: " + doc["brief"][:150] + ". "
-        "Góp ý cần sửa: " + feedback.strip()
-    )[:600]
+    prefix = "Tạo bản landing page mới. Yêu cầu gốc: "
+    suffix = ". Góp ý owner: " + feedback.strip()
+    original = doc["brief"][:max(0, 600 - len(prefix) - len(suffix))]
+    brief = prefix + original + suffix
     inputs = {"slug": slug, "brief": brief}
     goal_preflight.require_ready(
         "website.draft", inputs,
