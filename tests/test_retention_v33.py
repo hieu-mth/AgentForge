@@ -95,6 +95,29 @@ class RetentionTests(unittest.TestCase):
             retention.inspect("website","nem-ngu")
         self.assertTrue((target/"private.txt").exists())
 
+    def test_restore_refuses_to_overwrite_existing_destination(self):
+        before=retention.inspect("website","nem-ngu")
+        item=retention.backup("website","nem-ngu",before["tree_sha256"],confirm=True)
+        bid=item["backup_id"]
+        with patch.object(retention.ops_control,"read",return_value={"mode":"PAUSED"}):
+            retention.quarantine(bid,before["tree_sha256"],confirm=True)
+            self.product.mkdir(parents=True)
+            (self.product/"index.html").write_text("newer customer content",encoding="utf-8")
+            with self.assertRaises(FileExistsError):
+                retention.restore(bid,before["tree_sha256"],confirm=True)
+            self.assertEqual("newer customer content",(self.product/"index.html").read_text())
+            self.assertEqual("QUARANTINED",retention.verify(bid)["status"])
+            self.assertTrue((self.workspace/".quarantine"/bid).is_dir())
+
+    def test_quarantine_never_deletes_archive_or_sqlite(self):
+        original=retention.inspect("website","nem-ngu")
+        item=retention.backup("website","nem-ngu",original["tree_sha256"],confirm=True)
+        with patch.object(retention.ops_control,"read",return_value={"mode":"PAUSED"}):
+            receipt=retention.quarantine(item["backup_id"],original["tree_sha256"],confirm=True)
+        self.assertFalse(receipt["permanently_deleted"])
+        self.assertTrue((self.backups/(item["backup_id"]+".zip")).is_file())
+        self.assertEqual(b"NEVER_DELETE_SQLITE",self.database.read_bytes())
+
     def test_file_size_limit_enforced(self):
         with patch.object(retention,"MAX_FILE_BYTES",10):
             with self.assertRaises(ValueError):
