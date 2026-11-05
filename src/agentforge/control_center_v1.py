@@ -21,6 +21,7 @@ from urllib.parse import urlsplit
 from agentforge import analytics_insights, analytics_store, brain_planner
 from agentforge import brain_runner, brain_scheduler, brain_store, growth_reports
 from agentforge import growth_store, skill_registry, task_history, goal_preflight, result_view
+from agentforge import ops_control
 from agentforge.dashboard_v0 import _artifact_names, _task_public
 
 STATIC = Path(__file__).with_name("control_center_static")
@@ -53,6 +54,36 @@ def _public_task(task):
                 "slug": result.get("project_slug", ""),
             }
     return output
+
+
+def _owner_attention(goals, tasks, schedules, daemon):
+    """Deterministic, local and read-only owner inbox with bounded summaries."""
+    items = []
+    for goal in goals[:40]:
+        status = goal["status"]
+        if status not in {"WAITING_APPROVAL", "FAILED", "INTERRUPTED"}:
+            continue
+        items.append({
+            "kind": "goal", "id": goal["goal_id"], "status": status,
+            "title": goal["title"][:160],
+            "priority": "HIGH" if status == "WAITING_APPROVAL" else "REVIEW",
+        })
+        if len(items) >= 8:
+            break
+    if len(items) < 8:
+        for task in tasks[:40]:
+            if task["status"] != "INTERRUPTED" or task["kind"] != "skill":
+                continue
+            items.append({"kind": "task", "id": task["task_id"],
+                          "status": "INTERRUPTED", "title": task["skill_id"][:80],
+                          "priority": "REVIEW"})
+            if len(items) >= 8:
+                break
+    if any(x["status"] == "ACTIVE" for x in schedules) and not daemon.get("fresh"):
+        items.append({"kind": "schedules", "id": "",
+                      "status": "NOT_RUNNING", "title": "Lịch ACTIVE nhưng daemon không hoạt động",
+                      "priority": "HIGH"})
+    return items[:10]
 
 
 def _summary(server):
@@ -101,6 +132,8 @@ def _summary(server):
                       "performance_rows": x["performance_rows"],
                       "ledger_rows": x["ledger_rows"]} for x in datasets[:30]],
         "growth": growth, "daemon": health,
+        "operations": ops_control.read(),
+        "attention": _owner_attention(goals, tasks, schedules, health),
         "templates": {k: list(v) for k, v in brain_planner.TEMPLATES.items()},
         "connectors": [
             {"name": "YouTube", "status": "MANUAL_HANDOFF_ONLY",
@@ -115,6 +148,13 @@ def _summary(server):
 
 def _owner_action(server, path, request, session=None):
     """Explicit allowlist; no arbitrary skill invocation or Python execution."""
+    if path == "/api/ops/control":
+        mode = request.get("mode")
+        expected = "PAUSE_OPERATIONS" if mode == "PAUSED" else (
+            "RESUME_OPERATIONS" if mode == "ACTIVE" else None)
+        if expected is None or request.get("ack") != expected:
+            raise PermissionError("Explicit matching operations control acknowledgment required")
+        return ops_control.set_mode(mode, confirm=True)
     if path.startswith("/api/proposals/") and path.endswith("/apply"):
         from agentforge import product_builder
         parts = path.split("/")

@@ -61,7 +61,7 @@ def _utc():
 
 
 def write_heartbeat(status, *, claimed=0, error=None, path=None):
-    if status not in ("STARTING", "IDLE", "TICK_COMPLETED", "ERROR", "STOPPED"):
+    if status not in ("STARTING", "IDLE", "TICK_COMPLETED", "PAUSED", "ERROR", "STOPPED"):
         raise ValueError("Unsupported heartbeat status")
     if type(claimed) is not int or claimed < 0 or claimed > 3:
         raise ValueError("Invalid heartbeat claimed count")
@@ -100,7 +100,7 @@ def read_heartbeat(*, path=None, max_age_seconds=180):
         raise ValueError("Invalid heartbeat timezone")
     age = (datetime.now(timezone.utc) - updated.astimezone(timezone.utc)).total_seconds()
     fresh = (0 <= age <= max_age_seconds and data.get("status")
-             in ("STARTING", "IDLE", "TICK_COMPLETED"))
+             in ("STARTING", "IDLE", "TICK_COMPLETED", "PAUSED"))
     return {"status": data.get("status", "UNKNOWN") if fresh else "NOT_RUNNING",
             "fresh": bool(fresh), "updated_at_utc": data["updated_at_utc"],
             "claimed": data.get("claimed", 0),
@@ -116,6 +116,13 @@ def tick_once(*, db_path=None, task_db_path=None, heartbeat_path=None):
         write_heartbeat("TICK_COMPLETED", claimed=len(result["claimed"]),
                         path=heartbeat_path)
         return result
+    except PermissionError as exc:
+        if str(exc).startswith("OPERATIONS_PAUSED:"):
+            write_heartbeat("PAUSED", path=heartbeat_path)
+            return {"status": "OPERATIONS_PAUSED", "claimed": [],
+                    "executions": [], "external_actions_enabled": False}
+        write_heartbeat("ERROR", error=type(exc).__name__, path=heartbeat_path)
+        raise
     except Exception as exc:
         write_heartbeat("ERROR", error=type(exc).__name__, path=heartbeat_path)
         raise

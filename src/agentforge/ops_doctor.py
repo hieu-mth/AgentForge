@@ -12,7 +12,7 @@ from pathlib import Path
 
 from agentforge import analytics_store, brain_store, growth_store
 from agentforge import skill_registry, task_history
-from agentforge import ops_backup, ops_daemon
+from agentforge import ops_backup, ops_daemon, ops_control
 
 ROOT = brain_store.ROOT
 SQLITE_DEFAULTS = {
@@ -74,6 +74,10 @@ def inspect(*, paths=None, backup_dir=None, task_db=None, brain_db=None,
         findings.append({"severity": "WARN", "rule": "scheduler_heartbeat_unreadable"})
     if heartbeat.get("status") == "ERROR":
         findings.append({"severity": "WARN", "rule": "scheduler_last_tick_error"})
+    operations = ops_control.read()
+    if operations["mode"] == "PAUSED":
+        findings.append({"severity": "WARN", "rule": "operations_paused",
+                         "reason": operations["reason"]})
     backup_root = Path(backup_dir) if backup_dir is not None else ops_backup.OUT
     ops_backup._safe(backup_root)
     archives = (sorted(backup_root.glob("agentforge-*.zip"), reverse=True)
@@ -92,6 +96,7 @@ def inspect(*, paths=None, backup_dir=None, task_db=None, brain_db=None,
         "running_goals": running_goals,
         "scheduler": {"status": heartbeat.get("status", "NOT_RUNNING"),
                       "fresh": heartbeat.get("fresh", False)},
+        "operations": operations,
         "backup_count": len(archives),
         "latest_backup_name": latest,
         "findings": findings,

@@ -232,6 +232,8 @@ def _execute(task_id, skill_id, payload, *, grants, confirm_model_call,
         if history.get_task(task_id, db_path=db_path)["status"] == "QUEUED":
             history.transition(task_id, "WAITING_APPROVAL", result=result, db_path=db_path)
         return result
+    from agentforge.ops_control import require_active
+    require_active()
     history.transition(task_id, "RUNNING", db_path=db_path)
     # Only permission NAMES/booleans enter audit, never tokens or payloads.
     _, required = _contract(skill_id)
@@ -270,6 +272,8 @@ def invoke(skill_id, payload, *, grants=(), confirm_model_call=False,
     missing_grants(skill_id, grants, confirm_model_call=confirm_model_call,
                    confirm_browser_run=confirm_browser_run,
                    confirm_external_run=confirm_external_run, payload=payload)
+    from agentforge.ops_control import require_active
+    require_active()
     task_id = history.create_task("skill", skill_id, payload,
                                   parent_id=parent_id, db_path=db_path)
     return _execute(task_id, skill_id, payload, grants=grants,
@@ -281,6 +285,8 @@ def invoke(skill_id, payload, *, grants=(), confirm_model_call=False,
 def resume_waiting(task_id, *, grants=(), confirm_model_call=False,
                    confirm_browser_run=False, confirm_external_run=False,
                    db_path=None):
+    from agentforge.ops_control import require_active
+    require_active()
     task = history.get_task(task_id, db_path=db_path)
     if task["kind"] != "skill" or task["status"] != "WAITING_APPROVAL":
         raise ValueError("Only never-started approval tasks may be resumed")
