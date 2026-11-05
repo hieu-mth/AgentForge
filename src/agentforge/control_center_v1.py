@@ -40,7 +40,7 @@ def _read_static(name):
 
 # React build output is a separate artifact, never a writable workspace file.
 REACT_DIST = Path(__file__).resolve().parents[2] / "ui" / "dashboard" / "dist"
-REACT_ASSET_RE = re.compile(r"[A-Za-z0-9_.-]{1,120}\\.(?:js|css|svg|png|webp|ico)\\Z")
+REACT_ASSET_RE = re.compile(r"[A-Za-z0-9_.-]{1,120}\.(?:js|css|svg|png|webp|ico)\Z")
 
 
 def _react_asset(route):
