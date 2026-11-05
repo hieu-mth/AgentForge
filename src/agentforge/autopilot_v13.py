@@ -211,7 +211,14 @@ def enqueue_due(*, db_path=None, now=None):
             payload = json.loads(item["payload_json"])
             calls = _validated(item["skill_id"], payload)
             from agentforge.quality_v14 import preflight_payload, snapshot_job
-            preflight_payload(db, item["skill_id"], payload)
+            try:
+                preflight_payload(db, item["skill_id"], payload)
+            except ValueError:
+                db.execute("UPDATE schedules SET enabled=0 WHERE schedule_id=?",
+                           (item["schedule_id"],))
+                db.commit()
+                return {"status": "SCHEDULE_PAUSED_INPUT_REVIEW",
+                        "schedule_id": item["schedule_id"]}
             due = datetime.fromisoformat(item["next_due_utc"])
             interval = timedelta(minutes=item["frequency_minutes"])
             # Deliberately skip missed windows rather than replaying backlog.
@@ -255,7 +262,15 @@ def _claim(*, db_path=None, now=None):
             payload = json.loads(job["payload_json"])
             _validated(job["skill_id"], payload)
             from agentforge.quality_v14 import verify_queued_context
-            verify_queued_context(db, job["job_id"], job["skill_id"], payload)
+            try:
+                verify_queued_context(db, job["job_id"], job["skill_id"], payload)
+            except (PermissionError, ValueError):
+                db.execute("""UPDATE jobs SET status='BLOCKED_INPUT',
+                    error_code='BUSINESS_CONTEXT_REVIEW',updated_utc=?
+                    WHERE job_id=? AND status='QUEUED'""", (_utc(), job["job_id"]))
+                db.commit()
+                return {"status": "INPUT_REVIEW_REQUIRED", "job_id": job["job_id"],
+                        "quota_reserved": False}
             ops_control.require_active()
             db.execute("""UPDATE jobs SET status='DISPATCHING',
                 reserved_day=?, updated_utc=? WHERE job_id=? AND status='QUEUED'""",
