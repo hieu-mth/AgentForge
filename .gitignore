@@ -13,3 +13,8 @@ dist/
 
 # Locally downloaded TTS voice models; never commit licensed model weights.
 models/voices/
+
+# React Dashboard dependencies/build outputs (source is committed)
+ui/dashboard/node_modules/
+ui/dashboard/dist/
+ui/dashboard/.vite/

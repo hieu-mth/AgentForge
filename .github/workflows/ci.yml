@@ -32,6 +32,22 @@ jobs:
       - name: Test Control Center frontend actions
         run: node --test tests/test_control_center_task_detail.cjs tests/test_control_center_v11.cjs tests/test_ops_control_ui.cjs
 
+      - name: Setup Node for standalone React Dashboard
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install React Dashboard dependencies
+        working-directory: ui/dashboard
+        run: npm install --no-audit --no-fund
+
+      - name: Build React Dashboard (Ant Design)
+        working-directory: ui/dashboard
+        run: npm run build
+
+      - name: Validate built dashboard routing and assets
+        run: python -m unittest tests.test_react_dashboard_v27 -v
+
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
 
