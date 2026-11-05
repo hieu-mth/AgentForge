@@ -39,6 +39,23 @@ Or run a foreground queue processor (Ctrl+C to stop):
 
 For a website source draft, use skill web.create and a JSON input containing slug (new slug, 3-40 lowercase letters/digits/hyphens) and brief (20–600 characters). Generated source must still be reviewed and SHA-approved through the existing owner workflow, never auto-applied.
 
+## Owner-approved recurring AI draft schedule
+
+To create a repeating draft **intake** (not publishing or deployment), reuse the
+same JSON request file and specify the first future time in ISO-8601 with an
+explicit time zone. For example, a future UTC time in PowerShell:
+
+    $firstDue = (Get-Date).ToUniversalTime().AddHours(1).ToString("yyyy-MM-ddTHH:mm:ss+00:00")
+    .\.venv\Scripts\python.exe -m agentforge.autopilot_v13 schedule media.copy_draft --input-file .\draft-request.json --first-due $firstDue --every-minutes 1440 --confirm-schedule
+
+A running V1.3 queue processor picks up at most one due schedule intake per
+poll, then dispatches at most one reserved model job. Missed intervals are
+skipped rather than replayed on resume, and quota remains the shared UTC
+daily ceiling. Disabled delegation prevents new due work from being enqueued;
+global owner Pause blocks this intake as well. The schedule metadata appears
+in the redacted report. Recurring input is the exact owner-supplied payload,
+not a self-modifying AI-generated objective.
+
 ## Review, emergency stop, recovery
 
     .\.venv\Scripts\python.exe -m agentforge.autopilot_v13 report
@@ -58,7 +75,7 @@ Global owner Pause blocks new dispatch, but not an already-running network call.
 - SQLite BEGIN IMMEDIATE atomically reserves quota before each S1 invocation, across concurrent workers.
 - A job's estimated quota is consumed on failure/interrupt; retries require a new owner request.
 - Model outputs are unverified proposals only, not facts, commercial claims, applied website files or public posts.
-- This V1.3 accepts owner-submitted jobs; it does **not** independently create goals or schedule new AI jobs. A future iteration may add trusted scheduled intake, using this same quota gate.
+- This V1.3 accepts owner-submitted jobs and explicitly approved recurring draft intake; it does **not** independently invent strategy or expand skill permissions.
 - No always-on Windows service is installed. The local processor runs only while started and the PC is awake.
 - Run tests on Windows:
 
