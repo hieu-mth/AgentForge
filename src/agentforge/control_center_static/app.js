@@ -5,8 +5,8 @@ const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v === null || v === undefined ? "—" : v)
   .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
   .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
-const state = {csrf:null, data:null, view:"workspace", goal:null, task:null, memory:null, proposal:null, ops:null, inspectedDraft:null, inspectedVideo:null};
-const viewNames = {workspace:"Giao việc",team:"Team & Roles",channels:"Channels",finance:"Finance",settings:"Settings",overview:"Tổng quan",goals:"Goals & Phê duyệt",tasks:"Task History",
+const state = {csrf:null, data:null, view:"workspace", goal:null, task:null, memory:null, proposal:null, ops:null, inspectedDraft:null, inspectedVideo:null, artifacts:null};
+const viewNames = {workspace:"Giao việc",team:"Team & Roles",channels:"Channels",finance:"Finance",settings:"Settings",artifacts:"Projects & Files",overview:"Tổng quan",goals:"Goals & Phê duyệt",tasks:"Task History",
  skills:"AI Workforce",websites:"Websites",analytics:"Intelligence",growth:"Growth & Revenue",
  schedules:"Schedules",integrations:"Integrations",memory:"Owner Memory"};
 function notice(message,bad=false){
@@ -404,6 +404,20 @@ function renderSkills(){
  ' contracts. Không thể tự tạo executor hoặc bypass quyền qua giao diện.</div>'+
  '<div class="flow-grid section">'+cards+'</div>';
 }
+function renderArtifacts(){
+ const source=state.artifacts;
+ if(!source)return header("LOCAL STORAGE","Projects & Files","Danh sách tài sản cục bộ, chỉ đọc.")+
+  card("Đang tải","<p class='muted'>Đang kiểm kê file an toàn...</p>");
+ const rows=(source.items||[]).map(a=>'<tr><td>'+esc(a.kind)+'</td><td class="mono">'+
+  esc(a.id)+'</td><td>'+badge(a.status)+'</td><td>'+fmt(a.bytes)+'</td>'+
+  '<td>Chưa xác minh triển khai</td></tr>');
+ return header("LOCAL STORAGE","Projects & Files",
+  "Chỉ kiểm kê những tài sản thuộc AgentForge. Không có nút xóa hàng loạt; không chạm dữ liệu nghiệp vụ.")+
+  '<div class="callout">Workspace và SQLite được giữ nguyên trên máy. Website local ≠ đã triển khai online. Proposal ≠ sản phẩm được duyệt. Muốn dọn cache dùng scripts/repo_hygiene.py sau khi xem báo cáo.</div>'+
+  '<div class="section">'+card("Kiểm kê tài sản · "+fmt(source.total_items),
+    table(["LOẠI","ID/SLUG","TRẠNG THÁI","BYTES","ĐĂNG ONLINE"],rows,"Chưa có tài sản hợp lệ."))+'</div>'+
+  (source.truncated?'<p class="small muted">Danh sách giới hạn 40 mục; tổng số hiển thị phía trên.</p>':'');
+}
 function renderWebsites(){
  const proposals=state.data.tasks.filter(x=>x.web_proposal);
  const rows=proposals.map(t=>
@@ -565,7 +579,7 @@ function render(){
  $("nav-wait").textContent=String(state.data.goals.filter(g=>g.status==="WAITING_APPROVAL").length);
  document.querySelectorAll(".nav-link").forEach(x=>x.classList.toggle(
   "active",x.dataset.view===state.view));
- const output={workspace:renderWorkspace,team:renderTeam,channels:renderChannels,finance:renderFinance,settings:renderSettings,overview:renderOverview,goals:renderGoals,tasks:renderTasks,
+ const output={artifacts:renderArtifacts,workspace:renderWorkspace,team:renderTeam,channels:renderChannels,finance:renderFinance,settings:renderSettings,overview:renderOverview,goals:renderGoals,tasks:renderTasks,
   skills:renderSkills,websites:renderWebsites,analytics:renderAnalytics,growth:renderGrowth,
   schedules:renderSchedules,integrations:renderIntegrations,memory:renderMemory};
  $("content").innerHTML=(output[state.view]||renderOverview)();
@@ -599,6 +613,10 @@ function selectView(view){
  $("sidebar")?.classList.remove("open");$("mobile-overlay").hidden=true;
  if(view==="memory"){
   api("/api/memory").then(m=>{state.memory=m;render();})
+   .catch(e=>notice(e.message,true));
+ }
+ if(view==="artifacts"){
+  api("/api/artifacts").then(m=>{state.artifacts=m;render();})
    .catch(e=>notice(e.message,true));
  }
  if(view==="integrations"){
