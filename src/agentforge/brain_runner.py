@@ -79,6 +79,10 @@ def _run_steps(goal_id, *, grants, confirm_model_call,
             if index >= len(goal["plan"]):
                 return _finish(goal_id, parent, "SUCCEEDED",
                                brain_db_path=brain_db_path, task_db_path=task_db_path)
+            # A pause requested during this Goal blocks subsequent skill
+            # dispatch. Already-running external tools are not forcibly killed.
+            from agentforge.ops_control import require_active
+            require_active()
             step = goal["plan"][index]
             previous = next((x for x in goal["steps"]
                              if x["step_index"] == index), None)
@@ -142,6 +146,8 @@ def execute(goal_id, *, grants=(), confirm_model_call=False,
             confirm_browser_run=False, confirm_external_run=False,
             brain_db_path=None, task_db_path=None):
     """Start or resume approved goal; only new explicit ephemeral tool grants."""
+    from agentforge.ops_control import require_active
+    require_active()
     goal = store.get_goal(goal_id, db_path=brain_db_path)
     if goal["status"] not in {"APPROVED", "WAITING_APPROVAL"}:
         raise store.BrainError("Goal must be approved or waiting for owner")
