@@ -49,6 +49,19 @@ Run the tests (no live model credentials or customer interviews required):
 
 The repository's [GitHub Actions CI](.github/workflows/ci.yml) runs the same suite on Windows and Python 3.13 for pushes/PRs targeting `main`.
 
+## V1.3 Supervised Autopilot — bounded AI drafts
+
+V1.3 introduces an opt-in, local SQLite AI draft queue with atomic daily
+estimated-model-call reservations, owner-approved recurring draft schedules,
+a metadata-only report and no auto-retry after uncertain dispatch. Only
+`media.copy_draft` and `web.create` source proposals are delegated.
+Browser, shell, posting, financial actions and applying website source still
+require separate owner control.
+
+The default is **DISABLED**. Daily model-call counts are **not** enforced
+provider spend/token budgets. Windows setup, explicit enable/disable, review,
+schedule commands and limitations: [Supervised Autopilot V1.3](docs/milestones/SUPERVISED_AUTOPILOT_V13.md).
+
 ## One-command Windows owner acceptance
 
 From \`D:\AgentForge\` after \`git pull --ff-only origin main\`, launch
