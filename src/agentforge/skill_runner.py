@@ -208,6 +208,9 @@ def _dispatch(skill_id, payload):
 
 def _safe_failure(skill_id, exc):
     """Stable, deliberately allowlisted errors; never serialize arbitrary exceptions."""
+    if skill_id == "web.create":
+        from agentforge.builder_diagnostics import safe_failure
+        return safe_failure(exc)
     if skill_id.startswith("analytics."):
         from agentforge.analytics_store import AnalyticsError
         if isinstance(exc, AnalyticsError):
