@@ -42,6 +42,20 @@ class PromptWorkspaceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             plan_request(prompt, max_model_calls=0, brain_db_path=self.db)
 
+    def test_builder_error_codes_do_not_echo_untrusted_text(self):
+        from agentforge.skill_runner import _safe_failure
+        marker = "private-raw-model-output"
+        messages = [
+            (ValueError("Builder HTML appears truncated " + marker), "HTML_INCOMPLETE"),
+            (ValueError("Static quality gate FAIL: " + marker), "HTML_QUALITY_FAILED"),
+            (ValueError("Generated HTML too large " + marker), "HTML_TOO_LARGE"),
+            (RuntimeError(marker), "BUILDER_EXECUTION_FAILED"),
+        ]
+        for error, code in messages:
+            output = _safe_failure("web.create", error)
+            self.assertTrue(output.startswith(code), output)
+            self.assertNotIn(marker, output)
+
     def test_api_rejects_invalid_ack_and_extra_fields(self):
         with self.assertRaises(PermissionError):
             _owner_action(None, "/api/workspace/request",
