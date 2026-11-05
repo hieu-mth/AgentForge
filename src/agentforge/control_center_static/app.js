@@ -5,7 +5,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v === null || v === undefined ? "—" : v)
   .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
   .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
-const state = {csrf:null, data:null, view:"workspace", goal:null, task:null, memory:null, proposal:null, ops:null, inspectedDraft:null, inspectedVideo:null, artifacts:null};
+const state = {csrf:null, data:null, view:"workspace", goal:null, task:null, memory:null, proposal:null, ops:null, inspectedDraft:null, inspectedVideo:null, artifacts:null, modelHealth:null};
 const viewNames = {workspace:"Giao việc",team:"Team & Roles",channels:"Channels",finance:"Finance",settings:"Settings",artifacts:"Projects & Files",overview:"Tổng quan",goals:"Goals & Phê duyệt",tasks:"Task History",
  skills:"AI Workforce",websites:"Websites",analytics:"Intelligence",growth:"Growth & Revenue",
  schedules:"Schedules",integrations:"Integrations",memory:"Owner Memory"};
@@ -94,6 +94,12 @@ function renderWorkspace(){
   '<textarea id="workspace-prompt" rows="5" maxlength="600" required minlength="20" placeholder="Ví dụ: Tạo landing page nệm cao cấp cho ba tôi, có hình minh họa đẹp, mobile-first, hotline 0879547988..."></textarea>'+
   '<div class="workspace-prompt-footer"><span>Không gọi AI khi lập kế hoạch · Mọi bước thực thi cần được duyệt</span>'+
   '<button type="submit" class="btn btn-primary">Tạo kế hoạch →</button></div></form></div>'+
+  '<div class="workspace-health">'+
+  '<span class="small muted">Website Builder: '+esc(state.modelHealth?
+    (state.modelHealth.status==="READY"?"Ollama đã cài & phản hồi":state.modelHealth.status):
+    "Chưa kiểm tra khả năng kết nối model")+'</span>'+
+  '<button type="button" class="btn btn-outline btn-small" data-check-model-health="1">Kiểm tra Ollama (không sinh nội dung)</button>'+
+  '</div>'+ 
   '<div class="workspace-columns"><section class="card"><div class="section-head"><h2>Việc gần đây</h2>'+
   '<button class="section-link" data-view="goals">Xem tất cả</button></div>'+
   (recent||'<p class="muted">Chưa có kế hoạch. Hãy mô tả việc cần làm ở trên.</p>')+'</section>'+
@@ -657,6 +663,14 @@ async function handleClick(event){
  if(!button||button.disabled)return;
  if(button.dataset.view){selectView(button.dataset.view);return;}
  try{
+  if(button.dataset.checkModelHealth!==undefined){
+    const status=await api("/api/model/health");
+    state.modelHealth=status;
+    render();
+    notice(status.status==="READY"?"Ollama phản hồi và tìm thấy model":"Model preflight: "+status.status,
+           status.status!=="READY");
+    return;
+  }
   if(button.dataset.autopilotConfigure!==undefined){
     const dailyCap=Number($("ap-policy-cap").value);
     const enabled=$("ap-policy-enabled").value==="true";
