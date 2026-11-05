@@ -30,13 +30,13 @@ DESCRIPTIONS = dict(BUILDER_ERRORS)
 
 def classify(exc):
     """Return fixed error code + safe hint; never interpolate str(exc)."""
+    if isinstance(exc, urllib.error.HTTPError):
+        return "MODEL_HTTP_ERROR"
+    if isinstance(exc, (TimeoutError, socket.timeout)):
+        return "MODEL_TIMEOUT"
     if isinstance(exc, (urllib.error.URLError, ConnectionError, ConnectionRefusedError,
                         BrokenPipeError)):
         return "MODEL_CONNECT_FAILED"
-    if isinstance(exc, (TimeoutError, socket.timeout)):
-        return "MODEL_TIMEOUT"
-    if isinstance(exc, urllib.error.HTTPError):
-        return "MODEL_HTTP_ERROR"
     if isinstance(exc, (json.JSONDecodeError, UnicodeError, KeyError, TypeError)):
         return "MODEL_INVALID_RESPONSE"
     if isinstance(exc, FileExistsError):
