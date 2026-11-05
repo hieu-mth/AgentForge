@@ -123,6 +123,13 @@ function renderOverview(){
   '<p class="small muted">Business: '+esc(reviewData.business_context?reviewData.business_context.business:"Chưa cấu hình")+
   '. PASS_HEURISTIC vẫn cần duyệt thủ công. Dùng CLI quality_v14 để quyết định theo output SHA; không tự đăng hay apply.</p>'+
   table(["JOB","SKILL","QUALITY","LÝ DO","NỘI DUNG"],reviewRows,"Chưa có bản nháp cần duyệt"));
+ const videoData=d.local_video||{pending_count:0,items:[]};
+ const videoRows=(videoData.items||[]).slice(0,8).map(v=>
+  '<tr><td>'+short(v.production_id)+'</td><td>'+short(v.run_id)+'</td>'+
+  '<td>'+badge(v.status)+'</td><td>'+esc(v.quality||"—")+'</td></tr>');
+ const videoCard=card("Local Video Production · "+fmt(videoData.pending_count)+" chờ xem video",
+  '<p class="small muted">Storyboard chỉnh sửa → ảnh/phụ đề local → FFmpeg → VIDEO_PASS → owner duyệt. Video không tự xuất bản. Xem MP4 trong workspace/media/{run_id}/video.mp4; quyết định qua media_workflow_v15 CLI.</p>'+
+  table(["PRODUCTION","RUN","TRẠNG THÁI","QA"],videoRows,"Chưa có video production"));
  const safety='<div class="callout '+(paused?'warning':'')+'">'+
    '<strong>Operations: '+esc(operations.mode)+'</strong> — '+
    esc(paused?'Đã dừng phân phối nhiệm vụ mới. Việc đang chạy có thể kết thúc hoặc bị gián đoạn.':
@@ -149,6 +156,7 @@ function renderOverview(){
  '<div class="metrics">'+tiles+'</div>'+
  '<div class="section">'+safety+'</div>'+
  '<div class="section">'+reviewCard+'</div>'+
+ '<div class="section">'+videoCard+'</div>'+
  '<div class="section">'+card("Cần owner xử lý",
   attention?'<div class="stack">'+attention+'</div>':
    '<p class="small muted">Chưa có Goal đang chờ phê duyệt hoặc sự cố cần xem xét.</p>')+'</div>'+
