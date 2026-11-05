@@ -94,9 +94,10 @@ class RetentionHTTPTests(unittest.TestCase):
         code,verified,_=self.call("GET","/api/retention/verify/"+bid)
         self.assertEqual(200,code,verified)
         self.assertTrue(verified["verified"])
-        code,_,_=self.call("POST","/api/retention/quarantine",{
-            "ack":"QUARANTINE_ARTIFACT","backup_id":bid,"tree_sha":review["tree_sha256"]})
-        self.assertNotEqual(200,code)  # Operations defaults to ACTIVE, must PAUSE explicitly
+        with patch("agentforge.ops_control.read",return_value={"mode":"ACTIVE"}):
+            code,_,_=self.call("POST","/api/retention/quarantine",{
+                "ack":"QUARANTINE_ARTIFACT","backup_id":bid,"tree_sha":review["tree_sha256"]})
+        self.assertNotEqual(200,code)  # Operations ACTIVE forbids quarantine
         self.assertTrue(self.product.exists())
 
 if __name__=="__main__":
