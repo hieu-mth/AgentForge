@@ -119,7 +119,9 @@ def _summary(server):
     owner_company = company_v2.report()
     from agentforge.media_workflow_v15 import report as production_report
     productions = production_report()["productions"][:15]
+    from agentforge.workspace_policy import read as read_workspace_policy
     return {
+        "workspace_policy": read_workspace_policy(),
         "autopilot_policy": delegated,
         "company_v2": owner_company,
         "local_video": {
@@ -177,6 +179,16 @@ def _summary(server):
 
 def _owner_action(server, path, request, session=None):
     """Explicit allowlist; no arbitrary skill invocation or Python execution."""
+    if path == "/api/workspace/policy":
+        from agentforge import workspace_policy
+        if (set(request) != {"ack", "max_estimated_model_calls",
+                             "website_enabled", "storyboard_enabled"} or
+                request.get("ack") != "UPDATE_WORKSPACE_POLICY"):
+            raise PermissionError("Only explicit bounded owner workspace policy is allowed")
+        return workspace_policy.configure(
+            max_estimated_model_calls=request["max_estimated_model_calls"],
+            website_enabled=request["website_enabled"],
+            storyboard_enabled=request["storyboard_enabled"], confirm=True)
     if path == "/api/workspace/request":
         if set(request) != {"ack", "prompt", "max_model_calls"} or request.get("ack") != "PLAN_ONLY":
             raise PermissionError("Chỉ được tạo kế hoạch sau xác nhận owner.")
