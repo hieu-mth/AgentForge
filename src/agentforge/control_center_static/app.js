@@ -5,8 +5,8 @@ const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v === null || v === undefined ? "—" : v)
   .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
   .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
-const state = {csrf:null, data:null, view:"workspace", goal:null, task:null, memory:null, proposal:null, ops:null, inspectedDraft:null, inspectedVideo:null};
-const viewNames = {workspace:"Giao việc",team:"Team & Roles",channels:"Channels",finance:"Finance",settings:"Settings",overview:"Tổng quan",goals:"Goals & Phê duyệt",tasks:"Task History",
+const state = {csrf:null, data:null, view:"workspace", goal:null, task:null, memory:null, proposal:null, ops:null, inspectedDraft:null, inspectedVideo:null, artifacts:null, modelHealth:null};
+const viewNames = {workspace:"Giao việc",team:"Team & Roles",channels:"Channels",finance:"Finance",settings:"Settings",artifacts:"Projects & Files",overview:"Tổng quan",goals:"Goals & Phê duyệt",tasks:"Task History",
  skills:"AI Workforce",websites:"Websites",analytics:"Intelligence",growth:"Growth & Revenue",
  schedules:"Schedules",integrations:"Integrations",memory:"Owner Memory"};
 function notice(message,bad=false){
@@ -94,13 +94,20 @@ function renderWorkspace(){
   '<textarea id="workspace-prompt" rows="5" maxlength="600" required minlength="20" placeholder="Ví dụ: Tạo landing page nệm cao cấp cho ba tôi, có hình minh họa đẹp, mobile-first, hotline 0879547988..."></textarea>'+
   '<div class="workspace-prompt-footer"><span>Không gọi AI khi lập kế hoạch · Mọi bước thực thi cần được duyệt</span>'+
   '<button type="submit" class="btn btn-primary">Tạo kế hoạch →</button></div></form></div>'+
+  '<div class="workspace-health">'+
+  '<span class="small muted">Website Builder: '+esc(state.modelHealth?
+    (state.modelHealth.status==="READY"?"Ollama đã cài & phản hồi":state.modelHealth.status):
+    "Chưa kiểm tra khả năng kết nối model")+'</span>'+
+  '<button type="button" class="btn btn-outline btn-small" data-check-model-health="1">Kiểm tra Ollama (không sinh nội dung)</button>'+
+  '</div>'+ 
   '<div class="workspace-columns"><section class="card"><div class="section-head"><h2>Việc gần đây</h2>'+
   '<button class="section-link" data-view="goals">Xem tất cả</button></div>'+
   (recent||'<p class="muted">Chưa có kế hoạch. Hãy mô tả việc cần làm ở trên.</p>')+'</section>'+
   '<section class="card"><h2>Kiểm soát rõ ràng</h2>'+
   '<p class="muted">Chỉ hỗ trợ yêu cầu website/landing page và storyboard trong luồng prompt đầu tiên. Các công việc khác vẫn có thể thao tác bằng module hiện có.</p>'+
   '<div class="workspace-insight">Kế hoạch không tự chạy, không tự đăng, không cấp quyền ngân sách.</div>'+
-  '<button class="btn btn-outline" type="button" data-view="overview">Xem hệ thống & báo cáo</button></section></div>';
+  '<button class="btn btn-outline" type="button" data-view="overview">Xem hệ thống & báo cáo</button></section></div>'+
+  (state.goal?'<div class="section">'+card("Kế hoạch đang xử lý",renderGoalDetail())+'</div>':'');
 }
 function renderTeam(){
  const rows=(state.data.skills||[]).map(x=>'<tr><td>'+esc(x.worker)+'</td><td>'+esc(x.id)+'</td><td>'+badge(x.mode)+'</td></tr>');
@@ -403,6 +410,20 @@ function renderSkills(){
  ' contracts. Không thể tự tạo executor hoặc bypass quyền qua giao diện.</div>'+
  '<div class="flow-grid section">'+cards+'</div>';
 }
+function renderArtifacts(){
+ const source=state.artifacts;
+ if(!source)return header("LOCAL STORAGE","Projects & Files","Danh sách tài sản cục bộ, chỉ đọc.")+
+  card("Đang tải","<p class='muted'>Đang kiểm kê file an toàn...</p>");
+ const rows=(source.items||[]).map(a=>'<tr><td>'+esc(a.kind)+'</td><td class="mono">'+
+  esc(a.id)+'</td><td>'+badge(a.status)+'</td><td>'+fmt(a.bytes)+'</td>'+
+  '<td>Chưa xác minh triển khai</td></tr>');
+ return header("LOCAL STORAGE","Projects & Files",
+  "Chỉ kiểm kê những tài sản thuộc AgentForge. Không có nút xóa hàng loạt; không chạm dữ liệu nghiệp vụ.")+
+  '<div class="callout">Workspace và SQLite được giữ nguyên trên máy. Website local ≠ đã triển khai online. Proposal ≠ sản phẩm được duyệt. Muốn dọn cache dùng scripts/repo_hygiene.py sau khi xem báo cáo.</div>'+
+  '<div class="section">'+card("Kiểm kê tài sản · "+fmt(source.total_items),
+    table(["LOẠI","ID/SLUG","TRẠNG THÁI","BYTES","ĐĂNG ONLINE"],rows,"Chưa có tài sản hợp lệ."))+'</div>'+
+  (source.truncated?'<p class="small muted">Danh sách giới hạn 40 mục; tổng số hiển thị phía trên.</p>':'');
+}
 function renderWebsites(){
  const proposals=state.data.tasks.filter(x=>x.web_proposal);
  const rows=proposals.map(t=>
@@ -564,7 +585,7 @@ function render(){
  $("nav-wait").textContent=String(state.data.goals.filter(g=>g.status==="WAITING_APPROVAL").length);
  document.querySelectorAll(".nav-link").forEach(x=>x.classList.toggle(
   "active",x.dataset.view===state.view));
- const output={workspace:renderWorkspace,team:renderTeam,channels:renderChannels,finance:renderFinance,settings:renderSettings,overview:renderOverview,goals:renderGoals,tasks:renderTasks,
+ const output={artifacts:renderArtifacts,workspace:renderWorkspace,team:renderTeam,channels:renderChannels,finance:renderFinance,settings:renderSettings,overview:renderOverview,goals:renderGoals,tasks:renderTasks,
   skills:renderSkills,websites:renderWebsites,analytics:renderAnalytics,growth:renderGrowth,
   schedules:renderSchedules,integrations:renderIntegrations,memory:renderMemory};
  $("content").innerHTML=(output[state.view]||renderOverview)();
@@ -600,15 +621,21 @@ function selectView(view){
   api("/api/memory").then(m=>{state.memory=m;render();})
    .catch(e=>notice(e.message,true));
  }
+ if(view==="artifacts"){
+  api("/api/artifacts").then(m=>{state.artifacts=m;render();})
+   .catch(e=>notice(e.message,true));
+ }
  if(view==="integrations"){
   api("/api/ops/health").then(m=>{state.ops=m;render();})
    .catch(e=>notice(e.message,true));
  }
  render();window.scrollTo({top:0,behavior:"smooth"});
 }
-async function showGoal(id){
- try{state.goal=await api("/api/goals/"+encodeURIComponent(id));selectView("goals");}
- catch(e){notice(e.message,true);}
+async function showGoal(id, stayWorkspace=false){
+ try{
+  state.goal=await api("/api/goals/"+encodeURIComponent(id));
+  selectView(stayWorkspace?"workspace":"goals");
+ }catch(e){notice(e.message,true);}
 }
 async function showTask(id){
  try{
@@ -636,6 +663,14 @@ async function handleClick(event){
  if(!button||button.disabled)return;
  if(button.dataset.view){selectView(button.dataset.view);return;}
  try{
+  if(button.dataset.checkModelHealth!==undefined){
+    const status=await api("/api/model/health");
+    state.modelHealth=status;
+    render();
+    notice(status.status==="READY"?"Ollama phản hồi và tìm thấy model":"Model preflight: "+status.status,
+           status.status!=="READY");
+    return;
+  }
   if(button.dataset.autopilotConfigure!==undefined){
     const dailyCap=Number($("ap-policy-cap").value);
     const enabled=$("ap-policy-enabled").value==="true";
@@ -749,7 +784,9 @@ async function handleClick(event){
    if(!outcome.ready)notice("Kiểm tra dữ liệu: "+outcome.issues[0].code,true);
    return;
   }
-  if(button.dataset.detailGoal){await showGoal(button.dataset.detailGoal);return;}
+  if(button.dataset.detailGoal){
+   await showGoal(button.dataset.detailGoal,state.view==="workspace");return;
+  }
   if(button.dataset.detailTask){await showTask(button.dataset.detailTask);return;}
   if(button.dataset.openWorkspace!==undefined){selectView("workspace");return;}
   if(button.dataset.newWebsite!==undefined){selectView("goals");
@@ -782,7 +819,7 @@ async function handleClick(event){
     if(button.dataset.approveGoal){
       if(!confirm("Duyệt kế hoạch SHA-256:\n"+g.plan_sha256+"\n\nDuyệt KHÔNG tự chạy task."))return;
       await mutate("/api/goals/"+goalId+"/approve",{ack:"APPROVE",
-        plan_sha256:g.plan_sha256},"Đã duyệt plan");await showGoal(goalId);return;
+        plan_sha256:g.plan_sha256},"Đã duyệt plan");await showGoal(goalId,state.view==="workspace");return;
     }
     const action=button.dataset.runGoal?"run":"resume";
     const grants=[...document.querySelectorAll('input[name="grant"]:checked')].map(i=>i.value);
@@ -802,7 +839,7 @@ async function handleClick(event){
      ack_external:sensitive?"AUTHORIZE_EXTERNAL_TOOLS":""};
     const out=await mutate("/api/goals/"+goalId+"/"+action,request,
       "Goal: "+action+" → "+(action==="run"?"đã xử lý":"đã tiếp tục"));
-    notice("Trạng thái: "+out.status);await showGoal(goalId);return;
+    notice("Trạng thái: "+out.status);await showGoal(goalId,state.view==="workspace");return;
   }
   if(button.dataset.tickSchedules!==undefined){
    if(!confirm("Chạy thủ công những lịch read-only đã tới hạn?"))return;
@@ -832,7 +869,7 @@ async function handleSubmit(event){
    if(outcome.status==="NEEDS_CLARIFICATION"){
     notice(outcome.message,true);return;
    }
-   await showGoal(outcome.goal_id);
+   await showGoal(outcome.goal_id,true);
    return;
   }
   if(id==="goal-form"){
