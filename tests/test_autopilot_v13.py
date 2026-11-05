@@ -140,5 +140,23 @@ class AutopilotV13Tests(unittest.TestCase):
         self.assertEqual("QUEUE_EMPTY", ap.tick(allow_model=True, db_path=self.db)["status"])
 
 
+    def test_policy_revocation_after_claim_prevents_model_call(self):
+        self.enable(cap=1)
+        self.submit()
+        original_claim = ap._claim
+
+        def claim_then_revoke(*, db_path=None, now=None):
+            job = original_claim(db_path=db_path, now=now)
+            ap.configure(daily_cap=0, enabled=False, confirm=True, db_path=self.db)
+            return job
+
+        with patch("agentforge.autopilot_v13._claim", side_effect=claim_then_revoke), \
+             patch("agentforge.skill_runner.invoke") as invoked:
+            result = ap.tick(allow_model=True, db_path=self.db)
+        self.assertEqual("INTERRUPTED_REVIEW_REQUIRED", result["status"])
+        self.assertEqual("DELEGATION_REVOKED", result["reason"])
+        invoked.assert_not_called()
+        self.assertEqual(1, ap.report(db_path=self.db)["used_today"])
+
 if __name__ == "__main__":
     unittest.main()
