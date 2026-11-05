@@ -33,6 +33,24 @@ LEGACY_IMPORTS = {
 }
 
 
+BUSINESS_DOMAIN_IMPORTS = {
+    "agentforge.product_builder": "agentforge.domains.websites.builder",
+    "agentforge.web_assets": "agentforge.domains.websites.assets",
+    "agentforge.product_quality": "agentforge.domains.websites.quality",
+    "agentforge.product_revision": "agentforge.domains.websites.revision",
+    "agentforge.web_design_kit": "agentforge.domains.websites.design_kit",
+    "agentforge.browser_validation": "agentforge.domains.websites.browser_validation",
+    "agentforge.image_studio_v24": "agentforge.domains.websites.image_studio",
+    "agentforge.media_assets": "agentforge.domains.media.assets",
+    "agentforge.media_quality": "agentforge.domains.media.quality",
+    "agentforge.media_render": "agentforge.domains.media.render",
+    "agentforge.media_workflow_v15": "agentforge.domains.media.workflow",
+    "agentforge.growth_store": "agentforge.domains.growth.store",
+    "agentforge.growth_reports": "agentforge.domains.growth.reports",
+    "agentforge.growth_bundle": "agentforge.domains.growth.bundle",
+}
+
+
 def snapshot():
     """Read-only structure facts, never a recursive runtime file scan."""
     return {
@@ -41,6 +59,7 @@ def snapshot():
         "persistent": sorted(PERSISTENT_DIRS),
         "generated": sorted(GENERATED_DIRS),
         "compatibility_imports": dict(LEGACY_IMPORTS),
+        "business_domain_imports": dict(BUSINESS_DOMAIN_IMPORTS),
         "data_cleanup_allowed": False,
         "workspace_cleanup_allowed": False,
     }
