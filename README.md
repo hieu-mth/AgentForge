@@ -49,6 +49,24 @@ Run the tests (no live model credentials or customer interviews required):
 
 The repository's [GitHub Actions CI](.github/workflows/ci.yml) runs the same suite on Windows and Python 3.13 for pushes/PRs targeting `main`.
 
+## Owner Operations V1.2 — pause/resume and attention inbox
+
+A persistent local emergency pause can block **new S1 Skill, S4 Goal and
+read-only Scheduler dispatch** until the owner explicitly resumes. It does
+not forcibly terminate a model/browser/subprocess already in progress or
+override a legacy command invoked directly outside S1. The Dashboard
+Overview displays active/paused state and a focused owner attention inbox
+for approval gates, failures, interruptions and stale scheduled work.
+
+\`\`\`powershell
+.\.venv\Scripts\python.exe -m agentforge.ops_control status
+.\.venv\Scripts\python.exe -m agentforge.ops_control pause --confirm-pause
+.\.venv\Scripts\python.exe -m agentforge.ops_control resume --confirm-resume
+\`\`\`
+
+See [Owner Operations V1.2](docs/milestones/OWNER_OPERATIONS_V12.md)
+for exact safeguards, UI acceptance and recovery limitations.
+
 ## Control Center V1.1 — practical operations and readable results
 
 Control Center V1.1 adds a source-backed S3 dataset picker, **Goal preflight**
