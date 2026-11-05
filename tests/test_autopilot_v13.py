@@ -158,5 +158,43 @@ class AutopilotV13Tests(unittest.TestCase):
         invoked.assert_not_called()
         self.assertEqual(1, ap.report(db_path=self.db)["used_today"])
 
+    def test_recurring_schedule_approval_and_skip_missed_slots(self):
+        from datetime import timedelta
+        due = datetime.now(timezone.utc) + timedelta(minutes=1)
+        with self.assertRaises(PermissionError):
+            ap.schedule("media.copy_draft", MEDIA, due.isoformat(), 60,
+                        db_path=self.db)
+        with self.assertRaises(ValueError):
+            ap.schedule("media.copy_draft", MEDIA, due.isoformat(), 5,
+                        confirm=True, db_path=self.db)
+        item = ap.schedule("media.copy_draft", MEDIA, due.isoformat(), 60,
+                           confirm=True, db_path=self.db)
+        self.enable(cap=2)
+        future = due + timedelta(days=4)
+        queued = ap.enqueue_due(db_path=self.db, now=future)
+        self.assertEqual("ENQUEUED", queued["status"])
+        self.assertEqual(item["schedule_id"], queued["schedule_id"])
+        self.assertGreater(datetime.fromisoformat(queued["next_due_utc"]), future)
+        self.assertEqual(1, sum(x["status"] == "QUEUED"
+                                for x in ap.report(db_path=self.db)["jobs"]))
+        self.assertIsNone(ap.enqueue_due(db_path=self.db, now=future))
+        self.assertEqual(1, len(ap.report(db_path=self.db)["schedules"]))
+
+    def test_schedule_does_not_enqueue_when_disabled_or_paused(self):
+        from datetime import timedelta
+        due = datetime.now(timezone.utc) + timedelta(minutes=1)
+        ap.schedule("media.copy_draft", MEDIA, due.isoformat(), 60,
+                    confirm=True, db_path=self.db)
+        later = due + timedelta(minutes=1)
+        self.assertEqual("DELEGATION_DISABLED",
+                         ap.enqueue_due(db_path=self.db, now=later)["status"])
+        self.assertEqual([], ap.report(db_path=self.db)["jobs"])
+        self.enable()
+        with patch("agentforge.ops_control.require_active",
+                   side_effect=PermissionError("PAUSED")):
+            with self.assertRaises(PermissionError):
+                ap.enqueue_due(db_path=self.db, now=later)
+        self.assertEqual([], ap.report(db_path=self.db)["jobs"])
+
 if __name__ == "__main__":
     unittest.main()
