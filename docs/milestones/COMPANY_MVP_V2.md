@@ -11,7 +11,7 @@ V2 integrates existing S1 skills, S2 offline media production (V1.5), S3 analyti
 | V1.6 | Dashboard: read and change bounded Autopilot daily call policy; inspect full SHA-verified storyboard text and decide APPROVE/REJECT from the browser | Authenticated localhost session, CSRF, explicit action, content digest match, inspection recorded per session; no automatic model call |
 | V1.7 | S4 Goal Planner / templates and existing read-only scheduling; new V2 deterministic next-owner-action scorecard | Goal plan SHA + explicit owner approval and existing skill grants. No unrestricted agent-to-agent authority |
 | V1.8 | Existing local-only website proposal/review/apply flow and consent-attested, **anonymous** S5 leads. V2 campaign KPI view | Source SHA review before applying website. No public deployment, contact collector or customer PII store |
-| V1.9 | V1.5 MP4 generation/approval, existing S5 manual YouTube/TikTok ZIP handoff, post attestation and owner-recorded cash/commission | Explicit rights, video SHA checks, channel package/handoff; owner performs platform publication |
+| V1.9 | V1.5 MP4 generation/approval, new dashboard consent+SHA video review, existing S5 manual YouTube/TikTok ZIP handoff, post attestation and owner-recorded cash/commission | Explicit rights, video SHA checks, channel package/handoff; owner performs platform publication |
 | V2.0 | Company scorecard via the authenticated dashboard and python -m agentforge.company_v2 report, launch blockers and next owner actions | Reports provenance, absence of independent verification and unmet launch gates rather than false success |
 
 Important: V1.7–V1.9 compose and surface **existing verified S4/S5 features**; V2 does **not** add automatic social login, network deployment, customer contact ingestion, payment execution, AI model web browsing, or actual lead attribution.
@@ -34,7 +34,7 @@ In **Tổng quan**:
 
 - **V2 Autopilot Owner Control** lets the owner explicitly set enabled and daily_cap (0–10) without queuing or dispatching model calls. Existing used_today does not reset, and the daily call estimate is not provider-billing enforcement.
 - **AI Draft Review Queue** allows inspecting the stored original storyboard in a read-only escaped JSON modal. The server validates the entire output SHA against V1.4 review metadata. APPROVE is restricted to PASS_HEURISTIC and requires the same session to inspect the draft first. Neither approval nor rejection publishes or applies content.
-- **Storyboard Editor (local)** creates owned PNG/SRT/WAV assets. The existing V1.5 media_workflow_v15 render CLI requires explicit FFmpeg subprocess consent. Open and watch the resulting MP4 before video approval. The video approval remains CLI-only until secure video streaming exists.
+- **Storyboard Editor (local)** creates owned PNG/SRT/WAV assets. The existing V1.5 media_workflow_v15 render CLI requires explicit FFmpeg subprocess consent. Open and watch the resulting MP4 before video approval. The authenticated dashboard can register a SHA-bound APPROVE/REJECT after the owner explicitly confirms having watched the MP4 in an external Windows player; it does not stream or play the video. The original CLI approval remains available.
 - **V2.0 Business Operations Pilot** shows existing anonymous lead counts, campaign counts, owner-recorded posts, approved local video count and missing conditions; do not mistake these for verified sales.
 - **Goals & Phê duyệt**, **Websites**, **Growth & Revenue**, **Schedules** continue to use the existing owner-approved workflows.
 
