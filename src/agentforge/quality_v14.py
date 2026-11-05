@@ -250,9 +250,9 @@ def record_success(db, job_id, task_id, skill_id, result):
 
 def inbox(*, db_path=None):
     from agentforge.autopilot_v13 import _connect
-    db = _connect(db_path)
-    if db is None:
-        return {"business_context": None, "reviews": []}
+    # Existing V1.3 databases do not yet have V1.4 tables. Initialize them
+    # without altering any existing policy, queued job or schedule.
+    db = _connect(db_path, create=True)
     with db:
         profile = current_profile(db)
         rows = db.execute("""SELECT job_id,task_id,skill_id,output_sha,profile_sha,
