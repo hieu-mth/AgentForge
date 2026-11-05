@@ -45,8 +45,14 @@ ui/dashboard/
 ├── package.json
 ├── vite.config.js
 ├── src/
-│   ├── App.jsx          Owner login, tasks, plans, proposals and read-only views
+│   ├── App.jsx          Shell, authentication, API mutations, navigation
 │   ├── api.js           Cookie/CSRF same-origin client, no tokens in storage
+│   ├── components/
+│   │   └── shared.jsx  Status badges and presentation helpers
+│   ├── features/
+│   │   ├── Workspace.jsx  Prompt, plan and owner permission review
+│   │   ├── Websites.jsx   Website preview, feedback and SHA approval
+│   │   └── Operations.jsx  Overview, finance and read-only views
 │   ├── main.jsx        Ant Design theme + React root
 │   └── styles.css      Light responsive design system
 └── dist/               Generated only, gitignored
