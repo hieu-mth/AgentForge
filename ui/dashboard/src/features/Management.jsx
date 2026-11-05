@@ -227,8 +227,8 @@ export function OwnerSettings({data,mutate,onReload}) {
           <Switch/>
         </Form.Item>
         <Form.Item name="daily_cap" label="Lượt model dự kiến mỗi ngày"
-          rules={[{required:true,type:'number',min:0,max:100}]}>
-          <InputNumber min={0} max={100} style={{width:'100%'}}/>
+          rules={[{required:true,type:'number',min:0,max:10}]}>
+          <InputNumber min={0} max={10} style={{width:'100%'}}/>
         </Form.Item>
         <Button htmlType="submit">Cập nhật Autopilot</Button>
       </Form>
