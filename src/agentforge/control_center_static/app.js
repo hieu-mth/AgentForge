@@ -6,7 +6,7 @@ const esc = (v) => String(v === null || v === undefined ? "—" : v)
   .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
   .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 const state = {csrf:null, data:null, view:"workspace", goal:null, task:null, memory:null, proposal:null, ops:null, inspectedDraft:null, inspectedVideo:null};
-const viewNames = {workspace:"Giao việc",overview:"Tổng quan",goals:"Goals & Phê duyệt",tasks:"Task History",
+const viewNames = {workspace:"Giao việc",team:"Team & Roles",channels:"Channels",finance:"Finance",settings:"Settings",overview:"Tổng quan",goals:"Goals & Phê duyệt",tasks:"Task History",
  skills:"AI Workforce",websites:"Websites",analytics:"Intelligence",growth:"Growth & Revenue",
  schedules:"Schedules",integrations:"Integrations",memory:"Owner Memory"};
 function notice(message,bad=false){
@@ -101,6 +101,47 @@ function renderWorkspace(){
   '<p class="muted">Chỉ hỗ trợ yêu cầu website/landing page và storyboard trong luồng prompt đầu tiên. Các công việc khác vẫn có thể thao tác bằng module hiện có.</p>'+
   '<div class="workspace-insight">Kế hoạch không tự chạy, không tự đăng, không cấp quyền ngân sách.</div>'+
   '<button class="btn btn-outline" type="button" data-view="overview">Xem hệ thống & báo cáo</button></section></div>';
+}
+function renderTeam(){
+ const rows=(state.data.skills||[]).map(x=>'<tr><td>'+esc(x.worker)+'</td><td>'+esc(x.id)+'</td><td>'+badge(x.mode)+'</td></tr>');
+ return header("AI WORKFORCE","Team & Roles","Các AI role và skill đang được khai báo; không có quyền tự tạo role hoặc tự nâng quyền từ prompt.")+
+  '<div class="callout">Quyền thực thi được kiểm tra bằng S1 Skill Contract và phê duyệt owner. Role là worker profile, không phải nhân viên pháp lý hoặc tác nhân có ngân sách độc lập.</div>'+
+  '<div class="section">'+card("Danh mục role & skills",table(["WORKER","SKILL","EXECUTION"],rows))+'</div>';
+}
+function renderChannels(){
+ const rows=(state.data.connectors||[]).map(x=>
+  '<div class="channel-status"><div><strong>'+esc(x.name)+'</strong>'+
+  '<small>'+(x.authenticated?'Đã có xác thực':'Chưa kết nối OAuth/API chính thức')+'</small></div>'+badge(x.status)+'</div>').join("");
+ return header("EXTERNAL ACCOUNTS","Channels","Tình trạng kênh thật. Không hiển thị CONNECTED nếu thiếu chứng cứ xác thực.")+
+  '<div class="callout warning">YouTube/TikTok hiện chỉ hỗ trợ chuẩn bị nội dung và owner upload thủ công. Không có nút kết nối giả và không lưu mật khẩu trong SQLite.</div>'+
+  card("Các kênh",rows||empty("Chưa có kênh được cấu hình."));
+}
+function renderFinance(){
+ const c=state.data.company_v2||{},b=c.business||{},ap=c.autopilot||{};
+ return header("OWNER FINANCE","Finance","Tách số liệu ghi nhận thủ công khỏi doanh thu/chi phí đã được bên cung cấp xác minh.")+
+ '<div class="finance-cards">'+
+  card("Giới hạn model theo lượt",'<div class="finance-value">'+fmt(ap.daily_call_cap??0)+'</div><p class="small muted">Lượt ước tính mỗi ngày UTC, không phải ngân sách VND.</p>')+
+  card("Lượt model đã dùng hôm nay",'<div class="finance-value">'+fmt(ap.estimated_calls_used_today??0)+'</div><p class="small muted">Chưa đối soát với hóa đơn provider.</p>')+
+  card("Lợi nhuận đã xác minh",'<div class="finance-value">Chưa xác minh</div><p class="small muted">Không có kết nối ngân hàng hay đối soát hoa hồng.</p>')+
+  card("Chiến dịch thật",'<div class="finance-value">'+fmt(b.real_campaigns??0)+'</div><p class="small muted">Các số liệu owner nhập không được tự coi là doanh thu thật.</p>')+
+ '</div><div class="section">'+card("Quy tắc tài chính",'<p>Không tự chi tiền, mua quảng cáo hoặc thực hiện thanh toán. Hạn mức provider thực tế chưa thể xác minh bằng AgentForge hiện tại.</p>'+
+ '<button class="btn btn-outline" type="button" data-view="growth">Xem sổ chiến dịch owner →</button>')+'</div>';
+}
+function renderSettings(){
+ const ap=state.data.autopilot_policy||{enabled:false,daily_cap:0};
+ return header("OWNER GOVERNANCE","Settings","Cấu hình delegation và kiểm soát chi phí ước tính; quyền bên ngoài vẫn cần phê duyệt theo tác vụ.")+
+ '<div class="settings-panel">'+card("Autopilot · hạn mức lượt model",
+ '<p class="muted">Tắt bật delegation cho hàng đợi V1.3. Không tự gọi model, không kiểm soát chi phí hóa đơn.</p>'+
+ '<div class="form-field"><label for="ap-policy-cap">Lượt dự kiến mỗi ngày UTC (0–10)</label>'+
+ '<input id="ap-policy-cap" type="number" min="0" max="10" step="1" value="'+esc(ap.daily_cap)+'"></div>'+
+ '<div class="form-field"><label for="ap-policy-enabled">Delegation</label>'+
+ '<select id="ap-policy-enabled"><option value="false" '+(!ap.enabled?'selected':'')+'>Tắt</option>'+
+ '<option value="true" '+(ap.enabled?'selected':'')+'>Bật</option></select></div>'+
+ '<div class="form-actions"><button class="btn btn-primary" type="button" data-autopilot-configure="1">Lưu chính sách</button></div>')+
+ card("Local-first & Data Safety",
+ '<p>SQLite và workspace vẫn ở máy bạn. Dùng quy trình backup được kiểm chứng trước khi cleanup dữ liệu.</p>'+
+ '<p class="small muted">Không nhập mật khẩu, số tài khoản hoặc dữ liệu khách vào Prompt hay Task History.</p>'+
+ '<button class="btn btn-outline" type="button" data-view="integrations">Xem System Health →</button>')+'</div>';
 }
 function renderOverview(){
  const d=state.data,s=d.stats;
@@ -523,7 +564,7 @@ function render(){
  $("nav-wait").textContent=String(state.data.goals.filter(g=>g.status==="WAITING_APPROVAL").length);
  document.querySelectorAll(".nav-link").forEach(x=>x.classList.toggle(
   "active",x.dataset.view===state.view));
- const output={workspace:renderWorkspace,overview:renderOverview,goals:renderGoals,tasks:renderTasks,
+ const output={workspace:renderWorkspace,team:renderTeam,channels:renderChannels,finance:renderFinance,settings:renderSettings,overview:renderOverview,goals:renderGoals,tasks:renderTasks,
   skills:renderSkills,websites:renderWebsites,analytics:renderAnalytics,growth:renderGrowth,
   schedules:renderSchedules,integrations:renderIntegrations,memory:renderMemory};
  $("content").innerHTML=(output[state.view]||renderOverview)();
