@@ -5,7 +5,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v === null || v === undefined ? "—" : v)
   .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
   .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
-const state = {csrf:null, data:null, view:"workspace", goal:null, task:null, memory:null, proposal:null, ops:null, inspectedDraft:null, inspectedVideo:null, artifacts:null, modelHealth:null, imageHealth:null, imageJobs:null};
+const state = {csrf:null, data:null, view:"workspace", goal:null, task:null, memory:null, proposal:null, ops:null, inspectedDraft:null, inspectedVideo:null, artifacts:null, modelHealth:null, imageHealth:null, imageJobs:null, previewDevice:"desktop"};
 const viewNames = {workspace:"Giao việc",team:"Team & Roles",channels:"Channels",finance:"Finance",settings:"Settings",artifacts:"Projects & Files",overview:"Tổng quan",goals:"Goals & Phê duyệt",tasks:"Task History",
  skills:"AI Workforce",websites:"Websites",analytics:"Intelligence",growth:"Growth & Revenue",
  schedules:"Schedules",integrations:"Integrations",memory:"Owner Memory"};
@@ -476,26 +476,37 @@ function renderWebsites(){
   '<tr><td>'+esc(t.web_proposal.slug)+'</td><td>'+short(t.web_proposal.proposal_id)+
   '</td><td><span class="mono">'+short(t.web_proposal.sha256)+'</span></td><td>'+
   '<button class="btn btn-small btn-outline" data-view-proposal="'+
-  esc(t.web_proposal.proposal_id)+'">Kiểm tra source</button></td></tr>');
+  esc(t.web_proposal.proposal_id)+'">Xem website</button></td></tr>');
  const p=state.proposal;
+ const frame=p?'/api/proposals/'+encodeURIComponent(p.proposal_id)+'/preview':'';
  const preview=p?
-  '<div class="detail-header"><div><h2>Proposal: '+esc(p.project_slug)+'</h2>'+
-  '<span class="small muted">'+esc(p.summary)+'</span></div>'+badge(p.status)+'</div>'+
-  '<p class="small muted section">Source SHA-256 (cần so khớp):</p>'+
-  '<div class="mono callout">'+esc(p.sha256)+'</div>'+
-  '<div class="callout warning section">Source được hiển thị dưới dạng VĂN BẢN, không chạy script hoặc nhúng HTML. Áp dụng chỉ ghi tệp local, KHÔNG triển khai website hay thu tiền.</div>'+
-  (p.files||[]).map(f=>'<details class="section" open><summary>'+esc(f.path)+
-   '</summary><pre class="code-box">'+esc(f.content)+'</pre></details>').join("")+
+  '<div class="detail-header"><div><h2>'+esc(p.project_slug)+'</h2>'+
+  '<span class="small muted">Bản nháp · chỉ xem trước, chưa triển khai</span></div>'+badge(p.status)+'</div>'+
+  '<div class="web-preview-controls"><strong>Xem giao diện thật</strong>'+
+  '<div class="web-preview-toggle" role="group" aria-label="Kích thước màn hình">'+
+  '<button type="button" class="btn btn-small '+(state.previewDevice==="mobile"?"btn-outline":"btn-primary")+
+  '" data-preview-device="desktop">Desktop</button>'+
+  '<button type="button" class="btn btn-small '+(state.previewDevice==="mobile"?"btn-primary":"btn-outline")+
+  '" data-preview-device="mobile">Mobile</button></div></div>'+
+  '<div class="web-preview-stage"><div class="web-preview-frame '+(state.previewDevice==="mobile"?"is-mobile":"is-desktop")+'">'+
+  '<iframe title="Xem trước website AI: '+esc(p.project_slug)+'" sandbox="" referrerpolicy="no-referrer" loading="eager" src="'+esc(frame)+'"></iframe>'+
+  '</div></div>'+
+  '<p class="small muted">Bản xem trước bị cô lập: không chạy JavaScript, gửi biểu mẫu, tải tài nguyên Internet hoặc xuất bản website. Kiểm tra font, bố cục và nội dung trực quan trước khi duyệt.</p>'+
+  '<details class="section web-source-details"><summary>Xem mã nguồn & SHA (nâng cao)</summary>'+
+  '<p class="small muted">SHA-256: <span class="mono">'+esc(p.sha256)+'</span></p>'+
+  (p.files||[]).map(f=>'<details class="section"><summary>'+esc(f.path)+'</summary>'+
+   '<pre class="code-box">'+esc(f.content)+'</pre></details>').join("")+
+  '</details>'+
   '<div class="form-actions"><button class="btn btn-primary" data-apply-proposal="'+
-  esc(p.proposal_id)+'">Duyệt SHA và ghi website local</button></div>':
-  empty("Chọn proposal đã tạo qua Goal website.draft để xem toàn bộ source.");
+  esc(p.proposal_id)+'">Duyệt & lưu website local</button></div>':
+  empty("Chọn một proposal rồi bấm Xem website để thấy giao diện desktop/mobile, không cần đọc mã HTML.");
  return header("PRODUCT BUILDER","Websites",
-  "Tạo proposal website bằng model, kiểm tra source và áp dụng có kiểm soát mà không cần chép lệnh PowerShell.",
+  "Xem trực quan landing page AI đã tạo, kiểm tra phiên bản mobile và duyệt trước khi lưu file.",
   '<button class="btn btn-primary" data-new-website>+ Tạo website draft</button>')+
- '<div class="callout">Workflow website.draft tạo PROPOSAL, không ghi đè file. Owner phải đọc source, xác nhận SHA và bấm Áp dụng riêng. Mô hình AI chỉ được gọi khi bật external tools và cấp quyền rõ ràng.</div>'+
- '<div class="section">'+card("Proposals trong Task History",
+ '<div class="callout">Bản xem trước không chạy code AI. Chỉ khi owner bấm duyệt, hệ thống mới ghi website vào máy; không tự triển khai online.</div>'+
+ '<div class="section">'+card("Landing page đang chờ duyệt",
    table(["PROJECT","PROPOSAL ID","SHA-256","THAO TÁC"],rows))+'</div>'+
- '<div class="section">'+card("Review & Apply",preview)+'</div>';
+ '<div class="section">'+card("Preview & Approval",preview)+'</div>';
 }
 function renderAnalytics(){
  const rows=state.data.datasets.map(d=>
@@ -902,11 +913,15 @@ async function handleClick(event){
    $("goal-title").value="Website tư vấn nệm";
    return;
   }
+  if(button.dataset.previewDevice){
+    state.previewDevice=button.dataset.previewDevice==="mobile"?"mobile":"desktop";
+    render();return;
+  }
   if(button.dataset.viewProposal){await showProposal(button.dataset.viewProposal);return;}
   if(button.dataset.applyProposal){
    const p=state.proposal;
    if(!p||p.proposal_id!==button.dataset.applyProposal)throw Error("Hãy kiểm tra proposal trước");
-   if(!confirm("ĐÃ ĐỌC SOURCE? Áp dụng website local bằng SHA:\n"+p.sha256+
+   if(!confirm("ĐÃ XEM WEBSITE? Duyệt bản nháp với SHA:\n"+p.sha256+
     "\n\nKhông deploy, không ghi đè website đang có."))return;
    const output=await mutate("/api/proposals/"+p.proposal_id+"/apply",{
     ack:"APPLY_PROPOSAL",sha256:p.sha256},
