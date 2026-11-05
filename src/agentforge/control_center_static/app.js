@@ -118,11 +118,34 @@ function renderOverview(){
  const reviewRows=(reviewData.items||[]).filter(r=>r.decision==="PENDING").slice(0,8).map(r=>
   '<tr><td>'+short(r.job_id)+'</td><td>'+esc(r.skill_id)+'</td>'+
   '<td>'+badge(r.quality)+'</td><td>'+esc((r.reasons||[]).join(", "))+'</td>'+
-  '<td><button class="link-button" data-detail-task="'+esc(r.task_id)+'">Xem task</button></td></tr>');
+  '<td><button class="link-button" data-detail-task="'+esc(r.task_id)+'">Xem task</button> '+
+  '<button class="btn btn-small btn-outline" data-draft-inspect="'+esc(r.job_id)+'">Kiểm tra & duyệt</button></td></tr>');
  const reviewCard=card("AI Draft Review Queue · "+fmt(reviewData.pending_count)+" chờ duyệt",
   '<p class="small muted">Business: '+esc(reviewData.business_context?reviewData.business_context.business:"Chưa cấu hình")+
   '. PASS_HEURISTIC vẫn cần duyệt thủ công. Dùng CLI quality_v14 để quyết định theo output SHA; không tự đăng hay apply.</p>'+
   table(["JOB","SKILL","QUALITY","LÝ DO","NỘI DUNG"],reviewRows,"Chưa có bản nháp cần duyệt"));
+ const ap=d.autopilot_policy||{enabled:false,daily_cap:0};
+ const company=d.company_v2||{};
+ const apCard=card("V2 · Autopilot Owner Control",
+  '<p class="small muted">Điều chỉnh hạn mức ước tính lượt model/UTC ngày. Bật delegation không tự tạo job và không chứng minh chi phí provider.</p>'+
+  '<div class="form-field"><label for="ap-policy-cap">Giới hạn lượt model/ngày (0–10)</label>'+
+  '<input id="ap-policy-cap" type="number" min="0" max="10" step="1" value="'+esc(ap.daily_cap)+'"></div>'+
+  '<div class="form-field"><label for="ap-policy-enabled">Standing delegation</label>'+
+  '<select id="ap-policy-enabled"><option value="false" '+(!ap.enabled?'selected':'')+'>Tắt</option>'+
+  '<option value="true" '+(ap.enabled?'selected':'')+'>Bật</option></select></div>'+
+  '<div class="form-actions"><button class="btn btn-outline" data-autopilot-configure="1">Áp dụng chính sách (xác nhận)</button></div>'+
+  '<p class="small muted">Quy trình chạy model vẫn dùng CLI hoặc processor riêng; bảng này không kích hoạt model ngay.</p>');
+ const healthV2=company.business||{};
+ const companyCard=card("V2.0 · Business Operations Pilot",
+  '<p class="small muted">MVP local-first, chưa xác nhận kinh doanh có lãi. Không sử dụng AI tự giao dịch hoặc tự đăng bài.</p>'+
+  '<div class="stack"><div class="goal-tile"><strong>Chiến dịch thật: '+fmt(healthV2.real_campaigns||0)+'</strong>'+
+  '<small>Khách tiềm năng do owner nhập: '+fmt(healthV2.owner_recorded_leads||0)+'</small></div>'+
+  '<div class="goal-tile"><strong>MP4 đã owner duyệt: '+fmt(company.content?.owner_approved_local_videos||0)+'</strong>'+
+  '<small>Bài đăng owner khai báo: '+fmt(healthV2.owner_attested_publications||0)+'</small></div>'+
+  '<div class="goal-tile"><strong>Điều kiện chưa đạt</strong>'+
+  '<small>'+esc((company.launch_blockers||[]).join(" · ")||"Chưa có blocker nội bộ")+'</small></div>'+
+  '<div class="goal-tile"><strong>Việc cần làm tiếp</strong>'+
+  '<small>'+esc((company.next_owner_actions||[]).join(" · "))+'</small></div></div>');
  const videoData=d.local_video||{pending_count:0,items:[]};
  const videoRows=(videoData.items||[]).slice(0,8).map(v=>
   '<tr><td>'+short(v.production_id)+'</td><td>'+short(v.run_id)+'</td>'+
@@ -166,6 +189,7 @@ function renderOverview(){
  '</div><span class="hero-pill">● 24 skills · 5 MVP layers</span></div>'+
  '<div class="metrics">'+tiles+'</div>'+
  '<div class="section">'+safety+'</div>'+
+ '<div class="grid-2 section">'+apCard+companyCard+'</div>'+
  '<div class="section">'+reviewCard+'</div>'+
  '<div class="section">'+videoCard+'</div>'+
  '<div class="section">'+editorCard+'</div>'+
@@ -549,6 +573,37 @@ async function handleClick(event){
  if(!button||button.disabled)return;
  if(button.dataset.view){selectView(button.dataset.view);return;}
  try{
+  if(button.dataset.autopilotConfigure!==undefined){
+    const dailyCap=Number($("ap-policy-cap").value);
+    const enabled=$("ap-policy-enabled").value==="true";
+    if(!Number.isInteger(dailyCap)||dailyCap<0||dailyCap>10)throw Error("Quota phải là số nguyên 0–10");
+    if(!confirm("Xác nhận standing delegation: "+(enabled?"BẬT":"TẮT")+
+      "\\nQuota dự kiến mỗi ngày UTC: "+dailyCap+
+      "\\nGiới hạn lượt model KHÔNG phải giới hạn tiền provider."))return;
+    await mutate("/api/autopilot/configure",{
+      ack:"SET_DAILY_MODEL_POLICY",enabled,daily_cap:dailyCap
+    },"Đã cập nhật chính sách Autopilot");
+    return;
+  }
+  if(button.dataset.draftInspect){
+    const id=button.dataset.draftInspect;
+    const review=await api("/api/drafts/"+encodeURIComponent(id));
+    const task=review.task;
+    // Read-only full task details first. Never auto-approve from quality status.
+    await showTask(task.task_id);
+    if(!confirm("Đã đọc bản nháp trong cửa sổ Task?\\n"+
+       "Output SHA: "+review.output_sha+
+       "\\nPASS_HEURISTIC không đảm bảo nội dung đúng."))return;
+    const decision=prompt("Nhập APPROVE hoặc REJECT (viết hoa) để quyết định:", "REJECT");
+    if(!["APPROVE","REJECT"].includes(decision))return;
+    if(!confirm("Xác nhận "+decision+" cho job "+id+
+       "\\nSHA-256: "+review.output_sha+
+       "\\nKhông tự xuất bản hoặc apply?"))return;
+    await mutate("/api/drafts/"+encodeURIComponent(id)+"/decide",{
+      ack:"REVIEW_"+decision,decision,output_sha:review.output_sha
+    },"Đã ghi nhận quyết định "+decision);
+    return;
+  }
   if(button.dataset.mediaPrepare!==undefined){
     const storyboard=formJson("media-editor-json");
     if(!confirm("Xác nhận đã đọc và chỉnh sửa storyboard? Tạo PNG/WAV/SRT local, không gọi model và không dựng MP4."))return;
