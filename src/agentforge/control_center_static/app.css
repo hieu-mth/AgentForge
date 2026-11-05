@@ -289,3 +289,68 @@ body{font-family:"Segoe UI",Arial,system-ui,sans-serif}
 .web-source-details .code-box{max-height:350px;overflow:auto}
 @media(max-width:680px){.web-preview-frame.is-mobile{width:340px}.web-preview-stage{min-height:480px}
 .web-preview-frame iframe{height:580px}}
+
+/* V2.6 — Light UI refresh: modern SaaS layout, no runtime/CDN dependency. */
+:root{
+  --nav:#ffffff;--nav-deep:#ffffff;--ink:#111827;--muted:#64748b;
+  --bg:#f8fafc;--card:#ffffff;--line:#e5eaf1;
+  --violet:#2563eb;--violet-light:#eff6ff;--blue:#2563eb;
+  --green:#16805d;--shadow:0 4px 24px rgba(15,23,42,.035);
+  color-scheme:light;
+}
+body{background:#f8fafc;color:#172235;font-family:Inter,"Segoe UI",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.sidebar{background:#fff;border-right:1px solid #e5eaf1;color:#334155;
+  box-shadow:none}
+.brand{color:#111827}
+.brand strong{color:#111827}
+.brand small{color:#6c7d90}
+.brand-symbol{background:linear-gradient(135deg,#337df1,#1c56b8);
+  color:#fff;box-shadow:0 6px 18px rgba(37,99,235,.15)}
+.workspace-label,.nav-heading{color:#8794a6}
+.workspace-label span{color:#3268d7}
+.nav-link{color:#526177;border-radius:10px;transition:background-color .16s,color .16s,transform .16s}
+.nav-link:hover{background:#f1f5fc;color:#1d4ed8;transform:translateX(2px)}
+.nav-link.active{background:#eaf2ff;color:#1855c4;box-shadow:inset 3px 0 0 #3b82f6}
+.nav-icon{color:#8694a9}
+.nav-link.active .nav-icon{color:#2563eb}
+.nav-divider,.sidebar-bottom{border-color:#e7ecf3;background-color:transparent}
+.sidebar-health,.sidebar-health strong{color:#4f657a}
+.nav-count{background:#e4eeff;color:#1d5dbe}
+.topbar{background:#fff;border-bottom:1px solid var(--line);box-shadow:none}
+.card,.auth-surface{border:1px solid #e6ebf2;box-shadow:var(--shadow);border-radius:16px}
+h1,h2,h3{color:#152235}
+.btn{border-radius:9px;transition:background-color .18s,border-color .18s,
+  box-shadow .18s,transform .18s}
+.btn-primary{background:#2563eb;color:#fff;box-shadow:0 3px 10px rgba(37,99,235,.12)}
+.btn-primary:hover:not(:disabled){background:#1d4ed8;box-shadow:0 5px 16px rgba(37,99,235,.2)}
+.btn-outline{background:#fff;color:#334155;border-color:#d9e1ec}
+.btn-outline:hover:not(:disabled){background:#f3f7fe;border-color:#a9c2e7}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{
+ outline:3px solid #93c5fd;outline-offset:2px}
+input,textarea,select{border-color:#dce5ee;border-radius:10px}
+input:focus,textarea:focus,select:focus{border-color:#3b82f6;box-shadow:0 0 0 3px #dbeafe}
+.workspace-hero{background:radial-gradient(circle at 100% 0%,#eaf2ff 0,transparent 43%),#fff;
+ border:1px solid #e3e9f3;border-radius:22px;box-shadow:0 4px 24px rgba(25,40,80,.025)}
+.workspace-hero h1{letter-spacing:-1.6px}
+.workspace-hero>p{color:#64748b}
+.workspace-prompt{border:1px solid #dce5f1;box-shadow:0 12px 35px rgba(37,99,235,.055)}
+.workspace-insight,.workspace-health{background:#f0f6ff;border-color:#e2edff;color:#315e9b}
+.web-preview-stage{background:linear-gradient(135deg,#e9eff7,#f7f9fd);border-color:#e0e8f2}
+.web-preview-toggle{background:#edf3fc}
+.web-preview-frame{border-color:#d9e2ef;box-shadow:0 15px 40px rgba(20,40,80,.1)}
+.web-source-details{background:#fbfcff;border-color:#e2eaf4}
+.task-dialog{border:1px solid #e4eaf2;box-shadow:0 28px 90px rgba(17,24,39,.19)}
+.review-feedback{margin-top:26px;padding:22px;border:1px solid #dfe8f5;
+ background:linear-gradient(125deg,#fff,#f7faff);border-radius:14px}
+.review-feedback-heading h3{font-size:16px;margin-bottom:4px}
+.review-feedback textarea{min-height:102px;background:#fff}
+.review-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;
+ padding-top:16px;border-top:1px solid #e3eaf3;margin-top:16px}
+.review-actions .btn{font-size:13px;padding:12px 17px}
+@media(max-width:720px){.review-feedback{padding:15px}
+ .review-actions{flex-direction:column-reverse}
+ .review-actions .btn{width:100%}}
+@media(prefers-reduced-motion:reduce){
+ .nav-link,.btn,.web-preview-frame{transition:none!important;transform:none!important}
+}

@@ -282,6 +282,22 @@ def _owner_action(server, path, request, session=None):
         if expected is None or request.get("ack") != expected:
             raise PermissionError("Explicit matching operations control acknowledgment required")
         return ops_control.set_mode(mode, confirm=True)
+    if path.startswith("/api/proposals/") and path.endswith("/revision"):
+        from agentforge.website_feedback import request_revision
+        parts = path.split("/")
+        if len(parts) != 5 or set(request) != {"ack", "sha256", "feedback"}:
+            raise ValueError("Invalid revision request")
+        if request["ack"] != "REQUEST_REVISION":
+            raise PermissionError("Owner must explicitly request a revision")
+        ident = parts[3]
+        if (session is None or session.get("reviewed_proposals", {}).get(ident)
+                != request["sha256"]):
+            raise PermissionError("Review this exact proposal SHA before requesting changes")
+        return request_revision(
+            ident, request["sha256"], request["feedback"],
+            brain_db_path=server.brain_db_path,
+            analytics_db_path=server.analytics_db_path,
+            growth_db_path=server.growth_db_path)
     if path.startswith("/api/proposals/") and path.endswith("/apply"):
         from agentforge import product_builder
         parts = path.split("/")
