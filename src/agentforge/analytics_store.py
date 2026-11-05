@@ -276,6 +276,22 @@ def load_data(dataset, *, campaign=None, db_path=None):
             "performance": performance, "ledger": ledger}
 
 
+
+def dataset_metadata(dataset, *, db_path=None):
+    """Read-only existence/lineage classification; never creates a database."""
+    _name(dataset, DATASET, "dataset")
+    conn = _connect(db_path)
+    if conn is None:
+        return None
+    with closing(conn):
+        row = conn.execute(
+            "SELECT dataset,synthetic FROM datasets WHERE dataset=?",
+            (dataset,),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
+
+
 def list_datasets(*, db_path=None):
     conn = _connect(db_path)
     if conn is None:
