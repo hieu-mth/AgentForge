@@ -67,6 +67,21 @@
     <div class="mobile-overlay" id="mobile-overlay" hidden></div>
   </div>
 
+  <dialog id="task-dialog" class="task-dialog" aria-labelledby="task-dialog-title">
+    <div class="task-dialog-layout">
+      <div class="task-dialog-heading">
+        <div>
+          <div class="eyebrow">AUDIT TRAIL</div>
+          <h2 id="task-dialog-title">Chi tiết tác vụ</h2>
+          <p class="small muted">Trạng thái, lỗi và lịch sử thực thi</p>
+        </div>
+        <button type="button" id="task-dialog-close" class="btn btn-light"
+                aria-label="Đóng chi tiết tác vụ">✕ Đóng</button>
+      </div>
+      <div id="task-dialog-body" class="task-dialog-body"></div>
+    </div>
+  </dialog>
+
   <div class="toast-host" id="toast-host" role="status" aria-live="polite"></div>
 </body>
 </html>
