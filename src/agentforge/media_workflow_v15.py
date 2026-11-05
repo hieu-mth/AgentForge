@@ -80,6 +80,17 @@ def _business_check(data, *, autopilot_db_path=None):
         return quality_v14._sha(profile)
 
 
+def _verify_storyboard_manifest(record):
+    folder, manifest = media_assets.load_manifest(record["run_id"])
+    snapshot = _storyboard({
+        "slug": manifest["slug"], "title": manifest["title"],
+        "scenes": manifest["scenes"],
+    })
+    if _digest(snapshot) != record["storyboard_sha"]:
+        raise PermissionError("Media storyboard changed since owner edit")
+    return folder, manifest
+
+
 def _link_source(source_job_id, source_output_sha, *, autopilot_db_path=None):
     if source_job_id is None and source_output_sha is None:
         return None, None
@@ -164,6 +175,7 @@ def render(production_id, *, confirm_local_process=False, db_path=None):
     record = _row(production_id, db_path=db_path)
     if record["status"] != "ASSETS_READY":
         raise PermissionError("Only prepared production can render once")
+    _verify_storyboard_manifest(record)
     with closing(_db(db_path, create=True)) as db:
         with db:
             changed = db.execute("""UPDATE productions SET status='RENDERING',updated_at=?
@@ -183,7 +195,7 @@ def render(production_id, *, confirm_local_process=False, db_path=None):
         qa = media_quality.check(run_id)
         if qa["status"] != "VIDEO_PASS" or qa["failures"] or not qa["video_verified"]:
             raise RuntimeError("Rendered video did not pass quality gate")
-        _, manifest = media_assets.load_manifest(run_id)
+        _, manifest = _verify_storyboard_manifest(record)
         video_sha = manifest["artifacts"]["video.mp4"]
         if not brain_store.SHA.fullmatch(video_sha):
             raise RuntimeError("Invalid video digest")
@@ -214,8 +226,8 @@ def decide(production_id, choice, video_sha, *, confirm_review=False, db_path=No
     item = _row(production_id, db_path=db_path)
     if item["status"] != "VIDEO_READY" or item["video_sha"] != video_sha:
         raise PermissionError("Production not ready or video SHA changed")
+    _, manifest = _verify_storyboard_manifest(item)
     qa = media_quality.check(item["run_id"])
-    _, manifest = media_assets.load_manifest(item["run_id"])
     if (qa["status"] != "VIDEO_PASS" or qa["failures"]
             or manifest["artifacts"].get("video.mp4") != video_sha):
         raise PermissionError("Video quality or integrity check failed")
