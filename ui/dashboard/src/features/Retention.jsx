@@ -83,7 +83,8 @@ export function Retention({data,mutate}) {
       </>,
       okText:isQuarantine?'Xác nhận cách ly':'Xác nhận phục hồi',cancelText:'Hủy',
       onOk:async()=>{
-        const out=await mutate('/api/retention/'+action,{
+        const endpoint=isQuarantine?'/api/retention/quarantine':'/api/retention/restore';
+        const out=await mutate(endpoint,{
           ack:isQuarantine?'QUARANTINE_ARTIFACT':'RESTORE_ARTIFACT',
           backup_id:receipt.backup_id,tree_sha:receipt.tree_sha256});
         if(out){
