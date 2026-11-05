@@ -49,6 +49,33 @@ Run the tests (no live model credentials or customer interviews required):
 
 The repository's [GitHub Actions CI](.github/workflows/ci.yml) runs the same suite on Windows and Python 3.13 for pushes/PRs targeting `main`.
 
+## V2.7 React + Ant Design Dashboard (separate UI)
+
+A standalone React 19 + Ant Design 6 frontend now lives in
+[`ui/dashboard/`](ui/dashboard/README.md), with a Vite production build served
+by the existing authenticated local Python Control Center at
+`http://127.0.0.1:8780/dashboard/`. The previous UI stays at `/`.
+
+First build on Windows (Node.js 22 installed):
+
+```powershell
+cd D:\AgentForge\ui\dashboard
+npm install
+npm run build
+cd ..\..
+.\.venv\Scripts\python.exe -m agentforge.control_center_v1 --port 8780 --allow-external-tools
+```
+
+This first React slice covers owner login, prompt intake, reviewed Goal execution,
+Tasks, website visual review/feedback/approval and read-only overview. Legacy
+advanced workflows remain available and will migrate incrementally. The frontend
+does **not** directly access SQLite or bypass model permissions.
+
+See [project layout and safe compatibility plan](docs/architecture/PROJECT_LAYOUT_V27.md).
+The `ai/` domain entrypoint and `src/agentforge/ai/` package are reserved for
+gradual code migration; stable AI Python modules are **not yet moved wholesale**.
+The `workspace/` directory retains user products, and `data/` retains SQLite.
+
 ## V2.4 Local AI Image Studio (Optional)
 
 A separate, owner-gated **ComfyUI localhost adapter** enables real raster AI image
