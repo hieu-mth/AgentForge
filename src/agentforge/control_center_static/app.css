@@ -255,3 +255,13 @@ body{font-family:"Segoe UI",Arial,system-ui,sans-serif}
 @media(max-width:900px){.workspace-columns{grid-template-columns:1fr}.workspace-hero{padding:25px}}
 @media(max-width:620px){.workspace-prompt-footer{align-items:stretch;flex-direction:column}
 .workspace-prompt-footer button{width:100%}.workspace-job{flex-wrap:wrap}.workspace-hero h1{letter-spacing:-.8px}}
+
+/* Functional V2.1 pages */
+.finance-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.finance-value{font-size:clamp(20px,2.5vw,30px);letter-spacing:-.7px;font-weight:750;margin:12px 0}
+.settings-panel{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.channel-status{padding:17px 0;display:flex;justify-content:space-between;gap:18px;align-items:center;border-bottom:1px solid var(--line)}
+.channel-status:last-child{border-bottom:0}
+.channel-status strong,.channel-status small{display:block}
+.channel-status small{font-size:12px;margin-top:6px;color:var(--muted)}
+@media(max-width:800px){.finance-cards,.settings-panel{grid-template-columns:1fr}}
