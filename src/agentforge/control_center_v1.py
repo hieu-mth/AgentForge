@@ -172,6 +172,14 @@ def _summary(server):
 
 def _owner_action(server, path, request, session=None):
     """Explicit allowlist; no arbitrary skill invocation or Python execution."""
+    if path == "/api/media/prepare":
+        if request.get("ack") != "PREPARE_EDITED_STORYBOARD":
+            raise PermissionError("Explicit owner storyboard edit confirmation required")
+        if set(request) - {"ack", "storyboard"}:
+            raise ValueError("Only owner storyboard content is accepted in dashboard")
+        from agentforge import media_workflow_v15
+        return media_workflow_v15.prepare(
+            request.get("storyboard"), confirm_edit=True)
     if path == "/api/ops/control":
         mode = request.get("mode")
         expected = "PAUSE_OPERATIONS" if mode == "PAUSED" else (
