@@ -460,6 +460,9 @@ class _Handler(BaseHTTPRequestHandler):
                     "status": "AUTHENTICATED", "csrf": session["csrf"]})
             if route == "/api/bootstrap":
                 return self._reply(200, _summary(self.server))
+            if route == "/api/artifacts":
+                from agentforge.artifact_catalog import report
+                return self._reply(200, report())
             if route == "/api/ops/health":
                 from agentforge import ops_doctor
                 source_paths = {
