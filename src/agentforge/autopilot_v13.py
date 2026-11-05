@@ -197,6 +197,12 @@ def tick(*, allow_model=False, db_path=None, task_db_path=None):
     if "job_id" not in job:
         return job
     try:
+        # Recheck revocation after quota reservation and before S1 entry.
+        # Reservation stays consumed if owner revoked mid-flight: never replay.
+        if not policy(db_path=db_path)["enabled"]:
+            return {"job_id": job["job_id"], "status": "INTERRUPTED_REVIEW_REQUIRED",
+                    "reason": "DELEGATION_REVOKED", "automatic_retry": False}
+        ops_control.require_active()
         # Owner delegated precisely these grants at configure time.
         receipt = skill_runner.invoke(
             job["skill_id"], job["payload"],
