@@ -10,6 +10,7 @@ All existing V0 read-only endpoints and CLIs remain intact.
 import argparse
 import hmac
 import json
+import re
 import secrets
 import threading
 import time
