@@ -20,8 +20,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from PIL import Image
-
 from agentforge import ops_control, product_builder, web_assets
 
 BASE = "http://127.0.0.1:8188"
@@ -220,6 +218,7 @@ def collect(job_id, *, confirm_import=False, db_path=None, opener=None):
                         timeout=15, opener=opener)
     if not web_assets._format(contents, "png"):
         raise ValueError("ComfyUI did not return a PNG")
+    from PIL import Image  # Optional [media] dependency, only needed for image import.
     with Image.open(io.BytesIO(contents)) as image:
         if image.format != "PNG" or not (256 <= image.width <= 2048
                                         and 256 <= image.height <= 2048):
