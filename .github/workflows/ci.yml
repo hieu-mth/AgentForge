@@ -29,5 +29,8 @@ jobs:
       - name: Validate Control Center browser script
         run: node --check src/agentforge/control_center_static/app.js
 
+      - name: Test Control Center task detail navigation
+        run: node --test tests/test_control_center_task_detail.cjs
+
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
