@@ -114,7 +114,18 @@ def _summary(server):
     from agentforge.quality_v14 import inbox as quality_inbox
     quality = quality_inbox()
     review_items = quality["reviews"][:15]
+    from agentforge.media_workflow_v15 import report as production_report
+    productions = production_report()["productions"][:15]
     return {
+        "local_video": {
+            "items": [{
+                "production_id": x["production_id"], "run_id": x["run_id"],
+                "status": x["status"], "quality": x["quality"],
+                "storyboard_sha": x["storyboard_sha"],
+                "video_sha": x["video_sha"],
+            } for x in productions],
+            "pending_count": sum(x["status"] == "VIDEO_READY" for x in productions),
+        },
         "autopilot_reviews": {
             "business_context": quality["business_context"],
             "pending_count": sum(x["decision"] == "PENDING" for x in quality["reviews"]),
