@@ -833,6 +833,7 @@ async function handleSubmit(event){
 document.addEventListener("DOMContentLoaded",()=>{
  const taskDialog=$("task-dialog");
  $("task-dialog-close").addEventListener("click",()=>taskDialog.close());
+ $("task-dialog-done").addEventListener("click",()=>taskDialog.close());
  taskDialog.addEventListener("click",event=>{
   // Native <dialog> handles Esc and restores focus. Backdrop click closes.
   if(event.target===taskDialog)taskDialog.close();
