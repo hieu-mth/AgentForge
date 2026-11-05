@@ -49,6 +49,18 @@ Run the tests (no live model credentials or customer interviews required):
 
 The repository's [GitHub Actions CI](.github/workflows/ci.yml) runs the same suite on Windows and Python 3.13 for pushes/PRs targeting `main`.
 
+## V1.5 Offline Video Production & Owner Approval
+
+Owner can edit a Vietnamese storyboard JSON locally and reuse existing
+S1 media.compose, S2 FFmpeg render and media quality checks without another
+AI model call. An optional immutable source-review SHA links back to the
+previously rejected AI draft without automatically reusing its text. Video
+production has a non-retryable render claim, digest-bound owner approval,
+and a read-only review panel in the Control Center dashboard.
+No auto-publish or platform integration is authorized.
+
+Windows walkthrough: [Local Video Production V1.5](docs/milestones/LOCAL_VIDEO_V15.md).
+
 ## V1.4 Business Context + Content Quality Review
 
 V1.4 adds owner-confirmed, SHA-digested business context for proposal-only
