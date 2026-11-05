@@ -62,7 +62,9 @@ class MediaWorkflowV15Tests(unittest.TestCase):
             "result": {"video_path": "D:/AgentForge/workspace/media/video.mp4"}
         }) as invoked, patch("agentforge.media_quality.check", return_value=VIDEO), \
              patch("agentforge.media_assets.load_manifest", return_value=(
-                 Path("D:/AgentForge/workspace/media"), {"artifacts": {"video.mp4": VID_SHA}}
+                 Path("D:/AgentForge/workspace/media"), {"artifacts": {"video.mp4": VID_SHA},
+                  "slug": STORY["slug"], "title": STORY["title"],
+                  "scenes": STORY["scenes"]}
              )):
             rendered = workflow.render(result["production_id"],
                                        confirm_local_process=True, db_path=self.db)
@@ -149,7 +151,9 @@ class MediaWorkflowV15Tests(unittest.TestCase):
             "result": {"video_path": "local/video.mp4"}
         }), patch("agentforge.media_quality.check", return_value=VIDEO), \
              patch("agentforge.media_assets.load_manifest", return_value=(
-                 Path("local"), {"artifacts": {"video.mp4": VID_SHA}}
+                 Path("local"), {"artifacts": {"video.mp4": VID_SHA},
+                  "slug": STORY["slug"], "title": STORY["title"],
+                  "scenes": STORY["scenes"]}
              )):
             return workflow.render(production_id, confirm_local_process=True,
                                    db_path=self.db)
@@ -175,7 +179,9 @@ class MediaWorkflowV15Tests(unittest.TestCase):
                             confirm_review=True, db_path=self.db)
         with patch("agentforge.media_quality.check", return_value=VIDEO), \
              patch("agentforge.media_assets.load_manifest", return_value=(
-                 Path("local"), {"artifacts": {"video.mp4": VID_SHA}}
+                 Path("local"), {"artifacts": {"video.mp4": VID_SHA},
+                  "slug": STORY["slug"], "title": STORY["title"],
+                  "scenes": STORY["scenes"]}
              )):
             result = workflow.decide(item["production_id"], "APPROVE", VID_SHA,
                                      confirm_review=True, db_path=self.db)
@@ -194,6 +200,33 @@ class MediaWorkflowV15Tests(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 workflow.decide(item["production_id"], "APPROVE", VID_SHA,
                                 confirm_review=True, db_path=self.db)
+
+    def test_modified_storyboard_manifest_blocks_render(self):
+        prepared = self.prep()
+        modified = {"artifacts": {"video.mp4": VID_SHA},
+                    "slug": STORY["slug"], "title": STORY["title"] + " tampered",
+                    "scenes": STORY["scenes"]}
+        with patch("agentforge.media_assets.load_manifest",
+                   return_value=(Path("local"), modified)), \
+             patch("agentforge.skill_runner.invoke") as invoked:
+            with self.assertRaises(PermissionError):
+                workflow.render(prepared["production_id"], confirm_local_process=True,
+                                db_path=self.db)
+            invoked.assert_not_called()
+
+    def test_dashboard_prepare_api_requires_matching_owner_ack(self):
+        from agentforge.control_center_v1 import _owner_action
+        with patch("agentforge.media_workflow_v15.prepare",
+                   return_value={"status": "ASSETS_READY"}) as action:
+            with self.assertRaises(PermissionError):
+                _owner_action(None, "/api/media/prepare",
+                              {"ack": "wrong", "storyboard": STORY})
+            action.assert_not_called()
+            result = _owner_action(None, "/api/media/prepare",
+                                   {"ack": "PREPARE_EDITED_STORYBOARD",
+                                    "storyboard": STORY})
+            self.assertEqual("ASSETS_READY", result["status"])
+            self.assertTrue(action.call_args.kwargs["confirm_edit"])
 
     def test_emergency_pause_prevents_preparation_and_render(self):
         with patch("agentforge.ops_control.require_active", side_effect=PermissionError("PAUSED")):
