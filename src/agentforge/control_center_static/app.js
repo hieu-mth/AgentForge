@@ -194,28 +194,29 @@ function renderGoalDetail(){
  '<details class="section"><summary class="small muted">Xem đầy đủ inputs và plan để kiểm tra</summary>'+
  '<pre class="code-box">'+esc(JSON.stringify({inputs:g.inputs,plan:g.plan},null,2))+'</pre></details>';
 }
+function renderTaskDetail(task){
+ const events=(task.events||[]).map(x=>
+  '<tr><td>'+esc(x.at)+'</td><td>'+esc(x.name)+'</td></tr>');
+ return '<div class="detail-header"><h3 class="mono">'+esc(task.task_id)+'</h3>'+
+  badge(task.status)+'</div>'+
+  '<p class="small muted">Skill / workflow: '+esc(task.skill_id)+'</p>'+
+  (task.error?'<div class="callout warning"><strong>Lỗi thực thi:</strong> '+
+    esc(task.error)+'</div>':"")+
+  '<div class="callout">Artifacts: '+esc((task.artifacts||[]).join(", ")||"None")+'</div>'+
+  (task.web_proposal?'<div class="form-actions"><button class="btn btn-primary" data-view-proposal="'+
+    esc(task.web_proposal.proposal_id)+'">Xem và duyệt website proposal</button></div>':"")+
+  '<div class="section"><h3>Lịch sử sự kiện</h3>'+
+  table(["AT","EVENT"],events)+'</div>';
+}
 function renderTasks(){
  const rows=state.data.tasks.map(t=>
  '<tr><td><button class="link-button" data-detail-task="'+esc(t.task_id)+'">'+
  short(t.task_id)+'</button></td><td>'+esc(t.kind)+'</td><td>'+esc(t.skill_id)+
  '</td><td>'+badge(t.status)+'</td><td>'+esc(String(t.updated_at||"").slice(0,19))+
  '</td></tr>');
- const selected=state.task?
- '<div class="section">'+card("Task details",
-  '<div class="detail-header"><h2>'+short(state.task.task_id)+'</h2>'+badge(state.task.status)+'</div>'+
-  '<p class="small muted">'+esc(state.task.skill_id)+'</p>'+
-  (state.task.error?'<div class="callout warning"><strong>Lỗi thực thi:</strong> '+
-    esc(state.task.error)+'</div>':"")+
-  '<div class="callout">Artifacts: '+esc((state.task.artifacts||[]).join(", ")||"None")+'</div>'+
-  (state.task.web_proposal?'<div class="form-actions"><button class="btn btn-primary" data-view-proposal="'+
-    esc(state.task.web_proposal.proposal_id)+'">Xem và duyệt website proposal</button></div>':"")+
-  table(["AT","EVENT"],(state.task.events||[]).map(x=>
-   '<tr><td>'+esc(x.at)+'</td><td>'+esc(x.name)+'</td></tr>')))+
- '</div>':"";
  return header("AUDIT TRAIL","Task History",
-  "Mọi skill được gọi thông qua S1 đều có trạng thái, bằng chứng và log sự kiện.")+
- card("Các tác vụ gần đây",table(["TASK ID","LOẠI","SKILL","TRẠNG THÁI","UPDATED UTC"],rows))+
- selected;
+  "Bấm Task ID để xem lỗi, artifacts và log sự kiện ngay trong cửa sổ chi tiết.")+
+ card("Các tác vụ gần đây",table(["TASK ID","LOẠI","SKILL","TRẠNG THÁI","UPDATED UTC"],rows));
 }
 function renderSkills(){
  const cards=state.data.skills.map(s=>
@@ -407,6 +408,7 @@ function render(){
 }
 function selectView(view){
  if(!viewNames[view])return;
+ if($("task-dialog").open)$("task-dialog").close();
  state.view=view;state.task=null;
  $("sidebar")?.classList.remove("open");$("mobile-overlay").hidden=true;
  if(view==="memory"){
@@ -426,10 +428,10 @@ async function showGoal(id){
 async function showTask(id){
  try{
   const task=await api("/api/tasks/"+encodeURIComponent(id));
-  // selectView clears the previous task; assign the fetched task AFTER switching.
-  selectView("tasks");
   state.task=task;
-  render();
+  $("task-dialog-body").innerHTML=renderTaskDetail(task);
+  const dialog=$("task-dialog");
+  if(!dialog.open)dialog.showModal();
  }catch(e){notice(e.message,true);}
 }
 async function showProposal(id){
@@ -560,6 +562,16 @@ async function handleSubmit(event){
  finally{if(submit)submit.disabled=false;}
 }
 document.addEventListener("DOMContentLoaded",()=>{
+ const taskDialog=$("task-dialog");
+ $("task-dialog-close").addEventListener("click",()=>taskDialog.close());
+ taskDialog.addEventListener("click",event=>{
+  // Native <dialog> handles Esc and restores focus. Backdrop click closes.
+  if(event.target===taskDialog)taskDialog.close();
+ });
+ taskDialog.addEventListener("close",()=>{
+  state.task=null;
+  $("task-dialog-body").textContent="";
+ });
  $("login-form").addEventListener("submit",async e=>{
   e.preventDefault();
   try{
