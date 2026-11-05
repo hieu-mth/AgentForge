@@ -102,6 +102,7 @@ class WebsiteVisualPreviewTests(unittest.TestCase):
         self.assertEqual("DENY", headers["X-Frame-Options"])
         self.assertIn("script-src 'self'", headers["Content-Security-Policy"])
         self.assertIn("frame-ancestors 'none'", headers["Content-Security-Policy"])
+        self.assertIn("frame-src 'self'", headers["Content-Security-Policy"])
 
     def test_digest_change_refuses_preview(self):
         path = Path(self.proposal["proposal_path"])
