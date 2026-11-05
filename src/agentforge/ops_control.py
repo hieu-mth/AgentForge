@@ -37,7 +37,7 @@ def read(*, path=None):
             raise ValueError("Invalid state")
         return {"mode": value["mode"], "reason": "OWNER_SET",
                 "persisted": True, "updated_at_utc": value["updated_at_utc"]}
-    except (UnicodeError, json.JSONDecodeError, ValueError, OSError):
+    except (UnicodeError, json.JSONDecodeError, ValueError, TypeError, OSError):
         return {"mode": "PAUSED", "reason": "INVALID_STATE", "persisted": True}
 
 
@@ -49,7 +49,7 @@ def require_active(*, path=None):
 
 
 def set_mode(mode, *, confirm=False, path=None):
-    if mode not in MODES or confirm is not True:
+    if not isinstance(mode, str) or mode not in MODES or confirm is not True:
         raise PermissionError("Explicit owner confirmation required to pause or resume")
     target = _safe(Path(path) if path is not None else STATE_FILE)
     target.parent.mkdir(parents=True, exist_ok=True)
