@@ -35,7 +35,10 @@ class WebsiteVisualPreviewTests(unittest.TestCase):
             self.addCleanup(entry.stop)
         self.brief = "Trang giới thiệu nệm cho gia đình với hotline 0879547988."
         self.proposal = b.propose("nem-em-nha", self.brief,
-                                  model_client=lambda *_a, **_k: GOOD)
+                                  model_client=lambda *_a, **_k: {
+                                      "summary": "Safe local website draft",
+                                      "files": [{"path": "index.html", "content": GOOD}]
+                                  })
         self.server = cc.create_server(
             0, owner_code=OWNER,
             task_db_path=self.root / "tasks.db",
