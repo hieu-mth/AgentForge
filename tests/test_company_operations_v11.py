@@ -8,7 +8,7 @@ from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
-from agentforge import analytics_store, goal_preflight, result_view, task_history, skill_runner
+from agentforge import analytics_store, goal_preflight, result_view, task_history, skill_runner, ops_control
 from agentforge import control_center_v1 as cc
 
 CODE = "testing-owner-company-ops-2026"
@@ -187,6 +187,33 @@ class TestCompanyOperationsV11(unittest.TestCase):
         self.assertEqual(
             task_history.get_task(result["task_id"], db_path=self.task_db)["error"],
             result["error"])
+
+    def test_ops_pause_http_requires_owner_and_explicit_ack(self):
+        state_path = self.task_db.parent / "ops-control.json"
+        with patch.object(ops_control, "STATE_FILE", state_path):
+            code, _, _ = self.req("POST", "/api/ops/control", {
+                "mode": "PAUSED", "ack": "PAUSE_OPERATIONS"})
+            self.assertEqual(code, 401)
+            self.assertFalse(state_path.exists())
+            self.login()
+            code, _, _ = self.req("POST", "/api/ops/control", {
+                "mode": "PAUSED", "ack": "UNSAFE"})
+            self.assertEqual(code, 400)
+            self.assertFalse(state_path.exists())
+            code, state, _ = self.req("POST", "/api/ops/control", {
+                "mode": "PAUSED", "ack": "PAUSE_OPERATIONS"})
+            self.assertEqual(code, 200)
+            self.assertEqual(state["mode"], "PAUSED")
+            code, dashboard, _ = self.req("GET", "/api/bootstrap")
+            self.assertEqual(code, 200)
+            self.assertEqual(dashboard["operations"]["mode"], "PAUSED")
+            self.assertIn("attention", dashboard)
+            code, state, _ = self.req("POST", "/api/ops/control", {
+                "mode": "ACTIVE", "ack": "RESUME_OPERATIONS"})
+            self.assertEqual(code, 200)
+            self.assertEqual(state["mode"], "ACTIVE")
+            code, dashboard, _ = self.req("GET", "/api/bootstrap")
+            self.assertEqual(dashboard["operations"]["mode"], "ACTIVE")
 
     def test_report_projection_never_falls_back_to_arbitrary_model_output(self):
         self.assertIsNone(result_view.present("web.create", {
