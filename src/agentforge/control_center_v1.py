@@ -460,8 +460,8 @@ class _Handler(BaseHTTPRequestHandler):
         else:
             self.send_header("Content-Security-Policy",
                 "default-src 'none'; script-src 'self'; style-src 'self'; "
-                "connect-src 'self'; img-src 'self'; base-uri 'none'; "
-                "form-action 'none'; frame-ancestors 'none'")
+                "connect-src 'self'; img-src 'self'; frame-src 'self'; "
+                "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
         for k, v in headers:
             self.send_header(k, v)
         self.end_headers()
