@@ -514,3 +514,21 @@ consented local business pilot with real traffic, audience feedback,
 human-reviewed distribution, affiliate events and complete costs, then
 incrementally authorize third-party platforms with scoped credentials and
 receipts. Acceptance: docs/milestones/COMPANY_OPERATIONS_V11.md.
+
+
+## Addendum — Owner Operations V1.2 (2026-11-05)
+
+The post-V1.1 operational layer adds a persistent local fail-closed
+PAUSED/ACTIVE state, explicit owner-only controls in the authenticated
+Dashboard, new-dispatch gates in the unified S1 Skill Runner and S4
+Brain/Scheduler, and a deterministic owner attention queue. A foreground
+scheduler reports deliberate pause instead of proceeding with new due
+slots. Pausing is checked before new work and between bounded Goal
+steps; no already-running process is forcibly terminated, no external
+provider is controlled, and no ambiguous action is replayed. Normal
+owner planning and local record review can continue while paused.
+
+This milestone strengthens single-owner operation; it does **not**
+deliver 24/7 hosting, official publishing, validated ad budgets,
+verified revenue or autonomous market adaptation. See the acceptance
+and limits: docs/milestones/OWNER_OPERATIONS_V12.md.
