@@ -5,8 +5,8 @@ const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v === null || v === undefined ? "—" : v)
   .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
   .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
-const state = {csrf:null, data:null, view:"overview", goal:null, task:null, memory:null, proposal:null, ops:null, inspectedDraft:null, inspectedVideo:null};
-const viewNames = {overview:"Tổng quan",goals:"Goals & Phê duyệt",tasks:"Task History",
+const state = {csrf:null, data:null, view:"workspace", goal:null, task:null, memory:null, proposal:null, ops:null, inspectedDraft:null, inspectedVideo:null};
+const viewNames = {workspace:"Giao việc",overview:"Tổng quan",goals:"Goals & Phê duyệt",tasks:"Task History",
  skills:"AI Workforce",websites:"Websites",analytics:"Intelligence",growth:"Growth & Revenue",
  schedules:"Schedules",integrations:"Integrations",memory:"Owner Memory"};
 function notice(message,bad=false){
@@ -81,6 +81,27 @@ function table(columns,rows,emptyText="Chưa có bản ghi"){
 }
 function fmt(v){return (typeof v==="number"?v.toLocaleString("vi-VN"):esc(v));}
 function short(id){return esc(String(id||"").slice(0,12));}
+function renderWorkspace(){
+ const data=state.data;
+ const recent=(data.goals||[]).slice(0,5).map(g=>
+   '<div class="workspace-job"><div><strong>'+esc(g.title)+'</strong><small>'+esc(g.template)+'</small></div>'+
+   badge(g.status)+' <button class="btn btn-small btn-outline" type="button" data-detail-goal="'+esc(g.goal_id)+'">Chi tiết</button></div>').join("");
+ return '<div class="workspace-hero"><div class="eyebrow">YOUR AI COMPANY · LOCAL FIRST</div>'+
+  '<h1>Hôm nay bạn muốn xây dựng điều gì?</h1>'+
+  '<p>Chỉ cần mô tả mục tiêu. AgentForge chuyển yêu cầu thành kế hoạch để bạn duyệt trước khi chạy AI.</p>'+
+  '<form id="workspace-request-form" class="workspace-prompt">'+
+  '<label for="workspace-prompt">Yêu cầu công việc</label>'+
+  '<textarea id="workspace-prompt" rows="5" maxlength="600" required minlength="20" placeholder="Ví dụ: Tạo landing page nệm cao cấp cho ba tôi, có hình minh họa đẹp, mobile-first, hotline 0879547988..."></textarea>'+
+  '<div class="workspace-prompt-footer"><span>Không gọi AI khi lập kế hoạch · Mọi bước thực thi cần được duyệt</span>'+
+  '<button type="submit" class="btn btn-primary">Tạo kế hoạch →</button></div></form></div>'+
+  '<div class="workspace-columns"><section class="card"><div class="section-head"><h2>Việc gần đây</h2>'+
+  '<button class="section-link" data-view="goals">Xem tất cả</button></div>'+
+  (recent||'<p class="muted">Chưa có kế hoạch. Hãy mô tả việc cần làm ở trên.</p>')+'</section>'+
+  '<section class="card"><h2>Kiểm soát rõ ràng</h2>'+
+  '<p class="muted">Chỉ hỗ trợ yêu cầu website/landing page và storyboard trong luồng prompt đầu tiên. Các công việc khác vẫn có thể thao tác bằng module hiện có.</p>'+
+  '<div class="workspace-insight">Kế hoạch không tự chạy, không tự đăng, không cấp quyền ngân sách.</div>'+
+  '<button class="btn btn-outline" type="button" data-view="overview">Xem hệ thống & báo cáo</button></section></div>';
+}
 function renderOverview(){
  const d=state.data,s=d.stats;
  const metrics=[
@@ -502,7 +523,7 @@ function render(){
  $("nav-wait").textContent=String(state.data.goals.filter(g=>g.status==="WAITING_APPROVAL").length);
  document.querySelectorAll(".nav-link").forEach(x=>x.classList.toggle(
   "active",x.dataset.view===state.view));
- const output={overview:renderOverview,goals:renderGoals,tasks:renderTasks,
+ const output={workspace:renderWorkspace,overview:renderOverview,goals:renderGoals,tasks:renderTasks,
   skills:renderSkills,websites:renderWebsites,analytics:renderAnalytics,growth:renderGrowth,
   schedules:renderSchedules,integrations:renderIntegrations,memory:renderMemory};
  $("content").innerHTML=(output[state.view]||renderOverview)();
@@ -689,6 +710,7 @@ async function handleClick(event){
   }
   if(button.dataset.detailGoal){await showGoal(button.dataset.detailGoal);return;}
   if(button.dataset.detailTask){await showTask(button.dataset.detailTask);return;}
+  if(button.dataset.openWorkspace!==undefined){selectView("workspace");return;}
   if(button.dataset.newWebsite!==undefined){selectView("goals");
    const field=$("goal-template");field.value="website.draft";
    field.dispatchEvent(new Event("change"));
@@ -756,11 +778,22 @@ async function handleClick(event){
 }
 async function handleSubmit(event){
  const id=event.target.id;
- if(!["goal-form","schedule-form","campaign-form","event-form","memory-form"].includes(id))return;
+ if(!["workspace-request-form","goal-form","schedule-form","campaign-form","event-form","memory-form"].includes(id))return;
  event.preventDefault();
  const submit=event.target.querySelector('button[type="submit"]');
  if(submit)submit.disabled=true;
  try{
+  if(id==="workspace-request-form"){
+   const prompt=$("workspace-prompt").value.trim();
+   const outcome=await mutate("/api/workspace/request",{
+    ack:"PLAN_ONLY",prompt,max_model_calls:1
+   },"Đã phân tích yêu cầu");
+   if(outcome.status==="NEEDS_CLARIFICATION"){
+    notice(outcome.message,true);return;
+   }
+   await showGoal(outcome.goal_id);
+   return;
+  }
   if(id==="goal-form"){
    const out=await mutate("/api/goals/propose",{
     ack:"PROPOSE",title:$("goal-title").value,
