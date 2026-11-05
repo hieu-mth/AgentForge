@@ -204,6 +204,8 @@ function renderTasks(){
  '<div class="section">'+card("Task details",
   '<div class="detail-header"><h2>'+short(state.task.task_id)+'</h2>'+badge(state.task.status)+'</div>'+
   '<p class="small muted">'+esc(state.task.skill_id)+'</p>'+
+  (state.task.error?'<div class="callout warning"><strong>Lỗi thực thi:</strong> '+
+    esc(state.task.error)+'</div>':"")+
   '<div class="callout">Artifacts: '+esc((state.task.artifacts||[]).join(", ")||"None")+'</div>'+
   (state.task.web_proposal?'<div class="form-actions"><button class="btn btn-primary" data-view-proposal="'+
     esc(state.task.web_proposal.proposal_id)+'">Xem và duyệt website proposal</button></div>':"")+
@@ -422,8 +424,13 @@ async function showGoal(id){
  catch(e){notice(e.message,true);}
 }
 async function showTask(id){
- try{state.task=await api("/api/tasks/"+encodeURIComponent(id));selectView("tasks");}
- catch(e){notice(e.message,true);}
+ try{
+  const task=await api("/api/tasks/"+encodeURIComponent(id));
+  // selectView clears the previous task; assign the fetched task AFTER switching.
+  selectView("tasks");
+  state.task=task;
+  render();
+ }catch(e){notice(e.message,true);}
 }
 async function showProposal(id){
  try{
