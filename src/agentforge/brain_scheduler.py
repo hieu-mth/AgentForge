@@ -92,6 +92,8 @@ def tick(*, confirm_tick=False, db_path=None, task_db_path=None,
     """Check at most 3 due schedules; once-only durable slot claim."""
     if confirm_tick is not True:
         raise PermissionError("Owner must explicitly authorize local scheduler tick")
+    from agentforge.ops_control import require_active
+    require_active()
     if type(max_due) is not int or not 1 <= max_due <= 3:
         raise store.BrainError("Tick limit must be 1-3")
     current = now or datetime.now(UTC)
