@@ -14,6 +14,9 @@ import { badge, clip } from './components/shared.jsx';
 import { Workspace, GoalDrawer } from './features/Workspace.jsx';
 import { Websites, ProposalDrawer } from './features/Websites.jsx';
 import { Overview, ReadOnlyPage } from './features/Operations.jsx';
+import { Projects } from './features/Projects.jsx';
+import { Reviews } from './features/Reviews.jsx';
+import { Schedules, OperationsControl, Intelligence, Growth, OwnerSettings, OwnerMemory } from './features/Management.jsx';
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
@@ -70,6 +73,7 @@ export default function App() {
     finally{setBusy(false);}
   };
   const post=(path,body)=>api(path,{method:'POST',body,csrf});
+  const mutate=(path,body)=>runAction(()=>post(path,body));
   const ask=(title,content,onOk)=>modal.confirm({title,content,okText:'Xác nhận',cancelText:'Hủy',onOk});
   const openGoal=async id => {
     try{setGoal(await api('/api/goals/'+encodeURIComponent(id)));}catch(e){authError(e);}
@@ -116,19 +120,27 @@ export default function App() {
   const menuItems=[
     {key:'workspace',icon:<RobotOutlined/>,label:'Giao việc'},
     {key:'overview',icon:<DashboardOutlined/>,label:'Tổng quan'},
-    {key:'goals',icon:<AuditOutlined/>,label:'Goals'},
-    {key:'tasks',icon:<ClockCircleOutlined/>,label:'Tasks'},
+    {key:'goals',icon:<AuditOutlined/>,label:'Goals & Duyệt'},
+    {key:'tasks',icon:<ClockCircleOutlined/>,label:'Task History'},
+    {key:'reviews',icon:<CheckCircleOutlined/>,label:'AI & Video Review'},
     {key:'websites',icon:<GlobalOutlined/>,label:'Websites'},
-    {key:'projects',icon:<FolderOpenOutlined/>,label:'Projects & Files'},
+    {key:'projects',icon:<FolderOpenOutlined/>,label:'Projects & AI Images'},
     {type:'divider'},
     {key:'team',icon:<TeamOutlined/>,label:'Team & Roles'},
+    {key:'intelligence',icon:<AppstoreOutlined/>,label:'Intelligence'},
+    {key:'growth',icon:<BarChartOutlined/>,label:'Growth & Revenue'},
+    {key:'schedules',icon:<ClockCircleOutlined/>,label:'Schedules'},
+    {key:'operations',icon:<SafetyCertificateOutlined/>,label:'Operations'},
     {key:'channels',icon:<PlayCircleOutlined/>,label:'Channels'},
     {key:'finance',icon:<BarChartOutlined/>,label:'Finance'},
     {key:'settings',icon:<SettingOutlined/>,label:'Settings'},
+    {key:'memory',icon:<FileTextOutlined/>,label:'Owner Memory'},
   ];
   const titles={workspace:'Giao việc',overview:'Tổng quan',goals:'Kế hoạch',tasks:'Task History',
-    websites:'Websites',projects:'Projects & Files',team:'Team & Roles',channels:'Channels',
-    finance:'Finance',settings:'Settings'};
+    reviews:'AI & Video Review',websites:'Websites',projects:'Projects & AI Images',
+    team:'Team & Roles',intelligence:'Intelligence',growth:'Growth & Revenue',
+    schedules:'Schedules',operations:'Operations',channels:'Channels',
+    finance:'Finance',settings:'Settings',memory:'Owner Memory'};
   if(loginNeeded)return <><Login onLogin={async({code})=>{
     await runAction(async()=>{await api('/api/login',{method:'POST',body:{code}});await refresh();},
       {refreshData:false});}} busy={busy}/><ErrorBoundary error={error} onReset={()=>setError(null)}/></>;
@@ -164,11 +176,15 @@ export default function App() {
             {title:'Skill',dataIndex:'skill_id'}, {title:'Trạng thái',dataIndex:'status',render:badge},
             {title:'Hành động',render:(_,t)=><Button onClick={()=>api('/api/tasks/'+t.task_id).then(setTask).catch(authError)}>Chi tiết</Button>}]}/></Card>}
         {section==='websites'&&<Websites data={data} showProposal={openProposal}/>}
-        {section==='projects'&&<Card title="Projects & Files"><Alert type="info"
-          message="Kho tài sản hiện được xem trong Control Center cũ"
-          description="Không xóa hay di chuyển dữ liệu khi chuyển frontend. Phần duyệt website hiện đã có ở React."
-          action={<Button href="/" target="_blank">Mở kho local</Button>}/></Card>}
-        {['finance','channels','team','settings'].includes(section)&&<ReadOnlyPage section={section} data={data}/>}
+        {section==='projects'&&<Projects mutate={mutate}/>}
+        {section==='reviews'&&<Reviews data={data} mutate={mutate} onReload={refresh}/>}
+        {section==='schedules'&&<Schedules data={data} mutate={mutate} onReload={refresh}/>}
+        {section==='operations'&&<OperationsControl data={data} mutate={mutate} onReload={refresh}/>}
+        {section==='intelligence'&&<Intelligence data={data}/>}
+        {section==='growth'&&<Growth data={data} mutate={mutate} onReload={refresh}/>}
+        {section==='settings'&&<OwnerSettings data={data} mutate={mutate} onReload={refresh}/>}
+        {section==='memory'&&<OwnerMemory mutate={mutate}/>}
+        {['finance','channels','team'].includes(section)&&<ReadOnlyPage section={section} data={data}/>}
       </Content>
     </Layout>
     <GoalDrawer goal={goal} onClose={()=>setGoal(null)} onApprove={approve}

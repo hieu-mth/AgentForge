@@ -565,6 +565,11 @@ class _Handler(BaseHTTPRequestHandler):
                     "status": "AUTHENTICATED", "csrf": session["csrf"]})
             if route == "/api/bootstrap":
                 return self._reply(200, _summary(self.server))
+            if route.startswith("/api/image/") and route.endswith("/preview"):
+                from agentforge.asset_preview import image_for_job
+                job_id = route[len("/api/image/"):-len("/preview")]
+                content, image_type = image_for_job(job_id)
+                return self._reply(200, content, mime=image_type)
             if route == "/api/image/health":
                 from agentforge.image_studio_v24 import health
                 return self._reply(200, health())
