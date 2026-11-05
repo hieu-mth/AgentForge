@@ -213,6 +213,37 @@ def _summary(server):
 
 def _owner_action(server, path, request, session=None):
     """Explicit allowlist; no arbitrary skill invocation or Python execution."""
+    if path == "/api/retention/backup":
+        from agentforge.storage import retention
+        if (set(request) != {"ack", "kind", "id", "tree_sha"} or
+                request.get("ack") != "BACKUP_ARTIFACT"):
+            raise PermissionError("Explicit reviewed artifact backup required")
+        key = (request["kind"], request["id"])
+        if (session is None or session.get("inspected_artifacts", {}).get(key)
+                != request["tree_sha"]):
+            raise PermissionError("Inspect exact live artifact SHA first")
+        return retention.backup(request["kind"], request["id"], request["tree_sha"],
+                                confirm=True)
+    if path == "/api/retention/quarantine":
+        from agentforge.storage import retention
+        if (set(request) != {"ack", "backup_id", "tree_sha"} or
+                request.get("ack") != "QUARANTINE_ARTIFACT"):
+            raise PermissionError("Explicit reversible quarantine required")
+        if (session is None or session.get("verified_artifact_backups", {}).get(
+                request["backup_id"]) != request["tree_sha"]):
+            raise PermissionError("Verify exact backup SHA in this session")
+        return retention.quarantine(request["backup_id"], request["tree_sha"],
+                                    confirm=True)
+    if path == "/api/retention/restore":
+        from agentforge.storage import retention
+        if (set(request) != {"ack", "backup_id", "tree_sha"} or
+                request.get("ack") != "RESTORE_ARTIFACT"):
+            raise PermissionError("Explicit owner restore required")
+        if (session is None or session.get("verified_artifact_backups", {}).get(
+                request["backup_id"]) != request["tree_sha"]):
+            raise PermissionError("Verify exact backup SHA in this session")
+        return retention.restore(request["backup_id"], request["tree_sha"],
+                                 confirm=True)
     if path == "/api/image/submit":
         from agentforge.image_studio_v24 import submit
         if not server.allow_external_actions:
@@ -579,6 +610,30 @@ class _Handler(BaseHTTPRequestHandler):
             if route == "/api/model/health":
                 from agentforge.model_health import check
                 return self._reply(200, check())
+            if route == "/api/retention/inventory":
+                from agentforge.storage import retention
+                return self._reply(200, retention.inventory())
+            if route == "/api/retention/backups":
+                from agentforge.storage import retention
+                return self._reply(200, retention.list_backups())
+            if route.startswith("/api/retention/inspect/"):
+                from agentforge.storage import retention
+                pieces = route.split("/")
+                if len(pieces) != 6 or pieces[1:4] != ["api", "retention", "inspect"]:
+                    raise ValueError("Invalid artifact inspection route")
+                inspected = retention.inspect(pieces[4], pieces[5])
+                session = self._session()
+                session.setdefault("inspected_artifacts", {})[(pieces[4], pieces[5])] = inspected["tree_sha256"]
+                return self._reply(200, inspected)
+            if route.startswith("/api/retention/verify/"):
+                from agentforge.storage import retention
+                pieces = route.split("/")
+                if len(pieces) != 5 or pieces[1:4] != ["api", "retention", "verify"]:
+                    raise ValueError("Invalid backup verification route")
+                verified = retention.verify(pieces[4])
+                session = self._session()
+                session.setdefault("verified_artifact_backups", {})[pieces[4]] = verified["tree_sha256"]
+                return self._reply(200, verified)
             if route == "/api/artifacts":
                 from agentforge.artifact_catalog import report
                 return self._reply(200, report())
