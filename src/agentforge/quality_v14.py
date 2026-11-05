@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import unicodedata
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -80,7 +81,7 @@ def set_profile(profile, *, confirm=False, db_path=None):
         raise PermissionError("Explicit owner business context approval required")
     clean = validate_profile(profile)
     from agentforge.autopilot_v13 import _connect
-    with _connect(db_path, create=True) as db:
+    with closing(_connect(db_path, create=True)) as db:
         db.execute("BEGIN IMMEDIATE")
         try:
             db.execute("""INSERT INTO business_profile VALUES(1,?,?,?)
@@ -176,7 +177,7 @@ def pause_schedule(schedule_id, *, confirm=False, db_path=None):
         raise PermissionError("Owner schedule pause confirmation required")
     brain_store._id(schedule_id)
     from agentforge.autopilot_v13 import _connect
-    with _connect(db_path, create=True) as db:
+    with closing(_connect(db_path, create=True)) as db:
         with db:
             row = db.execute("UPDATE schedules SET enabled=0 WHERE schedule_id=?",
                              (schedule_id,))
@@ -274,7 +275,7 @@ def decide(job_id, decision, sha, *, confirm=False, db_path=None):
     if not isinstance(sha, str) or not brain_store.SHA.fullmatch(sha):
         raise ValueError("Output SHA required")
     from agentforge.autopilot_v13 import _connect
-    with _connect(db_path, create=True) as db:
+    with closing(_connect(db_path, create=True)) as db:
         db.execute("BEGIN IMMEDIATE")
         try:
             row = db.execute("SELECT * FROM content_reviews WHERE job_id=?",
