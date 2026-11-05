@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light">
   <meta name="referrer" content="no-referrer">
-  <title>AgentForge — Control Center V1</title>
+  <title>AgentForge — Workspace</title>
   <link rel="stylesheet" href="/app.css">
   <script src="/app.js" defer></script>
 </head>
@@ -34,10 +34,11 @@
 
   <div id="shell" class="shell" hidden>
     <aside class="sidebar" aria-label="Điều hướng">
-      <div class="brand"><span class="brand-symbol" aria-hidden="true">A</span><span><strong>AgentForge</strong><small>CONTROL CENTER V1</small></span></div>
+      <div class="brand"><span class="brand-symbol" aria-hidden="true">A</span><span><strong>AgentForge</strong><small>WORKSPACE</small></span></div>
       <div class="workspace-label">WORKSPACE <span>LOCAL</span></div>
       <nav class="nav" id="nav">
-        <button class="nav-link active" data-view="overview" type="button"><span class="nav-icon">◫</span> Tổng quan</button>
+        <button class="nav-link active" data-view="workspace" type="button"><span class="nav-icon">✦</span> Giao việc</button>
+        <button class="nav-link" data-view="overview" type="button"><span class="nav-icon">◫</span> Tổng quan</button>
         <button class="nav-link" data-view="goals" type="button"><span class="nav-icon">◎</span> Goals & Phê duyệt <span class="nav-count" id="nav-wait">0</span></button>
         <button class="nav-link" data-view="tasks" type="button"><span class="nav-icon">≡</span> Task History</button>
         <button class="nav-link" data-view="skills" type="button"><span class="nav-icon">◇</span> AI Workforce</button>
@@ -76,9 +77,10 @@
           <p class="small muted">Trạng thái, lỗi và lịch sử thực thi</p>
         </div>
         <button type="button" id="task-dialog-close" class="btn btn-light"
-                aria-label="Đóng chi tiết tác vụ">✕ Đóng</button>
+                aria-label="Đóng cửa sổ" title="Đóng">✕</button>
       </div>
       <div id="task-dialog-body" class="task-dialog-body"></div>
+      <div class="task-dialog-footer"><button type="button" class="btn btn-outline" id="task-dialog-done">Đóng cửa sổ</button></div>
     </div>
   </dialog>
 
