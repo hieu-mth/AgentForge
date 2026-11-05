@@ -86,3 +86,12 @@ Source: \`src/agentforge/storage/retention.py\`; tests:
 After V3.3 merges and Windows CI passes, **stop feature development**. The owner
 will verify the local Windows build, upload a real website/media sample, check
 review/permission controls, and decide the next roadmap from actual evidence.
+
+## React owner flow
+
+In the new Dashboard at `/dashboard/`, choose **Backups & Cleanup**:
+**Inspect SHA → Create ZIP backup → Verify ZIP & SHA → Pause Operations →
+Quarantine / Restore**. Each write requires a deliberate owner confirmation,
+and the Python backend verifies state/SHA again. The legacy CLI remains
+available for recovery.
+
