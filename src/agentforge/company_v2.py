@@ -26,7 +26,8 @@ def report(*, autopilot_db_path=None, growth_db_path=None, video_db_path=None):
     videos_approved = sum(x["status"] == "APPROVED" for x in video["productions"])
     leads = sum(x["lead_total"] for x in campaign_reports)
     posts_attested = sum(x["owner_reported_posts"] for x in campaign_reports)
-    blocked = []
+    blocked = ["PUBLIC_WEBSITE_DEPLOYMENT_UNVERIFIED",
+               "CUSTOMER_CONVERSION_UNVERIFIED"]
     if inbox["business_context"] is None:
         blocked.append("SET_BUSINESS_CONTEXT")
     if not campaigns:
@@ -70,12 +71,14 @@ def report(*, autopilot_db_path=None, growth_db_path=None, video_db_path=None):
                      "owner_recorded_leads": leads,
                      "owner_attested_publications": posts_attested,
                      "externally_verified_publications": 0,
+                     "public_website_deployment_verified": False,
+                     "customer_conversion_verified": False,
                      "bank_verified_profit_vnd": None,
                      "customer_contacts_stored": False},
         "launch_blockers": blocked,
         "next_owner_actions": next_actions[:5],
         "automated_publication": False, "autonomous_financial_actions": False,
-        "real_business_validated": not bool(blocked) and False,
+        "real_business_validated": False,
         "disclaimer": "Owner-reviewed offline MVP; real-world conversion and profitability unverified.",
     }
 
