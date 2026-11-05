@@ -1,3 +1,18 @@
+## V2.8 — Canonical structure and safe module migration
+
+The **source of truth** for repository structure is
+[Canonical Structure V2.8](docs/architecture/CANONICAL_STRUCTURE_V28.md).
+React admin UI: `ui/dashboard/`; installable backend: `src/agentforge/`;
+AI capability code: `src/agentforge/ai/`; business domains:
+`src/agentforge/domains/`; shared services: `src/agentforge/core/`;
+read-only inventory: `src/agentforge/storage/`. Persistent SQLite and
+generated websites/media remain untouched in `data/` and `workspace/`.
+
+Five more modules have been moved physically behind backwards-compatible
+imports. **Do not move existing databases or generated outputs.** Modules
+whose local root is computed using `__file__.parents[N]` are intentionally not
+moved yet.
+
 # AgentForge
 
 **Local-first, human-controlled AI business research and product prototyping.** AgentForge is a Python 3.13 prototype built with LangGraph and SQLite. It can research opportunities, manage owner-reviewed market/customer evidence, and propose small static web products. It is **not** an autonomous company, hardened sandbox, or production deployment system.

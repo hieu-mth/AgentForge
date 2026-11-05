@@ -1,3 +1,7 @@
+> **Historical V2.7 design.** Current canonical layout is
+> [CANONICAL_STRUCTURE_V28.md](CANONICAL_STRUCTURE_V28.md). Do not treat
+> this earlier layout as the migration source of truth.
+
 # AgentForge target layout — incremental migration, not a destructive move
 
 \`\`\`text
