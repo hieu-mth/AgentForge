@@ -509,8 +509,8 @@ class _Handler(BaseHTTPRequestHandler):
                 "frame-ancestors 'self'")
         else:
             self.send_header("Content-Security-Policy",
-                ("default-src 'none'; script-src 'self'; style-src 'self' "+
-                 ("'unsafe-inline' " if self.path.startswith("/dashboard") else "")+
+                ("default-src 'none'; script-src 'self'; style-src 'self'"+
+                 (" 'unsafe-inline'" if self.path.startswith("/dashboard") else "")+
                  "; connect-src 'self'; img-src 'self' data:; font-src 'self' data:; "+
                  "frame-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"))
         for k, v in headers:
