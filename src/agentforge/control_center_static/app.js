@@ -5,7 +5,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v === null || v === undefined ? "—" : v)
   .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
   .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
-const state = {csrf:null, data:null, view:"overview", goal:null, task:null, memory:null, proposal:null, ops:null};
+const state = {csrf:null, data:null, view:"overview", goal:null, task:null, memory:null, proposal:null, ops:null, inspectedDraft:null};
 const viewNames = {overview:"Tổng quan",goals:"Goals & Phê duyệt",tasks:"Task History",
  skills:"AI Workforce",websites:"Websites",analytics:"Intelligence",growth:"Growth & Revenue",
  schedules:"Schedules",integrations:"Integrations",memory:"Owner Memory"};
@@ -588,20 +588,40 @@ async function handleClick(event){
   if(button.dataset.draftInspect){
     const id=button.dataset.draftInspect;
     const review=await api("/api/drafts/"+encodeURIComponent(id));
-    const task=review.task;
-    // Read-only full task details first. Never auto-approve from quality status.
-    await showTask(task.task_id);
-    if(!confirm("Đã đọc bản nháp trong cửa sổ Task?\\n"+
-       "Output SHA: "+review.output_sha+
-       "\\nPASS_HEURISTIC không đảm bảo nội dung đúng."))return;
-    const decision=prompt("Nhập APPROVE hoặc REJECT (viết hoa) để quyết định:", "REJECT");
-    if(!["APPROVE","REJECT"].includes(decision))return;
-    if(!confirm("Xác nhận "+decision+" cho job "+id+
-       "\\nSHA-256: "+review.output_sha+
-       "\\nKhông tự xuất bản hoặc apply?"))return;
-    await mutate("/api/drafts/"+encodeURIComponent(id)+"/decide",{
+    if(review.decision!=="PENDING")throw Error("Bản nháp đã được quyết định");
+    if(!review.storyboard||!Array.isArray(review.storyboard.scenes)){
+      throw Error("Storyboard không hợp lệ");
+    }
+    state.inspectedDraft=review;
+    const dialog=$("task-dialog");
+    $("task-dialog-body").innerHTML=
+      '<div class="detail-header"><h3>Đọc đầy đủ storyboard trước khi quyết định</h3>'+badge(review.quality)+'</div>'+
+      '<p class="small muted">Job '+esc(id)+' · SHA '+esc(review.output_sha)+
+      ' · PASS_HEURISTIC chỉ là kiểm tra từ khóa.</p>'+
+      '<pre class="code-box">'+esc(JSON.stringify(review.storyboard,null,2))+'</pre>'+
+      '<div class="form-actions"><button class="btn btn-outline" type="button" data-draft-decision="REJECT">REJECT bản nháp</button>'+
+      '<button class="btn btn-primary" type="button" data-draft-decision="APPROVE">APPROVE bản nháp</button></div>'+
+      '<p class="small muted">Duyệt chỉ ghi nhận quyết định, không gọi model, không đăng bài.</p>';
+    if(!dialog.open)dialog.showModal();
+    return;
+  }
+  if(button.dataset.draftDecision){
+    const decision=button.dataset.draftDecision;
+    const review=state.inspectedDraft;
+    if(!review||!["APPROVE","REJECT"].includes(decision)){
+      throw Error("Hãy mở và đọc bản nháp trước");
+    }
+    if(decision==="APPROVE"&&review.quality!=="PASS_HEURISTIC"){
+      throw Error("Quality Gate chưa đạt, không thể APPROVE");
+    }
+    if(!confirm("Xác nhận "+decision+" cho storyboard đã đọc?\\n"+
+       "SHA-256: "+review.output_sha+
+       "\\nKhông tự xuất bản, không áp dụng hay gọi model."))return;
+    await mutate("/api/drafts/"+encodeURIComponent(review.job_id)+"/decide",{
       ack:"REVIEW_"+decision,decision,output_sha:review.output_sha
     },"Đã ghi nhận quyết định "+decision);
+    state.inspectedDraft=null;
+    $("task-dialog").close();
     return;
   }
   if(button.dataset.mediaPrepare!==undefined){
@@ -752,6 +772,7 @@ document.addEventListener("DOMContentLoaded",()=>{
  });
  taskDialog.addEventListener("close",()=>{
   state.task=null;
+  state.inspectedDraft=null;
   $("task-dialog-body").textContent="";
  });
  $("login-form").addEventListener("submit",async e=>{
