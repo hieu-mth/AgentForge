@@ -114,9 +114,14 @@ def _summary(server):
     from agentforge.quality_v14 import inbox as quality_inbox
     quality = quality_inbox()
     review_items = quality["reviews"][:15]
+    from agentforge import autopilot_v13, company_v2
+    delegated = autopilot_v13.policy()
+    owner_company = company_v2.report()
     from agentforge.media_workflow_v15 import report as production_report
     productions = production_report()["productions"][:15]
     return {
+        "autopilot_policy": delegated,
+        "company_v2": owner_company,
         "local_video": {
             "items": [{
                 "production_id": x["production_id"], "run_id": x["run_id"],
@@ -172,6 +177,50 @@ def _summary(server):
 
 def _owner_action(server, path, request, session=None):
     """Explicit allowlist; no arbitrary skill invocation or Python execution."""
+    if path == "/api/autopilot/configure":
+        from agentforge import autopilot_v13
+        if request.get("ack") != "SET_DAILY_MODEL_POLICY":
+            raise PermissionError("Owner must explicitly approve standing delegation")
+        if set(request) != {"ack", "enabled", "daily_cap"}:
+            raise ValueError("Only bounded policy fields accepted")
+        return autopilot_v13.configure(
+            enabled=request["enabled"], daily_cap=request["daily_cap"],
+            confirm=True)
+    if path.startswith("/api/videos/") and path.endswith("/decide"):
+        from agentforge import media_workflow_v15
+        parts = path.split("/")
+        if len(parts) != 5:
+            raise ValueError("Invalid video review route")
+        ident = parts[3]
+        if set(request) != {"ack", "decision", "video_sha", "watched_local_file"}:
+            raise ValueError("Only bounded video approval fields accepted")
+        decision = request["decision"]
+        if decision not in ("APPROVE", "REJECT") or request["ack"] != "VIDEO_" + decision:
+            raise PermissionError("Explicit video decision required")
+        if request["watched_local_file"] is not True:
+            raise PermissionError("Owner must confirm watching local MP4")
+        if (session is None or
+                session.get("inspected_video", {}).get(ident) != request["video_sha"]):
+            raise PermissionError("Inspect exact MP4 metadata in this session first")
+        return media_workflow_v15.decide(
+            ident, decision, request["video_sha"], confirm_review=True)
+    if path.startswith("/api/drafts/") and path.endswith("/decide"):
+        from agentforge import quality_v14
+        parts = path.split("/")
+        if len(parts) != 5:
+            raise ValueError("Invalid content review route")
+        job_id = parts[3]
+        if set(request) != {"ack", "decision", "output_sha"}:
+            raise ValueError("Only bounded content review fields accepted")
+        decision = request["decision"]
+        if decision not in ("APPROVE", "REJECT") or request["ack"] != "REVIEW_" + decision:
+            raise PermissionError("Explicit exact owner decision required")
+        if (decision == "APPROVE" and
+                (session is None or session.get("reviewed_ai_drafts", {}).get(job_id)
+                 != request["output_sha"])):
+            raise PermissionError("Inspect the full task in this session before approving")
+        return quality_v14.decide(
+            job_id, decision, request["output_sha"], confirm=True)
     if path == "/api/media/prepare":
         if request.get("ack") != "PREPARE_EDITED_STORYBOARD":
             raise PermissionError("Explicit owner storyboard edit confirmation required")
@@ -433,6 +482,51 @@ class _Handler(BaseHTTPRequestHandler):
                               for f in document["files"]],
                     "execution_authorized": False,
                 })
+            if route.startswith("/api/videos/"):
+                from agentforge import media_workflow_v15, media_quality
+                ident = route.removeprefix("/api/videos/")
+                record = media_workflow_v15._row(ident)
+                if record["status"] != "VIDEO_READY":
+                    raise PermissionError("Only completed MP4 can be reviewed")
+                _, manifest = media_workflow_v15._verify_storyboard_manifest(record)
+                qa = media_quality.check(record["run_id"])
+                if (qa["status"] != "VIDEO_PASS" or qa["failures"] or
+                        not qa["video_verified"] or
+                        manifest["artifacts"].get("video.mp4") != record["video_sha"]):
+                    raise PermissionError("MP4 integrity/quality is not verified")
+                self._session().setdefault("inspected_video", {})[ident] = record["video_sha"]
+                return self._reply(200, {
+                    "production_id": ident, "run_id": record["run_id"],
+                    "video_sha": record["video_sha"], "quality": qa["status"],
+                    "relative_path": "workspace/media/" + record["run_id"] + "/video.mp4",
+                    "published": False, "review_requires_playback": True})
+            if route.startswith("/api/drafts/"):
+                from agentforge import quality_v14
+                ident = route.removeprefix("/api/drafts/")
+                from agentforge import brain_store
+                brain_store._id(ident)
+                found = next((item for item in quality_v14.inbox()["reviews"]
+                              if item["job_id"] == ident), None)
+                if found is None:
+                    raise KeyError("Draft not found")
+                task = task_history.get_task(found["task_id"], db_path=self.server.task_db_path)
+                if (task.get("status") != "SUCCEEDED" or
+                        task.get("skill_id") != "media.copy_draft" or
+                        found["skill_id"] != "media.copy_draft"):
+                    raise PermissionError("Only bounded storyboard drafts can be inspected")
+                result = task.get("result")
+                if (not isinstance(result, dict) or
+                        len(quality_v14._canonical(result).encode("utf-8")) > 65000 or
+                        quality_v14._sha(result) != found["output_sha"]):
+                    raise PermissionError("Storyboard result digest mismatch")
+                # Read-only review: model data displayed as text, never executed.
+                session = self._session()
+                session.setdefault("reviewed_ai_drafts", {})[ident] = found["output_sha"]
+                return self._reply(200, {
+                    "job_id": ident, "output_sha": found["output_sha"],
+                    "quality": found["quality"], "decision": found["decision"],
+                    "task": _public_task(task),
+                    "storyboard": result})
             if route.startswith("/api/goals/"):
                 ident = route.removeprefix("/api/goals/")
                 return self._reply(200, brain_runner.inspect(

@@ -49,6 +49,20 @@ Run the tests (no live model credentials or customer interviews required):
 
 The repository's [GitHub Actions CI](.github/workflows/ci.yml) runs the same suite on Windows and Python 3.13 for pushes/PRs targeting `main`.
 
+## V2.0 Local-First Company MVP Pilot
+
+The authenticated Control Center now includes bounded owner Autopilot policy
+controls, SHA-verified original storyboard review with explicit decisions, and
+a deterministic company-readiness scorecard. The scorecard composes existing
+S3/S4/S5 campaign, anonymous lead and owner-attested revenue tracking with the
+V1.5 offline video workflow. It never claims independently verified sales,
+online deployment, automated publishing, financial execution or full autonomy.
+
+Read the [V2 company MVP pilot and acceptance plan](docs/milestones/COMPANY_MVP_V2.md)
+and run `python -m agentforge.company_v2 report` for current blockers.
+External accounts, real MP4 playback, public website deployment and actual
+business conversion still require separate owner-led field validation.
+
 ## V1.5 Offline Video Production & Owner Approval
 
 Owner can edit a Vietnamese storyboard JSON locally and reuse existing

@@ -5,7 +5,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v === null || v === undefined ? "—" : v)
   .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
   .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
-const state = {csrf:null, data:null, view:"overview", goal:null, task:null, memory:null, proposal:null, ops:null};
+const state = {csrf:null, data:null, view:"overview", goal:null, task:null, memory:null, proposal:null, ops:null, inspectedDraft:null, inspectedVideo:null};
 const viewNames = {overview:"Tổng quan",goals:"Goals & Phê duyệt",tasks:"Task History",
  skills:"AI Workforce",websites:"Websites",analytics:"Intelligence",growth:"Growth & Revenue",
  schedules:"Schedules",integrations:"Integrations",memory:"Owner Memory"};
@@ -118,15 +118,39 @@ function renderOverview(){
  const reviewRows=(reviewData.items||[]).filter(r=>r.decision==="PENDING").slice(0,8).map(r=>
   '<tr><td>'+short(r.job_id)+'</td><td>'+esc(r.skill_id)+'</td>'+
   '<td>'+badge(r.quality)+'</td><td>'+esc((r.reasons||[]).join(", "))+'</td>'+
-  '<td><button class="link-button" data-detail-task="'+esc(r.task_id)+'">Xem task</button></td></tr>');
+  '<td><button class="link-button" data-detail-task="'+esc(r.task_id)+'">Xem task</button> '+
+  '<button class="btn btn-small btn-outline" data-draft-inspect="'+esc(r.job_id)+'">Kiểm tra & duyệt</button></td></tr>');
  const reviewCard=card("AI Draft Review Queue · "+fmt(reviewData.pending_count)+" chờ duyệt",
   '<p class="small muted">Business: '+esc(reviewData.business_context?reviewData.business_context.business:"Chưa cấu hình")+
   '. PASS_HEURISTIC vẫn cần duyệt thủ công. Dùng CLI quality_v14 để quyết định theo output SHA; không tự đăng hay apply.</p>'+
   table(["JOB","SKILL","QUALITY","LÝ DO","NỘI DUNG"],reviewRows,"Chưa có bản nháp cần duyệt"));
+ const ap=d.autopilot_policy||{enabled:false,daily_cap:0};
+ const company=d.company_v2||{};
+ const apCard=card("V2 · Autopilot Owner Control",
+  '<p class="small muted">Điều chỉnh hạn mức ước tính lượt model/UTC ngày. Bật delegation không tự tạo job và không chứng minh chi phí provider.</p>'+
+  '<div class="form-field"><label for="ap-policy-cap">Giới hạn lượt model/ngày (0–10)</label>'+
+  '<input id="ap-policy-cap" type="number" min="0" max="10" step="1" value="'+esc(ap.daily_cap)+'"></div>'+
+  '<div class="form-field"><label for="ap-policy-enabled">Standing delegation</label>'+
+  '<select id="ap-policy-enabled"><option value="false" '+(!ap.enabled?'selected':'')+'>Tắt</option>'+
+  '<option value="true" '+(ap.enabled?'selected':'')+'>Bật</option></select></div>'+
+  '<div class="form-actions"><button class="btn btn-outline" data-autopilot-configure="1">Áp dụng chính sách (xác nhận)</button></div>'+
+  '<p class="small muted">Quy trình chạy model vẫn dùng CLI hoặc processor riêng; bảng này không kích hoạt model ngay.</p>');
+ const healthV2=company.business||{};
+ const companyCard=card("V2.0 · Business Operations Pilot",
+  '<p class="small muted">MVP local-first, chưa xác nhận kinh doanh có lãi. Không sử dụng AI tự giao dịch hoặc tự đăng bài.</p>'+
+  '<div class="stack"><div class="goal-tile"><strong>Chiến dịch thật: '+fmt(healthV2.real_campaigns||0)+'</strong>'+
+  '<small>Khách tiềm năng do owner nhập: '+fmt(healthV2.owner_recorded_leads||0)+'</small></div>'+
+  '<div class="goal-tile"><strong>MP4 đã owner duyệt: '+fmt(company.content?.owner_approved_local_videos||0)+'</strong>'+
+  '<small>Bài đăng owner khai báo: '+fmt(healthV2.owner_attested_publications||0)+'</small></div>'+
+  '<div class="goal-tile"><strong>Điều kiện chưa đạt</strong>'+
+  '<small>'+esc((company.launch_blockers||[]).join(" · ")||"Chưa có blocker nội bộ")+'</small></div>'+
+  '<div class="goal-tile"><strong>Việc cần làm tiếp</strong>'+
+  '<small>'+esc((company.next_owner_actions||[]).join(" · "))+'</small></div></div>');
  const videoData=d.local_video||{pending_count:0,items:[]};
  const videoRows=(videoData.items||[]).slice(0,8).map(v=>
   '<tr><td>'+short(v.production_id)+'</td><td>'+short(v.run_id)+'</td>'+
-  '<td>'+badge(v.status)+'</td><td>'+esc(v.quality||"—")+'</td></tr>');
+  '<td>'+badge(v.status)+'</td><td>'+esc(v.quality||"—")+'</td>'+
+  '<td>'+(v.status==="VIDEO_READY"?'<button class="btn btn-small btn-outline" data-video-inspect="'+esc(v.production_id)+'">Duyệt MP4</button>':'—')+'</td></tr>');
  const starterStoryboard={slug:"nem-ngu-edited",title:"Tư vấn chọn nệm ngủ",scenes:[
    {headline:"Chọn nệm ngủ thế nào?",caption:"Xem xét nhu cầu nghỉ ngơi và độ nâng đỡ của nệm.",duration_seconds:5},
    {headline:"Cần tư vấn chọn nệm?",caption:"Chia sẻ ngân sách và nhu cầu để được gợi ý phù hợp.",duration_seconds:5}
@@ -140,7 +164,7 @@ function renderOverview(){
   '<p class="small muted">Muốn dựng MP4 và duyệt video, sử dụng CLI media_workflow_v15 và xem file trước khi phê duyệt. Không có tự động đăng bài.</p>');
  const videoCard=card("Local Video Production · "+fmt(videoData.pending_count)+" chờ xem video",
   '<p class="small muted">Storyboard chỉnh sửa → ảnh/phụ đề local → FFmpeg → VIDEO_PASS → owner duyệt. Video không tự xuất bản. Xem MP4 trong workspace/media/{run_id}/video.mp4; quyết định qua media_workflow_v15 CLI.</p>'+
-  table(["PRODUCTION","RUN","TRẠNG THÁI","QA"],videoRows,"Chưa có video production"));
+  table(["PRODUCTION","RUN","TRẠNG THÁI","QA","OWNER"],videoRows,"Chưa có video production"));
  const safety='<div class="callout '+(paused?'warning':'')+'">'+
    '<strong>Operations: '+esc(operations.mode)+'</strong> — '+
    esc(paused?'Đã dừng phân phối nhiệm vụ mới. Việc đang chạy có thể kết thúc hoặc bị gián đoạn.':
@@ -166,6 +190,7 @@ function renderOverview(){
  '</div><span class="hero-pill">● 24 skills · 5 MVP layers</span></div>'+
  '<div class="metrics">'+tiles+'</div>'+
  '<div class="section">'+safety+'</div>'+
+ '<div class="grid-2 section">'+apCard+companyCard+'</div>'+
  '<div class="section">'+reviewCard+'</div>'+
  '<div class="section">'+videoCard+'</div>'+
  '<div class="section">'+editorCard+'</div>'+
@@ -549,6 +574,90 @@ async function handleClick(event){
  if(!button||button.disabled)return;
  if(button.dataset.view){selectView(button.dataset.view);return;}
  try{
+  if(button.dataset.autopilotConfigure!==undefined){
+    const dailyCap=Number($("ap-policy-cap").value);
+    const enabled=$("ap-policy-enabled").value==="true";
+    if(!Number.isInteger(dailyCap)||dailyCap<0||dailyCap>10)throw Error("Quota phải là số nguyên 0–10");
+    if(!confirm("Xác nhận standing delegation: "+(enabled?"BẬT":"TẮT")+
+      "\\nQuota dự kiến mỗi ngày UTC: "+dailyCap+
+      "\\nGiới hạn lượt model KHÔNG phải giới hạn tiền provider."))return;
+    await mutate("/api/autopilot/configure",{
+      ack:"SET_DAILY_MODEL_POLICY",enabled,daily_cap:dailyCap
+    },"Đã cập nhật chính sách Autopilot");
+    return;
+  }
+  if(button.dataset.videoInspect){
+    const id=button.dataset.videoInspect;
+    const meta=await api("/api/videos/"+encodeURIComponent(id));
+    state.inspectedVideo=meta;
+    const dialog=$("task-dialog");
+    $("task-dialog-body").innerHTML=
+      '<h3>Xem video local trước khi duyệt</h3>'+
+      '<p class="small muted">Mở video từ thư mục dự án trên Windows, xem hình ảnh, đọc chữ và nghe âm thanh.</p>'+
+      '<div class="callout mono">'+esc(meta.relative_path)+'</div>'+
+      '<p class="small muted">SHA-256: '+esc(meta.video_sha)+' · QA: '+esc(meta.quality)+
+      '. PASS chỉ xác minh cấu trúc và file; không đảm bảo thông tin quảng cáo đúng.</p>'+
+      '<label class="form-field"><input type="checkbox" id="v2-video-watched"> Tôi đã mở và xem toàn bộ file MP4 trên máy này.</label>'+
+      '<div class="form-actions"><button type="button" class="btn btn-outline" data-video-decision="REJECT">REJECT video</button>'+
+      '<button type="button" class="btn btn-primary" data-video-decision="APPROVE">APPROVE video</button></div>';
+    if(!dialog.open)dialog.showModal();
+    return;
+  }
+  if(button.dataset.videoDecision){
+    const meta=state.inspectedVideo;
+    const decision=button.dataset.videoDecision;
+    if(!meta||!["APPROVE","REJECT"].includes(decision)||!$("v2-video-watched")?.checked){
+      throw Error("Hãy kiểm tra file MP4 và xác nhận đã xem trước khi duyệt");
+    }
+    if(!confirm("Duyệt "+decision+" cho video đã xem?\\nSHA: "+meta.video_sha+
+      "\\nQuyết định không đăng bài và không cấp quyền upload."))return;
+    await mutate("/api/videos/"+encodeURIComponent(meta.production_id)+"/decide",{
+      ack:"VIDEO_"+decision,decision,video_sha:meta.video_sha,
+      watched_local_file:true
+    },"Đã ghi quyết định video: "+decision);
+    state.inspectedVideo=null;
+    $("task-dialog").close();
+    return;
+  }
+  if(button.dataset.draftInspect){
+    const id=button.dataset.draftInspect;
+    const review=await api("/api/drafts/"+encodeURIComponent(id));
+    if(review.decision!=="PENDING")throw Error("Bản nháp đã được quyết định");
+    if(!review.storyboard||!Array.isArray(review.storyboard.scenes)){
+      throw Error("Storyboard không hợp lệ");
+    }
+    state.inspectedDraft=review;
+    const dialog=$("task-dialog");
+    $("task-dialog-body").innerHTML=
+      '<div class="detail-header"><h3>Đọc đầy đủ storyboard trước khi quyết định</h3>'+badge(review.quality)+'</div>'+
+      '<p class="small muted">Job '+esc(id)+' · SHA '+esc(review.output_sha)+
+      ' · PASS_HEURISTIC chỉ là kiểm tra từ khóa.</p>'+
+      '<pre class="code-box">'+esc(JSON.stringify(review.storyboard,null,2))+'</pre>'+
+      '<div class="form-actions"><button class="btn btn-outline" type="button" data-draft-decision="REJECT">REJECT bản nháp</button>'+
+      '<button class="btn btn-primary" type="button" data-draft-decision="APPROVE">APPROVE bản nháp</button></div>'+
+      '<p class="small muted">Duyệt chỉ ghi nhận quyết định, không gọi model, không đăng bài.</p>';
+    if(!dialog.open)dialog.showModal();
+    return;
+  }
+  if(button.dataset.draftDecision){
+    const decision=button.dataset.draftDecision;
+    const review=state.inspectedDraft;
+    if(!review||!["APPROVE","REJECT"].includes(decision)){
+      throw Error("Hãy mở và đọc bản nháp trước");
+    }
+    if(decision==="APPROVE"&&review.quality!=="PASS_HEURISTIC"){
+      throw Error("Quality Gate chưa đạt, không thể APPROVE");
+    }
+    if(!confirm("Xác nhận "+decision+" cho storyboard đã đọc?\\n"+
+       "SHA-256: "+review.output_sha+
+       "\\nKhông tự xuất bản, không áp dụng hay gọi model."))return;
+    await mutate("/api/drafts/"+encodeURIComponent(review.job_id)+"/decide",{
+      ack:"REVIEW_"+decision,decision,output_sha:review.output_sha
+    },"Đã ghi nhận quyết định "+decision);
+    state.inspectedDraft=null;
+    $("task-dialog").close();
+    return;
+  }
   if(button.dataset.mediaPrepare!==undefined){
     const storyboard=formJson("media-editor-json");
     if(!confirm("Xác nhận đã đọc và chỉnh sửa storyboard? Tạo PNG/WAV/SRT local, không gọi model và không dựng MP4."))return;
@@ -697,6 +806,8 @@ document.addEventListener("DOMContentLoaded",()=>{
  });
  taskDialog.addEventListener("close",()=>{
   state.task=null;
+  state.inspectedDraft=null;
+  state.inspectedVideo=null;
   $("task-dialog-body").textContent="";
  });
  $("login-form").addEventListener("submit",async e=>{
