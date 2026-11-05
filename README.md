@@ -49,6 +49,22 @@ Run the tests (no live model credentials or customer interviews required):
 
 The repository's [GitHub Actions CI](.github/workflows/ci.yml) runs the same suite on Windows and Python 3.13 for pushes/PRs targeting `main`.
 
+## Control Center V1.1 — practical operations and readable results
+
+Control Center V1.1 adds a source-backed S3 dataset picker, **Goal preflight**
+and server-side dataset/campaign existence checks before planning,
+SHA approval and execution. The owner can now open a completed Goal step
+directly into the Task Details modal to read a **curated report** (aggregates,
+channel signals, uncertainty and synthetic flags); raw prompts, file paths
+and customer data are never serialized. Known dataset failures have stable
+actionable error codes, with all other exceptions safely redacted.
+
+Run the same local UI on \`http://127.0.0.1:8780/\`. Read
+[Company Operations V1.1](docs/milestones/COMPANY_OPERATIONS_V11.md)
+for exact Windows acceptance commands and a genuine 14-day pilot plan.
+This is local business cockpit functionality, not authenticated external
+publishing or verified net profit.
+
 ## Local Operations — backup, health and recovery staging
 
 Existing Control Center V1 remains the owner-operated interface. Local
@@ -437,4 +453,4 @@ Only capture real, consented, anonymous interviews. Do **not** capture example o
 - SHA-256 checks detect later modifications; they are not evidence that an interview truly occurred or that generated code is safe.
 - URL allowlists and path checks are **not** an OS sandbox. Run with minimum OS permissions and review source before execution.
 - No real customer demand, willingness to pay, sales or revenue has been independently verified.
-- Current milestone: **bounded, owner-gated static Web Builder workflow (C8F MVP)**. Next: test on a real customer problem, review product quality and business value before expanding worker types.
+- Current operational milestone: **S1–S5 local MVP + Control Center V1.1**; remaining work is a real market pilot, external account authorization, provider-enforced spend limits, verified revenue and safe unattended operations. See `docs/milestones/COMPANY_OPERATIONS_V11.md`.

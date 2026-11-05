@@ -206,6 +206,20 @@ def _dispatch(skill_id, payload):
     raise PermissionError("No trusted adapter")
 
 
+def _safe_failure(skill_id, exc):
+    """Stable, deliberately allowlisted errors; never serialize arbitrary exceptions."""
+    if skill_id.startswith("analytics."):
+        from agentforge.analytics_store import AnalyticsError
+        if isinstance(exc, AnalyticsError):
+            if str(exc) == "Dataset not found":
+                return ("DATASET_NOT_FOUND: Dataset chưa được import. "
+                        "Hãy chọn dataset có thật trong Intelligence.")
+            if str(exc) == "No analytics dataset has been imported":
+                return ("ANALYTICS_EMPTY: Chưa có dữ liệu Intelligence. "
+                        "Hãy import dữ liệu được phép trước khi phân tích.")
+    return f"{type(exc).__name__}: execution failed; inspect original module logs"
+
+
 def _execute(task_id, skill_id, payload, *, grants, confirm_model_call,
              confirm_browser_run, confirm_external_run, db_path):
     missing = missing_grants(
@@ -237,7 +251,7 @@ def _execute(task_id, skill_id, payload, *, grants, confirm_model_call,
                 "status": "SUCCEEDED", "executed": True, "result": result}
     except Exception as exc:
         # Do not serialize raw model text, URLs or secrets from exceptions.
-        error = f"{type(exc).__name__}: execution failed; inspect original module logs"
+        error = _safe_failure(skill_id, exc)
         history.transition(task_id, "FAILED", error=error, db_path=db_path)
         return {"task_id": task_id, "skill_id": skill_id,
                 "status": "FAILED", "executed": True, "error": error}

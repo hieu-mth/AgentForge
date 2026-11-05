@@ -490,3 +490,27 @@ This is backup integrity and recovery *staging*, not an automatic cutover,
 encrypted storage, public authenticated deployment, real OAuth
 publishers, hard provider-side budget control, verified bank payments
 or a fully autonomous 24/7 company. See docs/milestones/OPS_READINESS.md.
+
+
+## Addendum — Company Operations V1.1 owner acceptance (2026-11-05)
+
+Following the first Windows owner-run \`campaign.review\` Goal (4/4 read-only
+analytics tasks succeeded, one earlier invalid-dataset attempt failed),
+AgentForge adds non-mutating S3 dataset metadata lookup, an S4/Control Center
+preflight gate for missing local datasets/campaigns, dataset picker, explicit
+per-Goal step result actions, and a tightly allowlisted numeric analytics
+Result Viewer in the existing modal. Known missing-dataset errors receive
+a stable safe message; sensitive exceptions remain redacted. Authenticated
+CSRF-protected reference checks are independently performed before Goal
+propose, approve and run/resume from the web interface, not just in the UI.
+No existing task history, S1–S5 execution policies, SQLite schema, external
+accounts, models or background execution are changed.
+
+The system has **not** become an autonomous AI company or earned verified
+real profit: the fixed-template S4 planner, opt-in read-only schedule runner,
+manual YouTube/TikTok upload handoffs, unverified S5 owner bookkeeping,
+and unencrypted local backups remain as documented. Next validate a
+consented local business pilot with real traffic, audience feedback,
+human-reviewed distribution, affiliate events and complete costs, then
+incrementally authorize third-party platforms with scoped credentials and
+receipts. Acceptance: docs/milestones/COMPANY_OPERATIONS_V11.md.
