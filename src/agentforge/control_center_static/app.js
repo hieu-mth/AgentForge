@@ -5,7 +5,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v === null || v === undefined ? "—" : v)
   .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
   .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
-const state = {csrf:null, data:null, view:"overview", goal:null, task:null, memory:null, proposal:null, ops:null, inspectedDraft:null};
+const state = {csrf:null, data:null, view:"overview", goal:null, task:null, memory:null, proposal:null, ops:null, inspectedDraft:null, inspectedVideo:null};
 const viewNames = {overview:"Tổng quan",goals:"Goals & Phê duyệt",tasks:"Task History",
  skills:"AI Workforce",websites:"Websites",analytics:"Intelligence",growth:"Growth & Revenue",
  schedules:"Schedules",integrations:"Integrations",memory:"Owner Memory"};
@@ -149,7 +149,8 @@ function renderOverview(){
  const videoData=d.local_video||{pending_count:0,items:[]};
  const videoRows=(videoData.items||[]).slice(0,8).map(v=>
   '<tr><td>'+short(v.production_id)+'</td><td>'+short(v.run_id)+'</td>'+
-  '<td>'+badge(v.status)+'</td><td>'+esc(v.quality||"—")+'</td></tr>');
+  '<td>'+badge(v.status)+'</td><td>'+esc(v.quality||"—")+'</td>'+
+  '<td>'+(v.status==="VIDEO_READY"?'<button class="btn btn-small btn-outline" data-video-inspect="'+esc(v.production_id)+'">Duyệt MP4</button>':'—')+'</td></tr>');
  const starterStoryboard={slug:"nem-ngu-edited",title:"Tư vấn chọn nệm ngủ",scenes:[
    {headline:"Chọn nệm ngủ thế nào?",caption:"Xem xét nhu cầu nghỉ ngơi và độ nâng đỡ của nệm.",duration_seconds:5},
    {headline:"Cần tư vấn chọn nệm?",caption:"Chia sẻ ngân sách và nhu cầu để được gợi ý phù hợp.",duration_seconds:5}
@@ -163,7 +164,7 @@ function renderOverview(){
   '<p class="small muted">Muốn dựng MP4 và duyệt video, sử dụng CLI media_workflow_v15 và xem file trước khi phê duyệt. Không có tự động đăng bài.</p>');
  const videoCard=card("Local Video Production · "+fmt(videoData.pending_count)+" chờ xem video",
   '<p class="small muted">Storyboard chỉnh sửa → ảnh/phụ đề local → FFmpeg → VIDEO_PASS → owner duyệt. Video không tự xuất bản. Xem MP4 trong workspace/media/{run_id}/video.mp4; quyết định qua media_workflow_v15 CLI.</p>'+
-  table(["PRODUCTION","RUN","TRẠNG THÁI","QA"],videoRows,"Chưa có video production"));
+  table(["PRODUCTION","RUN","TRẠNG THÁI","QA","OWNER"],videoRows,"Chưa có video production"));
  const safety='<div class="callout '+(paused?'warning':'')+'">'+
    '<strong>Operations: '+esc(operations.mode)+'</strong> — '+
    esc(paused?'Đã dừng phân phối nhiệm vụ mới. Việc đang chạy có thể kết thúc hoặc bị gián đoạn.':
@@ -585,6 +586,39 @@ async function handleClick(event){
     },"Đã cập nhật chính sách Autopilot");
     return;
   }
+  if(button.dataset.videoInspect){
+    const id=button.dataset.videoInspect;
+    const meta=await api("/api/videos/"+encodeURIComponent(id));
+    state.inspectedVideo=meta;
+    const dialog=$("task-dialog");
+    $("task-dialog-body").innerHTML=
+      '<h3>Xem video local trước khi duyệt</h3>'+
+      '<p class="small muted">Mở video từ thư mục dự án trên Windows, xem hình ảnh, đọc chữ và nghe âm thanh.</p>'+
+      '<div class="callout mono">'+esc(meta.relative_path)+'</div>'+
+      '<p class="small muted">SHA-256: '+esc(meta.video_sha)+' · QA: '+esc(meta.quality)+
+      '. PASS chỉ xác minh cấu trúc và file; không đảm bảo thông tin quảng cáo đúng.</p>'+
+      '<label class="form-field"><input type="checkbox" id="v2-video-watched"> Tôi đã mở và xem toàn bộ file MP4 trên máy này.</label>'+
+      '<div class="form-actions"><button type="button" class="btn btn-outline" data-video-decision="REJECT">REJECT video</button>'+
+      '<button type="button" class="btn btn-primary" data-video-decision="APPROVE">APPROVE video</button></div>';
+    if(!dialog.open)dialog.showModal();
+    return;
+  }
+  if(button.dataset.videoDecision){
+    const meta=state.inspectedVideo;
+    const decision=button.dataset.videoDecision;
+    if(!meta||!["APPROVE","REJECT"].includes(decision)||!$("v2-video-watched")?.checked){
+      throw Error("Hãy kiểm tra file MP4 và xác nhận đã xem trước khi duyệt");
+    }
+    if(!confirm("Duyệt "+decision+" cho video đã xem?\\nSHA: "+meta.video_sha+
+      "\\nQuyết định không đăng bài và không cấp quyền upload."))return;
+    await mutate("/api/videos/"+encodeURIComponent(meta.production_id)+"/decide",{
+      ack:"VIDEO_"+decision,decision,video_sha:meta.video_sha,
+      watched_local_file:true
+    },"Đã ghi quyết định video: "+decision);
+    state.inspectedVideo=null;
+    $("task-dialog").close();
+    return;
+  }
   if(button.dataset.draftInspect){
     const id=button.dataset.draftInspect;
     const review=await api("/api/drafts/"+encodeURIComponent(id));
@@ -773,6 +807,7 @@ document.addEventListener("DOMContentLoaded",()=>{
  taskDialog.addEventListener("close",()=>{
   state.task=null;
   state.inspectedDraft=null;
+  state.inspectedVideo=null;
   $("task-dialog-body").textContent="";
  });
  $("login-form").addEventListener("submit",async e=>{
