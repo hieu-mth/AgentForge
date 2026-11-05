@@ -49,6 +49,22 @@ Run the tests (no live model credentials or customer interviews required):
 
 The repository's [GitHub Actions CI](.github/workflows/ci.yml) runs the same suite on Windows and Python 3.13 for pushes/PRs targeting `main`.
 
+## One-command Windows owner acceptance
+
+From \`D:\AgentForge\` after \`git pull --ff-only origin main\`, launch
+the read-only acceptance check (registry, owner pause state, SQLite,
+datasets, scheduler and backup health) without any cloud/model use:
+
+\`\`\`powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\agentforge_acceptance_windows.ps1 -RunTests
+\`\`\`
+
+Optional flags: \`-CreateBackup\` explicitly authorizes a local,
+**unencrypted** verified backup, while \`-StartDashboard\` opens the
+authenticated foreground Control Center. Neither option is enabled by
+default; do not put private backup archives on GitHub or share the
+one-time owner login code.
+
 ## Owner Operations V1.2 — pause/resume and attention inbox
 
 A persistent local emergency pause can block **new S1 Skill, S4 Goal and
