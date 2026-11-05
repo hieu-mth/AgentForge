@@ -137,19 +137,28 @@ function goalRows(){
 function renderGoals(){
  const templates=Object.keys(state.data.templates);
  const selected=templates.includes("campaign.review")?"campaign.review":templates[0];
- const templateOptions=templates.map(k=>'<option value="'+esc(k)+'">'+esc(k)+'</option>').join("");
+ const templateOptions=templates.map(k=>'<option value="'+esc(k)+'"'+(k===selected?' selected':'')+'>'+esc(k)+'</option>').join("");
+ const datasets=state.data.datasets||[];
+ const defaultDataset=datasets.length?datasets[0].dataset:"";
+ const options=datasets.map(d=>'<option value="'+esc(d.dataset)+'">'+esc(d.dataset)+
+    (d.synthetic?' · DEMO':' · owner supplied')+'</option>').join("");
+ const dataControl='<div class="form-field" id="goal-dataset-control"><label for="goal-dataset-pick">Dataset từ Intelligence</label>'+
+  (datasets.length?'<select id="goal-dataset-pick">'+options+'</select>':
+    '<p class="small muted">Chưa có dataset. Tạo/import dữ liệu tại Intelligence trước khi lập Goal phân tích.</p>')+'</div>';
  const form='<form id="goal-form"><div class="form-field"><label for="goal-title">Tên mục tiêu</label>'+
  '<input id="goal-title" required minlength="3" maxlength="160" value="Review campaign" /></div>'+
  '<div class="form-field"><label for="goal-template">Workflow có sẵn</label>'+
- '<select id="goal-template">'+templateOptions+'</select></div>'+
+ '<select id="goal-template">'+templateOptions+'</select></div>'+dataControl+
  '<div class="form-field"><label for="goal-json">Đầu vào · JSON</label>'+
- '<textarea id="goal-json" rows="5" spellcheck="false">{"dataset":"demo-example"}</textarea></div>'+
+ '<textarea id="goal-json" rows="5" spellcheck="false">'+esc(JSON.stringify({dataset:defaultDataset},null,2))+'</textarea></div>'+
  '<div class="form-row"><div class="form-field"><label for="goal-model-cap">Max model calls (ước tính)</label>'+
  '<input id="goal-model-cap" type="number" min="0" max="3" value="0"></div>'+
  '<div class="form-field"><label for="goal-process-cap">Max external process runs</label>'+
  '<input id="goal-process-cap" type="number" min="0" max="3" value="0"></div></div>'+
  '<div class="callout">Đề xuất không tự thực thi. Bạn phải xem kế hoạch, đối chiếu SHA rồi duyệt. Các thao tác ghi hoặc external tiếp tục yêu cầu grant riêng.</div>'+
- '<div class="form-actions"><button type="submit" class="btn btn-primary">Tạo kế hoạch</button></div></form>';
+ '<div class="form-actions"><button type="button" class="btn btn-outline" data-preflight-goal>Kiểm tra dữ liệu</button>'+
+ '<button type="submit" class="btn btn-primary">Tạo kế hoạch</button></div>'+
+ '<p class="small muted" id="goal-preflight-status" role="status" aria-live="polite">Dữ liệu sẽ được kiểm tra lại trước khi duyệt/chạy.</p></form>';
  const details=state.goal?renderGoalDetail():'<div class="empty-state"><strong>Chọn một Goal</strong>Xem SHA, các bước thực thi và phê duyệt ngay tại đây.</div>';
  return header("COMPANY BRAIN","Goals & Phê duyệt",
   "Tạo mục tiêu có giới hạn, kiểm tra từng bước và chỉ cấp quyền khi cần.")+
@@ -163,10 +172,13 @@ function renderGoalDetail(){
  if(!g)return "";
  const stepRows=(g.plan||[]).map((step,i)=>{
   const executed=(g.step_runs||[]).find(x=>x.step_index===i);
+  const childTask=executed?.child_task_id?
+   '<button type="button" class="btn btn-outline btn-small" data-detail-task="'+
+    esc(executed.child_task_id)+'">Xem kết quả / lỗi</button>':"";
   return '<li class="step"><span class="step-num">'+(i+1)+'</span><div class="step-text"><strong>'+
    esc(step.skill_id)+'</strong><small>'+esc(step.worker_id)+' · '+
    esc((step.required_permissions||[]).join(", ")||"read_only")+
-   '</small></div>'+badge(executed?executed.status:"NOT_STARTED")+'</li>';
+   '</small>'+childTask+'</div>'+badge(executed?executed.status:"NOT_STARTED")+'</li>';
  }).join("");
  const possible=g.status==="APPROVED"||g.status==="WAITING_APPROVAL";
  const action=g.status==="APPROVED"?"run":"resume";
@@ -194,6 +206,30 @@ function renderGoalDetail(){
  '<details class="section"><summary class="small muted">Xem đầy đủ inputs và plan để kiểm tra</summary>'+
  '<pre class="code-box">'+esc(JSON.stringify({inputs:g.inputs,plan:g.plan},null,2))+'</pre></details>';
 }
+function renderResultReport(report){
+ if(!report)return "";
+ const human=v=>v===null?"Chưa xác minh":typeof v==="boolean"?(v?"Có":"Không"):
+   typeof v==="number"?v.toLocaleString("vi-VN"):String(v);
+ const rows=Object.entries(report.fields||{}).map(([key,value])=>
+  '<tr><td>'+esc(key)+'</td><td>'+esc(human(value))+'</td></tr>');
+ const metricRows=Object.entries(report.metrics||{}).map(([key,value])=>
+  '<tr><td>'+esc(key)+'</td><td>'+esc(human(value))+'</td></tr>');
+ const channels=(report.channels||[]).map(x=>
+  '<tr><td>'+esc(x.name)+'</td><td>'+esc(JSON.stringify(x.metrics))+'</td></tr>');
+ const signals=(report.signals||[]).map(x=>
+  '<li>'+esc(JSON.stringify(x))+'</li>').join("");
+ const notices=(report.notices||[]).map(x=>'<li>'+esc(x)+'</li>').join("");
+ return '<section class="result-report section"><h3>Kết quả phân tích</h3>'+
+  '<div class="callout warning">Dữ liệu import từ owner có thể chưa được xác minh. DEMO không phải doanh thu thật;'+
+  ' kết quả phân tích không tự cấp quyền chi tiền.</div>'+
+  (rows.length?table(["CHỈ SỐ / TRẠNG THÁI","GIÁ TRỊ"],rows):"")+
+  (metricRows.length?'<h3>Hiệu quả tổng hợp</h3>'+table(["METRIC","VALUE"],metricRows):"")+
+  (channels.length?'<h3>Theo kênh</h3>'+table(["CHANNEL","METRICS"],channels):"")+
+  (signals?'<h3>Tín hiệu cần kiểm chứng</h3><ul class="report-list">'+signals+'</ul>':"")+
+  (notices?'<h3>Hạn chế & cảnh báo</h3><ul class="report-list">'+notices+'</ul>':"")+
+  '<p class="small muted">Số nguồn nhập: '+esc(report.source_count??"Chưa có")+
+  ' · Doanh thu xác minh độc lập: Không</p></section>';
+}
 function renderTaskDetail(task){
  const events=(task.events||[]).map(x=>
   '<tr><td>'+esc(x.at)+'</td><td>'+esc(x.name)+'</td></tr>');
@@ -203,6 +239,7 @@ function renderTaskDetail(task){
   (task.error?'<div class="callout warning"><strong>Lỗi thực thi:</strong> '+
     esc(task.error)+'</div>':"")+
   '<div class="callout">Artifacts: '+esc((task.artifacts||[]).join(", ")||"None")+'</div>'+
+  renderResultReport(task.report)+
   (task.web_proposal?'<div class="form-actions"><button class="btn btn-primary" data-view-proposal="'+
     esc(task.web_proposal.proposal_id)+'">Xem và duyệt website proposal</button></div>':"")+
   '<div class="section"><h3>Lịch sử sự kiện</h3>'+
@@ -396,12 +433,21 @@ function render(){
   const t=$("goal-template");
   t.addEventListener("change",()=>{const required=state.data.templates[t.value]||[];
    const values={};required.forEach(k=>{values[k]=({
-    dataset:"demo-example",campaign:"nem-shorts",slug:"nem-tu-van",
+    dataset:state.data.datasets?.[0]?.dataset||"",campaign:state.data.growth?.[0]?.campaign||"",slug:"nem-tu-van",
     title:"Tư vấn nệm",scenes:[],run_id:"0".repeat(32),
     topic:"Nghiên cứu nhu cầu nệm",audience:"Khách hàng",goal:"Tư vấn",
     description:"Lời khuyên cơ bản khi lựa chọn nệm.",rights_attested:true,
     brief:"Tạo website tư vấn nệm tiếng Việt chuyên nghiệp, đẹp trên điện thoại, không bịa giá hay số điện thoại."}
    )[k]||"";});
+   $("goal-json").value=JSON.stringify(values,null,2);
+   $("goal-dataset-control").hidden=!(["campaign.review","website.campaign"].includes(t.value));
+   if($("goal-dataset-pick")&&values.dataset)$("goal-dataset-pick").value=values.dataset;
+  });
+  $("goal-dataset-control").hidden=!(["campaign.review","website.campaign"].includes(t.value));
+  $("goal-dataset-pick")?.addEventListener("change",event=>{
+   let values={};try{values=JSON.parse($("goal-json").value);}catch{}
+   if(!values||typeof values!=="object"||Array.isArray(values))values={};
+   values.dataset=event.target.value;
    $("goal-json").value=JSON.stringify(values,null,2);
   });
  }
@@ -451,6 +497,15 @@ async function handleClick(event){
  if(!button||button.disabled)return;
  if(button.dataset.view){selectView(button.dataset.view);return;}
  try{
+  if(button.dataset.preflightGoal!==undefined){
+   const outcome=await api("/api/goals/preflight","POST",{
+    ack:"PREFLIGHT",template:$("goal-template").value,inputs:formJson("goal-json")});
+   $("goal-preflight-status").textContent=outcome.ready?
+    "Đã tìm thấy các tham chiếu local. Kiểm tra SHA và quyền trước khi chạy.":
+    outcome.issues.map(x=>x.code+": "+x.message).join(" · ");
+   if(!outcome.ready)notice("Kiểm tra dữ liệu: "+outcome.issues[0].code,true);
+   return;
+  }
   if(button.dataset.detailGoal){await showGoal(button.dataset.detailGoal);return;}
   if(button.dataset.detailTask){await showTask(button.dataset.detailTask);return;}
   if(button.dataset.newWebsite!==undefined){selectView("goals");
