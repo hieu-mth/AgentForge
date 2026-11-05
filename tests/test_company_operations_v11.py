@@ -6,8 +6,9 @@ import threading
 import unittest
 from contextlib import closing
 from pathlib import Path
+from unittest.mock import patch
 
-from agentforge import analytics_store, goal_preflight, result_view, task_history
+from agentforge import analytics_store, goal_preflight, result_view, task_history, skill_runner
 from agentforge import control_center_v1 as cc
 
 CODE = "testing-owner-company-ops-2026"
@@ -173,6 +174,19 @@ class TestCompanyOperationsV11(unittest.TestCase):
                           "do-not-show", "confidential", "hidden"):
             self.assertNotIn(forbidden, joined)
         self.assertFalse(output["report"]["business_verified"])
+
+    def test_analytics_runner_error_is_actionable_without_raw_input_leak(self):
+        with patch("agentforge.analytics_insights.data_quality",
+                   side_effect=analytics_store.AnalyticsError("Dataset not found")):
+            result = skill_runner.invoke(
+                "analytics.quality_check", {"dataset": "demo-invalid"},
+                db_path=self.task_db)
+        self.assertEqual(result["status"], "FAILED")
+        self.assertIn("DATASET_NOT_FOUND", result["error"])
+        self.assertNotIn("demo-invalid", result["error"])
+        self.assertEqual(
+            task_history.get_task(result["task_id"], db_path=self.task_db)["error"],
+            result["error"])
 
     def test_report_projection_never_falls_back_to_arbitrary_model_output(self):
         self.assertIsNone(result_view.present("web.create", {
