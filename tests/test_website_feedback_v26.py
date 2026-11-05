@@ -1,5 +1,6 @@
 """V2.6 owner revision workflow: SHA-bound feedback, gated planner, no model call."""
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from agentforge import website_feedback as feedback
@@ -65,17 +66,19 @@ class WebsiteFeedbackTests(unittest.TestCase):
         route = "/api/proposals/" + self.proposal_id + "/revision"
         data = {"ack": "REQUEST_REVISION", "sha256": self.sha,
                 "feedback": "Tăng hình ảnh nệm ở hero lên rõ hơn"}
+        server = SimpleNamespace(brain_db_path=None, analytics_db_path=None,
+                                 growth_db_path=None)
         with patch("agentforge.website_feedback.request_revision",
                    return_value={"status": "PLAN_CREATED"}) as maker:
             with self.assertRaises(PermissionError):
-                _owner_action(None, route, data, session={})
+                _owner_action(server, route, data, session={})
             with self.assertRaises(PermissionError):
-                _owner_action(None, route, {**data, "ack": "EXECUTE"},
+                _owner_action(server, route, {**data, "ack": "EXECUTE"},
                               session={"reviewed_proposals": {self.proposal_id: self.sha}})
             with self.assertRaises(ValueError):
-                _owner_action(None, route, {**data, "danger": "publish"},
+                _owner_action(server, route, {**data, "danger": "publish"},
                               session={"reviewed_proposals": {self.proposal_id: self.sha}})
-            receipt = _owner_action(None, route, data,
+            receipt = _owner_action(server, route, data,
                                     session={"reviewed_proposals": {self.proposal_id: self.sha}})
             self.assertEqual("PLAN_CREATED", receipt["status"])
             maker.assert_called_once()
