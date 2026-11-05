@@ -15,6 +15,7 @@ import { Workspace, GoalDrawer } from './features/Workspace.jsx';
 import { Websites, ProposalDrawer } from './features/Websites.jsx';
 import { Overview, ReadOnlyPage } from './features/Operations.jsx';
 import { Projects } from './features/Projects.jsx';
+import { Retention } from './features/Retention.jsx';
 import { Reviews } from './features/Reviews.jsx';
 import { Schedules, OperationsControl, Intelligence, Growth, OwnerSettings, OwnerMemory } from './features/Management.jsx';
 
@@ -125,6 +126,7 @@ export default function App() {
     {key:'reviews',icon:<CheckCircleOutlined/>,label:'AI & Video Review'},
     {key:'websites',icon:<GlobalOutlined/>,label:'Websites'},
     {key:'projects',icon:<FolderOpenOutlined/>,label:'Projects & AI Images'},
+    {key:'retention',icon:<SafetyCertificateOutlined/>,label:'Backups & Cleanup'},
     {type:'divider'},
     {key:'team',icon:<TeamOutlined/>,label:'Team & Roles'},
     {key:'intelligence',icon:<AppstoreOutlined/>,label:'Intelligence'},
@@ -137,7 +139,7 @@ export default function App() {
     {key:'memory',icon:<FileTextOutlined/>,label:'Owner Memory'},
   ];
   const titles={workspace:'Giao việc',overview:'Tổng quan',goals:'Kế hoạch',tasks:'Task History',
-    reviews:'AI & Video Review',websites:'Websites',projects:'Projects & AI Images',
+    reviews:'AI & Video Review',websites:'Websites',projects:'Projects & AI Images',retention:'Backups & Cleanup',
     team:'Team & Roles',intelligence:'Intelligence',growth:'Growth & Revenue',
     schedules:'Schedules',operations:'Operations',channels:'Channels',
     finance:'Finance',settings:'Settings',memory:'Owner Memory'};
@@ -177,6 +179,7 @@ export default function App() {
             {title:'Hành động',render:(_,t)=><Button onClick={()=>api('/api/tasks/'+t.task_id).then(setTask).catch(authError)}>Chi tiết</Button>}]}/></Card>}
         {section==='websites'&&<Websites data={data} showProposal={openProposal}/>}
         {section==='projects'&&<Projects mutate={mutate}/>}
+        {section==='retention'&&<Retention data={data} mutate={mutate}/>}
         {section==='reviews'&&<Reviews data={data} mutate={mutate} onReload={refresh}/>}
         {section==='schedules'&&<Schedules data={data} mutate={mutate} onReload={refresh}/>}
         {section==='operations'&&<OperationsControl data={data} mutate={mutate} onReload={refresh}/>}

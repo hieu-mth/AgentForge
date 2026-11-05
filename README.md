@@ -1,3 +1,19 @@
+## AgentForge V3.3 — Review freeze (local-first)
+
+The architecture and React operations milestones **V2.9 through V3.3** have
+been implemented. This version includes supervised AI/skill work, the separate
+React + Ant Design Dashboard at `/dashboard/`, owner review of website/video
+outputs, and **SHA-verified backup/quarantine/restore** under
+`src/agentforge/storage/retention.py`.
+
+New GUI: **Backups & Cleanup** — inspect artifact SHA → create local snapshot
+→ verify archive → PAUSE Operations → quarantine or restore. No permanent
+delete. No auto-publication, external finance or verified revenue.
+
+[Windows acceptance checklist](docs/milestones/V33_OWNER_ACCEPTANCE.md).
+[Canonical architecture](docs/architecture/CANONICAL_STRUCTURE_V28.md).
+**Feature development stops at V3.3 pending owner review.**
+
 ## V2.8 — Canonical structure and safe module migration
 
 The **source of truth** for repository structure is
