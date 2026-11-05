@@ -196,7 +196,11 @@ class MediaWorkflowV15Tests(unittest.TestCase):
         item = self.produced()
         with patch("agentforge.media_quality.check", return_value={
             "status": "FAIL", "failures": 1
-        }):
+        }), patch("agentforge.media_assets.load_manifest", return_value=(
+            Path("local"), {"artifacts": {"video.mp4": VID_SHA},
+                            "slug": STORY["slug"], "title": STORY["title"],
+                            "scenes": STORY["scenes"]}
+        )):
             with self.assertRaises(PermissionError):
                 workflow.decide(item["production_id"], "APPROVE", VID_SHA,
                                 confirm_review=True, db_path=self.db)
