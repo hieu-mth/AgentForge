@@ -24,3 +24,14 @@ removing any old path.
 
 This directory is for AI architecture, role manifests and future workflow
 definitions. It is **not a second executable AI runtime**.
+
+
+## V2.8 canonical locations
+
+Canonical executable modules already migrated into `src/agentforge/ai/`:
+`prompt_intake.py` and `model_health.py`. Do not create a second Python
+package at repository-root `ai/`; this directory owns human-readable
+AI role/workflow specifications only. See
+[`docs/architecture/CANONICAL_STRUCTURE_V28.md`](../docs/architecture/CANONICAL_STRUCTURE_V28.md)
+for the exact migration map. Existing stable AI executors remain at their
+old package paths until their runtime root and permission contracts are tested.
