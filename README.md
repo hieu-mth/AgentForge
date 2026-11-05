@@ -49,6 +49,19 @@ Run the tests (no live model credentials or customer interviews required):
 
 The repository's [GitHub Actions CI](.github/workflows/ci.yml) runs the same suite on Windows and Python 3.13 for pushes/PRs targeting `main`.
 
+## V1.4 Business Context + Content Quality Review
+
+V1.4 adds owner-confirmed, SHA-digested business context for proposal-only
+AI drafts, accent-sensitive deterministic Content Quality Gate and a local
+human review ledger. Control Center Overview lists pending draft quality
+reviews, while explicit owner CLI decisions remain bound to the immutable
+output SHA. No auto-publishing, source apply, new model grants or additional
+provider spend authority is added. Stale ambiguous briefs are quarantined
+without reserving model quota.
+
+Windows owner setup and limits:
+[Business Context + Quality Review V1.4](docs/milestones/BUSINESS_QUALITY_V14.md).
+
 ## V1.3 Supervised Autopilot — bounded AI drafts
 
 V1.3 introduces an opt-in, local SQLite AI draft queue with atomic daily
