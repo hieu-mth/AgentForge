@@ -15,7 +15,7 @@ class V2CompanyTests(unittest.TestCase):
         videos = {"productions": [{"status": "VIDEO_READY"},
                                    {"status": "APPROVED"}]}
         camps = [{"campaign": "nem-ngu", "synthetic": False}]
-        stats = {"lead_total": 3, "owner_reported_posts": 1,
+        stats = {"lead_total": 3, "synthetic": False, "owner_reported_posts": 1,
                  "owner_recorded_net_cash_vnd": 100000}
         with patch("agentforge.autopilot_v13.policy", return_value=policy), \
              patch("agentforge.autopilot_v13.report", return_value=autopilot), \
