@@ -89,6 +89,10 @@ function renderWorkspace(){
  return '<div class="workspace-hero"><div class="eyebrow">YOUR AI COMPANY · LOCAL FIRST</div>'+
   '<h1>Hôm nay bạn muốn xây dựng điều gì?</h1>'+
   '<p>Chỉ cần mô tả mục tiêu. AgentForge chuyển yêu cầu thành kế hoạch để bạn duyệt trước khi chạy AI.</p>'+
+  '<p class="small muted">Policy: '+esc(
+    (data.workspace_policy?.max_estimated_model_calls??1))+
+    ' lượt model/Goal tối đa · Website '+(data.workspace_policy?.website_enabled?"Bật":"Tắt")+
+    ' · Storyboard '+(data.workspace_policy?.storyboard_enabled?"Bật":"Tắt")+'</p>'+
   '<form id="workspace-request-form" class="workspace-prompt">'+
   '<label for="workspace-prompt">Yêu cầu công việc</label>'+
   '<textarea id="workspace-prompt" rows="5" maxlength="600" required minlength="20" placeholder="Ví dụ: Tạo landing page nệm cao cấp cho ba tôi, có hình minh họa đẹp, mobile-first, hotline 0879547988..."></textarea>'+
@@ -136,6 +140,7 @@ function renderFinance(){
 }
 function renderSettings(){
  const ap=state.data.autopilot_policy||{enabled:false,daily_cap:0};
+ const wp=state.data.workspace_policy||{max_estimated_model_calls:1,website_enabled:true,storyboard_enabled:true};
  return header("OWNER GOVERNANCE","Settings","Cấu hình delegation và kiểm soát chi phí ước tính; quyền bên ngoài vẫn cần phê duyệt theo tác vụ.")+
  '<div class="settings-panel">'+card("Autopilot · hạn mức lượt model",
  '<p class="muted">Tắt bật delegation cho hàng đợi V1.3. Không tự gọi model, không kiểm soát chi phí hóa đơn.</p>'+
@@ -145,6 +150,16 @@ function renderSettings(){
  '<select id="ap-policy-enabled"><option value="false" '+(!ap.enabled?'selected':'')+'>Tắt</option>'+
  '<option value="true" '+(ap.enabled?'selected':'')+'>Bật</option></select></div>'+
  '<div class="form-actions"><button class="btn btn-primary" type="button" data-autopilot-configure="1">Lưu chính sách</button></div>')+
+ card("Prompt Workspace · Role & lượt model",
+ '<p class="muted">Giới hạn tạo kế hoạch mới từ ô prompt; không thay thế quota Autopilot, quyền S1 hoặc hóa đơn provider.</p>'+
+ '<div class="form-field"><label for="wp-model-cap">Số lượt model ước tính tối đa mỗi Goal (0–3)</label>'+
+ '<input id="wp-model-cap" type="number" min="0" max="3" step="1" value="'+esc(wp.max_estimated_model_calls)+'"></div>'+
+ '<label class="check-row"><input id="wp-website" type="checkbox" '+(wp.website_enabled?"checked":"")+
+ '>Cho phép role Website Builder nhận yêu cầu mới</label>'+
+ '<label class="check-row"><input id="wp-storyboard" type="checkbox" '+(wp.storyboard_enabled?"checked":"")+
+ '>Cho phép role Storyboard nhận yêu cầu mới</label>'+
+ '<p class="small muted">Role bật/tắt ở đây chỉ áp dụng cho luồng prompt. Không nâng quyền model/process/network.</p>'+
+ '<div class="form-actions"><button class="btn btn-outline" type="button" data-workspace-policy-save="1">Lưu hạn mức & role</button></div>')+
  card("Local-first & Data Safety",
  '<p>SQLite và workspace vẫn ở máy bạn. Dùng quy trình backup được kiểm chứng trước khi cleanup dữ liệu.</p>'+
  '<p class="small muted">Không nhập mật khẩu, số tài khoản hoặc dữ liệu khách vào Prompt hay Task History.</p>'+
@@ -663,6 +678,22 @@ async function handleClick(event){
  if(!button||button.disabled)return;
  if(button.dataset.view){selectView(button.dataset.view);return;}
  try{
+  if(button.dataset.workspacePolicySave!==undefined){
+    const cap=Number($("wp-model-cap").value);
+    const website_enabled=$("wp-website").checked;
+    const storyboard_enabled=$("wp-storyboard").checked;
+    if(!Number.isInteger(cap)||cap<0||cap>3)throw Error("Hạn mức phải là số nguyên từ 0 đến 3");
+    if(!confirm("Lưu chính sách cho prompt mới?\n"+
+       "Model calls/Goal tối đa: "+cap+
+       "\nWebsite: "+(website_enabled?"Bật":"Tắt")+
+       "\nStoryboard: "+(storyboard_enabled?"Bật":"Tắt")+
+       "\nKhông làm thay đổi quyền cho task cũ hoặc billing provider."))return;
+    await mutate("/api/workspace/policy",{
+      ack:"UPDATE_WORKSPACE_POLICY",max_estimated_model_calls:cap,
+      website_enabled,storyboard_enabled
+    },"Đã lưu policy prompt-first");
+    return;
+  }
   if(button.dataset.checkModelHealth!==undefined){
     const status=await api("/api/model/health");
     state.modelHealth=status;
