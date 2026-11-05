@@ -209,5 +209,18 @@ class QualityV14Tests(unittest.TestCase):
         self.assertIsNone(review["business_context"])
         self.assertEqual(1, ap.policy(db_path=self.db)["daily_cap"])
 
+    def test_existing_bad_recurring_schedule_pauses_without_model_call(self):
+        due = datetime.now(timezone.utc) + timedelta(hours=1)
+        scheduled = ap.schedule("media.copy_draft", AMBIGUOUS_INPUT,
+                                due.isoformat(), 1440, confirm=True, db_path=self.db)
+        self.set_profile()
+        ap.configure(daily_cap=1, enabled=True, confirm=True, db_path=self.db)
+        outcome = ap.enqueue_due(db_path=self.db, now=due+timedelta(minutes=1))
+        self.assertEqual("SCHEDULE_PAUSED_INPUT_REVIEW", outcome["status"])
+        self.assertEqual(scheduled["schedule_id"], outcome["schedule_id"])
+        self.assertEqual(0, ap.report(db_path=self.db)["used_today"])
+        self.assertEqual([], ap.report(db_path=self.db)["jobs"])
+        self.assertEqual(0, ap.report(db_path=self.db)["schedules"][0]["enabled"])
+
 if __name__ == "__main__":
     unittest.main()
