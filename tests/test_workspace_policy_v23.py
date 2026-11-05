@@ -1,5 +1,6 @@
 """V2.3 owner workspace settings: policy gates, durable audit and no budget claims."""
 import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 from pathlib import Path
@@ -44,7 +45,7 @@ class WorkspacePolicyTests(unittest.TestCase):
         self.assertEqual("OWNER_SET", saved["source"])
         self.assertEqual(0, saved["max_estimated_model_calls"])
         self.assertFalse(saved["website_enabled"])
-        with sqlite3.connect(self.db) as connection:
+        with closing(sqlite3.connect(self.db)) as connection:
             self.assertEqual(1, connection.execute("SELECT COUNT(*) FROM changes").fetchone()[0])
             self.assertEqual(0, connection.execute("SELECT max_estimated_model_calls FROM policy").fetchone()[0])
 
