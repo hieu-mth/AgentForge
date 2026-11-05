@@ -2,7 +2,7 @@
 
 Media renderer and S1 dispatch are mocked. No real subprocess, model, or upload.
 """
-import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 from pathlib import Path
@@ -109,7 +109,7 @@ class MediaWorkflowV15Tests(unittest.TestCase):
             "goal": "Nội dung nệm ngủ"
         }, db_path=self.autopilot_db)
         src_sha = "e" * 64
-        with autopilot_v13._connect(self.autopilot_db, create=True) as db:
+        with closing(autopilot_v13._connect(self.autopilot_db, create=True)) as db:
             db.execute("""INSERT INTO content_reviews VALUES(?,?,?,?,?,?,?,?,?,?)""",
                        (job["job_id"], TASK_ID, "media.copy_draft", src_sha,
                         None, "PASS_HEURISTIC", '["test"]', "REJECTED", None, "today"))
