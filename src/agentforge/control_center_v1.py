@@ -474,15 +474,23 @@ class _Handler(BaseHTTPRequestHandler):
                 if found is None:
                     raise KeyError("Draft not found")
                 task = task_history.get_task(found["task_id"], db_path=self.server.task_db_path)
-                if task.get("status") != "SUCCEEDED" or task.get("skill_id") != found["skill_id"]:
-                    raise PermissionError("Draft task is not verifiable")
-                # Hash-bound inspection, not an automatic approval; no model call.
+                if (task.get("status") != "SUCCEEDED" or
+                        task.get("skill_id") != "media.copy_draft" or
+                        found["skill_id"] != "media.copy_draft"):
+                    raise PermissionError("Only bounded storyboard drafts can be inspected")
+                result = task.get("result")
+                if (not isinstance(result, dict) or
+                        len(quality_v14._canonical(result).encode("utf-8")) > 65000 or
+                        quality_v14._sha(result) != found["output_sha"]):
+                    raise PermissionError("Storyboard result digest mismatch")
+                # Read-only review: model data displayed as text, never executed.
                 session = self._session()
                 session.setdefault("reviewed_ai_drafts", {})[ident] = found["output_sha"]
                 return self._reply(200, {
                     "job_id": ident, "output_sha": found["output_sha"],
                     "quality": found["quality"], "decision": found["decision"],
-                    "task": _public_task(task)})
+                    "task": _public_task(task),
+                    "storyboard": result})
             if route.startswith("/api/goals/"):
                 ident = route.removeprefix("/api/goals/")
                 return self._reply(200, brain_runner.inspect(
