@@ -2,6 +2,16 @@
 
 V1.5 reuses existing S1/S2 media skills. No new model call, browser, network access, platform publishing, bank/payment integration or unattended media subprocess is introduced. Content Quality V1.4 and V1.3 daily AI limits remain unchanged.
 
+## Quick editor in the existing Control Center
+
+Restart localhost Control Center after updating to V1.5:
+
+    .\.venv\Scripts\python.exe -m agentforge.control_center_v1 --port 8780
+
+Log in with the new owner code, open **Tổng quan**, and find **Storyboard Editor (local)**. Edit the Vietnamese JSON directly in the text area and click **Tạo tài nguyên local (xác nhận)**. This uses only the authenticated, CSRF-protected local preparation API, and will not invoke a model, FFmpeg, video encoder, publishing platform or external tool. The result appears under **Local Video Production** and returns a production ID. Use the CLI steps below to render, preview, and explicitly approve the MP4.
+
+The dashboard editor is a lightweight JSON editor, not a timeline/video drag-and-drop editor. It does not automatically ingest rejected AI text or associate its old review; use the CLI prepare arguments below when you specifically want immutable provenance from a reviewed AI draft.
+
 ## Owner production workflow (Windows PowerShell 5.1)
 
 Stop any old media-processing commands. Start at D:\AgentForge and use latest main after merge. Do not run the production command until you have inspected and edited the storyboard.
