@@ -179,6 +179,31 @@ def _summary(server):
 
 def _owner_action(server, path, request, session=None):
     """Explicit allowlist; no arbitrary skill invocation or Python execution."""
+    if path == "/api/image/submit":
+        from agentforge.image_studio_v24 import submit
+        if not server.allow_external_actions:
+            raise PermissionError("ComfyUI image generation requires external-capable owner mode")
+        if set(request) != {"ack", "slug", "prompt", "checkpoint"} or request.get("ack") != "GENERATE_LOCAL_IMAGE":
+            raise PermissionError("Explicit owner image generation request required")
+        return submit(request["slug"], request["prompt"], request["checkpoint"],
+                      confirm_generation=True)
+    if path.startswith("/api/image/") and path.endswith("/collect"):
+        from agentforge.image_studio_v24 import collect
+        if not server.allow_external_actions:
+            raise PermissionError("Image import requires external-capable owner mode")
+        parts = path.split("/")
+        if len(parts) != 5 or set(request) != {"ack"} or request["ack"] != "IMPORT_AI_IMAGE":
+            raise PermissionError("Explicit owner image import required")
+        return collect(parts[3], confirm_import=True)
+    if path.startswith("/api/image/") and path.endswith("/attach"):
+        from agentforge.image_studio_v24 import attach
+        if set(request) != {"ack", "image_sha", "html_sha"} or request["ack"] != "ATTACH_AI_IMAGE":
+            raise PermissionError("Explicit SHA-bound owner image attachment required")
+        parts = path.split("/")
+        if len(parts) != 5:
+            raise ValueError("Invalid image job route")
+        return attach(parts[3], request["image_sha"], request["html_sha"],
+                      confirm_attach=True)
     if path == "/api/workspace/policy":
         from agentforge import workspace_policy
         if (set(request) != {"ack", "max_estimated_model_calls",
@@ -472,6 +497,12 @@ class _Handler(BaseHTTPRequestHandler):
                     "status": "AUTHENTICATED", "csrf": session["csrf"]})
             if route == "/api/bootstrap":
                 return self._reply(200, _summary(self.server))
+            if route == "/api/image/health":
+                from agentforge.image_studio_v24 import health
+                return self._reply(200, health())
+            if route == "/api/image/jobs":
+                from agentforge.image_studio_v24 import report
+                return self._reply(200, report())
             if route == "/api/model/health":
                 from agentforge.model_health import check
                 return self._reply(200, check())
