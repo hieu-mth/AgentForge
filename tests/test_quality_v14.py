@@ -200,10 +200,12 @@ class QualityV14Tests(unittest.TestCase):
     def test_existing_v13_db_migrates_on_inbox_read(self):
         # V1.3 local production has tables but no V1.4 migration yet.
         ap.configure(daily_cap=1, enabled=False, confirm=True, db_path=self.db)
-        with sqlite3.connect(self.db) as conn:
-            conn.execute("DROP TABLE IF EXISTS content_reviews")
-            conn.execute("DROP TABLE IF EXISTS job_context")
-            conn.execute("DROP TABLE IF EXISTS business_profile")
+        from contextlib import closing
+        with closing(sqlite3.connect(self.db)) as conn:
+            with conn:
+                conn.execute("DROP TABLE IF EXISTS content_reviews")
+                conn.execute("DROP TABLE IF EXISTS job_context")
+                conn.execute("DROP TABLE IF EXISTS business_profile")
         review = qa.inbox(db_path=self.db)
         self.assertEqual([], review["reviews"])
         self.assertIsNone(review["business_context"])
