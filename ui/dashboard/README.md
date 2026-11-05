@@ -92,3 +92,14 @@ does not claim parity with all 24 legacy skills.
 Windows CI builds the React app and runs Python static route tests.
 End-user validation is still required on the local Windows machine for modal
 interaction, responsive layout, actual preview output and real model calls.
+
+## V3.3 Backups & Cleanup
+
+The React **Backups & Cleanup** navigation page now shows an authenticated
+bounded inventory and verified backup receipts. Select one artifact, inspect
+its tree SHA, confirm a local backup and separately verify the returned ZIP.
+Quarantine/restore buttons are locked unless Operations is PAUSED and the
+exact backup was verified in the current owner session. No permanent deletion
+and no automatic cleanup. See
+[Windows acceptance](../../docs/milestones/V33_OWNER_ACCEPTANCE.md).
+
