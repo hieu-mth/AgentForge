@@ -128,6 +128,64 @@ def _job_profile(db, job_id):
     return profile, row["profile_sha"]
 
 
+
+def preflight_payload(db, skill_id, payload):
+    """Conservative business fit check BEFORE enqueue or paid model reserve."""
+    profile = current_profile(db)
+    if profile is None:
+        return {"status": "NO_CONTEXT_LEGACY_REVIEW_REQUIRED"}
+    if skill_id == "media.copy_draft":
+        text = "\n".join(payload.get(k, "") for k in ("topic", "audience", "goal"))
+    elif skill_id == "web.create":
+        text = payload.get("brief", "")
+    else:
+        raise PermissionError("Business context cannot authorize this skill")
+    if not any(_has_phrase(text, t) for t in profile["focus_phrases"]):
+        raise ValueError("BUSINESS_CONTEXT_MISMATCH: input must name the business explicitly")
+    if any(_has_phrase(text, t) for t in profile["blocked_phrases"]):
+        raise ValueError("BLOCKED_BUSINESS_TERMS: rewrite owner brief")
+    return {"status": "CONTEXT_MATCH"}
+
+
+def verify_queued_context(db, job_id, skill_id, payload):
+    """Existing jobs must not silently inherit new owner context."""
+    profile, profile_sha = _job_profile(db, job_id)
+    active = current_profile(db)
+    if active is not None and profile is None:
+        raise PermissionError("Legacy queued job missing owner business context; review manually")
+    if profile is not None:
+        if active is None or _sha(active) != profile_sha:
+            raise PermissionError("Owner business profile changed; requeue with new snapshot")
+        # Validate against saved input before model-call reservation.
+        if skill_id == "media.copy_draft":
+            text = "\n".join(payload.get(k, "") for k in ("topic", "audience", "goal"))
+        elif skill_id == "web.create":
+            text = payload.get("brief", "")
+        else:
+            raise PermissionError("Unsupported supervised skill")
+        if not any(_has_phrase(text, t) for t in profile["focus_phrases"]):
+            raise PermissionError("Queued brief does not match business context")
+        if any(_has_phrase(text, t) for t in profile["blocked_phrases"]):
+            raise PermissionError("Queued brief contains blocked terms")
+    return True
+
+
+def pause_schedule(schedule_id, *, confirm=False, db_path=None):
+    """Pause recurring intake, including stale pre-V1.4 schedules."""
+    if confirm is not True:
+        raise PermissionError("Owner schedule pause confirmation required")
+    brain_store._id(schedule_id)
+    from agentforge.autopilot_v13 import _connect
+    with _connect(db_path, create=True) as db:
+        with db:
+            row = db.execute("UPDATE schedules SET enabled=0 WHERE schedule_id=?",
+                             (schedule_id,))
+            if row.rowcount != 1:
+                raise KeyError("Schedule not found")
+    return {"schedule_id": schedule_id, "status": "PAUSED",
+            "queued_jobs_cancelled": False}
+
+
 def _has_phrase(source, phrase):
     # Accent-sensitive and word-boundary aware: 'nem' is NOT the same as 'nệm'.
     source = unicodedata.normalize("NFC", source).casefold()
@@ -249,6 +307,9 @@ def main():
     p.add_argument("--input-file", required=True)
     p.add_argument("--confirm-context", action="store_true")
     subs.add_parser("inbox")
+    pause = subs.add_parser("pause-schedule")
+    pause.add_argument("schedule_id")
+    pause.add_argument("--confirm-pause", action="store_true")
     r = subs.add_parser("decide")
     r.add_argument("job_id")
     r.add_argument("decision", choices=("APPROVE", "REJECT"))
@@ -264,6 +325,8 @@ def main():
                              confirm=args.confirm_context)
     elif args.action == "inbox":
         result = inbox()
+    elif args.action == "pause-schedule":
+        result = pause_schedule(args.schedule_id, confirm=args.confirm_pause)
     else:
         result = decide(args.job_id, args.decision, args.output_sha,
                         confirm=args.confirm_review)
