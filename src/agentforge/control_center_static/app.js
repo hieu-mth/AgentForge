@@ -497,8 +497,14 @@ function renderWebsites(){
   (p.files||[]).map(f=>'<details class="section"><summary>'+esc(f.path)+'</summary>'+
    '<pre class="code-box">'+esc(f.content)+'</pre></details>').join("")+
   '</details>'+
-  '<div class="form-actions"><button class="btn btn-primary" data-apply-proposal="'+
-  esc(p.proposal_id)+'">Duyệt & lưu website local</button></div>':
+  '<div class="review-feedback"><div class="review-feedback-heading"><div><h3>Chưa ưng? Góp ý để AI sửa</h3>'+
+  '<p class="small muted">Mô tả điểm cần thay đổi. AgentForge sẽ tạo kế hoạch phiên bản mới; không sửa hoặc xóa proposal gốc.</p></div></div>'+
+  '<label for="website-feedback">Yêu cầu chỉnh sửa</label>'+
+  '<textarea id="website-feedback" rows="4" minlength="10" maxlength="360" placeholder="Ví dụ: Làm hero sang trọng hơn, thay tông màu, tăng kích thước ảnh nệm, CTA gọi 0879547988 rõ hơn..."></textarea>'+
+  '<div class="review-actions"><button type="button" class="btn btn-outline" data-revise-proposal="'+
+  esc(p.proposal_id)+'">Yêu cầu AI chỉnh sửa</button>'+
+  '<button type="button" class="btn btn-primary" data-apply-proposal="'+
+  esc(p.proposal_id)+'">Duyệt & lưu website local</button></div></div>':
   empty("Chọn một proposal rồi bấm Xem website để thấy giao diện desktop/mobile, không cần đọc mã HTML.");
  return header("PRODUCT BUILDER","Websites",
   "Xem trực quan landing page AI đã tạo, kiểm tra phiên bản mobile và duyệt trước khi lưu file.",
@@ -918,6 +924,20 @@ async function handleClick(event){
     render();return;
   }
   if(button.dataset.viewProposal){await showProposal(button.dataset.viewProposal);return;}
+  if(button.dataset.reviseProposal){
+    const p=state.proposal;
+    if(!p||p.proposal_id!==button.dataset.reviseProposal)throw Error("Chọn bản nháp trước");
+    const feedback=$("website-feedback")?.value.trim()||"";
+    if(feedback.length<10||feedback.length>360)throw Error("Góp ý cần dài từ 10–360 ký tự");
+    if(!confirm("Tạo kế hoạch chỉnh sửa dựa trên góp ý?\n"+
+      "Proposal gốc được giữ nguyên, chưa gọi AI và chưa ghi website.\n"+
+      "Bạn sẽ duyệt kế hoạch và cấp quyền model riêng trước khi chạy."))return;
+    const out=await mutate("/api/proposals/"+encodeURIComponent(p.proposal_id)+"/revision",{
+      ack:"REQUEST_REVISION",sha256:p.sha256,feedback
+    },"Đã tạo kế hoạch chỉnh sửa mới");
+    await showGoal(out.goal_id);
+    return;
+  }
   if(button.dataset.applyProposal){
    const p=state.proposal;
    if(!p||p.proposal_id!==button.dataset.applyProposal)throw Error("Hãy kiểm tra proposal trước");
