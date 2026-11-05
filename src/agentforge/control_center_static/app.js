@@ -102,8 +102,25 @@ function renderOverview(){
  '<tr><td><button class="link-button" data-detail-task="'+esc(t.task_id)+'">'+
  short(t.task_id)+'</button></td><td>'+esc(t.skill_id)+'</td><td>'+badge(t.status)+
  '</td><td>'+esc(String(t.updated_at||"").replace("T"," ").slice(0,19))+'</td></tr>');
+ const operations=d.operations||{mode:"ACTIVE"};
+ const paused=operations.mode!=="ACTIVE";
  const h=d.daemon;
  const engine=h.fresh?'DAEMON ACTIVE':'MANUAL / OFFLINE';
+ const attention=(d.attention||[]).map(x=>{
+  const where=x.kind==="goal"?"data-detail-goal":x.kind==="task"?"data-detail-task":"data-view";
+  const target=x.kind==="schedules"?"schedules":x.id;
+  return '<div class="goal-tile"><div class="goal-main"><strong>'+esc(x.title)+
+  '</strong><small>'+esc(x.priority)+' · '+esc(x.status)+'</small></div>'+
+  '<button type="button" class="btn btn-small btn-outline" '+where+'="'+esc(target)+
+  '">Xem</button></div>';
+ }).join("");
+ const safety='<div class="callout '+(paused?'warning':'')+'">'+
+   '<strong>Operations: '+esc(operations.mode)+'</strong> — '+
+   esc(paused?'Đã dừng phân phối nhiệm vụ mới. Việc đang chạy có thể kết thúc hoặc bị gián đoạn.':
+       'Có thể chạy nhiệm vụ theo quyền đã cấp. Tạm dừng khi cần kiểm tra sự cố.')+
+   '<div class="form-actions"><button class="btn btn-outline" type="button" data-ops-mode="'+
+   (paused?'ACTIVE':'PAUSED')+'">'+(paused?'Tiếp tục vận hành':'Tạm dừng hệ thống')+
+   '</button></div></div>';
  const health=card("Trạng thái vận hành",
   '<div class="stack"><div class="goal-tile"><span class="goal-mark">◷</span>'+
   '<div class="goal-main"><strong>Scheduler</strong><small>'+
@@ -121,6 +138,10 @@ function renderOverview(){
  '<p>Các workflow được điều phối bởi Company Brain. Mọi quyền ghi, gọi model, mở trình duyệt hoặc chạy công cụ đều qua cổng phê duyệt.</p>'+
  '</div><span class="hero-pill">● 24 skills · 5 MVP layers</span></div>'+
  '<div class="metrics">'+tiles+'</div>'+
+ '<div class="section">'+safety+'</div>'+
+ '<div class="section">'+card("Cần owner xử lý",
+  attention?'<div class="stack">'+attention+'</div>':
+   '<p class="small muted">Chưa có Goal đang chờ phê duyệt hoặc sự cố cần xem xét.</p>')+'</div>'+
  '<div class="grid-2 section">'+card("Mục tiêu gần đây",
   '<div class="stack">'+(goals||empty("Tạo mục tiêu đầu tiên từ Goal Manager."))+'</div>',
   '<button class="section-link" data-view="goals">Xem tất cả →</button>')+
@@ -345,7 +366,8 @@ function renderSchedules(){
  '<div class="form-field"><label for="schedule-template">Read-only workflow</label>'+
  '<select id="schedule-template">'+options+'</select></div>'+
  '<div class="form-field"><label for="schedule-input">Inputs · JSON</label>'+
- '<textarea id="schedule-input" rows="4" spellcheck="false">{"dataset":"demo-example"}</textarea></div>'+
+ '<textarea id="schedule-input" rows="4" spellcheck="false">'+
+ esc(JSON.stringify({dataset:state.data.datasets?.[0]?.dataset||""}))+'</textarea></div>'+
  '<div class="form-row"><div class="form-field"><label for="schedule-due">Chạy lần đầu (giờ máy)</label>'+
  '<input id="schedule-due" type="datetime-local" required></div>'+
  '<div class="form-field"><label for="schedule-frequency">Lặp lại mỗi (phút)</label>'+
@@ -497,6 +519,17 @@ async function handleClick(event){
  if(!button||button.disabled)return;
  if(button.dataset.view){selectView(button.dataset.view);return;}
  try{
+  if(button.dataset.opsMode){
+   const mode=button.dataset.opsMode;
+   if(!["ACTIVE","PAUSED"].includes(mode))throw Error("Invalid operations action");
+   if(!confirm(mode==="PAUSED"?
+     "TẠM DỪNG: Chặn các lượt chạy Goal/skill/schedule mới? Việc đang chạy không bị dừng cưỡng bức.":
+     "TIẾP TỤC: Cho phép những tác vụ mới đã được duyệt chạy lại? Không tự replay công việc cũ."))return;
+   await mutate("/api/ops/control",{
+    mode,ack:mode==="PAUSED"?"PAUSE_OPERATIONS":"RESUME_OPERATIONS"
+   },mode==="PAUSED"?"Đã tạm dừng phân phối nhiệm vụ":"Đã mở lại phân phối nhiệm vụ");
+   return;
+  }
   if(button.dataset.preflightGoal!==undefined){
    const outcome=await api("/api/goals/preflight","POST",{
     ack:"PREFLIGHT",template:$("goal-template").value,inputs:formJson("goal-json")});
