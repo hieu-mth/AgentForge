@@ -618,7 +618,7 @@ class _Handler(BaseHTTPRequestHandler):
                     route.removeprefix("/api/growth/"),
                     db_path=self.server.growth_db_path))
             return self._blocked(404, "not_found")
-        except (ValueError, KeyError, PermissionError, TypeError):
+        except (ValueError, KeyError, PermissionError, TypeError, FileNotFoundError):
             return self._blocked(404, "not_found")
 
     def _read_json(self):
