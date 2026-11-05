@@ -20,7 +20,7 @@ from urllib.parse import urlsplit
 
 from agentforge import analytics_insights, analytics_store, brain_planner
 from agentforge import brain_runner, brain_scheduler, brain_store, growth_reports
-from agentforge import growth_store, skill_registry, task_history
+from agentforge import growth_store, skill_registry, task_history, goal_preflight, result_view
 from agentforge.dashboard_v0 import _artifact_names, _task_public
 
 STATIC = Path(__file__).with_name("control_center_static")
@@ -40,6 +40,8 @@ def _read_static(name):
 def _public_task(task):
     output = _task_public(task)
     output["artifacts"] = _artifact_names(task.get("result"))
+    output["report"] = result_view.present(task.get("skill_id"), task.get("result")) if (
+        task.get("status") == "SUCCEEDED") else None
     if (task.get("skill_id") == "web.create" and task.get("status") == "SUCCEEDED"
             and isinstance(task.get("result"), dict)):
         result = task["result"]
@@ -128,9 +130,20 @@ def _owner_action(server, path, request, session=None):
             raise PermissionError("Inspect original proposal in this session before applying")
         return product_builder.apply(
             proposal_id, confirm_write=True, sha256=metadata["sha256"])
+    if path == "/api/goals/preflight":
+        if request.get("ack") != "PREFLIGHT":
+            raise PermissionError("Confirm PREFLIGHT before reading references")
+        return goal_preflight.inspect(
+            request.get("template"), request.get("inputs"),
+            analytics_db_path=server.analytics_db_path,
+            growth_db_path=server.growth_db_path)
     if path == "/api/goals/propose":
         if request.get("ack") != "PROPOSE":
             raise PermissionError("Confirm PROPOSE before making a goal")
+        goal_preflight.require_ready(
+            request.get("template"), request.get("inputs"),
+            analytics_db_path=server.analytics_db_path,
+            growth_db_path=server.growth_db_path)
         return brain_planner.propose(
             request.get("title"), request.get("template"), request.get("inputs"),
             max_model_calls=request.get("max_model_calls", 0),
@@ -147,12 +160,20 @@ def _owner_action(server, path, request, session=None):
         if action == "approve":
             if request.get("ack") != "APPROVE":
                 raise PermissionError("Explicit APPROVE required")
+            goal_preflight.require_ready(
+                goal["template"], goal["inputs"],
+                analytics_db_path=server.analytics_db_path,
+                growth_db_path=server.growth_db_path)
             return brain_store.approve_goal(
                 ident, request["plan_sha256"], db_path=server.brain_db_path)
         if action in {"run", "resume"}:
             required_status = "APPROVED" if action == "run" else "WAITING_APPROVAL"
             if goal["status"] != required_status or request.get("ack") != action.upper():
                 raise PermissionError(f"Explicit {action.upper()} on {required_status} goal required")
+            goal_preflight.require_ready(
+                goal["template"], goal["inputs"],
+                analytics_db_path=server.analytics_db_path,
+                growth_db_path=server.growth_db_path)
             grants = request.get("grants", [])
             if (not isinstance(grants, list) or len(grants) > 8 or
                     any(not isinstance(g, str) for g in grants) or
