@@ -49,6 +49,24 @@ Run the tests (no live model credentials or customer interviews required):
 
 The repository's [GitHub Actions CI](.github/workflows/ci.yml) runs the same suite on Windows and Python 3.13 for pushes/PRs targeting `main`.
 
+## V2.1 Prompt-First Workspace (Owner UI)
+
+The default page now accepts a plain Vietnamese request and creates a bounded
+S4 plan **without dispatching the model**. Currently supports landing page/
+website and storyboard requests; other requests are explicitly clarified.
+The owner still inspects and approves plan SHA and grants execution rights in
+the existing Goal workflow. Specialized Team & Roles, Finance, Channels and
+Settings screens give owner-friendly views over existing trusted local records.
+The interface has a conventional modal close button and footer action.
+
+Read the [repository layout and safe cleanup policy](docs/architecture/REPOSITORY_STRUCTURE.md)
+before reorganizing files. In particular, never delete `data/`, `workspace/`
+or unreviewed media/website proposals as cache.
+
+Limitations: no automatic photorealistic image generation, OAuth publishing,
+actual billing verification, unconstrained natural-language task execution or
+AI agent self-modification is implied by this usability iteration.
+
 ## V2.0 Local-First Company MVP Pilot
 
 The authenticated Control Center now includes bounded owner Autopilot policy

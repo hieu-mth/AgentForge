@@ -177,6 +177,15 @@ def _summary(server):
 
 def _owner_action(server, path, request, session=None):
     """Explicit allowlist; no arbitrary skill invocation or Python execution."""
+    if path == "/api/workspace/request":
+        if set(request) != {"ack", "prompt", "max_model_calls"} or request.get("ack") != "PLAN_ONLY":
+            raise PermissionError("Chỉ được tạo kế hoạch sau xác nhận owner.")
+        from agentforge.prompt_intake import plan_request
+        return plan_request(
+            request["prompt"], max_model_calls=request["max_model_calls"],
+            max_external_runs=0, brain_db_path=server.brain_db_path,
+            analytics_db_path=server.analytics_db_path,
+            growth_db_path=server.growth_db_path)
     if path == "/api/autopilot/configure":
         from agentforge import autopilot_v13
         if request.get("ack") != "SET_DAILY_MODEL_POLICY":
