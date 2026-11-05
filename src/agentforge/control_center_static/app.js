@@ -100,7 +100,8 @@ function renderWorkspace(){
   '<section class="card"><h2>Kiểm soát rõ ràng</h2>'+
   '<p class="muted">Chỉ hỗ trợ yêu cầu website/landing page và storyboard trong luồng prompt đầu tiên. Các công việc khác vẫn có thể thao tác bằng module hiện có.</p>'+
   '<div class="workspace-insight">Kế hoạch không tự chạy, không tự đăng, không cấp quyền ngân sách.</div>'+
-  '<button class="btn btn-outline" type="button" data-view="overview">Xem hệ thống & báo cáo</button></section></div>';
+  '<button class="btn btn-outline" type="button" data-view="overview">Xem hệ thống & báo cáo</button></section></div>'+
+  (state.goal?'<div class="section">'+card("Kế hoạch đang xử lý",renderGoalDetail())+'</div>':'');
 }
 function renderTeam(){
  const rows=(state.data.skills||[]).map(x=>'<tr><td>'+esc(x.worker)+'</td><td>'+esc(x.id)+'</td><td>'+badge(x.mode)+'</td></tr>');
@@ -606,9 +607,11 @@ function selectView(view){
  }
  render();window.scrollTo({top:0,behavior:"smooth"});
 }
-async function showGoal(id){
- try{state.goal=await api("/api/goals/"+encodeURIComponent(id));selectView("goals");}
- catch(e){notice(e.message,true);}
+async function showGoal(id, stayWorkspace=false){
+ try{
+  state.goal=await api("/api/goals/"+encodeURIComponent(id));
+  selectView(stayWorkspace?"workspace":"goals");
+ }catch(e){notice(e.message,true);}
 }
 async function showTask(id){
  try{
@@ -749,7 +752,9 @@ async function handleClick(event){
    if(!outcome.ready)notice("Kiểm tra dữ liệu: "+outcome.issues[0].code,true);
    return;
   }
-  if(button.dataset.detailGoal){await showGoal(button.dataset.detailGoal);return;}
+  if(button.dataset.detailGoal){
+   await showGoal(button.dataset.detailGoal,state.view==="workspace");return;
+  }
   if(button.dataset.detailTask){await showTask(button.dataset.detailTask);return;}
   if(button.dataset.openWorkspace!==undefined){selectView("workspace");return;}
   if(button.dataset.newWebsite!==undefined){selectView("goals");
@@ -782,7 +787,7 @@ async function handleClick(event){
     if(button.dataset.approveGoal){
       if(!confirm("Duyệt kế hoạch SHA-256:\n"+g.plan_sha256+"\n\nDuyệt KHÔNG tự chạy task."))return;
       await mutate("/api/goals/"+goalId+"/approve",{ack:"APPROVE",
-        plan_sha256:g.plan_sha256},"Đã duyệt plan");await showGoal(goalId);return;
+        plan_sha256:g.plan_sha256},"Đã duyệt plan");await showGoal(goalId,state.view==="workspace");return;
     }
     const action=button.dataset.runGoal?"run":"resume";
     const grants=[...document.querySelectorAll('input[name="grant"]:checked')].map(i=>i.value);
@@ -802,7 +807,7 @@ async function handleClick(event){
      ack_external:sensitive?"AUTHORIZE_EXTERNAL_TOOLS":""};
     const out=await mutate("/api/goals/"+goalId+"/"+action,request,
       "Goal: "+action+" → "+(action==="run"?"đã xử lý":"đã tiếp tục"));
-    notice("Trạng thái: "+out.status);await showGoal(goalId);return;
+    notice("Trạng thái: "+out.status);await showGoal(goalId,state.view==="workspace");return;
   }
   if(button.dataset.tickSchedules!==undefined){
    if(!confirm("Chạy thủ công những lịch read-only đã tới hạn?"))return;
@@ -832,7 +837,7 @@ async function handleSubmit(event){
    if(outcome.status==="NEEDS_CLARIFICATION"){
     notice(outcome.message,true);return;
    }
-   await showGoal(outcome.goal_id);
+   await showGoal(outcome.goal_id,true);
    return;
   }
   if(id==="goal-form"){
