@@ -197,5 +197,17 @@ class QualityV14Tests(unittest.TestCase):
         self.assertEqual(0, ap.report(db_path=self.db)["schedules"][0]["enabled"])
 
 
+    def test_existing_v13_db_migrates_on_inbox_read(self):
+        # V1.3 local production has tables but no V1.4 migration yet.
+        ap.configure(daily_cap=1, enabled=False, confirm=True, db_path=self.db)
+        with sqlite3.connect(self.db) as conn:
+            conn.execute("DROP TABLE IF EXISTS content_reviews")
+            conn.execute("DROP TABLE IF EXISTS job_context")
+            conn.execute("DROP TABLE IF EXISTS business_profile")
+        review = qa.inbox(db_path=self.db)
+        self.assertEqual([], review["reviews"])
+        self.assertIsNone(review["business_context"])
+        self.assertEqual(1, ap.policy(db_path=self.db)["daily_cap"])
+
 if __name__ == "__main__":
     unittest.main()
