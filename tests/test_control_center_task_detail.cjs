@@ -61,7 +61,7 @@ function runtime(task, initialView="tasks") {
   // while testing the registered modal close handlers.
   vm.runInContext("start = () => {}", context);
   for (const fn of documentListeners.get("DOMContentLoaded") || [])fn();
-  vm.runInContext("render()", context);
+  if(initialView==="tasks")vm.runInContext("render()", context);
   return {context, node, calls, getScrollCount:()=>scrollCount};
 }
 
