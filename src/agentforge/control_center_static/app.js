@@ -127,6 +127,17 @@ function renderOverview(){
  const videoRows=(videoData.items||[]).slice(0,8).map(v=>
   '<tr><td>'+short(v.production_id)+'</td><td>'+short(v.run_id)+'</td>'+
   '<td>'+badge(v.status)+'</td><td>'+esc(v.quality||"—")+'</td></tr>');
+ const starterStoryboard={slug:"nem-ngu-edited",title:"Tư vấn chọn nệm ngủ",scenes:[
+   {headline:"Chọn nệm ngủ thế nào?",caption:"Xem xét nhu cầu nghỉ ngơi và độ nâng đỡ của nệm.",duration_seconds:5},
+   {headline:"Cần tư vấn chọn nệm?",caption:"Chia sẻ ngân sách và nhu cầu để được gợi ý phù hợp.",duration_seconds:5}
+ ]};
+ const editorCard=card("Storyboard Editor (local)",
+  '<p class="small muted">Chỉnh sửa JSON bản nháp của owner. Chuẩn bị chỉ tạo PNG, WAV, SRT trên máy và không gọi AI/FFmpeg. Dùng slug mới mỗi lần; kiểm tra nội dung trước khi bấm.</p>'+
+  '<div class="form-field"><label for="media-editor-json">Storyboard chỉnh sửa</label>'+
+  '<textarea id="media-editor-json" rows="13" spellcheck="false">'+
+  esc(JSON.stringify(starterStoryboard,null,2))+'</textarea></div>'+
+  '<div class="form-actions"><button type="button" class="btn btn-primary" data-media-prepare="1">Tạo tài nguyên local (xác nhận)</button></div>'+
+  '<p class="small muted">Muốn dựng MP4 và duyệt video, sử dụng CLI media_workflow_v15 và xem file trước khi phê duyệt. Không có tự động đăng bài.</p>');
  const videoCard=card("Local Video Production · "+fmt(videoData.pending_count)+" chờ xem video",
   '<p class="small muted">Storyboard chỉnh sửa → ảnh/phụ đề local → FFmpeg → VIDEO_PASS → owner duyệt. Video không tự xuất bản. Xem MP4 trong workspace/media/{run_id}/video.mp4; quyết định qua media_workflow_v15 CLI.</p>'+
   table(["PRODUCTION","RUN","TRẠNG THÁI","QA"],videoRows,"Chưa có video production"));
@@ -157,6 +168,7 @@ function renderOverview(){
  '<div class="section">'+safety+'</div>'+
  '<div class="section">'+reviewCard+'</div>'+
  '<div class="section">'+videoCard+'</div>'+
+ '<div class="section">'+editorCard+'</div>'+
  '<div class="section">'+card("Cần owner xử lý",
   attention?'<div class="stack">'+attention+'</div>':
    '<p class="small muted">Chưa có Goal đang chờ phê duyệt hoặc sự cố cần xem xét.</p>')+'</div>'+
@@ -537,6 +549,15 @@ async function handleClick(event){
  if(!button||button.disabled)return;
  if(button.dataset.view){selectView(button.dataset.view);return;}
  try{
+  if(button.dataset.mediaPrepare!==undefined){
+    const storyboard=formJson("media-editor-json");
+    if(!confirm("Xác nhận đã đọc và chỉnh sửa storyboard? Tạo PNG/WAV/SRT local, không gọi model và không dựng MP4."))return;
+    const outcome=await mutate("/api/media/prepare",{
+      ack:"PREPARE_EDITED_STORYBOARD",storyboard
+    },"Đã tạo tài nguyên storyboard local");
+    notice("Production ID: "+outcome.production_id+" · Run: "+outcome.run_id);
+    return;
+  }
   if(button.dataset.opsMode){
    const mode=button.dataset.opsMode;
    if(!["ACTIVE","PAUSED"].includes(mode))throw Error("Invalid operations action");
