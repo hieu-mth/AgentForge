@@ -111,7 +111,20 @@ def _summary(server):
     except (OSError, ValueError):
         health = {"status": "UNKNOWN", "fresh": False}
     states = ("SUCCEEDED", "RUNNING", "WAITING_APPROVAL", "FAILED", "INTERRUPTED")
+    from agentforge.quality_v14 import inbox as quality_inbox
+    quality = quality_inbox()
+    review_items = quality["reviews"][:15]
     return {
+        "autopilot_reviews": {
+            "business_context": quality["business_context"],
+            "pending_count": sum(x["decision"] == "PENDING" for x in quality["reviews"]),
+            "items": [{
+                "job_id": x["job_id"], "task_id": x["task_id"],
+                "skill_id": x["skill_id"], "quality": x["quality"],
+                "decision": x["decision"], "reasons": x["reasons"],
+                "output_sha": x["output_sha"],
+            } for x in review_items],
+        },
         "version": "v1", "local_only": True, "authenticated": True,
         "external_actions_enabled": server.allow_external_actions,
         "stats": {"tasks": len(tasks), "skills": len(skill_registry.load_registry()),

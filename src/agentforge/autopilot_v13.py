@@ -61,6 +61,8 @@ def _connect(db_path=None, *, create=False):
           created_utc TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS ix_autopilot_schedules ON schedules(enabled,next_due_utc);
         """)
+        from agentforge.quality_v14 import ensure
+        ensure(db)
     return db
 
 
@@ -131,12 +133,15 @@ def submit(skill_id, payload, *, db_path=None):
     with closing(_connect(db_path, create=True)) as db:
         db.execute("BEGIN IMMEDIATE")
         try:
+            from agentforge.quality_v14 import preflight_payload, snapshot_job
+            preflight_payload(db, skill_id, payload)
             if db.execute("SELECT COUNT(*) FROM jobs WHERE status='QUEUED'").fetchone()[0] >= MAX_PENDING:
                 raise ValueError("Delegated queue is full")
             db.execute("INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?)",
                        (job_id, skill_id, json.dumps(payload, ensure_ascii=False,
                         sort_keys=True, separators=(",", ":")), "QUEUED",
                         calls, None, None, now, now, None))
+            snapshot_job(db, job_id)
             db.commit()
         except BaseException:
             db.rollback()
@@ -167,6 +172,8 @@ def schedule(skill_id, payload, next_due_utc, frequency_minutes, *,
         raise ValueError("First due must be future and within one year")
     schedule_id = uuid4().hex
     with closing(_connect(db_path, create=True)) as db:
+        from agentforge.quality_v14 import preflight_payload
+        preflight_payload(db, skill_id, payload)
         with db:
             db.execute("INSERT INTO schedules VALUES (?,?,?,?,?,?,?)", (
                 schedule_id, skill_id,
@@ -203,6 +210,15 @@ def enqueue_due(*, db_path=None, now=None):
                 return {"status": "QUEUE_FULL"}
             payload = json.loads(item["payload_json"])
             calls = _validated(item["skill_id"], payload)
+            from agentforge.quality_v14 import preflight_payload, snapshot_job
+            try:
+                preflight_payload(db, item["skill_id"], payload)
+            except ValueError:
+                db.execute("UPDATE schedules SET enabled=0 WHERE schedule_id=?",
+                           (item["schedule_id"],))
+                db.commit()
+                return {"status": "SCHEDULE_PAUSED_INPUT_REVIEW",
+                        "schedule_id": item["schedule_id"]}
             due = datetime.fromisoformat(item["next_due_utc"])
             interval = timedelta(minutes=item["frequency_minutes"])
             # Deliberately skip missed windows rather than replaying backlog.
@@ -212,6 +228,7 @@ def enqueue_due(*, db_path=None, now=None):
             db.execute("INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?,?,?)", (
                 job_id, item["skill_id"], item["payload_json"],
                 "QUEUED", calls, None, None, now_str, now_str, None))
+            snapshot_job(db, job_id)
             db.execute("UPDATE schedules SET next_due_utc=? WHERE schedule_id=?",
                        (due.isoformat(), item["schedule_id"]))
             db.commit()
@@ -244,6 +261,16 @@ def _claim(*, db_path=None, now=None):
             # Recheck all policy and payload before the irreversible no-retry claim.
             payload = json.loads(job["payload_json"])
             _validated(job["skill_id"], payload)
+            from agentforge.quality_v14 import verify_queued_context
+            try:
+                verify_queued_context(db, job["job_id"], job["skill_id"], payload)
+            except (PermissionError, ValueError):
+                db.execute("""UPDATE jobs SET status='BLOCKED_INPUT',
+                    error_code='BUSINESS_CONTEXT_REVIEW',updated_utc=?
+                    WHERE job_id=? AND status='QUEUED'""", (_utc(), job["job_id"]))
+                db.commit()
+                return {"status": "INPUT_REVIEW_REQUIRED", "job_id": job["job_id"],
+                        "quota_reserved": False}
             ops_control.require_active()
             db.execute("""UPDATE jobs SET status='DISPATCHING',
                 reserved_day=?, updated_utc=? WHERE job_id=? AND status='QUEUED'""",
@@ -256,7 +283,8 @@ def _claim(*, db_path=None, now=None):
             raise
 
 
-def _finish(job_id, status, task_id=None, error_code=None, *, db_path=None):
+def _finish(job_id, status, task_id=None, error_code=None, *,
+            result=None, skill_id=None, db_path=None):
     if status not in ("SUCCEEDED", "FAILED", "WAITING_OWNER_REVIEW"):
         raise ValueError("Invalid dispatch completion")
     if task_id is not None and (not isinstance(task_id, str) or not brain_store.ID.fullmatch(task_id)):
@@ -268,6 +296,9 @@ def _finish(job_id, status, task_id=None, error_code=None, *, db_path=None):
                 (status, task_id, error_code, _utc(), job_id))
             if changed.rowcount != 1:
                 raise RuntimeError("Dispatch receipt cannot be recorded")
+            if status == "SUCCEEDED":
+                from agentforge.quality_v14 import record_success
+                return record_success(db, job_id, task_id, skill_id, result)
 
 
 def tick(*, allow_model=False, db_path=None, task_db_path=None):
@@ -299,11 +330,13 @@ def tick(*, allow_model=False, db_path=None, task_db_path=None):
             result_status = "WAITING_OWNER_REVIEW"
         else:
             result_status = "FAILED"
-        _finish(job["job_id"], result_status, receipt.get("task_id"),
-                None if result_status == "SUCCEEDED" else "SKILL_NOT_SUCCEEDED",
-                db_path=db_path)
+        review = _finish(job["job_id"], result_status, receipt.get("task_id"),
+                         None if result_status == "SUCCEEDED" else "SKILL_NOT_SUCCEEDED",
+                         result=receipt.get("result"), skill_id=job["skill_id"],
+                         db_path=db_path)
         return {"job_id": job["job_id"], "status": result_status,
-                "task_id": receipt.get("task_id"), "requires_owner_review_of_output": True}
+                "task_id": receipt.get("task_id"), "quality": review,
+                "requires_owner_review_of_output": True}
     except Exception as exc:
         # Exception may follow a successful provider request. Consumed quota and
         # DISPATCHING marker deliberately remain; owner must investigate.

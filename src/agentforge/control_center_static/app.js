@@ -114,6 +114,15 @@ function renderOverview(){
   '<button type="button" class="btn btn-small btn-outline" '+where+'="'+esc(target)+
   '">Xem</button></div>';
  }).join("");
+ const reviewData=d.autopilot_reviews||{pending_count:0,items:[],business_context:null};
+ const reviewRows=(reviewData.items||[]).filter(r=>r.decision==="PENDING").slice(0,8).map(r=>
+  '<tr><td>'+short(r.job_id)+'</td><td>'+esc(r.skill_id)+'</td>'+
+  '<td>'+badge(r.quality)+'</td><td>'+esc((r.reasons||[]).join(", "))+'</td>'+
+  '<td><button class="link-button" data-detail-task="'+esc(r.task_id)+'">Xem task</button></td></tr>');
+ const reviewCard=card("AI Draft Review Queue · "+fmt(reviewData.pending_count)+" chờ duyệt",
+  '<p class="small muted">Business: '+esc(reviewData.business_context?reviewData.business_context.business:"Chưa cấu hình")+
+  '. PASS_HEURISTIC vẫn cần duyệt thủ công. Dùng CLI quality_v14 để quyết định theo output SHA; không tự đăng hay apply.</p>'+
+  table(["JOB","SKILL","QUALITY","LÝ DO","NỘI DUNG"],reviewRows,"Chưa có bản nháp cần duyệt"));
  const safety='<div class="callout '+(paused?'warning':'')+'">'+
    '<strong>Operations: '+esc(operations.mode)+'</strong> — '+
    esc(paused?'Đã dừng phân phối nhiệm vụ mới. Việc đang chạy có thể kết thúc hoặc bị gián đoạn.':
@@ -139,6 +148,7 @@ function renderOverview(){
  '</div><span class="hero-pill">● 24 skills · 5 MVP layers</span></div>'+
  '<div class="metrics">'+tiles+'</div>'+
  '<div class="section">'+safety+'</div>'+
+ '<div class="section">'+reviewCard+'</div>'+
  '<div class="section">'+card("Cần owner xử lý",
   attention?'<div class="stack">'+attention+'</div>':
    '<p class="small muted">Chưa có Goal đang chờ phê duyệt hoặc sự cố cần xem xét.</p>')+'</div>'+
