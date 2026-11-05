@@ -160,7 +160,11 @@ class MediaWorkflowV15Tests(unittest.TestCase):
 
     def test_renderer_failure_is_not_retried_or_automatically_approved(self):
         first = self.prep()
-        with patch("agentforge.skill_runner.invoke", side_effect=RuntimeError("ffmpeg failed")):
+        with patch("agentforge.skill_runner.invoke", side_effect=RuntimeError("ffmpeg failed")), \
+             patch("agentforge.media_assets.load_manifest", return_value=(
+                 Path("local"), {"slug": STORY["slug"], "title": STORY["title"],
+                                 "scenes": STORY["scenes"], "artifacts": {}}
+             )):
             with self.assertRaises(RuntimeError):
                 workflow.render(first["production_id"], confirm_local_process=True,
                                 db_path=self.db)
