@@ -147,17 +147,17 @@ class QualityV14Tests(unittest.TestCase):
         job = ap.submit("media.copy_draft", VALID_INPUT, db_path=self.db)
         changed = {**PROFILE, "focus_phrases": ["gối ngủ"]}
         qa.set_profile(changed, confirm=True, db_path=self.db)
-        with self.assertRaises(PermissionError):
-            ap._claim(db_path=self.db)
+        self.assertEqual("INPUT_REVIEW_REQUIRED",
+                         ap._claim(db_path=self.db)["status"])
         self.assertEqual(0, ap.report(db_path=self.db)["used_today"])
-        self.assertEqual("QUEUED", ap.report(db_path=self.db)["jobs"][0]["status"])
+        self.assertEqual("BLOCKED_INPUT", ap.report(db_path=self.db)["jobs"][0]["status"])
 
     def test_unreviewed_legacy_jobs_do_not_inherit_new_business_context(self):
         ap.configure(daily_cap=1, enabled=True, confirm=True, db_path=self.db)
         ap.submit("media.copy_draft", AMBIGUOUS_INPUT, db_path=self.db)
         self.set_profile()
-        with self.assertRaises(PermissionError):
-            ap._claim(db_path=self.db)
+        self.assertEqual("INPUT_REVIEW_REQUIRED",
+                         ap._claim(db_path=self.db)["status"])
         self.assertEqual(0, ap.report(db_path=self.db)["used_today"])
 
     def test_website_proposal_stays_unassessed_without_source_access(self):
