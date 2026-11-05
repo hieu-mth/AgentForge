@@ -5,7 +5,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v === null || v === undefined ? "—" : v)
   .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
   .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
-const state = {csrf:null, data:null, view:"workspace", goal:null, task:null, memory:null, proposal:null, ops:null, inspectedDraft:null, inspectedVideo:null, artifacts:null, modelHealth:null};
+const state = {csrf:null, data:null, view:"workspace", goal:null, task:null, memory:null, proposal:null, ops:null, inspectedDraft:null, inspectedVideo:null, artifacts:null, modelHealth:null, imageHealth:null, imageJobs:null};
 const viewNames = {workspace:"Giao việc",team:"Team & Roles",channels:"Channels",finance:"Finance",settings:"Settings",artifacts:"Projects & Files",overview:"Tổng quan",goals:"Goals & Phê duyệt",tasks:"Task History",
  skills:"AI Workforce",websites:"Websites",analytics:"Intelligence",growth:"Growth & Revenue",
  schedules:"Schedules",integrations:"Integrations",memory:"Owner Memory"};
@@ -437,7 +437,38 @@ function renderArtifacts(){
   '<div class="callout">Workspace và SQLite được giữ nguyên trên máy. Website local ≠ đã triển khai online. Proposal ≠ sản phẩm được duyệt. Muốn dọn cache dùng scripts/repo_hygiene.py sau khi xem báo cáo.</div>'+
   '<div class="section">'+card("Kiểm kê tài sản · "+fmt(source.total_items),
     table(["LOẠI","ID/SLUG","TRẠNG THÁI","BYTES","ĐĂNG ONLINE"],rows,"Chưa có tài sản hợp lệ."))+'</div>'+
-  (source.truncated?'<p class="small muted">Danh sách giới hạn 40 mục; tổng số hiển thị phía trên.</p>':'');
+  (source.truncated?'<p class="small muted">Danh sách giới hạn 40 mục; tổng số hiển thị phía trên.</p>':'')+
+  '<div class="section">'+renderImageStudio()+'</div>';
+}
+function renderImageStudio(){
+ const health=state.imageHealth||{status:"NOT_CHECKED",checkpoints:[]};
+ const jobs=state.imageJobs?.jobs||[];
+ const sites=(state.artifacts?.items||[]).filter(x=>x.kind==="website");
+ const checkpoints=(health.checkpoints||[]).map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join("");
+ const sitesList=sites.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.id)+'</option>').join("");
+ const rows=jobs.map(x=>'<tr><td>'+short(x.job_id)+'</td><td>'+esc(x.slug)+'</td>'+
+   '<td>'+badge(x.status)+'</td><td class="mono">'+short(x.asset_sha||"")+'</td>'+
+   '<td>'+(x.status==="SUBMITTED"?
+   '<button type="button" class="btn btn-small btn-outline" data-image-collect="'+esc(x.job_id)+'">Nhận ảnh khi xong</button>':
+   x.status==="ASSET_READY"?
+   '<button type="button" class="btn btn-small btn-primary" data-image-attach="'+esc(x.job_id)+'">Gắn ảnh vào web</button>':
+   '—')+'</td></tr>');
+ const form=health.status==="READY"&&sites.length?
+   '<div class="form-field"><label for="image-project">Website đã apply (local)</label><select id="image-project">'+sitesList+'</select></div>'+
+   '<div class="form-field"><label for="image-checkpoint">Checkpoint ComfyUI đã cài</label><select id="image-checkpoint">'+checkpoints+'</select></div>'+
+   '<div class="form-field"><label for="image-prompt">Mô tả ảnh (20–450 ký tự)</label>'+
+   '<textarea id="image-prompt" minlength="20" maxlength="450" rows="3" placeholder="Photorealistic cozy Vietnamese bedroom with elegant mattress, warm natural light, neutral palette, no text, no labels"></textarea></div>'+
+   '<button type="button" class="btn btn-primary" data-image-submit="1">Tạo ảnh AI local · Xác nhận GPU</button>':
+   '<p class="muted">Chưa có ComfyUI local + checkpoint hợp lệ hoặc chưa có website đã apply. Không tự tạo ảnh giả hay gọi dịch vụ cloud.</p>';
+ return card("AI Image Studio · ComfyUI local (tùy chọn)",
+  '<div class="callout">Dùng model ảnh riêng tại 127.0.0.1:8188, không phải Ollama qwen3:8b. Sinh ảnh có thể sử dụng GPU và điện. Ảnh phải được owner xem trước khi gắn vào website; không tự đăng online.</div>'+
+  '<div class="form-actions"><button type="button" class="btn btn-outline" data-image-health="1">Kiểm tra ComfyUI / checkpoints</button>'+
+  '<span class="small muted">Trạng thái: '+esc(health.status)+'</span></div>'+
+  '<div class="section">'+form+'</div>'+
+  '<div class="section"><h3>Các lượt tạo ảnh</h3>'+
+  table(["JOB","WEBSITE","TRẠNG THÁI","ẢNH SHA","THAO TÁC"],rows,
+        "Chưa có job AI image. Tác vụ đã gửi sẽ không tự chạy lại.")+'</div>'+
+  '<p class="small muted">Sau khi nhận ảnh, mở workspace/products/SLUG/assets/af-ai-JOB_ID.png và kiểm tra bằng trình xem ảnh trên máy. Gắn ảnh sẽ lưu bản backup HTML; không ghi đè âm thầm.</p>');
 }
 function renderWebsites(){
  const proposals=state.data.tasks.filter(x=>x.web_proposal);
@@ -637,7 +668,8 @@ function selectView(view){
    .catch(e=>notice(e.message,true));
  }
  if(view==="artifacts"){
-  api("/api/artifacts").then(m=>{state.artifacts=m;render();})
+  Promise.all([api("/api/artifacts"),api("/api/image/jobs"),api("/api/image/health")])
+   .then(([a,j,h])=>{state.artifacts=a;state.imageJobs=j;state.imageHealth=h;render();})
    .catch(e=>notice(e.message,true));
  }
  if(view==="integrations"){
@@ -693,6 +725,50 @@ async function handleClick(event){
       website_enabled,storyboard_enabled
     },"Đã lưu policy prompt-first");
     return;
+  }
+  if(button.dataset.imageHealth!==undefined){
+    state.imageHealth=await api("/api/image/health");
+    render();
+    notice(state.imageHealth.status==="READY"?"ComfyUI và checkpoint sẵn sàng":
+      "ComfyUI: "+state.imageHealth.status,
+      state.imageHealth.status!=="READY");
+    return;
+  }
+  if(button.dataset.imageSubmit!==undefined){
+    const slug=$("image-project").value,checkpoint=$("image-checkpoint").value;
+    const prompt=$("image-prompt").value.trim();
+    if(prompt.length<20||prompt.length>450)throw Error("Mô tả ảnh phải dài 20–450 ký tự");
+    if(!confirm("Cho phép ComfyUI LOCAL chạy model ảnh trên GPU để tạo đúng 1 ảnh?\n"+
+      "Checkpoint: "+checkpoint+"\nWebsite: "+slug+"\n"+
+      "Không tự tải model, không chi API cloud, không tự đăng bài."))return;
+    const output=await mutate("/api/image/submit",{
+      ack:"GENERATE_LOCAL_IMAGE",slug,prompt,checkpoint
+    },"Đã gửi job tới ComfyUI local");
+    state.imageJobs=await api("/api/image/jobs");
+    render();notice("Image job: "+output.job_id);
+    return;
+  }
+  if(button.dataset.imageCollect!==undefined){
+    if(!confirm("Kiểm tra ComfyUI và nhập một ảnh hoàn thành vào website local?"))return;
+    const out=await mutate("/api/image/"+button.dataset.imageCollect+"/collect",{
+      ack:"IMPORT_AI_IMAGE"
+    },"Đã kiểm tra kết quả ảnh");
+    state.imageJobs=await api("/api/image/jobs");
+    render();notice("Image status: "+out.status);
+    return;
+  }
+  if(button.dataset.imageAttach!==undefined){
+    const job=(state.imageJobs?.jobs||[]).find(x=>x.job_id===button.dataset.imageAttach);
+    if(!job||!job.asset_sha||!job.current_html_sha)throw Error("Không tìm thấy SHA ảnh hoặc website");
+    if(!confirm("Xác nhận ĐÃ MỞ VÀ XEM FILE ẢNH local?\n"+
+      "Website: "+job.slug+"\nẢnh SHA: "+job.asset_sha+
+      "\nHTML SHA: "+job.current_html_sha+
+      "\nTạo backup HTML và gắn ảnh vào website local; KHÔNG deploy."))return;
+    await mutate("/api/image/"+job.job_id+"/attach",{
+      ack:"ATTACH_AI_IMAGE",image_sha:job.asset_sha,html_sha:job.current_html_sha
+    },"Đã gắn ảnh và sao lưu HTML gốc");
+    state.imageJobs=await api("/api/image/jobs");
+    render();return;
   }
   if(button.dataset.checkModelHealth!==undefined){
     const status=await api("/api/model/health");

@@ -49,6 +49,18 @@ Run the tests (no live model credentials or customer interviews required):
 
 The repository's [GitHub Actions CI](.github/workflows/ci.yml) runs the same suite on Windows and Python 3.13 for pushes/PRs targeting `main`.
 
+## V2.4 Local AI Image Studio (Optional)
+
+A separate, owner-gated **ComfyUI localhost adapter** enables real raster AI image
+generation for an already owner-applied local website, if ComfyUI and a supported
+checkpoint have been separately installed. It submits one fixed standard graph,
+imports an SHA-checked PNG, requires owner review, and attaches the labeled
+illustration with an HTML backup and source SHA check. No automatic retry, public
+deployment, image-provider cloud access or guaranteed photorealistic result.
+
+[Read the V2.4 image studio workflow](docs/milestones/LOCAL_AI_IMAGES_V24.md).
+Ollama `qwen3:8b` is a text model and **does not itself create raster images**.
+
 ## V2.1 Prompt-First Workspace (Owner UI)
 
 The default page now accepts a plain Vietnamese request and creates a bounded
