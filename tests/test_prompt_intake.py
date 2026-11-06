@@ -39,8 +39,8 @@ class PromptWorkspaceTests(unittest.TestCase):
             submitted = plan_request(prompt, brain_db_path=self.db)
             model.assert_not_called()
         goal = brain_store.get_goal(submitted["goal_id"], db_path=self.db)
-        self.assertEqual(goal["inputs"]["brief"], prompt)
-        self.assertEqual(goal["plan"][0]["payload"]["brief"], prompt)
+        self.assertEqual(goal["inputs"]["brief"], prompt.strip())
+        self.assertEqual(goal["plan"][0]["payload"]["brief"], prompt.strip())
         with self.assertRaises(ValueError):
             plan_request("Tạo website " + "x" * MAX_PROMPT, brain_db_path=self.db)
 
