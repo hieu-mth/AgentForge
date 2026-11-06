@@ -129,8 +129,17 @@ export default function App() {
   const openGoalResult=async selectedGoal=>{
     const completed=(selectedGoal.step_runs||[]).find(step=>step.status==='SUCCEEDED'&&step.child_task_id);
     if(!completed){message.warning('Không tìm thấy thành phẩm của kế hoạch này');return;}
-    try{setTask(await api('/api/tasks/'+encodeURIComponent(completed.child_task_id)));}
-    catch(e){authError(e);}
+    try{
+      const detail=await api('/api/tasks/'+encodeURIComponent(completed.child_task_id));
+      if(detail.web_proposal?.proposal_id){
+        // A successful web.create produces a reviewable *proposal*, not a
+        // completed live website. Open the existing sandboxed visual preview.
+        await openProposal(detail.web_proposal.proposal_id);
+        setGoal(null);
+      }else{
+        setTask(detail);
+      }
+    }catch(e){authError(e);}
   };
   const plan=async prompt => {
     const outcome=await runAction(()=>post('/api/workspace/request',

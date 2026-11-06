@@ -1,7 +1,7 @@
 schema_version = 1
 id = "web.create"
-version = "0.1.0"
-description = "Create a premium offline static website proposal for owner review."
+version = "0.2.0"
+description = "Create an owner-reviewable offline website from structured AI copy and audited local HTML/CSS."
 worker_id = "product_builder"
 execution_mode = "owner_gated"
 required_permissions = ["model.invoke", "workspace.propose"]

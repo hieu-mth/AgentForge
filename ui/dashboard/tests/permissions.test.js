@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PERMISSIONS, requiredPermissions, permissionsKnown, executionConsent } from '../src/permissions.js';
+import { PERMISSIONS, SKILLS, requiredPermissions, permissionsKnown, executionConsent } from '../src/permissions.js';
+import { readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 
 test('every grant has an owner-facing title, effect, and risk level',()=>{
   for (const permission of ['workspace.read','workspace.write','workspace.propose','model.invoke',
@@ -37,4 +40,18 @@ test('browser/process confirmations match selected required permissions only',()
 test('unknown permissions are fail closed, never treated as explained',()=>{
   assert.equal(permissionsKnown(['workspace.write']),true);
   assert.equal(permissionsKnown(['workspace.write','admin.root']),false);
+});
+
+test('every registered skill has a human-readable Vietnamese label',()=>{
+  const root=resolve(dirname(fileURLToPath(import.meta.url)),'../../../skills');
+  const ids=readdirSync(root,{withFileTypes:true})
+    .filter(entry=>entry.isDirectory())
+    .map(entry=>{
+      const toml=readFileSync(resolve(root,entry.name,'skill.toml'),'utf8');
+      const id=toml.match(/^id\s*=\s*"([^"]+)"/m);
+      assert.ok(id,'Missing ID for '+entry.name);
+      return id[1];
+    });
+  assert.deepEqual(ids.sort(),Object.keys(SKILLS).sort());
+  for(const label of Object.values(SKILLS)) assert.ok(label.length>8);
 });
