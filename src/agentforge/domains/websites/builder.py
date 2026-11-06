@@ -27,7 +27,7 @@ ALLOWED_FILES = frozenset({"index.html", "styles.css", "app.js", "README.md"})
 MAX_TOTAL_BYTES = 24_000
 # V2 premium HTML may include inline CSS/artwork; C8A still requests compact HTML.
 MAX_FILE_BYTES = 16_000
-MAX_PROPOSAL_BYTES = 30_000
+MAX_PROPOSAL_BYTES = 80_000
 # Reject obvious active network access / remote code. Not a security scanner.
 SUSPICIOUS = re.compile(
     r"https?://|(?:src|href)\s*=\s*(?:['\"]\s*)?(?://|data:)|"
@@ -243,7 +243,7 @@ def _standalone_html(raw):
 def propose(slug, brief, *, model_client=None):
     """Model produces an immutable proposal, never product files."""
     slug = _check_slug(slug)
-    brief = _bounded_text(brief, "brief", 20, 600)
+    brief = _bounded_text(brief, "brief", 20, 6000)
     product_root = PRODUCTS / slug
     _check_path_chain(product_root)
     if product_root.exists():
@@ -344,7 +344,7 @@ def _read_proposal(proposal_id):
                 "execution_authorized", "spending_authorized", "deployment_authorized"))):
         raise ValueError("Invalid or unauthorized product proposal")
     slug = _check_slug(data["project_slug"])
-    brief = _bounded_text(data["brief"], "brief", 20, 600)
+    brief = _bounded_text(data["brief"], "brief", 20, 6000)
     checked = _validate_files({"summary": data["summary"], "files": data["files"]})
     if not isinstance(data["sha256"], str) or not SHA_RE.fullmatch(data["sha256"]):
         raise ValueError("Invalid proposal digest")
