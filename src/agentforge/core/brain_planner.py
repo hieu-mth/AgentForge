@@ -35,6 +35,7 @@ def _steps(template, inputs):
     if not isinstance(inputs, dict) or required - set(inputs):
         raise brain_store.BrainError("Required goal inputs missing")
     allowed = required | (
+        {"source_proposal_id", "source_sha256", "revision_feedback"} if template == "website.draft" else
         {"campaign"} if template in {"campaign.review", "website.campaign"} else
         {"photo_name", "rights_confirmed"} if template == "media.produce" else set())
     if set(inputs) - allowed:
@@ -50,8 +51,20 @@ def _steps(template, inputs):
         from agentforge.product_builder import _check_slug, _bounded_text
         _check_slug(inputs["slug"])
         _bounded_text(inputs["brief"], "brief", 20, 6000)
-        steps = [("web.create", {
-            "slug": inputs["slug"], "brief": inputs["brief"]})]
+        revision_keys = {"source_proposal_id", "source_sha256", "revision_feedback"}
+        present = revision_keys & set(inputs)
+        if present and present != revision_keys:
+            raise brain_store.BrainError("Revision requires the source ID, SHA and complete feedback")
+        if present:
+            from agentforge.website_feedback import MIN_FEEDBACK, MAX_FEEDBACK
+            from agentforge.product_builder import _check_proposal_id, SHA_RE
+            _check_proposal_id(inputs["source_proposal_id"])
+            if not isinstance(inputs["source_sha256"], str) or not SHA_RE.fullmatch(inputs["source_sha256"]):
+                raise brain_store.BrainError("Invalid source proposal digest")
+            _bounded_text(inputs["revision_feedback"], "revision feedback", MIN_FEEDBACK, MAX_FEEDBACK)
+        steps = [("web.create", {key: inputs[key] for key in
+                 ("slug", "brief", "source_proposal_id", "source_sha256", "revision_feedback")
+                 if key in inputs})]
     elif template == "website.campaign":
         payload = {"dataset": inputs["dataset"]}
         if "campaign" in inputs:
