@@ -1,21 +1,22 @@
-import { Alert, Button, Card, Descriptions, Divider, Statistic, Table, Typography } from 'antd';
-import { ClockCircleOutlined } from '@ant-design/icons';
-import { badge, fallback } from '../components/shared.jsx';
-const { Text } = Typography;
+import { Alert, Button, Card, Descriptions, Table } from 'antd';
+import { AuditOutlined, BankOutlined, ClockCircleOutlined, FireOutlined,
+  PlayCircleOutlined, TeamOutlined } from '@ant-design/icons';
+import { badge, fallback, StatTile } from '../components/shared.jsx';
 
 export function Overview({data, onNavigate}) {
   const company=data?.company_v2||{}, biz=company.business||{}, content=company.content||{};
-  const cards=[
-    ['AI đang chờ duyệt',content.pending_ai_reviews??0],
-    ['Video cần xem',content.videos_waiting_for_owner??0],
-    ['Chiến dịch thật',biz.real_campaigns??0],
-    ['Lead owner ghi nhận',biz.owner_recorded_leads??0],
-  ];
+  const pending=content.pending_ai_reviews??0, videos=content.videos_waiting_for_owner??0;
+  const actions=company.next_owner_actions||[];
   return <>
-    <div className="metric-grid">{cards.map(([label,value])=>
-      <Card key={label} className="metric"><Statistic title={label} value={value}/></Card>)}</div>
+    <div className="stat-grid">
+      <StatTile label="AI đang chờ duyệt" value={pending} icon={<AuditOutlined/>} tone={pending?'warn':'good'}
+        hint={pending?'Cần bạn xem xét':'Đã xử lý hết'}/>
+      <StatTile label="Video cần xem" value={videos} icon={<PlayCircleOutlined/>} tone={videos?'warn':'good'}/>
+      <StatTile label="Chiến dịch thật" value={biz.real_campaigns??0} icon={<FireOutlined/>} tone="info"/>
+      <StatTile label="Lead owner ghi nhận" value={biz.owner_recorded_leads??0} icon={<TeamOutlined/>} tone="info"/>
+    </div>
     <div className="two-cols">
-      <Card title="Tình trạng hệ thống">
+      <Card title="Tình trạng hệ thống" className="panel">
         <Descriptions column={1} size="small" items={[
           {key:'1',label:'Operations',children:badge(company.operations)},
           {key:'2',label:'Autopilot',children:badge(company.autopilot?.enabled?'ACTIVE':'OFF')},
@@ -23,9 +24,10 @@ export function Overview({data, onNavigate}) {
           {key:'4',label:'Lợi nhuận bank-verified',children:'Chưa có đối soát'},
         ]}/>
       </Card>
-      <Card title="Cần làm tiếp" extra={<Button size="small" onClick={()=>onNavigate('workspace')}>Giao việc</Button>}>
-        {(company.next_owner_actions||[]).length?
-          (company.next_owner_actions||[]).map(x=><p key={x}><ClockCircleOutlined/> {x}</p>):
+      <Card title="Cần làm tiếp" className="panel"
+        extra={<Button size="small" type="primary" ghost onClick={()=>onNavigate('workspace')}>Giao việc</Button>}>
+        {actions.length ?
+          <ul className="todo-list">{actions.map(x=><li key={x}><ClockCircleOutlined/> {x}</li>)}</ul> :
           fallback('Không có hành động mới')}
       </Card>
     </div>
@@ -34,24 +36,27 @@ export function Overview({data, onNavigate}) {
 
 export function ReadOnlyPage({section,data}) {
   const company=data?.company_v2||{}, b=company.business||{};
-  if(section==='finance') return <div className="metric-grid">
-    <Card><Statistic title="Campaign thật" value={b.real_campaigns||0}/></Card>
-    <Card><Statistic title="Bài đăng owner khai báo" value={b.owner_attested_publications||0}/></Card>
-    <Card><Statistic title="Lợi nhuận xác minh" value="Chưa xác minh"/></Card>
-    <Card><Statistic title="Provider billing" value="Chưa kết nối"/></Card>
-    <Alert type="info" className="full-row" message="Số liệu hiện có chưa phải báo cáo ngân hàng. Không tự giao dịch, chi tiền hoặc đăng quảng cáo."/>
-  </div>;
-  if(section==='channels') return <Card title="Kênh xuất bản">
+  if(section==='finance') return <>
+    <div className="stat-grid">
+      <StatTile label="Campaign thật" value={b.real_campaigns||0} icon={<FireOutlined/>}/>
+      <StatTile label="Bài đăng owner khai báo" value={b.owner_attested_publications||0} icon={<AuditOutlined/>}/>
+      <StatTile label="Lợi nhuận xác minh" value="Chưa xác minh" tone="warn" icon={<BankOutlined/>}/>
+      <StatTile label="Provider billing" value="Chưa kết nối" tone="warn"/>
+    </div>
+    <Alert showIcon type="info" message="Số liệu hiện có chưa phải báo cáo ngân hàng. Không tự giao dịch, chi tiền hoặc đăng quảng cáo."/>
+  </>;
+  if(section==='channels') return <Card title="Kênh xuất bản" className="panel">
     <Alert type="warning" showIcon message="YouTube và TikTok chưa kết nối OAuth"
       description="AgentForge hiện chỉ chuẩn bị gói upload thủ công. Không hiển thị nút kết nối giả."/>
   </Card>;
-  if(section==='team') return <Card title="Danh mục AI Workforce">
-    <Table rowKey={s=>s.id} dataSource={data?.skills||[]} pagination={{pageSize:10}}
-      columns={[{title:'Skill',dataIndex:'id'},{title:'Role/Worker',dataIndex:'worker'},
+  if(section==='team') return <Card title="Danh mục AI Workforce" className="panel">
+    <Table rowKey={s=>s.id} dataSource={data?.skills||[]} scroll={{x:'max-content'}}
+      pagination={{pageSize:10,hideOnSinglePage:true}}
+      columns={[{title:'Skill',dataIndex:'id',render:v=><code>{v}</code>},{title:'Role/Worker',dataIndex:'worker'},
         {title:'Chế độ',dataIndex:'mode',render:badge}]}/>
   </Card>;
-  if(section==='settings') return <Card title="Giới hạn & chính sách">
-    <Descriptions column={1} bordered items={[
+  if(section==='settings') return <Card title="Giới hạn & chính sách" className="panel">
+    <Descriptions column={{xs:1,md:1}} bordered items={[
       {key:'1',label:'Lượt model tối đa cho prompt/Goal',children:data?.workspace_policy?.max_estimated_model_calls??1},
       {key:'2',label:'Website intake',children:data?.workspace_policy?.website_enabled?'Bật':'Tắt'},
       {key:'3',label:'Storyboard intake',children:data?.workspace_policy?.storyboard_enabled?'Bật':'Tắt'},
@@ -61,4 +66,3 @@ export function ReadOnlyPage({section,data}) {
   </Card>;
   return fallback('Không có dữ liệu');
 }
-

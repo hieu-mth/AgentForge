@@ -6,8 +6,8 @@ const { TextArea } = Input;
 
 export function Websites({data, showProposal}) {
   const proposals=(data?.tasks||[]).filter(x=>x.web_proposal);
-  return <Card title="Landing page AI" extra={<Text type="secondary">Chỉ duyệt sau khi xem bản preview</Text>}>
-    <Table rowKey={x=>x.task_id} pagination={{pageSize:8}} dataSource={proposals}
+  return <Card className="panel" title="Landing page AI" extra={<Text type="secondary">Chỉ duyệt sau khi xem bản preview</Text>}>
+    <Table rowKey={x=>x.task_id} scroll={{x:"max-content"}} pagination={{pageSize:8,hideOnSinglePage:true}} dataSource={proposals}
       locale={{emptyText:'Chưa có bản nháp website.'}} columns={[
         {title:'Project',render:(_,t)=><b>{t.web_proposal.slug}</b>},
         {title:'Proposal',render:(_,t)=><code>{clip(t.web_proposal.proposal_id)}</code>},
@@ -25,8 +25,8 @@ export function ProposalDrawer({proposal, onClose, onRevise, onApply, busy}) {
   if (!proposal) return null;
   const id=proposal.proposal_id, allowed=needPreviewId(id);
   return <Drawer title="Xem trước & phê duyệt website" open={!!proposal} onClose={onClose}
-    width="min(1120px, 96vw)" destroyOnHidden extra={badge(proposal.status)}>
-    <Space direction="vertical" style={{width:'100%'}} size={18}>
+    size="min(1120px, 96vw)" destroyOnHidden extra={badge(proposal.status)}>
+    <Space orientation="vertical" style={{width:'100%'}} size={18}>
       <div className="preview-toolbar">
         <div><Title level={4} style={{marginBottom:0}}>{proposal.project_slug}</Title>
           <Text type="secondary">Bản nháp được cách ly, không chạy script hoặc tải tài nguyên ngoài</Text></div>

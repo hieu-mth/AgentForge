@@ -41,7 +41,7 @@ export function Schedules({data,mutate,onReload}) {
         if(out){message.success('Đã tạo lịch');form.resetFields();onReload();}
       });
   };
-  return <Space direction="vertical" style={{width:'100%'}} size={18}>
+  return <Space orientation="vertical" style={{width:'100%'}} size={18}>
     <Alert type="info" showIcon message="Lịch local có kiểm soát"
       description="Chỉ workflow read-only, không có quyền model/process. Bạn phải chủ động bấm Tick hoặc chạy daemon đã được owner cấu hình. Tạo lịch không có nghĩa là đã bật background."/>
     <Card title="Các lịch đã lập" extra={<Button onClick={()=>confirmOwner(modal,
@@ -94,7 +94,7 @@ export function OperationsControl({data,mutate,onReload}) {
         ack:next==='PAUSED'?'PAUSE_OPERATIONS':'RESUME_OPERATIONS',mode:next});
       if(out){message.success('Operations: '+next);onReload();}
     });
-  return <Space size={18} direction="vertical" style={{width:'100%'}}>
+  return <Space size={18} orientation="vertical" style={{width:'100%'}}>
     <Alert type="info" showIcon message="Đây là công tắc vận hành local"
       description="Pause không xóa task, sản phẩm hoặc audit. Resume không tự cấp quyền publish, browser, model hoặc chi tiền."/>
     <Card title="Operations">
@@ -114,7 +114,7 @@ export function OperationsControl({data,mutate,onReload}) {
 
 export function Intelligence({data}) {
   const items=data?.datasets||[];
-  return <Space direction="vertical" style={{width:'100%'}}>
+  return <Space orientation="vertical" style={{width:'100%'}}>
     <Alert type="info" showIcon message="Dữ liệu đã lưu trên máy"
       description="Synthetic và real được đánh dấu riêng. Dữ liệu thống kê không chứng minh có khách hàng hoặc lợi nhuận thật."/>
     <Card title="Datasets hiện có">
@@ -141,7 +141,7 @@ export function Growth({data,mutate,onReload}) {
       }});
       if(out){message.success('Đã tạo campaign');form.resetFields();onReload();}
     });
-  return <Space direction="vertical" size={18} style={{width:'100%'}}>
+  return <Space orientation="vertical" size={18} style={{width:'100%'}}>
     <Alert type="warning" showIcon message="Budget ở đây chỉ là số liệu kế hoạch"
       description="Không phải quyền chi tiền, hóa đơn provider hay lợi nhuận xác minh."/>
     <Card title="Growth & Revenue">
@@ -249,7 +249,7 @@ export function OwnerMemory({mutate}) {
         key:v.key,note:v.note,evidence_ref:v.evidence_ref});
       if(out){message.success('Đã lưu phiên bản ghi chú');form.resetFields();refresh();}
     });
-  return <Space direction="vertical" size={18} style={{width:'100%'}}>
+  return <Space orientation="vertical" size={18} style={{width:'100%'}}>
     <Card title="Owner Memory · ghi chú có nguồn">
       <Table rowKey="key" dataSource={rows||[]} pagination={{pageSize:8}}
         columns={[

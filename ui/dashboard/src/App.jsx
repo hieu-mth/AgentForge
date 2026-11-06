@@ -1,16 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { App as AntApp, Alert, Badge, Button, Card, Checkbox, Collapse, ConfigProvider,
-  Descriptions, Divider, Drawer, Empty, Form, Input, Layout, Menu, Modal,
-  Segmented, Select, Space, Spin, Statistic, Table, Tabs, Tag, Typography } from 'antd';
+import { useCallback, useEffect, useState } from 'react';
+import { App as AntApp, Alert, Button, Card, Collapse, Descriptions, Drawer, Form, Grid, Input,
+  Layout, Menu, Space, Spin, Table, Tabs, Tooltip, Typography } from 'antd';
 import {
-  AppstoreOutlined, AuditOutlined, BarChartOutlined, CheckCircleOutlined,
-  ClockCircleOutlined, CodeOutlined, DashboardOutlined, FileTextOutlined,
-  FolderOpenOutlined, GlobalOutlined, LogoutOutlined, MenuFoldOutlined,
-  MenuUnfoldOutlined, PlayCircleOutlined, ReloadOutlined, RobotOutlined,
-  SafetyCertificateOutlined, SendOutlined, SettingOutlined, TeamOutlined,
+  BarChartOutlined, CodeOutlined, DashboardOutlined, FolderOpenOutlined,
+  MenuOutlined, MoonOutlined, ReloadOutlined, RobotOutlined,
+  SafetyCertificateOutlined, SettingOutlined, SunOutlined, TeamOutlined,
 } from '@ant-design/icons';
 import { api } from './api.js';
-import { badge, clip } from './components/shared.jsx';
+import { useThemeMode } from './theme.jsx';
+import { badge, clip, PageHeader } from './components/shared.jsx';
 import { Workspace, GoalDrawer } from './features/Workspace.jsx';
 import { Websites, ProposalDrawer } from './features/Websites.jsx';
 import { Overview, ReadOnlyPage } from './features/Operations.jsx';
@@ -22,7 +20,13 @@ import { NAV_GROUPS, groupFor, labelFor, defaultSection, parseSection, hashFor, 
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
-const { TextArea } = Input;
+
+const GROUP_ICONS = {
+  workspace: <RobotOutlined/>, overview: <DashboardOutlined/>,
+  projects: <FolderOpenOutlined/>, business: <BarChartOutlined/>,
+  team: <TeamOutlined/>, settings: <SettingOutlined/>,
+};
+const MENU_ITEMS = NAV_GROUPS.map(item => ({key: item.key, icon: GROUP_ICONS[item.key], label: item.label}));
 
 function ErrorBoundary({error, onReset}) {
   if (!error) return null;
@@ -30,20 +34,36 @@ function ErrorBoundary({error, onReset}) {
     description={error.message || String(error)} style={{marginBottom:20}}/>;
 }
 
+function Brand({collapsed}) {
+  return <div className="brand"><span className="brand-glyph"><i/></span>
+    {!collapsed&&<div><strong>AgentForge</strong><small>AI COMPANY</small></div>}</div>;
+}
+
 function Login({onLogin, busy}) {
   return <div className="login-screen">
-    <Card className="login-card" bordered={false}>
-      <div className="brand-large"><span className="brand-glyph">A</span> AgentForge</div>
-      <Tag color="blue">LOCAL-FIRST · OWNER ACCESS</Tag>
-      <Title level={2} style={{marginTop:22,marginBottom:8}}>Chào mừng trở lại.</Title>
-      <Paragraph type="secondary">Điều hành AI Company trên máy của bạn. Nhập mã Owner được hiển thị trong PowerShell; mã này không được lưu trên trình duyệt.</Paragraph>
-      <Form layout="vertical" onFinish={onLogin}>
-        <Form.Item label="Mã Owner" name="code" rules={[{required:true, min:12}]}>
-          <Input.Password autoComplete="off" placeholder="Mã phiên đăng nhập"/>
-        </Form.Item>
-        <Button type="primary" htmlType="submit" loading={busy} block>Vào Workspace</Button>
-      </Form>
-    </Card>
+    <section className="login-art" aria-hidden="true">
+      <Brand/>
+      <div className="login-copy">
+        <h2>Rèn ý tưởng thành <em>sản phẩm</em>.</h2>
+        <p>Một công ty AI chạy ngay trên máy của bạn: lập kế hoạch, thực thi và chỉ hành động khi bạn gật đầu.</p>
+      </div>
+      <ul className="login-points">
+        <li>Duyệt SHA trước mọi lượt chạy</li><li>Dữ liệu ở lại localhost</li><li>Quyền cấp tạm thời, từng lần</li>
+      </ul>
+    </section>
+    <section className="login-panel">
+      <div className="login-card">
+        <div className="chip"><SafetyCertificateOutlined/> LOCAL-FIRST · OWNER ACCESS</div>
+        <Title level={2} style={{marginTop:18,marginBottom:8}}>Chào mừng trở lại</Title>
+        <Paragraph type="secondary">Nhập mã Owner hiển thị trong PowerShell. Mã này không được lưu trên trình duyệt.</Paragraph>
+        <Form layout="vertical" onFinish={onLogin} requiredMark={false}>
+          <Form.Item label="Mã Owner" name="code" rules={[{required:true, min:12, message:'Mã cần ít nhất 12 ký tự'}]}>
+            <Input.Password size="large" autoFocus autoComplete="off" placeholder="Mã phiên đăng nhập"/>
+          </Form.Item>
+          <Button size="large" type="primary" htmlType="submit" loading={busy} block>Vào Workspace</Button>
+        </Form>
+      </div>
+    </section>
   </div>;
 }
 
@@ -59,6 +79,10 @@ export default function App() {
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState(null);
   const [collapsed,setCollapsed]=useState(false);
+  const [navOpen,setNavOpen]=useState(false);
+  const screens=Grid.useBreakpoint();
+  const mobile=screens.lg===false;
+  const {mode,toggle:toggleTheme}=useThemeMode();
   const authError = err => {
     if (err.status===401) {setLoginNeeded(true);setData(null);setCsrf(null);}
     else {setError(err);message.error(err.message || 'API error');}
@@ -77,6 +101,7 @@ export default function App() {
     const next=hashFor(target);
     setSection(parseSection(next));
     if(window.location.hash!==next)window.location.hash=next;
+    window.scrollTo?.({top:0});
   };
   const runAction=async(fn,{refreshData=true}={})=>{
     setBusy(true);setError(null);
@@ -129,73 +154,92 @@ export default function App() {
     async()=>{const out=await runAction(()=>post('/api/proposals/'+p.proposal_id+'/apply',
       {ack:'APPLY_PROPOSAL',sha256:p.sha256}));
       if(out){setProposal(null);message.success('Đã lưu vào workspace/products');}});
+
   // Sidebar shows only business-level destinations; all existing screens live in tabs.
   const group=groupFor(section);
-  const groupIcons={
-    workspace:<RobotOutlined/>,overview:<DashboardOutlined/>,
-    projects:<FolderOpenOutlined/>,business:<BarChartOutlined/>,
-    team:<TeamOutlined/>,settings:<SettingOutlined/>,
-  };
-  const menuItems=NAV_GROUPS.map(item=>({
-    key:item.key,icon:groupIcons[item.key],label:item.label,
-  }));
   const groupTitle=NAV_GROUPS.find(item=>item.key===group)?.label || 'Giao việc';
   const activeTabs=tabsFor(group);
   if(loginNeeded)return <><Login onLogin={async({code})=>{
     await runAction(async()=>{await api('/api/login',{method:'POST',body:{code}});await refresh();},
       {refreshData:false});}} busy={busy}/><ErrorBoundary error={error} onReset={()=>setError(null)}/></>;
-  if(!data)return <div className="loading-screen"><Spin size="large"/><Text type="secondary">Đang kết nối AgentForge…</Text><ErrorBoundary error={error} onReset={()=>setError(null)}/></div>;
+  if(!data)return <div className="loading-screen"><Brand/><Spin size="large"/>
+    <Text type="secondary">Đang kết nối AgentForge…</Text>
+    <ErrorBoundary error={error} onReset={()=>setError(null)}/></div>;
   const title = labelFor(section);
   const goals = data.goals||[], tasks=data.tasks||[];
+  const goTo=key=>{navigate(defaultSection(key));setNavOpen(false);};
+  const menu=<Menu theme="dark" mode="inline" items={MENU_ITEMS} selectedKeys={[group]}
+    onClick={e=>goTo(e.key)} className="app-menu"/>;
+  const operations=data.company_v2?.operations;
   return <Layout className="app-shell">
-    <Sider theme="light" collapsible collapsed={collapsed} onCollapse={setCollapsed}
-      breakpoint="lg" width={242} className="app-sider">
-      <div className="brand"><span className="brand-glyph">A</span>{!collapsed&&<div><strong>AgentForge</strong><small>AI COMPANY</small></div>}</div>
-      <Menu theme="light" mode="inline" items={menuItems} selectedKeys={[group]}
-        onClick={e=>navigate(defaultSection(e.key))} className="app-menu"/>
-      {!collapsed && <div className="sider-foot"><Badge status="success" text="Local-first"/><div>Chỉ sử dụng trên localhost</div></div>}
-    </Sider>
-    <Layout>
+    {!mobile&&<Sider theme="dark" collapsible collapsed={collapsed} onCollapse={setCollapsed}
+      width={252} collapsedWidth={78} className="app-sider">
+      <Brand collapsed={collapsed}/>
+      {menu}
+      {!collapsed&&<div className="sider-foot"><span className="live-dot"/>
+        <div><strong>Local-first</strong><small>Chỉ chạy trên localhost</small></div></div>}
+    </Sider>}
+    {mobile&&<Drawer placement="left" open={navOpen} onClose={()=>setNavOpen(false)} size={270}
+      className="nav-drawer" closable={false} styles={{body:{padding:0}}}>
+      <Brand/>{menu}</Drawer>}
+    <Layout className="app-main">
       <Header className="app-header">
-        <div><Text type="secondary">Workspace / {groupTitle} / </Text><Text strong>{title}</Text></div>
-        <Space><Button icon={<ReloadOutlined/>} loading={busy} onClick={()=>runAction(refresh,{refreshData:false})}>Làm mới</Button>
-          <Button href="/" target="_blank" icon={<CodeOutlined/>}>Giao diện cũ</Button></Space>
+        <div className="crumbs">
+          {mobile&&<Button type="text" aria-label="Mở menu" icon={<MenuOutlined/>} onClick={()=>setNavOpen(true)}/>}
+          <Text type="secondary" className="crumb-root">{groupTitle}</Text>
+          {title!==groupTitle&&<><span className="crumb-sep">/</span><Text strong>{title}</Text></>}
+        </div>
+        <Space size={8}>
+          {operations&&<span className="header-status">{badge(operations)}</span>}
+          <Tooltip title={mode==='dark'?'Chế độ sáng':'Chế độ tối'}>
+            <Button shape="circle" aria-label="Đổi giao diện sáng/tối"
+              icon={mode==='dark'?<SunOutlined/>:<MoonOutlined/>} onClick={toggleTheme}/></Tooltip>
+          <Tooltip title="Làm mới dữ liệu">
+            <Button shape="circle" aria-label="Làm mới" icon={<ReloadOutlined/>} loading={busy}
+              onClick={()=>runAction(refresh,{refreshData:false})}/></Tooltip>
+          <Button href="/" target="_blank" icon={<CodeOutlined/>} className="legacy-link"><span>Giao diện cũ</span></Button>
+        </Space>
       </Header>
       <Content className="app-content">
-        <div className="page-heading"><div><div className="eyebrow">AGENTFORGE / OWNER WORKSPACE</div>
-          {section!=='workspace'&&<Title level={2}>{groupTitle}</Title>}</div></div>
+        {section!=='workspace'&&<PageHeader eyebrow="AGENTFORGE / OWNER WORKSPACE" title={groupTitle}/>}
         <ErrorBoundary error={error} onReset={()=>setError(null)}/>
         {activeTabs.length>1&&
           <Tabs className="workspace-tabs" activeKey={section}
             items={activeTabs} onChange={navigate}/>}
-        {section==='workspace'&&<Workspace data={data} onPlan={plan} openGoal={openGoal} loading={busy}/>}
-        {section==='overview'&&<Overview data={data} onNavigate={navigate}/>}
-        {section==='goals'&&<Card><Table dataSource={goals} rowKey="goal_id" pagination={{pageSize:10}}
-          columns={[{title:'Mục tiêu',dataIndex:'title'}, {title:'Workflow',dataIndex:'template'},
-            {title:'Trạng thái',dataIndex:'status',render:badge},
-            {title:'Hành động',render:(_,g)=><Button onClick={()=>openGoal(g.goal_id)}>Xem & duyệt</Button>}]}/></Card>}
-        {section==='tasks'&&<Card><Table dataSource={tasks} rowKey="task_id" pagination={{pageSize:10}}
-          columns={[{title:'Task',render:(_,t)=><code>{clip(t.task_id)}</code>},
-            {title:'Skill',dataIndex:'skill_id'}, {title:'Trạng thái',dataIndex:'status',render:badge},
-            {title:'Hành động',render:(_,t)=><Button onClick={()=>api('/api/tasks/'+t.task_id).then(setTask).catch(authError)}>Chi tiết</Button>}]}/></Card>}
-        {section==='websites'&&<Websites data={data} showProposal={openProposal}/>}
-        {section==='projects'&&<Projects mutate={mutate}/>}
-        {section==='retention'&&<Retention data={data} mutate={mutate}/>}
-        {section==='reviews'&&<Reviews data={data} mutate={mutate} onReload={refresh}/>}
-        {section==='schedules'&&<Schedules data={data} mutate={mutate} onReload={refresh}/>}
-        {section==='operations'&&<OperationsControl data={data} mutate={mutate} onReload={refresh}/>}
-        {section==='intelligence'&&<Intelligence data={data}/>}
-        {section==='growth'&&<Growth data={data} mutate={mutate} onReload={refresh}/>}
-        {section==='settings'&&<OwnerSettings data={data} mutate={mutate} onReload={refresh}/>}
-        {section==='memory'&&<OwnerMemory mutate={mutate}/>}
-        {['finance','channels','team'].includes(section)&&<ReadOnlyPage section={section} data={data}/>}
+        <div className="page-body" key={section}>
+          {section==='workspace'&&<Workspace data={data} onPlan={plan} openGoal={openGoal} loading={busy}/>}
+          {section==='overview'&&<Overview data={data} onNavigate={navigate}/>}
+          {section==='goals'&&<Card><Table dataSource={goals} rowKey="goal_id"
+            pagination={{pageSize:10,hideOnSinglePage:true}} scroll={{x:'max-content'}}
+            locale={{emptyText:'Chưa có kế hoạch nào'}}
+            columns={[{title:'Mục tiêu',dataIndex:'title'}, {title:'Workflow',dataIndex:'template'},
+              {title:'Trạng thái',dataIndex:'status',render:badge},
+              {title:'Hành động',render:(_,g)=><Button onClick={()=>openGoal(g.goal_id)}>Xem & duyệt</Button>}]}/></Card>}
+          {section==='tasks'&&<Card><Table dataSource={tasks} rowKey="task_id"
+            pagination={{pageSize:10,hideOnSinglePage:true}} scroll={{x:'max-content'}}
+            locale={{emptyText:'Chưa có tác vụ nào'}}
+            columns={[{title:'Task',render:(_,t)=><code>{clip(t.task_id)}</code>},
+              {title:'Skill',dataIndex:'skill_id'}, {title:'Trạng thái',dataIndex:'status',render:badge},
+              {title:'Hành động',render:(_,t)=><Button onClick={()=>api('/api/tasks/'+t.task_id).then(setTask).catch(authError)}>Chi tiết</Button>}]}/></Card>}
+          {section==='websites'&&<Websites data={data} showProposal={openProposal}/>}
+          {section==='projects'&&<Projects mutate={mutate}/>}
+          {section==='retention'&&<Retention data={data} mutate={mutate}/>}
+          {section==='reviews'&&<Reviews data={data} mutate={mutate} onReload={refresh}/>}
+          {section==='schedules'&&<Schedules data={data} mutate={mutate} onReload={refresh}/>}
+          {section==='operations'&&<OperationsControl data={data} mutate={mutate} onReload={refresh}/>}
+          {section==='intelligence'&&<Intelligence data={data}/>}
+          {section==='growth'&&<Growth data={data} mutate={mutate} onReload={refresh}/>}
+          {section==='settings'&&<OwnerSettings data={data} mutate={mutate} onReload={refresh}/>}
+          {section==='memory'&&<OwnerMemory mutate={mutate}/>}
+          {['finance','channels','team'].includes(section)&&<ReadOnlyPage section={section} data={data}/>}
+        </div>
       </Content>
     </Layout>
     <GoalDrawer goal={goal} onClose={()=>setGoal(null)} onApprove={approve}
       onExecute={execute} busy={busy} externalEnabled={!!data.external_actions_enabled}/>
     <ProposalDrawer proposal={proposal} onClose={()=>setProposal(null)}
       onRevise={revise} onApply={apply} busy={busy}/>
-    <Drawer title="Chi tiết tác vụ" width={720} open={!!task} onClose={()=>setTask(null)}>
+    <Drawer title="Chi tiết tác vụ" size={720} open={!!task} onClose={()=>setTask(null)}>
       {task && <><Descriptions bordered column={1} size="small" items={[
         {key:'1',label:'Task ID',children:<code>{task.task_id}</code>},
         {key:'2',label:'Skill',children:task.skill_id},

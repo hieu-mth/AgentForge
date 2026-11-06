@@ -53,7 +53,7 @@ export function Retention({data,mutate}) {
     modal.confirm({
       title:'Tạo bản backup local cho thành phẩm này?',
       width:600,okText:'Tạo backup ZIP',cancelText:'Hủy',
-      content:<Space direction="vertical">
+      content:<Space orientation="vertical">
         <Paragraph>Tên: <Text code>{item.kind}/{item.id}</Text>. Nguồn vẫn được giữ nguyên; bản sao nằm ở data/backups/agentforge.</Paragraph>
         <Text>File: {review.file_count} · {(review.total_bytes/1024/1024).toFixed(2)} MiB</Text>
         <Text>Tree SHA-256: <Text code style={{overflowWrap:'anywhere'}}>{review.tree_sha256}</Text></Text>
@@ -98,7 +98,7 @@ export function Retention({data,mutate}) {
     });
   };
 
-  return <Space direction="vertical" size={20} style={{width:'100%'}}>
+  return <Space orientation="vertical" size={20} style={{width:'100%'}}>
     <Alert type="info" showIcon message="Retention & Cleanup — an toàn theo SHA"
       description="Chỉ sao lưu và di chuyển thành phẩm đã chọn. Không tự xóa sản phẩm, SQLite, task history hoặc dữ liệu khách hàng. Quarantine không giải phóng dung lượng ổ đĩa."/>
     <Alert type={paused?'success':'warning'} showIcon
@@ -113,7 +113,7 @@ export function Retention({data,mutate}) {
           {title:'Trạng thái',dataIndex:'state',render:badge},
           {title:'Kiểm tra',render:(_,item)=>{
             const receipt=inspected[key(item)];
-            return <Space direction="vertical">
+            return <Space orientation="vertical">
               <Button onClick={()=>inspect(item)} size="small" loading={busy}>Kiểm tra SHA</Button>
               {receipt&&<>
                 <Text type="secondary">{receipt.file_count} file / {(receipt.total_bytes/1024/1024).toFixed(2)} MiB</Text>
@@ -134,7 +134,7 @@ export function Retention({data,mutate}) {
           {title:'Trạng thái',dataIndex:'status',render:badge},
           {title:'Bảo vệ',render:(_,row)=>{
             const match=verified[row.backup_id]?.tree_sha256===row.tree_sha256;
-            return <Space direction="vertical" size={8}>
+            return <Space orientation="vertical" size={8}>
               <Button size="small" onClick={()=>verify(row)} loading={busy}>Verify ZIP & SHA</Button>
               {match&&<Tag color="success" icon={<SafetyCertificateOutlined/>}>Đã verify phiên này</Tag>}
               {row.status==='BACKED_UP'&&

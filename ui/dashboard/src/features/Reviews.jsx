@@ -45,7 +45,7 @@ export function Reviews({data, mutate, onReload}) {
         if(out){message.success('Đã ghi quyết định video');setVideo(null);onReload();}
       }});
   };
-  return <Space direction="vertical" size={18} style={{width:'100%'}}>
+  return <Space orientation="vertical" size={18} style={{width:'100%'}}>
     <Alert showIcon type="info" message="Owner Review Queue"
       description="Phê duyệt chỉ ghi lại quyết định, không đăng bài, phát hành video hoặc quảng cáo."/>
     <Card title={'AI Drafts ('+(data?.autopilot_reviews?.pending_count||0)+' chờ xử lý)'}>
@@ -69,8 +69,8 @@ export function Reviews({data, mutate, onReload}) {
         ]}/>
     </Card>
     <Drawer title="Review storyboard AI" open={!!draft} onClose={()=>setDraft(null)}
-      width={720} destroyOnHidden>
-      {draft&&<Space direction="vertical" size="middle" style={{width:'100%'}}>
+      size="min(720px, 96vw)" destroyOnHidden>
+      {draft&&<Space orientation="vertical" size="middle" style={{width:'100%'}}>
         <Alert type="warning" message="PASS_HEURISTIC không phải xác minh fact"
           description="Đọc toàn bộ nội dung và tự kiểm tra claim, sản phẩm, giá và chính sách trước khi duyệt."/>
         <Text>SHA: <Text code>{draft.output_sha}</Text></Text>
@@ -87,8 +87,8 @@ export function Reviews({data, mutate, onReload}) {
       </Space>}
     </Drawer>
     <Drawer title="Review MP4 local" open={!!video} onClose={()=>setVideo(null)}
-      width={680} destroyOnHidden>
-      {video&&<Space direction="vertical" size="middle" style={{width:'100%'}}>
+      size="min(680px, 96vw)" destroyOnHidden>
+      {video&&<Space orientation="vertical" size="middle" style={{width:'100%'}}>
         <Alert type="warning" message="Phải xem video thật trên máy trước khi quyết định"
           description="Bản metadata này không thay thế việc phát MP4. Không tự đăng video."/>
         <Descriptions bordered column={1} items={[

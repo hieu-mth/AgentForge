@@ -61,7 +61,7 @@ export function Projects({mutate}) {
   if(!state.artifacts)return <Card><Spin/> Đang đọc kho thành phẩm local...</Card>;
   const sites=(state.artifacts.items||[]).filter(x=>x.kind==='website');
   const models=state.health?.checkpoints||[];
-  return <Space direction="vertical" size={18} style={{width:'100%'}}>
+  return <Space orientation="vertical" size={18} style={{width:'100%'}}>
     <Alert showIcon type="info" message="Kho sản phẩm và lịch sử local — không tự xóa"
       description="Danh sách dưới đây chỉ kiểm kê những sản phẩm được lưu tại máy. Website local không phải website đã triển khai Internet."/>
     <Card title="Projects & Files" extra={<Button icon={<ReloadOutlined/>} onClick={refresh} loading={busy}>Làm mới</Button>}>
@@ -98,7 +98,7 @@ export function Projects({mutate}) {
       </Form>
     </Card>
     <Card title="Lượt tạo ảnh và duyệt file">
-      <Space direction="vertical" style={{width:'100%'}} size="middle">
+      <Space orientation="vertical" style={{width:'100%'}} size="middle">
         {(state.jobs?.jobs||[]).length===0?<Empty description="Chưa có job ảnh AI"/>:
           (state.jobs?.jobs||[]).map(job=><Card size="small" key={job.job_id}>
             <div className="image-job">
