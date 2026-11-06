@@ -28,7 +28,7 @@ from agentforge.dashboard_v0 import _artifact_names, _task_public
 STATIC = Path(__file__).with_name("control_center_static")
 COOKIE = "af_owner_session"
 SESSION_SECONDS = 8 * 60 * 60
-MAX_BODY = 8192
+MAX_BODY = 65536
 SENSITIVE_GRANTS = {"model.invoke", "network.read", "network.search",
                     "browser.run", "process.run"}
 LOCAL_GRANTS = {"workspace.write", "workspace.propose", "workspace.read"}
