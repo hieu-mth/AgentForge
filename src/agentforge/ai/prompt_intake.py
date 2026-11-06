@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from agentforge import brain_planner, goal_preflight, workspace_policy
 
-MAX_PROMPT = 600
+MAX_PROMPT = 6000
 
 
 def _fold(value):
@@ -22,7 +22,7 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
                  policy_db_path=None):
     if (not isinstance(prompt, str) or not 20 <= len(prompt.strip()) <= MAX_PROMPT
             or any(ord(ch) < 32 and ch not in "\n\t" for ch in prompt)):
-        raise ValueError("Yêu cầu phải dài 20–600 ký tự, không chứa ký tự điều khiển.")
+        raise ValueError("Yêu cầu phải dài 20–6000 ký tự, không chứa ký tự điều khiển.")
     if type(max_model_calls) is not int or not 0 <= max_model_calls <= 3:
         raise ValueError("Giới hạn model phải từ 0 đến 3.")
     if type(max_external_runs) is not int or max_external_runs != 0:

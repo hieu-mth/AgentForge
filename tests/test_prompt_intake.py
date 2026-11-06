@@ -29,6 +29,21 @@ class PromptWorkspaceTests(unittest.TestCase):
         self.assertIn("0879547988", goal["inputs"]["brief"])
         self.assertEqual("web.create", goal["plan"][0]["skill_id"])
 
+    def test_extended_owner_brief_uses_characters_not_words(self):
+        from agentforge.prompt_intake import MAX_PROMPT
+        self.assertEqual(MAX_PROMPT, 6000)
+        prompt = "Tạo website tư vấn nệm tại Việt Nam. " + ("Nội dung chi tiết tiếng Việt. " * 175)
+        self.assertGreater(len(prompt), 600)
+        self.assertLessEqual(len(prompt), MAX_PROMPT)
+        with patch("agentforge.model.generate_json") as model:
+            submitted = plan_request(prompt, brain_db_path=self.db)
+            model.assert_not_called()
+        goal = brain_store.get_goal(submitted["goal_id"], db_path=self.db)
+        self.assertEqual(goal["inputs"]["brief"], prompt.strip())
+        self.assertEqual(goal["plan"][0]["payload"]["brief"], prompt.strip())
+        with self.assertRaises(ValueError):
+            plan_request("Tạo website " + "x" * MAX_PROMPT, brain_db_path=self.db)
+
     def test_unknown_or_multiple_intents_do_not_create_goal(self):
         for prompt in ("Hãy giúp tôi vận hành toàn bộ doanh nghiệp và tự mua quảng cáo",
                        "Tạo landing page và kịch bản video quảng cáo nệm ngay lập tức"):

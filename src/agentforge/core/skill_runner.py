@@ -127,6 +127,13 @@ def _dispatch(skill_id, payload):
         return check_project(payload["slug"])
     if skill_id == "web.create":
         from agentforge.product_builder import propose
+        if "source_proposal_id" in payload:
+            return propose(
+                payload["slug"], payload["brief"],
+                source_proposal_id=payload["source_proposal_id"],
+                source_sha256=payload["source_sha256"],
+                revision_feedback=payload["revision_feedback"],
+            )
         return propose(payload["slug"], payload["brief"])
     if skill_id == "web.browser_test":
         from agentforge.browser_validation import validate
@@ -224,6 +231,9 @@ def _safe_failure(skill_id, exc):
             return "MODEL_JSON_INVALID: AI did not produce valid structured JSON."
         if isinstance(exc, ValueError):
             value = str(exc)
+            if value.startswith("REVISION_NO_CHANGE:"):
+                return ("WEBSITE_UNCHANGED: AI returned the same website. "
+                        "No new proposal was saved; specify a concrete change.")
             if value.startswith("Structured website content invalid:"):
                 return ("WEB_COPY_INVALID: AI content failed the bounded website "
                         "copy contract; no proposal saved.")
