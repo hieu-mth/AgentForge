@@ -40,13 +40,14 @@ export function Workspace({data, onPlan, openGoal, loading}) {
       <h1 className="hero-title">Hôm nay, bạn muốn <em>rèn</em> điều gì?</h1>
       <p className="hero-caption">Mô tả mục tiêu bằng lời của bạn. AgentForge lập kế hoạch và dừng lại chờ bạn duyệt — không tự gọi AI, không tự chi tiền.</p>
       <div className="prompt-composer">
-        <TextArea aria-label="Mô tả công việc" autoSize={{minRows:4, maxRows:10}} maxLength={600} showCount
+        <TextArea aria-label="Mô tả công việc" autoSize={{minRows:4, maxRows:10}} maxLength={600}
           value={prompt} variant="borderless" onChange={e => setPrompt(e.target.value)}
           onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') submit(); }}
           placeholder="Ví dụ: Thiết kế landing page nệm ngủ cao cấp cho ba tôi, tạo hình ảnh đẹp, tối ưu trên điện thoại và có nút gọi 0879547988..."/>
         <div className="composer-footer">
           <span className="composer-hint"><SafetyCertificateOutlined/> Lập kế hoạch miễn phí · Ctrl+Enter để gửi
             {length > 0 && length < MIN_PROMPT && <b> · cần thêm {MIN_PROMPT - length} ký tự</b>}</span>
+          <span className="composer-count" aria-live="off">{prompt.length}/600</span>
           <Button type="primary" size="large" icon={<SendOutlined/>} loading={loading}
             disabled={length < MIN_PROMPT} onClick={submit}>Tạo kế hoạch</Button>
         </div>
@@ -79,7 +80,7 @@ export function Workspace({data, onPlan, openGoal, loading}) {
         <Divider style={{margin:'14px 0'}}/>
         <div className="feature-row"><CheckCircleOutlined/> Duyệt SHA kế hoạch trước khi gọi model</div>
         <div className="feature-row"><FolderOpenOutlined/> Thành phẩm lưu tại workspace local</div>
-        <Text type="secondary" className="subtle">Hiện hỗ trợ website và storyboard. Workflow chuyên sâu còn ở giao diện cũ.</Text>
+        <Text type="secondary" className="subtle">Hiện hỗ trợ website và storyboard. Workflow chuyên sâu nằm trong các mục Dự án, Kinh doanh và Cài đặt.</Text>
       </Card>
     </div>
   </div>;
