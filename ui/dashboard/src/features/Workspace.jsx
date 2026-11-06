@@ -40,10 +40,11 @@ export function Workspace({data, onPlan, openGoal, loading}) {
       <h1 className="hero-title">Hôm nay, bạn muốn <em>rèn</em> điều gì?</h1>
       <p className="hero-caption">Mô tả mục tiêu bằng lời của bạn. AgentForge lập kế hoạch và dừng lại chờ bạn duyệt — không tự gọi AI, không tự chi tiền.</p>
       <div className="prompt-composer">
-        <TextArea aria-label="Mô tả công việc" autoSize={{minRows:4, maxRows:10}} maxLength={600} showCount
+        <TextArea aria-label="Mô tả công việc" autoSize={{minRows:4, maxRows:10}} maxLength={600}
           value={prompt} variant="borderless" onChange={e => setPrompt(e.target.value)}
           onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') submit(); }}
           placeholder="Ví dụ: Thiết kế landing page nệm ngủ cao cấp cho ba tôi, tạo hình ảnh đẹp, tối ưu trên điện thoại và có nút gọi 0879547988..."/>
+        <div className="composer-counter" aria-live="off">{prompt.length}/600</div>
         <div className="composer-footer">
           <span className="composer-hint"><SafetyCertificateOutlined/> Lập kế hoạch miễn phí · Ctrl+Enter để gửi
             {length > 0 && length < MIN_PROMPT && <b> · cần thêm {MIN_PROMPT - length} ký tự</b>}</span>
