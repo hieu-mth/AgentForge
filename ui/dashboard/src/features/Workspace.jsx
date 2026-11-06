@@ -128,7 +128,7 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, busy, externalE
         {required.length===0 && <Text type="secondary">Công việc này chỉ đọc dữ liệu, không cần cấp thêm quyền.</Text>}
         {required.map(permission=>{
           const info=PERMISSIONS[permission];
-          return <label className="permission-item" key={permission}>
+          return <div className="permission-item" key={permission}>
             <Checkbox checked={grants.includes(permission)} disabled={!info}
               onChange={e=>setGrants(previous=>e.target.checked
                 ? [...new Set([...previous,permission])]
@@ -138,7 +138,7 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, busy, externalE
               <span>{info?.description||'Không thể cho phép khi chưa rõ tác động.'}</span>
               <small>{info?.impact||'Cần xác minh'} · <code>{permission}</code></small>
             </span>
-          </label>;
+          </div>;
         })}
       </div>
       {required.includes('model.invoke')&&<Alert type="warning" showIcon
