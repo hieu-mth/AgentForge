@@ -49,6 +49,10 @@ jobs:
         working-directory: ui/dashboard
         run: npm run build
 
+      - name: Smoke-test React production boot in Microsoft Edge
+        working-directory: ui/dashboard
+        run: npm run test:browser
+
       - name: Validate built dashboard routing and assets
         run: python -m unittest tests.test_react_dashboard_v27 -v
 
