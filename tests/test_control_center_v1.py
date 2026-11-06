@@ -158,7 +158,7 @@ class TestControlCenterV1(unittest.TestCase):
             "ack": "PLAN_ONLY", "prompt": brief, "max_model_calls": 1})
         self.assertEqual(code, 200, submitted)
         saved = brain_store.get_goal(submitted["goal_id"], db_path=self.brain)
-        self.assertEqual(saved["inputs"]["brief"], brief)
+        self.assertEqual(saved["inputs"]["brief"], brief.strip())
         self.assertEqual(saved["status"], "PLANNED")
         self.assertFalse(self.taskdb.exists())
         code, _, _ = self.req("POST", "/api/workspace/request", {
