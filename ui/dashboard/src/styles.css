@@ -205,7 +205,7 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .app-sider{overflow:visible!important}
 .app-sider .ant-layout-sider-children{overflow:visible}
 .sider-toggle{
-  position:absolute;top:94px;right:-16px;z-index:30;
+  position:absolute;top:50%;margin-top:-16px;right:-16px;z-index:30;
   display:grid;place-items:center;width:32px;height:32px;
   padding:0;border:1px solid #363e65;border-radius:50%;
   background:#161a34;color:#cbd3fa;cursor:pointer;
@@ -228,3 +228,6 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
   .prompt-composer .composer-footer button{order:2}
 }
 @media(prefers-reduced-motion:reduce){.sider-chevron,.sider-toggle{transition:none!important}}
+
+.page-title,.hero-title{color:var(--text)}
+.ant-form-item .ant-switch{margin-top:2px}

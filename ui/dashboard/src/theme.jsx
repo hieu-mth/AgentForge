@@ -24,6 +24,8 @@ export function buildTheme(mode) {
       colorSuccess: '#16a34a',
       colorWarning: '#f59e0b',
       colorError: '#e5484d',
+      colorInfoBg: dark ? '#191c3a' : '#eef0ff',
+      colorInfoBorder: dark ? '#2c3170' : '#d4d8ff',
       colorBgBase: dark ? '#0d0f1a' : '#ffffff',
       colorBgLayout: dark ? '#090b14' : '#f5f6fb',
       colorBgContainer: dark ? '#141729' : '#ffffff',

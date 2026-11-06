@@ -206,7 +206,7 @@ export default function App() {
         </Space>
       </Header>
       <Content className="app-content">
-        {section!=='workspace'&&<PageHeader eyebrow="AGENTFORGE / OWNER WORKSPACE" title={groupTitle}/>}
+        {section!=='workspace'&&<PageHeader eyebrow={(title!==groupTitle?groupTitle:'AgentForge').toUpperCase()} title={title}/>}
         <ErrorBoundary error={error} onReset={()=>setError(null)}/>
         {activeTabs.length>1&&
           <Tabs className="workspace-tabs" activeKey={section}
