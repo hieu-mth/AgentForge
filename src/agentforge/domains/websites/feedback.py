@@ -1,7 +1,7 @@
 """Owner feedback → a new supervised website draft Goal, never silent rewriting.
 
-A revision is an independently reviewed website proposal generated from
-the original brief and owner feedback, not a patch of the original HTML.
+A revision is an independently reviewed website proposal whose execution
+must inspect the SHA-verified original and use the owner's full feedback.
 The original SHA-valid proposal is retained for audit and comparison.
 """
 from uuid import uuid4
@@ -27,12 +27,16 @@ def request_revision(proposal_id, sha256, feedback, *, brain_db_path=None,
         raise PermissionError("Role Website hoặc lượt model cho Goal mới đang bị tắt.")
 
     slug = "rev-" + uuid4().hex[:12]
-    # Keep complete feedback, avoid leaking full original HTML into the model.
-    prefix = "Tạo bản landing page mới. Yêu cầu gốc: "
-    suffix = ". Góp ý owner: " + feedback.strip()
-    original = doc["brief"][:max(0, 600 - len(prefix) - len(suffix))]
-    brief = prefix + original + suffix
-    inputs = {"slug": slug, "brief": brief}
+    # Preserve both complete original intent and requested changes. Neither
+    # is squeezed into the old 600-character concatenated pseudo-brief.
+    # These source fields are SHA-bound to the new Goal plan.
+    inputs = {
+        "slug": slug,
+        "brief": doc["brief"],
+        "source_proposal_id": proposal_id,
+        "source_sha256": sha256,
+        "revision_feedback": feedback.strip(),
+    }
     goal_preflight.require_ready(
         "website.draft", inputs,
         analytics_db_path=analytics_db_path, growth_db_path=growth_db_path)
