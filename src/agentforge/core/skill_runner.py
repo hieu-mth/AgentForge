@@ -232,6 +232,14 @@ def _safe_failure(skill_id, exc):
             # Classify known builder contract failures without persisting raw
             # model output, exception bodies, filesystem paths or credentials.
             if "Disallowed active/remote content" in value:
+                # Classify only our trusted builder error labels. Never expose
+                # the rejected HTML, raw URL, or exception text to the UI.
+                if "remote URL at line" in value:
+                    return ("HTML_REMOTE_URL: Website draft contains a blocked "
+                            "external URL. Use offline SVG/CSS instead of online assets.")
+                if "active/embedded content at line" in value:
+                    return ("HTML_ACTIVE_CONTENT: Website draft contains a "
+                            "blocked embedded element or browser API.")
                 return "HTML_UNSAFE_CONTENT: External resources or active content blocked."
             if "script source" in value:
                 return "HTML_SCRIPT_SOURCE: Only a local app.js script is allowed."
