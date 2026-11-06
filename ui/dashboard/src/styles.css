@@ -231,3 +231,8 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 
 .page-title,.hero-title{color:var(--text)}
 .ant-form-item .ant-switch{margin-top:2px}
+
+/* Owner-facing storyboard preview: content is text, not executable HTML. */
+.storyboard-scene{border:1px solid var(--line);background:var(--surface-2);
+  border-radius:12px;padding:16px;margin:12px 0;overflow-wrap:anywhere}
+.storyboard-scene:last-child{margin-bottom:0}
