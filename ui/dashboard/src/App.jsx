@@ -113,7 +113,17 @@ export default function App() {
   const mutate=(path,body)=>runAction(()=>post(path,body));
   const ask=(title,content,onOk)=>modal.confirm({title,content,okText:'Xác nhận',cancelText:'Hủy',onOk});
   const openGoal=async id => {
-    try{setGoal(await api('/api/goals/'+encodeURIComponent(id)));}catch(e){authError(e);}
+    try{
+      const detail=await api('/api/goals/'+encodeURIComponent(id));
+      const failedStep=(detail.step_runs||[]).find(s=>s.status==='FAILED'&&s.child_task_id);
+      if(failedStep){
+        try{
+          const taskDetail=await api('/api/tasks/'+encodeURIComponent(failedStep.child_task_id));
+          detail.execution_error=taskDetail.error||detail.error;
+        }catch{detail.execution_error=detail.error;}
+      }
+      setGoal(detail);
+    }catch(e){authError(e);}
   };
   const plan=async prompt => {
     const outcome=await runAction(()=>post('/api/workspace/request',
