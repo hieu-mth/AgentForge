@@ -203,6 +203,7 @@ def inspect(goal_id, *, brain_db_path=None):
         "goal_id": goal_id, "status": goal["status"],
         "title": goal["title"], "template": goal["template"],
         "plan_sha256": goal["plan_sha256"],
+        "error": goal.get("error"),
         "inputs": goal["inputs"],
         "plan": goal["plan"], "step_runs": goal["steps"],
         "parent_task_id": goal["parent_task_id"],

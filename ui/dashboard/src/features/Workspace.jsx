@@ -101,6 +101,9 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, busy, externalE
     <Title level={4}>{goal.title}</Title>
     <Text type="secondary">{goal.template} · {goal.goal_id}</Text>
     <Divider/>
+    {['FAILED','INTERRUPTED'].includes(goal.status) && <Alert type="error" showIcon
+      style={{marginBottom:16}} message="Thực thi chưa thành công"
+      description={goal.execution_error||goal.error||'Xem Task History để kiểm tra nguyên nhân.'}/>}
     <Alert type="info" showIcon message="SHA-256 kế hoạch" description={<code className="digest">{goal.plan_sha256}</code>}/>
     <div className="plan-steps">{(goal.plan||[]).map((step,i)=>
       <div className="plan-step" key={i}>

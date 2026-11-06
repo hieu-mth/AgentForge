@@ -138,6 +138,21 @@ class TestS1SkillRunner(unittest.TestCase):
                                     db_path=self.db)
         self.assertFalse(self.db.exists())
 
+    def test_web_builder_validation_errors_are_safe_and_actionable(self):
+        cases = [
+            ("Disallowed active/remote content in index.html: remote URL at line 5; key=SECRET",
+             "HTML_UNSAFE_CONTENT"),
+            ("Only a local app.js script source is allowed", "HTML_SCRIPT_SOURCE"),
+            ("Model returned an unexpected object", "BUILDER_SCHEMA_INVALID"),
+            ("Builder reply must start with a complete HTML document", "HTML_INCOMPLETE"),
+            ("A novel error containing api_key=SECRET", "BUILDER_INVALID_OUTPUT"),
+        ]
+        for detail, expected in cases:
+            with self.subTest(detail=expected):
+                message = skill_runner._safe_failure("web.create", ValueError(detail))
+                self.assertTrue(message.startswith(expected + ":"))
+                self.assertNotIn("SECRET", message)
+
     def test_execution_failure_is_audited_without_leaking_exception_body(self):
         with patch("agentforge.product_quality.check_project",
                    side_effect=RuntimeError("api_key=secret private-body")):
