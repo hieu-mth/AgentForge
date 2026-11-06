@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from agentforge import product_builder as builder, product_quality
-from agentforge.domains.websites.structured_builder import COPY_SCHEMA, render
+from agentforge.domains.websites.structured_builder import COPY_SCHEMA, render, owner_phone
 
 COPY = {
     "brand": "Minh Studio",
@@ -147,6 +147,19 @@ class TestReliableWebBuilder(unittest.TestCase):
         self.assertTrue((builder.PRODUCTS / "portfolio-demo" / "index.html").is_file())
         with self.assertRaises(FileExistsError):
             builder.apply(receipt["proposal_id"], sha256=receipt["sha256"], confirm_write=True)
+
+    def test_owner_supplied_phone_adds_only_local_dial_action(self):
+        self.assertEqual(owner_phone("Liên hệ 0879547988 để tư vấn"), "0879547988")
+        self.assertEqual(owner_phone("Số điện thoại +84 879 547 988"), "+84879547988")
+        self.assertIsNone(owner_phone("Chưa có số điện thoại, hãy đặt placeholder"))
+        with patch("agentforge.model.generate_json", return_value=COPY):
+            receipt = builder.propose("portfolio-demo", BRIEF + " Hotline 0879547988")
+        doc = json.loads(Path(receipt["proposal_path"]).read_text(encoding="utf-8"))
+        html = doc["files"][0]["content"]
+        self.assertIn('href="tel:0879547988"', html)
+        self.assertNotEqual(product_quality.analyze(html)["status"], "FAIL")
+        with self.assertRaises(ValueError):
+            render(COPY, phone="https://host.invalid")
 
     def test_direct_renderer_has_no_network_or_process(self):
         with (patch("subprocess.run") as process, patch("urllib.request.urlopen") as network):
