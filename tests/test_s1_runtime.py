@@ -141,6 +141,10 @@ class TestS1SkillRunner(unittest.TestCase):
     def test_web_builder_validation_errors_are_safe_and_actionable(self):
         cases = [
             ("Disallowed active/remote content in index.html: remote URL at line 5; key=SECRET",
+             "HTML_REMOTE_URL"),
+            ("Disallowed active/remote content in index.html: active/embedded content at line 6; SECRET",
+             "HTML_ACTIVE_CONTENT"),
+            ("Disallowed active/remote content in index.html: NUL byte SECRET",
              "HTML_UNSAFE_CONTENT"),
             ("Only a local app.js script source is allowed", "HTML_SCRIPT_SOURCE"),
             ("Model returned an unexpected object", "BUILDER_SCHEMA_INVALID"),
