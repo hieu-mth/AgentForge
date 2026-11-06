@@ -321,8 +321,22 @@ def propose(slug, brief, *, model_client=None, source_proposal_id=None,
                       or fallback["layout"] or copy.get("layout") or "split")
         phone = owner_phone(revision_feedback or "") or owner_phone(brief)
         html = render(copy, phone=phone, theme=palette, layout=layout)
-        if source_html is not None and html == source_html:
-            raise ValueError("REVISION_NO_CHANGE: Website output identical to source")
+        if source_html is not None:
+            from agentforge.domains.websites.revision_context import inspect_previous_html
+            current = inspect_previous_html(html)
+            # V3.4's first renderer lacked style metadata. For its known
+            # template only, forest/split was the fixed visual baseline.
+            is_v34 = ('class="site-header"' in source_html
+                      and 'class="container hero"' in source_html)
+            old_theme = previous["theme"] or ("forest" if is_v34 else None)
+            old_layout = previous["layout"] or ("split" if is_v34 else None)
+            semantically_same = (
+                is_v34 and previous["visible_text"] == current["visible_text"]
+                and old_theme == palette and old_layout == layout
+            )
+            if html == source_html or semantically_same:
+                raise ValueError(
+                    "REVISION_NO_CHANGE: Rendered website has no visible changes")
         output = _validate_files({
             "summary": "AI-assisted Vietnamese copy in a deterministic offline website template; owner review required",
             "files": [{"path": "index.html", "content": html}],
