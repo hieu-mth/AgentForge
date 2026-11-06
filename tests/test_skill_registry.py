@@ -88,9 +88,10 @@ class TestSkillRegistry(unittest.TestCase):
         self.assertRaises(skills.SkillConfigError, skills.load_registry, root=self.root)
 
     def test_reject_bad_contract_version_worker_and_permission(self):
+        active_version = skills.load_skill("web.create", root=self.root)["version"]
         cases = [
             ('schema_version = 1', 'schema_version = 2'),
-            ('version = "0.1.0"', 'version = "latest"'),
+            (f'version = "{active_version}"', 'version = "latest"'),
             ('worker_id = "product_builder"', 'worker_id = "../steal"'),
             ('"model.invoke"', '"admin.root"'),
         ]
