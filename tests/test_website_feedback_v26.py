@@ -36,7 +36,10 @@ class WebsiteFeedbackTests(unittest.TestCase):
         self.assertEqual("website.draft", arguments.args[1])
         self.assertEqual(1, arguments.kwargs["max_model_calls"])
         self.assertEqual(0, arguments.kwargs["max_external_runs"])
-        self.assertIn(comment, arguments.args[2]["brief"])
+        self.assertEqual(comment, arguments.args[2]["revision_feedback"])
+        self.assertEqual(self.doc["brief"], arguments.args[2]["brief"])
+        self.assertEqual(self.proposal_id, arguments.args[2]["source_proposal_id"])
+        self.assertEqual(self.sha, arguments.args[2]["source_sha256"])
         self.assertIn("0879547988", arguments.args[2]["brief"])
         self.assertTrue(arguments.args[2]["slug"].startswith("rev-"))
 
@@ -48,8 +51,8 @@ class WebsiteFeedbackTests(unittest.TestCase):
              patch("agentforge.brain_planner.propose", return_value={"goal_id": "c"*32}) as propose:
             feedback.request_revision(self.proposal_id, self.sha, full)
         brief = propose.call_args.args[2]["brief"]
-        self.assertLessEqual(len(brief), 600)
-        self.assertTrue(brief.endswith(full))
+        self.assertEqual(brief, self.doc["brief"])
+        self.assertEqual(propose.call_args.args[2]["revision_feedback"], full)
 
     def test_policy_and_sha_fail_closed(self):
         with patch("agentforge.product_builder._read_proposal", return_value=(self.doc, None)):
