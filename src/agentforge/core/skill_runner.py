@@ -220,8 +220,15 @@ def _safe_failure(skill_id, exc):
             return "MODEL_UNAVAILABLE: Cannot connect to model endpoint."
         if isinstance(exc, FileExistsError):
             return "PROJECT_EXISTS: Use another project slug."
+        if isinstance(exc, json.JSONDecodeError):
+            return "MODEL_JSON_INVALID: AI did not produce valid structured JSON."
         if isinstance(exc, ValueError):
             value = str(exc)
+            if value.startswith("Structured website content invalid:"):
+                return ("WEB_COPY_INVALID: AI content failed the bounded website "
+                        "copy contract; no proposal saved.")
+            if value == "Invalid owner phone number":
+                return "OWNER_CONTACT_INVALID: The supplied phone format is not supported."
             if any(x in value for x in ("truncated", "incomplete", "complete HTML document",
                                          "incomplete code fence")):
                 return "HTML_INCOMPLETE: Model output was not a complete document."
