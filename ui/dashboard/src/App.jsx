@@ -17,6 +17,7 @@ import { Retention } from './features/Retention.jsx';
 import { Reviews } from './features/Reviews.jsx';
 import { Schedules, OperationsControl, Intelligence, Growth, OwnerSettings, OwnerMemory } from './features/Management.jsx';
 import { NAV_GROUPS, groupFor, labelFor, defaultSection, parseSection, hashFor, tabsFor } from './navigation.js';
+import { PERMISSIONS } from './permissions.js';
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
@@ -140,8 +141,13 @@ export default function App() {
       if(out){message.success('Đã duyệt');await openGoal(goal.goal_id);}});
   const execute=(goal,permissions)=>ask('Cho phép thực thi Goal này?',
     <><Paragraph>Chỉ cấp quyền trong lượt chạy này. Có thể gọi model hoặc tiến trình ngoài nếu bạn đã bật.</Paragraph>
-      <Paragraph>Grants: {permissions.grants.join(', ')||'read-only'}</Paragraph>
-      {permissions.sensitive&&<Alert type="warning" message="Có quyền model/network/process — kiểm tra trước khi duyệt"/>}</>,
+      <Paragraph><strong>Quyền được cấp:</strong></Paragraph>
+      <ul>{permissions.grants.length ? permissions.grants.map(p=>
+        <li key={p}>{PERMISSIONS[p]?.title||'Quyền không xác định'}</li>) :
+        <li>Chỉ đọc dữ liệu</li>}</ul>
+      {permissions.sensitive&&<Alert type="warning"
+        message="Công việc có thể dùng AI, Internet hoặc công cụ ngoài"
+        description="Chỉ xác nhận nếu bạn đồng ý với các tác động được mô tả. Lượt chạy vẫn phải tuân theo chính sách backend."/>}</>,
     async()=>{const action=goal.status==='APPROVED'?'run':'resume';
       const payload={ack:action.toUpperCase(),plan_sha256:goal.plan_sha256,
         grants:permissions.grants,confirm_model_call:permissions.confirmModel,

@@ -231,3 +231,16 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 
 .page-title,.hero-title{color:var(--text)}
 .ant-form-item .ant-switch{margin-top:2px}
+
+/* Owner consent: readable, narrowly scoped permissions rather than API flags. */
+.permission-list{display:grid;gap:10px;margin:16px 0}
+.permission-item{display:flex;gap:12px;align-items:flex-start;padding:13px 14px;
+  border:1px solid var(--line);border-radius:12px;background:var(--surface-2);
+  cursor:pointer;transition:border-color .2s}
+.permission-item:hover{border-color:var(--primary)}
+.permission-item>.ant-checkbox-wrapper,.permission-item>.ant-checkbox{margin-top:3px;flex:none}
+.permission-copy{display:flex;flex-direction:column;gap:5px;min-width:0}
+.permission-copy strong{font-size:14px;color:var(--text)}
+.permission-copy>span{color:var(--muted);line-height:1.6;font-size:13px}
+.permission-copy small{color:var(--faint);font-size:11px;line-height:1.5;overflow-wrap:anywhere}
+.permission-copy code{font-size:11px;opacity:.75}
