@@ -149,6 +149,8 @@ class TestS1SkillRunner(unittest.TestCase):
             ("Only a local app.js script source is allowed", "HTML_SCRIPT_SOURCE"),
             ("Model returned an unexpected object", "BUILDER_SCHEMA_INVALID"),
             ("Builder reply must start with a complete HTML document", "HTML_INCOMPLETE"),
+            ("Structured website content invalid: SECRET", "WEB_COPY_INVALID"),
+            ("Invalid owner phone number", "OWNER_CONTACT_INVALID"),
             ("A novel error containing api_key=SECRET", "BUILDER_INVALID_OUTPUT"),
         ]
         for detail, expected in cases:
