@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { App as AntApp, Alert, Button, Card, Collapse, Descriptions, Drawer, Form, Grid, Input,
   Layout, Menu, Space, Spin, Table, Tabs, Tooltip, Typography } from 'antd';
 import {
-  BarChartOutlined, CodeOutlined, DashboardOutlined, FolderOpenOutlined,
-  MenuOutlined, MoonOutlined, ReloadOutlined, RobotOutlined,
+  BarChartOutlined, DashboardOutlined, FolderOpenOutlined,
+  LeftOutlined, MenuOutlined, MoonOutlined, ReloadOutlined, RobotOutlined,
   SafetyCertificateOutlined, SettingOutlined, SunOutlined, TeamOutlined,
 } from '@ant-design/icons';
 import { api } from './api.js';
@@ -157,7 +157,7 @@ export default function App() {
 
   // Sidebar shows only business-level destinations; all existing screens live in tabs.
   const group=groupFor(section);
-  const groupTitle=NAV_GROUPS.find(item=>item.key===group)?.label || 'Giao việc';
+  const groupTitle=NAV_GROUPS.find(item=>item.key===group)?.label || 'Tổng quan';
   const activeTabs=tabsFor(group);
   if(loginNeeded)return <><Login onLogin={async({code})=>{
     await runAction(async()=>{await api('/api/login',{method:'POST',body:{code}});await refresh();},
@@ -173,9 +173,15 @@ export default function App() {
   const operations=data.company_v2?.operations;
   return <Layout className="app-shell">
     {!mobile&&<Sider theme="dark" collapsible collapsed={collapsed} onCollapse={setCollapsed}
-      width={252} collapsedWidth={78} className="app-sider">
+      trigger={null} width={252} collapsedWidth={78} className="app-sider">
       <Brand collapsed={collapsed}/>
       {menu}
+      <Tooltip title={collapsed?"Mở rộng menu":"Thu gọn menu"} placement="right">
+        <button type="button" className="sider-toggle" aria-label={collapsed?"Mở rộng menu":"Thu gọn menu"}
+          aria-expanded={!collapsed} onClick={()=>setCollapsed(v=>!v)}>
+          <LeftOutlined className={collapsed?"sider-chevron rotated":"sider-chevron"}/>
+        </button>
+      </Tooltip>
       {!collapsed&&<div className="sider-foot"><span className="live-dot"/>
         <div><strong>Local-first</strong><small>Chỉ chạy trên localhost</small></div></div>}
     </Sider>}
@@ -197,7 +203,6 @@ export default function App() {
           <Tooltip title="Làm mới dữ liệu">
             <Button shape="circle" aria-label="Làm mới" icon={<ReloadOutlined/>} loading={busy}
               onClick={()=>runAction(refresh,{refreshData:false})}/></Tooltip>
-          <Button href="/" target="_blank" icon={<CodeOutlined/>} className="legacy-link"><span>Giao diện cũ</span></Button>
         </Space>
       </Header>
       <Content className="app-content">
