@@ -117,6 +117,28 @@ class WebsiteRevisionV35Tests(unittest.TestCase):
             model.assert_called_once()
         self.assertEqual(len(list(builder.PROPOSALS.glob("*.json"))), 1)
 
+    def test_old_v34_template_metadata_difference_is_not_a_real_edit(self):
+        first = self.original()
+        path = Path(first["proposal_path"])
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        source = doc["files"][0]["content"]
+        old_style_marker = ' data-af-theme="forest" data-af-layout="split"'
+        self.assertIn(old_style_marker, source)
+        doc["files"][0]["content"] = source.replace(old_style_marker, "")
+        doc["sha256"] = builder._digest(
+            doc["project_slug"], doc["brief"],
+            {"summary": doc["summary"], "files": doc["files"]})
+        path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+        with patch("agentforge.model.generate_json", return_value=COPY) as model:
+            with self.assertRaisesRegex(ValueError, "REVISION_NO_CHANGE"):
+                builder.propose(
+                    "nem-revision", BRIEF,
+                    source_proposal_id=first["proposal_id"],
+                    source_sha256=doc["sha256"],
+                    revision_feedback="Hãy sửa phần tiêu đề cho khác và hấp dẫn hơn.")
+            model.assert_called_once()
+        self.assertEqual(len(list(builder.PROPOSALS.glob("*.json"))), 1)
+
     def test_stale_sha_denied_before_model_call(self):
         original = self.original()
         with patch("agentforge.model.generate_json") as model:
