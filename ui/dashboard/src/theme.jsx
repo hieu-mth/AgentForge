@@ -3,7 +3,7 @@ import { theme as antTheme } from 'antd';
 
 // Only a harmless UI preference is stored (never the Owner code or CSRF token).
 const KEY = 'agentforge.theme';
-const ThemeContext = createContext({mode: 'light', toggle: () => {}});
+const ThemeContext = createContext({mode: 'dark', toggle: () => {}});
 export const useThemeMode = () => useContext(ThemeContext);
 
 const initialMode = () => {
@@ -11,7 +11,7 @@ const initialMode = () => {
     const saved = window.localStorage.getItem(KEY);
     if (saved === 'light' || saved === 'dark') return saved;
   } catch { /* storage may be blocked */ }
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return 'dark'; // Explicit owner default; saved light preference remains respected.
 };
 
 export function buildTheme(mode) {
