@@ -170,24 +170,29 @@ def requested_design(description):
     import unicodedata
     folded = "".join(ch for ch in unicodedata.normalize("NFD", description.lower())
                      if unicodedata.category(ch) != "Mn").replace("đ", "d")
-    theme = None
-    layout = None
-    if any(x in folded for x in ("xanh reu", "xanh la", "forest", "olive")):
-        theme = "forest"
-    elif any(x in folded for x in ("xanh duong", "xanh bien", "ocean", "blue")):
-        theme = "ocean"
-    elif any(x in folded for x in ("mau kem", "mau be", "champagne", "tan", "beige", "mau nau")):
-        theme = "sand"
-    elif any(x in folded for x in ("mau tim", "mau hong", "plum", "purple", "pink")):
-        theme = "plum"
-    elif any(x in folded for x in ("den trang", "mau den", "den xam", "monochrome", "black and white")):
-        theme = "mono"
-    if any(x in folded for x in ("can giua", "o giua", "centered", "hero giua", "bo cuc giua")):
-        layout = "centered"
-    elif any(x in folded for x in ("editorial", "tap chi", "hero lon", "pha cach")):
-        layout = "editorial"
-    elif any(x in folded for x in ("chia doi", "hai cot", "2 cot", "split hero")):
-        layout = "split"
+    # Choose the last color/layout named in the request. This handles phrases
+    # such as "đổi từ xanh rêu sang xanh dương" (the destination wins).
+    theme_aliases = {
+        "forest": ("xanh reu", "xanh la", "forest", "olive"),
+        "ocean": ("xanh duong", "xanh bien", "ocean", "blue"),
+        "sand": ("mau kem", "mau be", "champagne", "tan", "beige", "mau nau"),
+        "plum": ("mau tim", "mau hong", "plum", "purple", "pink"),
+        "mono": ("den trang", "mau den", "den xam", "monochrome", "black and white"),
+    }
+    layout_aliases = {
+        "centered": ("can giua", "o giua", "centered", "hero giua", "bo cuc giua"),
+        "editorial": ("editorial", "tap chi", "hero lon", "pha cach"),
+        "split": ("chia doi", "hai cot", "2 cot", "split hero"),
+    }
+
+    def latest(aliases):
+        matches = [(folded.rfind(alias), key)
+                   for key, keys in aliases.items()
+                   for alias in keys if alias in folded]
+        return max(matches)[1] if matches else None
+
+    theme = latest(theme_aliases)
+    layout = latest(layout_aliases)
     return {"theme": theme, "layout": layout}
 
 
