@@ -64,6 +64,8 @@ class WebsiteRevisionV35Tests(unittest.TestCase):
         self.assertNotEqual(analyze(ocean)["status"], "FAIL")
         self.assertEqual(requested_design("Đổi sang màu xanh dương, căn giữa phần hero"),
                          {"theme": "ocean", "layout": "centered"})
+        self.assertEqual(requested_design("Đổi từ xanh rêu sang xanh dương, căn giữa hero"),
+                         {"theme": "ocean", "layout": "centered"})
 
     def test_revision_has_complete_source_and_feedback_through_goal_to_preview(self):
         original = self.original()
