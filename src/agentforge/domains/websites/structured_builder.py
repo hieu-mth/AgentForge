@@ -238,7 +238,7 @@ def validate_copy(raw):
     if not isinstance(raw, dict) or required - set(raw) or set(raw) - allowed:
         raise ValueError("Structured website content invalid: fields")
     for choice, options in (("theme", THEMES), ("layout", LAYOUTS)):
-        if choice in raw and raw[choice] not in options:
+        if choice in raw and (not isinstance(raw[choice], str) or raw[choice] not in options):
             raise ValueError("Structured website content invalid: " + choice)
     limits = {
         "brand": 64, "headline": 100, "subtitle": 210,
