@@ -1,8 +1,8 @@
 """Explicit, bounded read-only public result projection for Control Center.
 
-Never return whole task results or arbitrary model output. This module only
-projects known statistical/finance fields; it cannot serialize source CSV rows,
-PII, prompts, model text, paths, or source filenames. Synthetic provenance is
+Never return whole task results or unbounded model output. Only explicitly
+allowlisted owner-review fields are projected; analytics fields remain restricted.
+Never serialize source CSV rows, prompts, paths, or source filenames. Synthetic provenance is
 always displayed. The raw result remains in the owner-local task database.
 """
 
@@ -55,6 +55,34 @@ def present(skill_id, result):
     """Return only preapproved owner-visible statistics; no raw result fallback."""
     if not isinstance(result, dict):
         return None
+    if skill_id == "media.copy_draft":
+        # This skill is specifically an owner-review text artifact. Return only
+        # its typed, bounded storyboard fields, never arbitrary model keys.
+        scenes = result.get("scenes")
+        title = result.get("title")
+        if not isinstance(title, str) or not isinstance(scenes, list):
+            return None
+        safe_scenes = []
+        for scene in scenes[:5]:
+            if not isinstance(scene, dict):
+                return None
+            heading, caption, seconds = (
+                scene.get("headline"), scene.get("caption"), scene.get("duration_seconds"))
+            if (not isinstance(heading, str) or not isinstance(caption, str)
+                    or type(seconds) is not int or not 3 <= seconds <= 8):
+                return None
+            safe_scenes.append({
+                "headline": heading[:200],
+                "caption": caption[:1000],
+                "duration_seconds": seconds,
+            })
+        if not 2 <= len(safe_scenes) <= 5:
+            return None
+        return {
+            "kind": "storyboard", "title": title[:160],
+            "scenes": safe_scenes, "status": "DRAFT_NOT_VERIFIED",
+            "review_required": True, "verified_claims": False,
+        }
     if skill_id in ANALYTICS:
         kind = "analytics"
     elif skill_id in GROWTH:

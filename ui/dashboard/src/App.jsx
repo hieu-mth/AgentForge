@@ -126,6 +126,12 @@ export default function App() {
       setGoal(detail);
     }catch(e){authError(e);}
   };
+  const openGoalResult=async selectedGoal=>{
+    const completed=(selectedGoal.step_runs||[]).find(step=>step.status==='SUCCEEDED'&&step.child_task_id);
+    if(!completed){message.warning('Không tìm thấy thành phẩm của kế hoạch này');return;}
+    try{setTask(await api('/api/tasks/'+encodeURIComponent(completed.child_task_id)));}
+    catch(e){authError(e);}
+  };
   const plan=async prompt => {
     const outcome=await runAction(()=>post('/api/workspace/request',
       {ack:'PLAN_ONLY',prompt,max_model_calls:1}));
@@ -257,7 +263,7 @@ export default function App() {
       </Content>
     </Layout>
     <GoalDrawer goal={goal} onClose={()=>setGoal(null)} onApprove={approve}
-      onExecute={execute} busy={busy} externalEnabled={!!data.external_actions_enabled}/>
+      onExecute={execute} onViewResult={openGoalResult} busy={busy} externalEnabled={!!data.external_actions_enabled}/>
     <ProposalDrawer proposal={proposal} onClose={()=>setProposal(null)}
       onRevise={revise} onApply={apply} busy={busy}/>
     <Drawer title="Chi tiết tác vụ" size={720} open={!!task} onClose={()=>setTask(null)}>
@@ -266,7 +272,22 @@ export default function App() {
         {key:'2',label:'Skill',children:task.skill_id},
         {key:'3',label:'Status',children:badge(task.status)},
         {key:'4',label:'Error',children:task.error||'Không có'},
-      ]}/><Collapse style={{marginTop:20}} items={[
+      ]}/>
+      {task.report?.kind==='storyboard'&&<Card title={task.report.title||'Kịch bản video'}
+        style={{marginTop:18}} extra={<Button onClick={()=>navigator.clipboard?.writeText(
+          JSON.stringify({title:task.report.title,scenes:task.report.scenes},null,2)
+        )}>Sao chép JSON</Button>}>
+        <Alert type="info" showIcon style={{marginBottom:16}}
+          message="Đây là kịch bản nháp, chưa phải video hoàn chỉnh"
+          description="Nội dung AI chưa được xác minh; cần Owner duyệt trước khi sử dụng."/>
+        {(task.report.scenes||[]).map((scene,index)=><div key={index}
+          className="storyboard-scene">
+          <Text type="secondary">Cảnh {index+1} · {scene.duration_seconds} giây</Text>
+          <Typography.Title level={5} style={{margin:'8px 0'}}>{scene.headline}</Typography.Title>
+          <Typography.Paragraph>{scene.caption}</Typography.Paragraph>
+        </div>)}
+      </Card>}
+      <Collapse style={{marginTop:20}} items={[
         {key:'1',label:'Events & audit',children:<pre className="source-text">{JSON.stringify(task.events||[],null,2)}</pre>},
         {key:'2',label:'Kết quả',children:<pre className="source-text">{JSON.stringify(task.report||task.result||{},null,2)}</pre>},
       ]}/></>}
