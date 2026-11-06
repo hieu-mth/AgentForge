@@ -31,6 +31,8 @@ COPY_SCHEMA = {
             },
         },
         "call_to_action": {"type": "string"},
+        "theme": {"type": "string", "enum": ["forest", "ocean", "sand", "plum", "mono"]},
+        "layout": {"type": "string", "enum": ["split", "centered", "editorial"]},
     },
     "required": [
         "brand", "headline", "subtitle", "introduction",
@@ -129,6 +131,66 @@ html{scroll-behavior:auto}
 """
 
 
+
+THEMES = {
+    "forest": "",
+    "ocean": """:root{--accent:#2354a0;--ink:#142943;--bg:#f1f6fd;--glow:#bed4f4}
+.visual{background:linear-gradient(135deg,#142a58,#447cc6 58%,#a3c6e0)}
+.contact,.footer{background:#142943}
+""",
+    "sand": """:root{--accent:#9b5f2e;--ink:#423322;--bg:#fcf6e8;--glow:#f1dbb5}
+.visual{background:linear-gradient(135deg,#745338,#bc9163 58%,#e2cdb0)}
+.contact,.footer{background:#423322}
+""",
+    "plum": """:root{--accent:#8b3b77;--ink:#342238;--bg:#fcf4fa;--glow:#e4bcd8}
+.visual{background:linear-gradient(135deg,#462b55,#9d5b94 58%,#d7afc5)}
+.contact,.footer{background:#342238}
+""",
+    "mono": """:root{--accent:#3a4048;--ink:#1c1e22;--bg:#f5f5f3;--glow:#d6d6d6}
+.visual{background:linear-gradient(135deg,#111317,#4e535a 58%,#babec1)}
+.contact,.footer{background:#1c1e22}
+""",
+}
+LAYOUTS = {
+    "split": "",
+    "centered": """.hero{grid-template-columns:1fr;gap:35px;text-align:center}
+.hero .lead{margin-inline:auto}.hero .actions{justify-content:center}
+.hero .visual{width:min(100%,820px);margin-inline:auto;min-height:350px}
+""",
+    "editorial": """.hero{grid-template-columns:1.18fr .82fr;gap:36px}
+.hero .visual{min-height:520px;border-radius:7px}
+.hero h1{font-weight:800}
+@media(max-width:900px){.hero{grid-template-columns:1fr}}
+""",
+}
+
+
+def requested_design(description):
+    """Only exact bounded style choices; no owner text enters CSS."""
+    import unicodedata
+    folded = "".join(ch for ch in unicodedata.normalize("NFD", description.lower())
+                     if unicodedata.category(ch) != "Mn").replace("đ", "d")
+    theme = None
+    layout = None
+    if any(x in folded for x in ("xanh reu", "xanh la", "forest", "olive")):
+        theme = "forest"
+    elif any(x in folded for x in ("xanh duong", "xanh bien", "ocean", "blue")):
+        theme = "ocean"
+    elif any(x in folded for x in ("mau kem", "mau be", "champagne", "tan", "beige", "mau nau")):
+        theme = "sand"
+    elif any(x in folded for x in ("mau tim", "mau hong", "plum", "purple", "pink")):
+        theme = "plum"
+    elif any(x in folded for x in ("den trang", "mau den", "den xam", "monochrome", "black and white")):
+        theme = "mono"
+    if any(x in folded for x in ("can giua", "o giua", "centered", "hero giua", "bo cuc giua")):
+        layout = "centered"
+    elif any(x in folded for x in ("editorial", "tap chi", "hero lon", "pha cach")):
+        layout = "editorial"
+    elif any(x in folded for x in ("chia doi", "hai cot", "2 cot", "split hero")):
+        layout = "split"
+    return {"theme": theme, "layout": layout}
+
+
 def _text(value, field, limit):
     if not isinstance(value, str):
         raise ValueError("Structured website content invalid: " + field)
@@ -171,8 +233,13 @@ def owner_phone(brief):
 
 
 def validate_copy(raw):
-    if not isinstance(raw, dict) or set(raw) != set(COPY_SCHEMA["required"]):
+    required = set(COPY_SCHEMA["required"])
+    allowed = required | {"theme", "layout"}
+    if not isinstance(raw, dict) or required - set(raw) or set(raw) - allowed:
         raise ValueError("Structured website content invalid: fields")
+    for choice, options in (("theme", THEMES), ("layout", LAYOUTS)):
+        if choice in raw and raw[choice] not in options:
+            raise ValueError("Structured website content invalid: " + choice)
     limits = {
         "brand": 64, "headline": 100, "subtitle": 210,
         "introduction": 380, "call_to_action": 120,
@@ -192,8 +259,13 @@ def validate_copy(raw):
     return values
 
 
-def render(raw, *, phone=None):
+def render(raw, *, phone=None, theme=None, layout=None):
     copy = validate_copy(raw)
+    theme = theme or copy.get("theme", "forest")
+    layout = layout or copy.get("layout", "split")
+    if theme not in THEMES or layout not in LAYOUTS:
+        raise ValueError("Structured website content invalid: design style")
+    stylesheet = CSS + THEMES[theme] + LAYOUTS[layout]
     if phone is not None and (not isinstance(phone, str) or not re.fullmatch(r"(?:0[35789]|\+84[35789])\d{8}", phone)):
         raise ValueError("Invalid owner phone number")
     contact_action = ('<a class="primary" href="tel:' + escape(phone) + '">Gọi tư vấn trực tiếp ↗</a>'
@@ -206,14 +278,14 @@ def render(raw, *, phone=None):
         for i, item in enumerate(copy["highlights"], 1)
     )
     return f"""<!doctype html>
-<html lang="vi">
+<html lang="vi" data-af-theme="{theme}" data-af-layout="{layout}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'">
 <title>{text('brand')} — {text('headline')}</title>
-<style>{CSS}</style>
+<style>{stylesheet}</style>
 </head>
 <body>
 <header class="site-header"><div class="container nav">
