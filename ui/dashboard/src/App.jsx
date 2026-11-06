@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { App as AntApp, Alert, Badge, Button, Card, Checkbox, Collapse, ConfigProvider,
   Descriptions, Divider, Drawer, Empty, Form, Input, Layout, Menu, Modal,
-  Segmented, Select, Space, Spin, Statistic, Table, Tag, Typography } from 'antd';
+  Segmented, Select, Space, Spin, Statistic, Table, Tabs, Tag, Typography } from 'antd';
 import {
   AppstoreOutlined, AuditOutlined, BarChartOutlined, CheckCircleOutlined,
   ClockCircleOutlined, CodeOutlined, DashboardOutlined, FileTextOutlined,
@@ -18,6 +18,7 @@ import { Projects } from './features/Projects.jsx';
 import { Retention } from './features/Retention.jsx';
 import { Reviews } from './features/Reviews.jsx';
 import { Schedules, OperationsControl, Intelligence, Growth, OwnerSettings, OwnerMemory } from './features/Management.jsx';
+import { NAV_GROUPS, groupFor, labelFor, defaultSection, parseSection, hashFor, tabsFor } from './navigation.js';
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
@@ -51,7 +52,7 @@ export default function App() {
   const [csrf,setCsrf]=useState(null);
   const [data,setData]=useState(null);
   const [loginNeeded,setLoginNeeded]=useState(false);
-  const [section,setSection]=useState('workspace');
+  const [section,setSection]=useState(()=>parseSection(window.location.hash));
   const [goal,setGoal]=useState(null);
   const [proposal,setProposal]=useState(null);
   const [task,setTask]=useState(null);
@@ -67,6 +68,16 @@ export default function App() {
     setCsrf(session.csrf);setData(bootstrap);setLoginNeeded(false);
   },[]);
   useEffect(()=>{refresh().catch(e=>{if(e.status===401)setLoginNeeded(true);else setError(e);});},[refresh]);
+  useEffect(()=>{
+    const syncLocation=()=>setSection(parseSection(window.location.hash));
+    window.addEventListener('hashchange',syncLocation);
+    return ()=>window.removeEventListener('hashchange',syncLocation);
+  },[]);
+  const navigate=(target)=>{
+    const next=hashFor(target);
+    setSection(parseSection(next));
+    if(window.location.hash!==next)window.location.hash=next;
+  };
   const runAction=async(fn,{refreshData=true}={})=>{
     setBusy(true);setError(null);
     try{const result=await fn();if(refreshData)await refresh();return result;}
@@ -118,57 +129,47 @@ export default function App() {
     async()=>{const out=await runAction(()=>post('/api/proposals/'+p.proposal_id+'/apply',
       {ack:'APPLY_PROPOSAL',sha256:p.sha256}));
       if(out){setProposal(null);message.success('Đã lưu vào workspace/products');}});
-  const menuItems=[
-    {key:'workspace',icon:<RobotOutlined/>,label:'Giao việc'},
-    {key:'overview',icon:<DashboardOutlined/>,label:'Tổng quan'},
-    {key:'goals',icon:<AuditOutlined/>,label:'Goals & Duyệt'},
-    {key:'tasks',icon:<ClockCircleOutlined/>,label:'Task History'},
-    {key:'reviews',icon:<CheckCircleOutlined/>,label:'AI & Video Review'},
-    {key:'websites',icon:<GlobalOutlined/>,label:'Websites'},
-    {key:'projects',icon:<FolderOpenOutlined/>,label:'Projects & AI Images'},
-    {key:'retention',icon:<SafetyCertificateOutlined/>,label:'Backups & Cleanup'},
-    {type:'divider'},
-    {key:'team',icon:<TeamOutlined/>,label:'Team & Roles'},
-    {key:'intelligence',icon:<AppstoreOutlined/>,label:'Intelligence'},
-    {key:'growth',icon:<BarChartOutlined/>,label:'Growth & Revenue'},
-    {key:'schedules',icon:<ClockCircleOutlined/>,label:'Schedules'},
-    {key:'operations',icon:<SafetyCertificateOutlined/>,label:'Operations'},
-    {key:'channels',icon:<PlayCircleOutlined/>,label:'Channels'},
-    {key:'finance',icon:<BarChartOutlined/>,label:'Finance'},
-    {key:'settings',icon:<SettingOutlined/>,label:'Settings'},
-    {key:'memory',icon:<FileTextOutlined/>,label:'Owner Memory'},
-  ];
-  const titles={workspace:'Giao việc',overview:'Tổng quan',goals:'Kế hoạch',tasks:'Task History',
-    reviews:'AI & Video Review',websites:'Websites',projects:'Projects & AI Images',retention:'Backups & Cleanup',
-    team:'Team & Roles',intelligence:'Intelligence',growth:'Growth & Revenue',
-    schedules:'Schedules',operations:'Operations',channels:'Channels',
-    finance:'Finance',settings:'Settings',memory:'Owner Memory'};
+  // Sidebar shows only business-level destinations; all existing screens live in tabs.
+  const group=groupFor(section);
+  const groupIcons={
+    workspace:<RobotOutlined/>,overview:<DashboardOutlined/>,
+    projects:<FolderOpenOutlined/>,business:<BarChartOutlined/>,
+    team:<TeamOutlined/>,settings:<SettingOutlined/>,
+  };
+  const menuItems=NAV_GROUPS.map(item=>({
+    key:item.key,icon:groupIcons[item.key],label:item.label,
+  }));
+  const groupTitle=NAV_GROUPS.find(item=>item.key===group)?.label || 'Giao việc';
+  const activeTabs=tabsFor(group);
   if(loginNeeded)return <><Login onLogin={async({code})=>{
     await runAction(async()=>{await api('/api/login',{method:'POST',body:{code}});await refresh();},
       {refreshData:false});}} busy={busy}/><ErrorBoundary error={error} onReset={()=>setError(null)}/></>;
   if(!data)return <div className="loading-screen"><Spin size="large"/><Text type="secondary">Đang kết nối AgentForge…</Text><ErrorBoundary error={error} onReset={()=>setError(null)}/></div>;
-  const title = titles[section] || 'Dashboard';
+  const title = labelFor(section);
   const goals = data.goals||[], tasks=data.tasks||[];
   return <Layout className="app-shell">
     <Sider theme="light" collapsible collapsed={collapsed} onCollapse={setCollapsed}
       breakpoint="lg" width={242} className="app-sider">
       <div className="brand"><span className="brand-glyph">A</span>{!collapsed&&<div><strong>AgentForge</strong><small>AI COMPANY</small></div>}</div>
-      <Menu theme="light" mode="inline" items={menuItems} selectedKeys={[section]}
-        onClick={e=>setSection(e.key)} className="app-menu"/>
+      <Menu theme="light" mode="inline" items={menuItems} selectedKeys={[group]}
+        onClick={e=>navigate(defaultSection(e.key))} className="app-menu"/>
       {!collapsed && <div className="sider-foot"><Badge status="success" text="Local-first"/><div>Chỉ sử dụng trên localhost</div></div>}
     </Sider>
     <Layout>
       <Header className="app-header">
-        <div><Text type="secondary">Workspace / </Text><Text strong>{title}</Text></div>
+        <div><Text type="secondary">Workspace / {groupTitle} / </Text><Text strong>{title}</Text></div>
         <Space><Button icon={<ReloadOutlined/>} loading={busy} onClick={()=>runAction(refresh,{refreshData:false})}>Làm mới</Button>
           <Button href="/" target="_blank" icon={<CodeOutlined/>}>Giao diện cũ</Button></Space>
       </Header>
       <Content className="app-content">
         <div className="page-heading"><div><div className="eyebrow">AGENTFORGE / OWNER WORKSPACE</div>
-          {section!=='workspace'&&<Title level={2}>{title}</Title>}</div></div>
+          {section!=='workspace'&&<Title level={2}>{groupTitle}</Title>}</div></div>
         <ErrorBoundary error={error} onReset={()=>setError(null)}/>
+        {activeTabs.length>1&&
+          <Tabs className="workspace-tabs" activeKey={section}
+            items={activeTabs} onChange={navigate}/>}
         {section==='workspace'&&<Workspace data={data} onPlan={plan} openGoal={openGoal} loading={busy}/>}
-        {section==='overview'&&<Overview data={data} onNavigate={setSection}/>}
+        {section==='overview'&&<Overview data={data} onNavigate={navigate}/>}
         {section==='goals'&&<Card><Table dataSource={goals} rowKey="goal_id" pagination={{pageSize:10}}
           columns={[{title:'Mục tiêu',dataIndex:'title'}, {title:'Workflow',dataIndex:'template'},
             {title:'Trạng thái',dataIndex:'status',render:badge},
