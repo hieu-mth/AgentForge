@@ -190,7 +190,7 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 @media(max-width:900px){.two-cols{grid-template-columns:1fr}
   .login-screen{grid-template-columns:1fr}.login-art{display:none}}
 @media(max-width:650px){
-  .legacy-link span,.header-status{display:none}
+  .header-status{display:none}
   .hero{padding:22px 18px;border-radius:20px}
   .composer-footer{flex-direction:column;align-items:stretch}.composer-footer button{width:100%}
   .list-line{align-items:flex-start;flex-direction:column;gap:10px}
@@ -200,3 +200,31 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;
   animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+
+/* Owner review polish: compact right-edge chevron and an unobstructed prompt counter. */
+.app-sider{overflow:visible!important}
+.app-sider .ant-layout-sider-children{overflow:visible}
+.sider-toggle{
+  position:absolute;top:94px;right:-16px;z-index:30;
+  display:grid;place-items:center;width:32px;height:32px;
+  padding:0;border:1px solid #363e65;border-radius:50%;
+  background:#161a34;color:#cbd3fa;cursor:pointer;
+  box-shadow:0 5px 16px rgba(0,0,0,.24);
+  transition:background .2s var(--ease),border-color .2s var(--ease),box-shadow .2s var(--ease)
+}
+.sider-toggle:hover{background:#252b50;border-color:var(--primary);box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.sider-toggle:focus-visible{outline:3px solid var(--primary);outline-offset:2px}
+.sider-chevron{display:block;line-height:1;transition:transform .25s var(--ease)}
+.sider-chevron.rotated{transform:rotate(180deg)}
+.prompt-composer .composer-footer{position:relative;flex-wrap:wrap;min-height:53px;gap:10px 14px}
+.composer-hint{flex:1 1 260px;min-width:0}
+.composer-count{font-size:12px;line-height:1.5;white-space:nowrap;
+  font-variant-numeric:tabular-nums;color:var(--faint);padding:4px 2px;align-self:center}
+.prompt-composer textarea{margin-bottom:2px}
+@media(max-width:650px){
+  .prompt-composer .composer-footer{align-items:center}
+  .composer-hint{flex-basis:100%}
+  .composer-count{order:1;align-self:flex-end}
+  .prompt-composer .composer-footer button{order:2}
+}
+@media(prefers-reduced-motion:reduce){.sider-chevron,.sider-toggle{transition:none!important}}
