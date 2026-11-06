@@ -41,6 +41,10 @@ jobs:
         working-directory: ui/dashboard
         run: npm install --no-audit --no-fund
 
+      - name: Validate compact React navigation
+        working-directory: ui/dashboard
+        run: npm run test:navigation
+
       - name: Build React Dashboard (Ant Design)
         working-directory: ui/dashboard
         run: npm run build
