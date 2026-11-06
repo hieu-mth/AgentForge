@@ -148,6 +148,24 @@ class TestControlCenterV1(unittest.TestCase):
         code, _, _ = self.req("GET", "/api/bootstrap")
         self.assertEqual(code, 401)
 
+    def test_long_unicode_website_brief_over_authenticated_http(self):
+        self.login()
+        brief = ("Tạo website tư vấn nệm cho gia đình Việt Nam. "
+                 + "Thiết kế tinh tế và rõ ràng trên điện thoại. " * 125)
+        self.assertGreater(len(brief), 600)
+        self.assertLess(len(brief), 6000)
+        code, submitted, _ = self.req("POST", "/api/workspace/request", {
+            "ack": "PLAN_ONLY", "prompt": brief, "max_model_calls": 1})
+        self.assertEqual(code, 200, submitted)
+        saved = brain_store.get_goal(submitted["goal_id"], db_path=self.brain)
+        self.assertEqual(saved["inputs"]["brief"], brief)
+        self.assertEqual(saved["status"], "PLANNED")
+        self.assertFalse(self.taskdb.exists())
+        code, _, _ = self.req("POST", "/api/workspace/request", {
+            "ack": "PLAN_ONLY", "prompt": "Tạo website " + "x" * 6000,
+            "max_model_calls": 1})
+        self.assertEqual(code, 400)
+
     def test_csrf_origin_host_and_body_guards(self):
         self.login()
         for params in (
