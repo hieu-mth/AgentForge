@@ -156,6 +156,20 @@ def _escaped_text(value):
     raise ValueError("Structured website content invalid: too many reserved tokens")
 
 
+PHONE_RE = re.compile(r"(?<![A-Za-z0-9])(?:\+84|0)[\s.-]?[35789](?:[\s.-]?\d){8}(?!\d)")
+
+
+def owner_phone(brief):
+    """Recognize only an explicitly supplied Vietnamese mobile number."""
+    if not isinstance(brief, str):
+        return None
+    found = PHONE_RE.search(brief)
+    if found is None:
+        return None
+    number = re.sub(r"[\s.-]", "", found.group(0))
+    return number if re.fullmatch(r"(?:0[35789]|\+84[35789])\d{8}", number) else None
+
+
 def validate_copy(raw):
     if not isinstance(raw, dict) or set(raw) != set(COPY_SCHEMA["required"]):
         raise ValueError("Structured website content invalid: fields")
@@ -178,8 +192,12 @@ def validate_copy(raw):
     return values
 
 
-def render(raw):
+def render(raw, *, phone=None):
     copy = validate_copy(raw)
+    if phone is not None and (not isinstance(phone, str) or not re.fullmatch(r"(?:0[35789]|\+84[35789])\d{8}", phone)):
+        raise ValueError("Invalid owner phone number")
+    contact_action = ('<a class="primary" href="tel:' + escape(phone) + '">Gọi tư vấn trực tiếp ↗</a>'
+                      if phone else '<a class="primary" href="#dau-trang">Trở về đầu trang ↑</a>')
     text = lambda field: _escaped_text(copy[field])
     features = "".join(
         '<article class="feature"><div class="feature-index">'
@@ -227,8 +245,8 @@ def render(raw):
 <section class="contact" id="lien-he" aria-labelledby="contact-heading">
 <div class="container contact-inner"><p class="kicker">Bước tiếp theo</p>
 <h2 id="contact-heading">{text('call_to_action')}</h2>
-<p>Đây là bản nháp để chủ dự án xem xét. Thông tin liên hệ chính thức sẽ được bổ sung sau khi xác minh.</p>
-<a class="primary" href="#dau-trang">Trở về đầu trang <span aria-hidden="true">↑</span></a>
+<p>Đây là bản nháp để chủ dự án xem xét. {("Số điện thoại bên dưới được lấy từ yêu cầu của chủ dự án; hãy kiểm tra trước khi công bố." if phone else "Thông tin liên hệ chính thức sẽ được bổ sung sau khi xác minh.")}</p>
+{contact_action}
 <p class="note">Nội dung và hình minh họa đang ở giai đoạn đề xuất. Chưa xác nhận thông tin sản phẩm, giá hay cam kết thương mại.</p>
 </div></section>
 </main>
