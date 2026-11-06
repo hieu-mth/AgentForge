@@ -49,7 +49,7 @@ def _steps(template, inputs):
     elif template == "website.draft":
         from agentforge.product_builder import _check_slug, _bounded_text
         _check_slug(inputs["slug"])
-        _bounded_text(inputs["brief"], "brief", 20, 600)
+        _bounded_text(inputs["brief"], "brief", 20, 6000)
         steps = [("web.create", {
             "slug": inputs["slug"], "brief": inputs["brief"]})]
     elif template == "website.campaign":
