@@ -244,3 +244,8 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .permission-copy>span{color:var(--muted);line-height:1.6;font-size:13px}
 .permission-copy small{color:var(--faint);font-size:11px;line-height:1.5;overflow-wrap:anywhere}
 .permission-copy code{font-size:11px;opacity:.75}
+
+/* Owner-facing storyboard preview: content is text, not executable HTML. */
+.storyboard-scene{border:1px solid var(--line);background:var(--surface-2);
+  border-radius:12px;padding:16px;margin:12px 0;overflow-wrap:anywhere}
+.storyboard-scene:last-child{margin-bottom:0}

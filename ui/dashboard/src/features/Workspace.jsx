@@ -87,7 +87,7 @@ export function Workspace({data, onPlan, openGoal, loading}) {
   </div>;
 }
 
-export function GoalDrawer({goal, onClose, onApprove, onExecute, busy, externalEnabled}) {
+export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, busy, externalEnabled}) {
   const [grants, setGrants] = useState([]);
   useEffect(()=>{setGrants([]);},[goal?.goal_id]);
   if (!goal) return null;
@@ -118,6 +118,8 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, busy, externalE
     <Collapse ghost items={[{key:'1',label:'Xem chi tiết dữ liệu và plan (nâng cao)',
       children:<pre className="source-text">{JSON.stringify({inputs:goal.inputs,plan:goal.plan},null,2)}</pre>}]}/>
     <Divider/>
+    {goal.status==='SUCCEEDED'&&<Button type="primary" block
+      onClick={()=>onViewResult(goal)}>Xem kết quả công việc</Button>}
     {goal.status==='PLANNED' && <Button type="primary" block loading={busy}
       onClick={()=>onApprove(goal)}>Duyệt SHA · chưa chạy AI</Button>}
     {runnable && <>
