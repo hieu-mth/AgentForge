@@ -28,7 +28,14 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .app-sider{position:sticky!important;top:0;height:100vh;z-index:20;
   background:linear-gradient(180deg,#12152e 0%,#0b0d1f 100%)!important;border-right:1px solid #1d2142}
 .app-sider .ant-layout-sider-children{display:flex;flex-direction:column;height:100%}
-.app-sider .ant-layout-sider-trigger{background:#0b0d1f!important;border-top:1px solid #1d2142}
+.sider-toggle{position:absolute;right:-15px;top:85px;z-index:30;width:30px;height:30px;
+  display:grid;place-items:center;border:1px solid #303658;border-radius:50%;
+  color:#dde1ff;background:#191d38;box-shadow:0 3px 12px rgba(0,0,0,.22);
+  cursor:pointer;transition:background .2s,border-color .2s}
+.sider-toggle:hover{background:#292e54;border-color:#6268a3}
+.sider-toggle .anticon{transition:transform .22s ease}
+.sider-toggle .sider-toggle-open{transform:rotate(180deg)}
+.sider-toggle:focus-visible{outline:2px solid #a5a8ff;outline-offset:2px}
 .nav-drawer .ant-drawer-body,.nav-drawer .ant-drawer-content{background:#0f1226}
 .brand{height:76px;display:flex;align-items:center;gap:12px;padding:0 20px;flex:none}
 .brand strong,.brand small{display:block;line-height:1.2}
@@ -83,6 +90,8 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
   border-radius:20px;box-shadow:0 14px 40px rgba(60,70,150,.1);transition:border-color .2s,box-shadow .2s}
 .prompt-composer:focus-within{border-color:var(--primary);box-shadow:0 0 0 4px color-mix(in srgb,var(--primary) 16%,transparent),0 14px 40px rgba(60,70,150,.12)}
 .prompt-composer textarea{font-size:15px;line-height:1.75;resize:none!important}
+.composer-counter{text-align:right;font-size:12px;line-height:1.4;color:var(--faint);
+  padding:2px 0 8px;font-variant-numeric:tabular-nums}
 .composer-footer{border-top:1px solid var(--line-soft);padding-top:12px;margin-top:6px;display:flex;
   align-items:center;justify-content:space-between;gap:14px}
 .composer-hint{font-size:12.5px;color:var(--faint)}.composer-hint b{color:var(--warn);font-weight:600}
