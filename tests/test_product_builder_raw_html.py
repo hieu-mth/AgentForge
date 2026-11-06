@@ -1,201 +1,159 @@
-"""C8A hotfix: plain HTML model output, no JSON-escaped source required."""
+"""web.create production: structured model copy, safe deterministic template."""
 import json
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from agentforge import product_builder as b
+from agentforge import product_builder as builder, product_quality
+from agentforge.domains.websites.structured_builder import COPY_SCHEMA, render
 
-
+COPY = {
+    "brand": "Minh Studio",
+    "headline": "Ảnh đẹp kể câu chuyện của bạn",
+    "subtitle": "Portfolio nhiếp ảnh phong cách tinh giản với bố cục nhiều khoảng trắng.",
+    "introduction": "Giới thiệu phong cách ảnh, cách làm việc và hướng kết nối trực tiếp.",
+    "highlights": [
+        {"title": "Chân dung", "description": "Lưu lại những khoảnh khắc tự nhiên."},
+        {"title": "Không gian", "description": "Góc nhìn giàu chất liệu và cảm xúc."},
+        {"title": "Câu chuyện", "description": "Bố cục có chủ đích, dễ đọc trên điện thoại."},
+    ],
+    "call_to_action": "Bắt đầu trao đổi về ý tưởng của bạn",
+}
+BRIEF = "Thiết kế website portfolio cho nhiếp ảnh gia Việt Nam, phong cách tối giản."
 GOOD = '<!doctype html><html lang="vi"><head><style>body{margin:0}</style></head><body><h1>Xin chào</h1></body></html>'
 
 
-class TestProductBuilderRawHtml(unittest.TestCase):
+class TestReliableWebBuilder(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         self.patches = [
-            patch.object(b, "ROOT", self.root),
-            patch.object(b, "WORKSPACE", self.root / "workspace"),
-            patch.object(b, "PRODUCTS", self.root / "workspace" / "products"),
-            patch.object(b, "PROPOSALS", self.root / "data" / "company" / "product_builder" / "proposals"),
+            patch.object(builder, "ROOT", self.root),
+            patch.object(builder, "WORKSPACE", self.root / "workspace"),
+            patch.object(builder, "PRODUCTS", self.root / "workspace" / "products"),
+            patch.object(builder, "PROPOSALS", self.root / "data" / "company" / "product_builder" / "proposals"),
         ]
-        for p in self.patches:
-            p.start()
-        self.brief = "Make a compact attractive Vietnamese landing page for Excel services."
+        for item in self.patches:
+            item.start()
 
     def tearDown(self):
-        for p in reversed(self.patches):
-            p.stop()
+        for item in reversed(self.patches):
+            item.stop()
         self.tmp.cleanup()
 
-    def test_default_calls_plain_text_generation_without_json(self):
-        with (patch("agentforge.model.generate", return_value=GOOD) as generate,
-              patch("agentforge.model.generate_json") as generate_json):
-            proposal = b.propose("shop-landing", self.brief)
-            generate.assert_called_once()
-            self.assertEqual(generate.call_args.kwargs, {"worker_id": "product_builder"})
-            self.assertIn("Return ONLY raw HTML", generate.call_args.args[0])
-            generate_json.assert_not_called()
-        document = json.loads(Path(proposal["proposal_path"]).read_text(encoding="utf-8"))
-        self.assertEqual([x["path"] for x in document["files"]], ["index.html"])
-        html = document["files"][0]["content"]
-        self.assertIn("<h1>Xin chào</h1>", html)
-        self.assertIn("agentforge-web-design-v2", html)
-        self.assertIn("Segoe UI", html)
-        self.assertIn("prefers-reduced-motion", html)
-        self.assertIn("Minh họa đồ họa trang trí", html)
-        self.assertFalse(b.PRODUCTS.exists())
-        self.assertFalse(document["execution_authorized"])
+    def _create(self, data=None):
+        answer = COPY if data is None else data
+        with (patch("agentforge.model.generate_json", return_value=answer) as model,
+              patch("agentforge.model.generate") as raw):
+            receipt = builder.propose("portfolio-demo", BRIEF)
+            model.assert_called_once()
+            self.assertEqual(model.call_args.kwargs, {"worker_id": "product_builder"})
+            self.assertEqual(model.call_args.args[1], COPY_SCHEMA)
+            self.assertIn(BRIEF, model.call_args.args[0])
+            raw.assert_not_called()
+        return receipt
 
-    def test_realistic_inline_svg_xmlns_is_not_an_external_request(self):
-        svg = ('<svg xmlns="http://www.w3.org/2000/svg" '
-               'xmlns:xlink="http://www.w3.org/1999/xlink" '
-               'viewBox="0 0 20 20"><circle cx="10" cy="10" r="5"/></svg>')
-        illustrated = GOOD.replace("<h1>Xin chào</h1>",
-                                   "<h1>Xin chào</h1>" + svg)
-        with patch("agentforge.model.generate", return_value=illustrated) as generate:
-            proposal = b.propose("shop-landing", self.brief)
-            generate.assert_called_once()
-        doc = json.loads(Path(proposal["proposal_path"]).read_text(encoding="utf-8"))
-        html = doc["files"][0]["content"]
-        self.assertIn('xmlns="http://www.w3.org/2000/svg"', html)
-        self.assertIn("agentforge-web-design-v2", html)
-        from agentforge import product_quality as quality
-        findings = quality.analyze(html)["findings"]
-        self.assertNotIn("unsafe_content", [item["rule"] for item in findings])
+    def test_one_structured_model_call_creates_only_review_proposal(self):
+        receipt = self._create()
+        self.assertFalse(builder.PRODUCTS.exists())
+        doc = json.loads(Path(receipt["proposal_path"]).read_text(encoding="utf-8"))
+        self.assertEqual(doc["status"], "PROPOSED_NOT_APPLIED")
+        self.assertFalse(doc["execution_authorized"])
+        self.assertFalse(doc["spending_authorized"])
+        self.assertFalse(doc["deployment_authorized"])
+        self.assertEqual(len(doc["files"]), 1)
+        source = doc["files"][0]["content"]
+        self.assertIn("<h1 id=\"hero-heading\">Ảnh đẹp", source)
+        self.assertIn("Minh Studio", source)
+        self.assertIn("Content-Security-Policy", source)
+        self.assertIn("prefers-reduced-motion", source)
+        self.assertIn("grid-template-columns", source)
+        self.assertIn('lang="vi"', source)
+        self.assertIn('href="#lien-he"', source)
+        self.assertNotIn("<script", source)
+        self.assertNotIn('src="https:', source)
+        report = product_quality.analyze(source)
+        self.assertNotEqual(report["status"], "FAIL", report["findings"])
+        self.assertLess(len(source.encode("utf-8")), builder.MAX_FILE_BYTES)
 
-    def test_non_namespace_network_urls_still_rejected(self):
-        examples = [
-            '<img src="https://example.org/tracker.png">',
-            '<svg><image href="http://www.w3.org/2000/svg"/></svg>',
-            '<svg xmlns="http://www.w3.org/2000/svg"><image href="https://example.org/x.png"/></svg>',
-            '<script>fetch("/api")</script>',
-        ]
-        for payload in examples:
-            with self.subTest(payload=payload[:30]):
-                bad = GOOD.replace("<h1>", payload + "<h1>")
-                with patch("agentforge.model.generate", return_value=bad):
-                    with self.assertRaisesRegex(ValueError, "Disallowed active/remote"):
-                        b.propose("shop-landing", self.brief)
-        self.assertFalse(b.PROPOSALS.exists())
+    def test_model_text_never_becomes_html_code_or_remote_resource(self):
+        attack = dict(COPY)
+        attack["headline"] = '<script>alert("x")</script>'
+        attack["subtitle"] = 'Ảnh ở https://example.invalid/image.jpg và fetch("/api")'
+        attack["introduction"] = '@import url(data:text/html,whatever) <img src=x onerror=alert(1)>'
+        receipt = self._create(attack)
+        doc = json.loads(Path(receipt["proposal_path"]).read_text(encoding="utf-8"))
+        source = doc["files"][0]["content"]
+        self.assertIn("&lt;script&gt;", source)
+        self.assertIn("&lt;img", source)
+        self.assertNotIn("<script>", source)
+        self.assertNotIn("https://example.invalid", source)
+        self.assertNotIn("@import", source)
+        self.assertIsNone(builder._suspicious_match(source))
+        self.assertNotEqual(product_quality.analyze(source)["status"], "FAIL")
 
-    def test_unsafe_error_identifies_category_and_line(self):
-        from agentforge.web_design_kit import GENERIC_ART, upgrade_html
-        bad = GOOD.replace("<h1>", "\n<a href='https://example.org'>Link</a>\n<h1>")
-        rendered = upgrade_html(bad, [], fallback_art=GENERIC_ART)
-        expected_line = rendered[:rendered.index("https://example.org")].count("\n") + 1
-        with patch("agentforge.model.generate", return_value=bad) as generate:
-            with self.assertRaisesRegex(
-                ValueError, rf"remote URL at line {expected_line}"
-            ):
-                b.propose("shop-landing", self.brief)
-            generate.assert_called_once()
-        self.assertFalse(b.PROPOSALS.exists())
-
-    def test_model_specific_svg_skips_neutral_fallback(self):
-        illustrated = GOOD.replace(
-            "<h1>Xin chào</h1>",
-            "<h1>Xin chào</h1><svg role='img' viewBox='0 0 20 20'></svg>",
-        )
-        with patch("agentforge.model.generate", return_value=illustrated) as generate:
-            proposal = b.propose("shop-landing", self.brief)
-            generate.assert_called_once()
-        doc = json.loads(Path(proposal["proposal_path"]).read_text(encoding="utf-8"))
-        html = doc["files"][0]["content"]
-        self.assertIn("viewBox='0 0 20 20'", html)
-        self.assertNotIn("Minh họa đồ họa trang trí", html)
-        self.assertIn("agentforge-web-design-v2", html)
-
-    def test_premium_output_still_respects_file_size_limit(self):
-        enormous = GOOD.replace("</body>", "<p>" + "x" * 15000 + "</p></body>")
-        with patch("agentforge.model.generate", return_value=enormous) as generate:
-            with self.assertRaisesRegex(ValueError, "too large"):
-                b.propose("shop-landing", self.brief)
-            generate.assert_called_once()
-        self.assertFalse(b.PROPOSALS.exists())
-
-    def test_optional_single_markdown_html_fence(self):
-        with patch("agentforge.model.generate", return_value="```html\n" + GOOD + "\n```"):
-            proposal = b.propose("shop-landing", self.brief)
-        doc = json.loads(Path(proposal["proposal_path"]).read_text(encoding="utf-8"))
-        self.assertIn("<h1>Xin chào</h1>", doc["files"][0]["content"])
-        self.assertIn("agentforge-web-design-v2", doc["files"][0]["content"])
-
-    def test_incomplete_html_rejected_without_proposal(self):
-        with patch("agentforge.model.generate", return_value=GOOD[:75]):
-            with self.assertRaisesRegex(ValueError, "truncated or incomplete"):
-                b.propose("shop-landing", self.brief)
-        self.assertFalse(b.PROPOSALS.exists())
-        self.assertFalse(b.PRODUCTS.exists())
-
-    def test_raw_json_or_prose_rejected_without_files(self):
-        for bad in ('{"files":', 'Here is your HTML:\n' + GOOD, "```html\n" + GOOD):
+    def test_legacy_html_parser_rejects_untrusted_raw_code(self):
+        fence = chr(96) * 3
+        self.assertEqual(builder._standalone_html(fence + "html\n" + GOOD + "\n" + fence), GOOD)
+        for bad in ['{"files":', "Explanation: " + GOOD, GOOD[:-18]]:
             with self.subTest(bad=bad[:20]):
-                with patch("agentforge.model.generate", return_value=bad):
-                    with self.assertRaises(ValueError):
-                        b.propose("shop-landing", self.brief)
-        self.assertFalse(b.PROPOSALS.exists())
+                with self.assertRaises(ValueError):
+                    builder._standalone_html(bad)
 
-    def test_inline_onclick_rejected_before_proposal_even_if_model_returns_html(self):
-        unsafe = GOOD.replace("<h1>", '<button onclick="alert(1)">Tư vấn</button><h1>')
-        with patch("agentforge.model.generate", return_value=unsafe) as generate:
-            with self.assertRaisesRegex(ValueError, "Static quality gate FAIL: inline_events"):
-                b.propose("shop-landing", self.brief)
-            generate.assert_called_once()
-        self.assertFalse(b.PROPOSALS.exists())
-        self.assertFalse(b.PRODUCTS.exists())
+    def test_invalid_model_json_fails_without_proposal(self):
+        cases = [
+            {"brand": "Only a brand"},
+            {**COPY, "highlights": []},
+            {**COPY, "headline": ""},
+            {**COPY, "headline": "x" * 101},
+            {**COPY, "highlights": [{"title": "One", "description": "Only one"}]},
+            {**COPY, "highlights": [COPY["highlights"][0], {"title": "Two", "description": ""}]},
+        ]
+        for idx, data in enumerate(cases):
+            with self.subTest(case=idx):
+                with patch("agentforge.model.generate_json", return_value=data) as model:
+                    with self.assertRaisesRegex(ValueError, "Structured website content invalid"):
+                        builder.propose("portfolio-demo", BRIEF)
+                    model.assert_called_once()
+                self.assertFalse(builder.PROPOSALS.exists())
 
-    def test_old_digest_valid_proposal_with_inline_event_cannot_apply(self):
-        with patch("agentforge.model.generate", return_value=GOOD):
-            proposal = b.propose("shop-landing", self.brief)
-        path = Path(proposal["proposal_path"])
-        doc = json.loads(path.read_text(encoding="utf-8"))
-        doc["files"][0]["content"] = doc["files"][0]["content"].replace(
-            "<h1>", '<button onclick="alert(1)">Tư vấn</button><h1>'
-        )
-        doc["sha256"] = b._digest(
-            doc["project_slug"], doc["brief"],
-            {"summary": doc["summary"], "files": doc["files"]},
-        )
-        path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
-        with self.assertRaisesRegex(ValueError, "Static quality gate FAIL: inline_events"):
-            b.apply(doc["proposal_id"], confirm_write=True, sha256=doc["sha256"])
-        self.assertFalse(b.PRODUCTS.exists())
-
-    def test_remote_code_rejected_even_in_valid_html(self):
-        bad = GOOD.replace('<h1>', '<script>fetch("https://example.org")</script><h1>')
-        with patch("agentforge.model.generate", return_value=bad):
-            with self.assertRaisesRegex(ValueError, "Disallowed"):
-                b.propose("shop-landing", self.brief)
-        self.assertFalse(b.PROPOSALS.exists())
-
-    def test_no_automatic_retry_or_silent_repair_on_model_error(self):
-        with patch("agentforge.model.generate", side_effect=RuntimeError("Gateway error")) as gen:
+    def test_no_model_auto_retry_or_fabricated_success_on_outage(self):
+        with patch("agentforge.model.generate_json", side_effect=RuntimeError("Offline gateway unavailable")) as model:
             with self.assertRaises(RuntimeError):
-                b.propose("shop-landing", self.brief)
-            gen.assert_called_once()
-        self.assertFalse(b.PROPOSALS.exists())
+                builder.propose("portfolio-demo", BRIEF)
+            model.assert_called_once()
+        self.assertFalse(builder.PROPOSALS.exists())
 
-    def test_approved_apply_still_requires_matching_digest(self):
-        with patch("agentforge.model.generate", return_value=GOOD):
-            proposal = b.propose("shop-landing", self.brief)
-        with self.assertRaises(PermissionError):
-            b.apply(proposal["proposal_id"], sha256=proposal["sha256"])
-        with self.assertRaises(PermissionError):
-            b.apply(proposal["proposal_id"], confirm_write=True, sha256="0"*64)
-        self.assertFalse(b.PRODUCTS.exists())
+    def test_html_maximum_allowed_copy_stays_bounded(self):
+        maximal = {
+            "brand": "B" * 64, "headline": "H" * 100,
+            "subtitle": "S" * 210, "introduction": "I" * 380,
+            "highlights": [{"title": "T" * 65, "description": "D" * 185} for _ in range(4)],
+            "call_to_action": "C" * 120,
+        }
+        html = render(maximal)
+        self.assertLess(len(html.encode("utf-8")), builder.MAX_FILE_BYTES)
+        self.assertNotEqual(product_quality.analyze(html)["status"], "FAIL")
 
-    def test_valid_single_file_can_apply_only_after_explicit_approval(self):
-        with patch("agentforge.model.generate", return_value=GOOD):
-            proposal = b.propose("shop-landing", self.brief)
-        res = b.apply(proposal["proposal_id"], confirm_write=True, sha256=proposal["sha256"])
-        self.assertEqual(res["status"], "FILES_WRITTEN_NOT_EXECUTED")
-        applied_html = (Path(res["project_path"]) / "index.html").read_text(encoding="utf-8")
-        self.assertIn("agentforge-web-design-v2", applied_html)
-        self.assertIn("<h1>Xin chào</h1>", applied_html)
-        self.assertFalse(res["execution_authorized"])
+    def test_review_sha_still_required_to_apply(self):
+        receipt = self._create()
+        with self.assertRaises(PermissionError):
+            builder.apply(receipt["proposal_id"], sha256=receipt["sha256"])
+        with self.assertRaises(PermissionError):
+            builder.apply(receipt["proposal_id"], sha256="0" * 64, confirm_write=True)
+        done = builder.apply(receipt["proposal_id"], sha256=receipt["sha256"], confirm_write=True)
+        self.assertEqual(done["status"], "FILES_WRITTEN_NOT_EXECUTED")
+        self.assertTrue((builder.PRODUCTS / "portfolio-demo" / "index.html").is_file())
+        with self.assertRaises(FileExistsError):
+            builder.apply(receipt["proposal_id"], sha256=receipt["sha256"], confirm_write=True)
+
+    def test_direct_renderer_has_no_network_or_process(self):
+        with (patch("subprocess.run") as process, patch("urllib.request.urlopen") as network):
+            rendered = render(COPY)
+            process.assert_not_called()
+            network.assert_not_called()
+        self.assertIn("Bắt đầu trao đổi", rendered)
 
 
 if __name__ == "__main__":
