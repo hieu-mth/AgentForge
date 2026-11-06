@@ -1,8 +1,8 @@
 // A single declarative route map: six sidebar destinations, all 17 features preserved.
 // No API permissions are changed by client-side navigation.
 export const NAV_GROUPS = Object.freeze([
-  {key:'workspace',label:'Giao việc',tabs:[['workspace','Giao việc']]},
   {key:'overview',label:'Tổng quan',tabs:[['overview','Tổng quan']]},
+  {key:'workspace',label:'Giao việc',tabs:[['workspace','Giao việc']]},
   {key:'projects',label:'Dự án & Thành phẩm',tabs:[
     ['websites','Websites'],['projects','Kho thành phẩm & Ảnh AI'],
     ['reviews','Duyệt AI & Video'],['retention','Sao lưu & Cleanup']]},
@@ -23,10 +23,10 @@ const ROUTES = Object.fromEntries(NAV_GROUPS.flatMap(group=>
   group.tabs.map(([key,label])=>[key,{group:group.key,label}])
 ));
 export function groupFor(section) {
-  return ROUTES[section]?.group || 'workspace';
+  return ROUTES[section]?.group || 'overview';
 }
 export function labelFor(section) {
-  return ROUTES[section]?.label || 'Giao việc';
+  return ROUTES[section]?.label || 'Tổng quan';
 }
 export function defaultSection(group) {
   return DEFAULT_TAB[group] || 'workspace';
@@ -37,8 +37,8 @@ export function tabsFor(group) {
 export function parseSection(hash) {
   // A previously bookmarked page remains valid; unknown paths fail closed to Workspace.
   const match = /^#\/?([a-z][a-z0-9-]*)$/.exec(hash || '');
-  return match && ROUTES[match[1]] ? match[1] : 'workspace';
+  return match && ROUTES[match[1]] ? match[1] : 'overview';
 }
 export function hashFor(section) {
-  return '#/'+(ROUTES[section] ? section : 'workspace');
+  return '#/'+(ROUTES[section] ? section : 'overview');
 }
