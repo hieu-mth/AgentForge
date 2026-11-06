@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { App as AntApp, Alert, Button, Card, Collapse, Descriptions, Drawer, Form, Grid, Input,
   Layout, Menu, Space, Spin, Table, Tabs, Tooltip, Typography } from 'antd';
 import {
-  BarChartOutlined, CodeOutlined, DashboardOutlined, FolderOpenOutlined,
-  MenuOutlined, MoonOutlined, ReloadOutlined, RobotOutlined,
+  BarChartOutlined, DashboardOutlined, FolderOpenOutlined,
+  MenuOutlined, MoonOutlined, ReloadOutlined, RightOutlined, RobotOutlined,
   SafetyCertificateOutlined, SettingOutlined, SunOutlined, TeamOutlined,
 } from '@ant-design/icons';
 import { api } from './api.js';
@@ -172,9 +172,14 @@ export default function App() {
     onClick={e=>goTo(e.key)} className="app-menu"/>;
   const operations=data.company_v2?.operations;
   return <Layout className="app-shell">
-    {!mobile&&<Sider theme="dark" collapsible collapsed={collapsed} onCollapse={setCollapsed}
+    {!mobile&&<Sider theme="dark" collapsible trigger={null} collapsed={collapsed} onCollapse={setCollapsed}
       width={252} collapsedWidth={78} className="app-sider">
       <Brand collapsed={collapsed}/>
+      <button type="button" className="sider-toggle" onClick={()=>setCollapsed(v=>!v)}
+        aria-label={collapsed?"Mở rộng menu":"Thu gọn menu"} aria-expanded={!collapsed}
+        title={collapsed?"Mở rộng menu":"Thu gọn menu"}>
+        <RightOutlined className={collapsed?"":"sider-toggle-open"}/>
+      </button>
       {menu}
       {!collapsed&&<div className="sider-foot"><span className="live-dot"/>
         <div><strong>Local-first</strong><small>Chỉ chạy trên localhost</small></div></div>}
@@ -197,7 +202,6 @@ export default function App() {
           <Tooltip title="Làm mới dữ liệu">
             <Button shape="circle" aria-label="Làm mới" icon={<ReloadOutlined/>} loading={busy}
               onClick={()=>runAction(refresh,{refreshData:false})}/></Tooltip>
-          <Button href="/" target="_blank" icon={<CodeOutlined/>} className="legacy-link"><span>Giao diện cũ</span></Button>
         </Space>
       </Header>
       <Content className="app-content">
