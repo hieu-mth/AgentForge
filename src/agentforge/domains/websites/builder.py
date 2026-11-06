@@ -254,7 +254,7 @@ def propose(slug, brief, *, model_client=None):
         # becomes executable code. This removes recurring raw-HTML gate failures
         # without weakening the C8C validation or owner approval process.
         from agentforge.model import generate_json
-        from agentforge.domains.websites.structured_builder import COPY_SCHEMA, render
+        from agentforge.domains.websites.structured_builder import COPY_SCHEMA, render, owner_phone
         prompt = (
             "Write concise, original Vietnamese website COPY for a premium "
             "offline landing page. Return JSON matching the supplied schema. "
@@ -273,7 +273,7 @@ def propose(slug, brief, *, model_client=None):
             f"PROJECT: {slug}\nOWNER BRIEF:\n{brief}"
         )
         copy = generate_json(prompt, COPY_SCHEMA, worker_id=WORKER_ID)
-        html = render(copy)
+        html = render(copy, phone=owner_phone(brief))
         output = _validate_files({
             "summary": "AI-assisted Vietnamese copy in a deterministic offline website template; owner review required",
             "files": [{"path": "index.html", "content": html}],
