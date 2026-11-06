@@ -229,6 +229,24 @@ def _safe_failure(skill_id, exc):
                 return "HTML_QUALITY_FAILED: Static source rejected by quality gate."
             if any(x in value for x in ("too large", "exceeds", "byte limit")):
                 return "HTML_TOO_LARGE: Generated HTML exceeded safe size limits."
+            # Classify known builder contract failures without persisting raw
+            # model output, exception bodies, filesystem paths or credentials.
+            if "Disallowed active/remote content" in value:
+                return "HTML_UNSAFE_CONTENT: External resources or active content blocked."
+            if "script source" in value:
+                return "HTML_SCRIPT_SOURCE: Only a local app.js script is allowed."
+            if any(marker in value for marker in (
+                "unexpected object", "Expected 1-4 product files",
+                "Invalid product file", "duplicate product filename",
+                "requires index.html", "Product file cannot be empty",
+                "Builder must return HTML text",
+            )):
+                return "BUILDER_SCHEMA_INVALID: Model output did not match the file contract."
+            if any(marker in value for marker in (
+                "must start with", "incomplete code fence",
+                "incomplete", "truncated",
+            )):
+                return "HTML_INCOMPLETE: Model output was not a complete document."
             return "BUILDER_INVALID_OUTPUT: Generated website failed validation."
         return "BUILDER_EXECUTION_FAILED: Check model runtime and builder contracts."
     if skill_id.startswith("analytics."):
