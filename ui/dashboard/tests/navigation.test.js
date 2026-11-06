@@ -9,7 +9,7 @@ const originalScreens=[
 ];
 test('sidebar contains exactly six business-facing groups',()=>{
   assert.deepEqual(NAV_GROUPS.map(x=>x.label),[
-    'Giao việc','Tổng quan','Dự án & Thành phẩm','Kinh doanh','Đội ngũ AI','Cài đặt'
+    'Tổng quan','Giao việc','Dự án & Thành phẩm','Kinh doanh','Đội ngũ AI','Cài đặt'
   ]);
 });
 test('every original screen is present once; no accidental deletion',()=>{
@@ -29,7 +29,7 @@ test('deep links preserve each feature and recover from invalid input',()=>{
     assert.ok(labelFor(name));
   }
   for(const invalid of ['','#/invalid','#/../../data','#/websites?x=1','#/WEBsites','#/']) {
-    assert.equal(parseSection(invalid),'workspace');
+    assert.equal(parseSection(invalid),'overview');
   }
 });
 test('business and owner tools remain reachable in expected groups',()=>{
@@ -42,5 +42,13 @@ test('business and owner tools remain reachable in expected groups',()=>{
   assert.equal(groupFor('tasks'),'team');
   assert.equal(groupFor('operations'),'settings');
   assert.equal(groupFor('memory'),'settings');
-  assert.equal(defaultSection('unknown'),'workspace');
+  assert.equal(defaultSection('unknown'),'overview');
+});
+
+test('overview is the initial landing, while existing deep links stay stable',()=>{
+  assert.equal(parseSection(''),'overview');
+  assert.equal(parseSection('#/'),'overview');
+  assert.equal(parseSection('#/workspace'),'workspace');
+  assert.equal(hashFor('overview'),'#/overview');
+  assert.equal(NAV_GROUPS[0].key,'overview');
 });
