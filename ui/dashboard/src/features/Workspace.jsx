@@ -48,7 +48,7 @@ export function Workspace({data, onPlan, openGoal, loading}) {
         <div className="composer-footer">
           <span className="composer-hint"><SafetyCertificateOutlined/> Lập kế hoạch miễn phí · Ctrl+Enter để gửi
             {length > 0 && length < MIN_PROMPT && <b> · cần thêm {MIN_PROMPT - length} ký tự</b>}</span>
-          <span className="composer-count" aria-live="off">{prompt.length.toLocaleString('vi-VN')}/6.000</span>
+          <span className="composer-count" aria-live="off">{prompt.length.toLocaleString('vi-VN')}/6.000 ký tự</span>
           <Button type="primary" size="large" icon={<SendOutlined/>} loading={loading}
             disabled={length < MIN_PROMPT} onClick={submit}>Tạo kế hoạch</Button>
         </div>
