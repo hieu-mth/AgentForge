@@ -29,13 +29,13 @@ export function labelFor(section) {
   return ROUTES[section]?.label || 'Tổng quan';
 }
 export function defaultSection(group) {
-  return DEFAULT_TAB[group] || 'workspace';
+  return DEFAULT_TAB[group] || 'overview';
 }
 export function tabsFor(group) {
   return (NAV_GROUPS.find(x=>x.key===group)?.tabs || []).map(([key,label])=>({key,label}));
 }
 export function parseSection(hash) {
-  // A previously bookmarked page remains valid; unknown paths fail closed to Workspace.
+  // A previously bookmarked page remains valid; unknown paths return to Overview.
   const match = /^#\/?([a-z][a-z0-9-]*)$/.exec(hash || '');
   return match && ROUTES[match[1]] ? match[1] : 'overview';
 }
