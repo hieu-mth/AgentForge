@@ -231,6 +231,9 @@ def _safe_failure(skill_id, exc):
             return "MODEL_JSON_INVALID: AI did not produce valid structured JSON."
         if isinstance(exc, ValueError):
             value = str(exc)
+            if value.startswith("REVISION_NO_CHANGE:"):
+                return ("WEBSITE_UNCHANGED: AI returned the same website. "
+                        "No new proposal was saved; specify a concrete change.")
             if value.startswith("Structured website content invalid:"):
                 return ("WEB_COPY_INVALID: AI content failed the bounded website "
                         "copy contract; no proposal saved.")
