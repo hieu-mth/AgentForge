@@ -3,6 +3,7 @@ import { Alert, Button, Card, Checkbox, Collapse, Divider, Drawer, Input, Space,
 import { BulbOutlined, CheckCircleOutlined, FolderOpenOutlined, SafetyCertificateOutlined,
   SendOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { badge, clip, fallback, StatTile } from '../components/shared.jsx';
+import { PERMISSIONS, WORKERS, SKILLS, requiredPermissions, permissionsKnown, executionConsent } from '../permissions.js';
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 
@@ -88,13 +89,13 @@ export function Workspace({data, onPlan, openGoal, loading}) {
 
 export function GoalDrawer({goal, onClose, onApprove, onExecute, busy, externalEnabled}) {
   const [grants, setGrants] = useState([]);
-  const [confirmModel, setConfirmModel] = useState(false);
-  const [confirmBrowser, setConfirmBrowser] = useState(false);
-  const [confirmProcess, setConfirmProcess] = useState(false);
-  useEffect(()=>{setGrants([]);setConfirmModel(false);setConfirmBrowser(false);setConfirmProcess(false);},[goal?.goal_id]);
+  useEffect(()=>{setGrants([]);},[goal?.goal_id]);
   if (!goal) return null;
-  const required = [...new Set((goal.plan||[]).flatMap(x=>x.required_permissions||[]))];
-  const sensitive = required.some(p=>['model.invoke','network.search','network.read','browser.run','process.run'].includes(p));
+  const required = requiredPermissions(goal.plan);
+  const known = permissionsKnown(required);
+  const consent = executionConsent(required, grants);
+  const complete = known && required.every(permission=>grants.includes(permission));
+  const sensitive = consent.sensitive;
   const runnable = ['APPROVED','WAITING_APPROVAL'].includes(goal.status);
   return <Drawer title="Kế hoạch & phê duyệt" open={!!goal} onClose={onClose}
     size="min(640px, 96vw)" destroyOnHidden extra={badge(goal.status)}>
@@ -105,8 +106,11 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, busy, externalE
     <div className="plan-steps">{(goal.plan||[]).map((step,i)=>
       <div className="plan-step" key={i}>
         <span className="step-number">{i+1}</span>
-        <div><strong>{step.skill_id}</strong><div className="subtle">{step.worker_id}</div>
-        <Text type="secondary">{(step.required_permissions||[]).join(', ')||'read_only'}</Text></div>
+        <div><strong>{SKILLS[step.skill_id]||step.skill_id}</strong>
+        <div className="subtle">{WORKERS[step.worker_id]||step.worker_id}</div>
+        <Text type="secondary">{(step.required_permissions||[]).map(p=>PERMISSIONS[p]?.title||p).join(' · ')||'Chỉ đọc dữ liệu'}</Text>
+        <Collapse ghost size="small" items={[{key:'technical',label:'Thông tin kỹ thuật',
+          children:<Text code>{step.skill_id} · {step.worker_id}</Text>}]}/></div>
       </div>)}</div>
     <Collapse ghost items={[{key:'1',label:'Xem chi tiết dữ liệu và plan (nâng cao)',
       children:<pre className="source-text">{JSON.stringify({inputs:goal.inputs,plan:goal.plan},null,2)}</pre>}]}/>
@@ -114,23 +118,42 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, busy, externalE
     {goal.status==='PLANNED' && <Button type="primary" block loading={busy}
       onClick={()=>onApprove(goal)}>Duyệt SHA · chưa chạy AI</Button>}
     {runnable && <>
-      <Title level={5}>Quyền cho lần chạy này</Title>
-      <Alert type="warning" showIcon message="Phê duyệt riêng từng quyền; không cấp quyền vĩnh viễn."/>
-      <Checkbox.Group value={grants} onChange={setGrants}
-        options={['workspace.write','workspace.propose','model.invoke','network.search','network.read','browser.run','process.run']
-          .map(value=>({label:value,value}))} className="grants"/>
-      <Space orientation="vertical" style={{marginTop:16,display:'flex'}}>
-        <Checkbox checked={confirmModel} onChange={e=>setConfirmModel(e.target.checked)}>Cho phép gọi model</Checkbox>
-        <Checkbox checked={confirmBrowser} onChange={e=>setConfirmBrowser(e.target.checked)}>Cho phép browser</Checkbox>
-        <Checkbox checked={confirmProcess} onChange={e=>setConfirmProcess(e.target.checked)}>Cho phép process/FFmpeg</Checkbox>
-      </Space>
+      <Title level={5}>AI cần bạn cho phép những gì?</Title>
+      <Alert type="info" showIcon message="Chỉ yêu cầu quyền có trong kế hoạch đã duyệt"
+        description="Các quyền chỉ có hiệu lực trong lượt chạy này. Bạn có thể bỏ chọn để chưa chạy."/>
+      {!known && <Alert type="error" showIcon style={{marginTop:12}}
+        message="Có quyền mới chưa được giải thích — không thể thực thi"
+        description="Cần cập nhật giao diện để hiển thị đầy đủ quyền trước khi duyệt."/>}
+      <div className="permission-list">
+        {required.length===0 && <Text type="secondary">Công việc này chỉ đọc dữ liệu, không cần cấp thêm quyền.</Text>}
+        {required.map(permission=>{
+          const info=PERMISSIONS[permission];
+          return <label className="permission-item" key={permission}>
+            <Checkbox checked={grants.includes(permission)} disabled={!info}
+              onChange={e=>setGrants(previous=>e.target.checked
+                ? [...new Set([...previous,permission])]
+                : previous.filter(value=>value!==permission))}/>
+            <span className="permission-copy">
+              <strong>{info?.title||'Quyền chưa xác định'}</strong>
+              <span>{info?.description||'Không thể cho phép khi chưa rõ tác động.'}</span>
+              <small>{info?.impact||'Cần xác minh'} · <code>{permission}</code></small>
+            </span>
+          </label>;
+        })}
+      </div>
+      {required.includes('model.invoke')&&<Alert type="warning" showIcon
+        message="AI local hay cloud?"
+        description="AgentForge dùng model đang cấu hình trong backend. Nếu cấu hình cloud, nội dung gửi tới nhà cung cấp có thể có chi phí; việc tick quyền này cũng là xác nhận gọi model cho lượt chạy."/>}
       {sensitive && !externalEnabled && <Alert type="error" showIcon style={{marginTop:16}}
-        message="Server đang khóa external tools. Cần bật khi khởi động backend."/>}
+        message="Server đang khóa công cụ ngoài"
+        description="Cần bật quyền ở backend trước khi thực thi. Không thể mở khóa bằng cách tick checkbox."/>}
       <Button type="primary" block style={{marginTop:20}} loading={busy}
-        disabled={sensitive&&!externalEnabled}
-        onClick={()=>onExecute(goal,{grants,confirmModel,confirmBrowser,confirmProcess,sensitive})}>
-        {goal.status==='APPROVED'?'Chạy kế hoạch':'Tiếp tục từ approval gate'}
+        disabled={!complete||(sensitive&&!externalEnabled)}
+        onClick={()=>onExecute(goal,consent)}>
+        {goal.status==='APPROVED'?'Xác nhận quyền và bắt đầu chạy':'Xác nhận quyền và tiếp tục chạy'}
       </Button>
+      {!complete && known && required.length>0 &&
+        <Text type="secondary" className="subtle">Hãy đọc và chọn đủ {required.length} quyền được yêu cầu trước khi chạy.</Text>}
     </>}
   </Drawer>;
 }
