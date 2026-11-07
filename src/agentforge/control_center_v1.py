@@ -347,6 +347,35 @@ def _owner_action(server, path, request, session=None):
         if expected is None or request.get("ack") != expected:
             raise PermissionError("Explicit matching operations control acknowledgment required")
         return ops_control.set_mode(mode, confirm=True)
+    if path.startswith("/api/webapps/") and (
+            path.endswith("/revision") or path.endswith("/apply")):
+        from agentforge import webapp_builder
+        parts = path.split("/")
+        if len(parts) != 5 or parts[1:3] != ["api", "webapps"]:
+            raise ValueError("Invalid application action")
+        proposal_id, action = parts[3], parts[4]
+        if set(request) != ({"ack", "sha256", "feedback"} if action == "revision"
+                              else {"ack", "sha256"}):
+            raise ValueError("Invalid application request fields")
+        proposal = webapp_builder.inspect(proposal_id)
+        if request.get("sha256") != proposal["sha256"]:
+            raise PermissionError("Application proposal SHA mismatch")
+        if (session is None or session.get("reviewed_webapps", {}).get(proposal_id)
+                != proposal["sha256"]):
+            raise PermissionError("Inspect this exact app proposal before authorizing")
+        if action == "revision":
+            if request["ack"] != "REQUEST_REVISION":
+                raise PermissionError("Explicit app revision acknowledgment required")
+            from agentforge.webapp_feedback import request_revision
+            return request_revision(
+                proposal_id, proposal["sha256"], request["feedback"],
+                brain_db_path=server.brain_db_path,
+                analytics_db_path=server.analytics_db_path,
+                growth_db_path=server.growth_db_path)
+        if request["ack"] != "APPLY_WEBAPP":
+            raise PermissionError("Explicit app source approval required")
+        return webapp_builder.apply(
+            proposal_id, sha256=proposal["sha256"], confirm_write=True)
     if path.startswith("/api/proposals/") and path.endswith("/revision"):
         from agentforge.website_feedback import request_revision
         parts = path.split("/")
@@ -651,6 +680,29 @@ class _Handler(BaseHTTPRequestHandler):
             if route == "/api/memory":
                 return self._reply(200, brain_store.list_memory(
                     db_path=self.server.brain_db_path))
+            if route.startswith("/api/webapps/"):
+                from agentforge import webapp_builder
+                parts = route.split("/")
+                if len(parts) != 4 or parts[1:3] != ["api", "webapps"]:
+                    raise ValueError("Invalid application review route")
+                proposal_id = parts[3]
+                document, _ = webapp_builder._read_proposal(proposal_id)
+                session = self._session()
+                session.setdefault("reviewed_webapps", {})[proposal_id] = document["sha256"]
+                comparison = webapp_builder.compare(proposal_id)
+                return self._reply(200, {
+                    "proposal_id": proposal_id,
+                    "sha256": document["sha256"],
+                    "project_slug": document["project_slug"],
+                    "status": document["status"],
+                    "format": document["format"],
+                    "revision": document.get("revision"),
+                    "comparison": comparison,
+                    "files": [{"path": file["path"], "content": file["content"]}
+                              for file in document["files"]],
+                    "execution_authorized": False,
+                    "deployment_authorized": False,
+                })
             if route.startswith("/api/proposals/") and route.endswith("/preview"):
                 from agentforge.website_preview import from_proposal
                 ident = route[len("/api/proposals/"):-len("/preview")]
