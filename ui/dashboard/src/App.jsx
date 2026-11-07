@@ -296,6 +296,33 @@ export default function App() {
           <Typography.Paragraph>{scene.caption}</Typography.Paragraph>
         </div>)}
       </Card>}
+      {task.report?.kind==='webapp'&&<Card title="Ứng dụng React marketplace — bản nháp mã nguồn"
+        style={{marginTop:18}}>
+        <Alert type="warning" showIcon
+          message="Mã nguồn mới chỉ được tạo đề xuất, chưa thực thi"
+          description="V4.0b tạo dữ liệu demo do AI đề xuất và kết hợp với React code đã được kiểm tra. Chưa có AI tự viết logic tùy ý, chưa chạy npm, không có thanh toán thật."/>
+        <Descriptions style={{marginTop:16}} column={1} bordered size="small" items={[
+          {key:'project',label:'Dự án',children:task.report.project_slug},
+          {key:'proposal',label:'Proposal',children:<code>{task.report.proposal_id}</code>},
+          {key:'sha',label:'SHA duyệt riêng',children:<Text code copyable>{task.report.sha256}</Text>},
+        ]}/>
+        <Typography.Paragraph type="secondary" style={{marginTop:14}}>
+          Kiểm tra proposal và mã nguồn trên máy Windows trước khi duyệt lưu:
+        </Typography.Paragraph>
+        <pre className="source-text">{[
+          'cd D:\\AgentForge',
+          '.\\.venv\\Scripts\\python.exe -m agentforge.webapp_builder inspect '+task.report.proposal_id,
+          '.\\.venv\\Scripts\\python.exe -m agentforge.webapp_builder apply '+task.report.proposal_id+' --sha256 '+task.report.sha256+' --confirm-write',
+          'cd workspace\\webapps\\'+task.report.project_slug,
+          'npm.cmd install',
+          'npm.cmd test',
+          'npm.cmd run build',
+          'npm.cmd run dev',
+        ].join('\n')}</pre>
+        <Typography.Paragraph type="secondary">
+          Lệnh apply là bước phê duyệt bổ sung; chỉ chạy sau khi tự xem mã nguồn. npm install và npm run dev không được AgentForge tự động gọi.
+        </Typography.Paragraph>
+      </Card>}
       <Collapse style={{marginTop:20}} items={[
         {key:'1',label:'Events & audit',children:<pre className="source-text">{JSON.stringify(task.events||[],null,2)}</pre>},
         {key:'2',label:'Kết quả',children:<pre className="source-text">{JSON.stringify(task.report||task.result||{},null,2)}</pre>},
