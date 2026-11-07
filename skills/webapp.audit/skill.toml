@@ -1,0 +1,29 @@
+schema_version = 1
+id = "webapp.audit"
+version = "1.0.0"
+description = "Deterministic static shape/provenance QA for a signed AI JSX proposal; no build/browser."
+worker_id = "webapp_architect"
+execution_mode = "read_only"
+required_permissions = ["workspace.read"]
+required_tools = ["filesystem"]
+artifact_types = ["static_qa_report"]
+quality_checks = ["signed_source", "source_allowlist"]
+[limits]
+timeout_seconds = 30
+estimated_model_calls = 0
+[input_schema]
+type = "object"
+required = ["proposal_id", "sha256"]
+additional_properties = false
+[input_schema.properties]
+proposal_id = "string"
+sha256 = "string"
+[output_schema]
+type = "object"
+required = ["qa_report_id", "qa_report_sha", "status", "build_verified"]
+additional_properties = true
+[output_schema.properties]
+qa_report_id = "string"
+qa_report_sha = "string"
+status = "string"
+build_verified = "boolean"
