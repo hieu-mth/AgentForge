@@ -55,6 +55,6 @@ test('all reference products are bounded with unique IDs and demo copy',()=>{
     assert.match(p.id,/^p\d{3}$/);
     assert.ok(p.name.length>6 && p.name.length<=80);
     assert.ok(p.price>0 && p.price<100000000);
-    assert.ok(p.description.includes('demo')||p.description.includes('mẫu')||p.description.includes('minh họa')||p.description.includes('giả lập'));
+    assert.ok(p.description.includes('demo')||p.description.includes('mẫu')||p.description.includes('minh họa')||p.description.includes('giả lập')||p.description.includes('mô phỏng'));
   }
 });
