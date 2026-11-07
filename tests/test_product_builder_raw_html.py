@@ -96,6 +96,16 @@ class TestReliableWebBuilder(unittest.TestCase):
         self.assertNotIn('class="section section--steps', a)
         self.assertNotEqual(product_quality.analyze(b)["status"], "FAIL")
 
+    def test_ai_can_remove_hero_art_and_second_cta(self):
+        simple = deepcopy(DESIGN)
+        simple["style"]["art"] = "none"
+        simple["hero"]["secondary_action"] = ""
+        html = render(simple)
+        self.assertIn('data-af-layout="centered"', html)
+        self.assertNotIn('class="hero-art', html)
+        self.assertNotIn('class="button ghost"', html)
+        self.assertEqual(product_quality.analyze(html)["failures"], 0)
+
     def test_low_contrast_ai_accent_uses_readable_text_fallback(self):
         poor = deepcopy(DESIGN)
         poor["style"].update({"background": "#ffffff", "surface": "#ffffff",
