@@ -23,6 +23,9 @@ export function ProposalDrawer({proposal, onClose, onRevise, onApply, busy}) {
   const [feedback,setFeedback]=useState('');
   useEffect(()=>{setFeedback('');setDevice('desktop');},[proposal?.proposal_id]);
   if (!proposal) return null;
+  const designFile=(proposal.files||[]).find(file=>file.path==='site.json');
+  let design=null;
+  try{if(designFile?.content)design=JSON.parse(designFile.content);}catch{design=null;}
   const id=proposal.proposal_id, allowed=needPreviewId(id);
   return <Drawer title="Xem trước & phê duyệt website" open={!!proposal} onClose={onClose}
     size="min(1120px, 96vw)" destroyOnHidden extra={badge(proposal.status)}>
@@ -33,6 +36,18 @@ export function ProposalDrawer({proposal, onClose, onRevise, onApply, busy}) {
         <Segmented options={[{label:'Desktop',value:'desktop'},{label:'Mobile',value:'mobile'}]}
           value={device} onChange={setDevice}/>
       </div>
+      {design?.style && Array.isArray(design.sections) && <Card size="small"
+        title="Thiết kế riêng do AI lựa chọn">
+        <Space wrap>
+          <Text>Font: <strong>{design.style.font}</strong></Text>
+          <Text>Hero: <strong>{design.style.hero_layout}</strong></Text>
+          <Text>Bảng màu: <Text code>{[design.style.background,design.style.surface,design.style.accent].join(' · ')}</Text></Text>
+          <Text>Section: <strong>{design.sections.length}</strong></Text>
+        </Space>
+        <Paragraph type="secondary" style={{margin:'8px 0 0'}}>
+          {design.sections.map(item=>item.title).join(' → ')}
+        </Paragraph>
+      </Card>}
       <div className="preview-stage">
         {allowed ? <iframe className={'preview-iframe '+(device==='mobile'?'mobile':'desktop')}
           title={'Xem trước website '+proposal.project_slug} sandbox=""
