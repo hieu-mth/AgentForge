@@ -49,8 +49,8 @@ export function ProposalDrawer({proposal, onClose, onRevise, onApply, busy}) {
         <Title level={5}>Chưa ưng? Yêu cầu AI chỉnh sửa</Title>
         <Paragraph type="secondary">Góp ý sẽ dùng chính website đang xem làm bản gốc, tạo bản sửa mới để duyệt; không ghi đè bản cũ.</Paragraph>
         <Alert type="info" showIcon style={{marginBottom:12}}
-          message="Có thể đổi nội dung, bảng màu và bố cục hero"
-          description="Hiện chưa hỗ trợ tự thêm tính năng ứng dụng hoặc mã JavaScript tùy ý. Nếu AI không tạo thay đổi hiển thị, công việc sẽ báo lỗi thay vì trả bản y hệt."/>
+          message="AI có thể thiết kế lại toàn trang"
+          description="Có thể đổi thứ tự/số lượng section, màu HEX, font, hero, kiểu thẻ và nội dung. Không tự viết JavaScript hoặc gọi Internet. Nếu không có thay đổi hiển thị, hệ thống sẽ báo lỗi thay vì trả lại bản y hệt."/>
         <TextArea rows={3} maxLength={3000} showCount value={feedback}
           onChange={e=>setFeedback(e.target.value)}
           placeholder="Ví dụ: Hero nhìn còn thô, thay bố cục cho sang trọng hơn, có hình ảnh nệm và CTA rõ ràng trên điện thoại..."/>
