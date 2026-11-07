@@ -10,6 +10,7 @@ const COLOR = /^#[0-9a-fA-F]{6}$/;
 
 export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,onVerify,busy}) {
   const [feedback,setFeedback]=useState('');
+  const isCode=proposal?.ai_code_experimental===true;
   useEffect(()=>setFeedback(''),[proposal?.proposal_id]);
   if(!proposal)return null;
   const specFile=(proposal.files||[]).find(f=>f.path==='app.json');
@@ -33,7 +34,9 @@ export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,onVerify
         <Title level={4} style={{margin:'0 0 8px'}}>{proposal.project_slug}</Title>
         <Alert type="warning" showIcon
           message="Đây là mã nguồn nháp, không phải ứng dụng đang chạy"
-          description="AI chỉ tạo dữ liệu demo và cấu hình đã kiểm tra; React/Vite dùng mã nguồn được review. Không tự chạy npm, không thanh toán hoặc xuất bản."/>
+          description={isCode
+            ? 'Chế độ thử nghiệm: AI tự viết JSX/CSS. Kiểm tra tĩnh không chứng minh mã an toàn hoặc chạy đúng. Không mở preview hay thực thi trên host; cần QA Docker được duyệt riêng.'
+            : 'AI chỉ tạo dữ liệu demo và cấu hình đã kiểm tra; React/Vite dùng mã nguồn được review. Không tự chạy npm, không thanh toán hoặc xuất bản.'}/>
         <Descriptions size="small" column={1} style={{marginTop:15}} items={[
           {key:'id',label:'Proposal',children:<Text code>{proposal.proposal_id}</Text>},
           {key:'sha',label:'SHA-256',children:<Text code copyable>{proposal.sha256}</Text>},
@@ -61,14 +64,16 @@ export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,onVerify
         <Text type="secondary">Phiên bản cũ được giữ nguyên; bản mới sử dụng thư mục riêng, không ghi đè.</Text>
       </Card>}
       <Collapse items={fileItems} style={{width:'100%'}}/>
-      <Card size="small" title="Yêu cầu AI chỉnh sửa ứng dụng">
-        <Paragraph type="secondary">AI sẽ nhận dữ liệu phiên bản này và góp ý của bạn. Kết quả là proposal mới cần phê duyệt Goal và SHA. Phần logic React vẫn cố định trong mốc V4.1.</Paragraph>
-        <Input.TextArea rows={4} maxLength={3000} showCount value={feedback}
+      <Card size="small" title={isCode?'Duyệt mã nguồn AI thử nghiệm':'Yêu cầu AI chỉnh sửa ứng dụng'}>
+        <Paragraph type="secondary">{isCode
+          ? 'AI đã viết mã React tùy biến. Chưa hỗ trợ AI sửa mã JSX theo phiên bản trong chế độ này; không nên áp dụng mã khi chưa review từng file và kiểm thử cách ly.'
+          : 'AI sẽ nhận dữ liệu phiên bản này và góp ý của bạn. Kết quả là proposal mới cần phê duyệt Goal và SHA. Phần logic React vẫn cố định trong mốc V4.1.'}</Paragraph>
+        {!isCode&&<Input.TextArea rows={4} maxLength={3000} showCount value={feedback}
           onChange={e=>setFeedback(e.target.value)}
-          placeholder="Ví dụ: Đổi màu sang xanh navy, đổi tên gian hàng, bổ sung sản phẩm nhà cửa và giữ nguyên danh mục điện tử..."/>
+          placeholder="Ví dụ: Đổi màu sang xanh navy, đổi tên gian hàng, bổ sung sản phẩm nhà cửa và giữ nguyên danh mục điện tử..."/>}
         <Space wrap style={{display:'flex',justifyContent:'flex-end',marginTop:22}}>
-          <Button disabled={feedback.trim().length<10} loading={busy}
-            onClick={()=>onRevise(proposal,feedback)}>Tạo kế hoạch chỉnh sửa</Button>
+          {!isCode&&<Button disabled={feedback.trim().length<10} loading={busy}
+            onClick={()=>onRevise(proposal,feedback)}>Tạo kế hoạch chỉnh sửa</Button>}
           <Button loading={busy} onClick={()=>onVerify(proposal)}>
             Lập Goal QA sandbox
           </Button>
@@ -77,7 +82,9 @@ export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,onVerify
           </Button>
         </Space>
         <Paragraph type="secondary" style={{marginTop:15,marginBottom:0}}>
-          Lưu mã nguồn không tự chạy npm hay cài dependencies. Sau khi duyệt, mở workspace/webapps trong PowerShell để tự kiểm thử ứng dụng.
+          {isCode
+            ? 'Lưu mã nguồn không làm mã AI trở nên đáng tin cậy. Không chạy npm trực tiếp trên Windows với dự án AI thử nghiệm; trước tiên sử dụng QA Docker được duyệt riêng.'
+            : 'Lưu mã nguồn không tự chạy npm hay cài dependencies. Sau khi duyệt, mở workspace/webapps trong PowerShell để tự kiểm thử ứng dụng.'}
         </Paragraph>
       </Card>
     </Space>
