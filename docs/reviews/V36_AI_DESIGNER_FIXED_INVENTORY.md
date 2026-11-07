@@ -49,7 +49,7 @@ the ability to execute arbitrary generated code from this static website skill.
   enum composition values and bounded numeric corner radius, escaping all
   dynamic prose in HTML text/attribute contexts. The compiler itself does not
   call any model, browser, network endpoint or process.
-- The signed `site.json` file is typed data: validation does not interpret it
+- The signed `site.json` file contains versioned `agentforge.design.v1` typed data: validation does not interpret it
   as executable JavaScript/HTML, and revisions may use it only as *untrusted*
   context after verifying the original proposal SHA.
 - A revision with the same visible design/copy is rejected; a metadata-only
