@@ -317,6 +317,18 @@ export default function App() {
         {key:'3',label:'Status',children:badge(task.status)},
         {key:'4',label:'Error',children:task.error||'Không có'},
       ]}/>
+      {task.report?.kind==='webapp_qa'&&<Card title="Kết quả QA React trong Docker"
+        style={{marginTop:18}}>
+        <Alert type={task.report.status==='PASS'?'success':'error'} showIcon
+          message={task.report.status==='PASS'?'Đã chạy unit test và build trong container offline':'Không có kết quả QA hợp lệ'}
+          description="Không có truy cập mạng, không mount mã nguồn ở chế độ ghi. Kết quả không có nghĩa là ứng dụng đã được deploy hoặc đã qua kiểm thử giao diện trên máy Owner."/>
+        <Descriptions column={1} size="small" bordered style={{marginTop:14}} items={[
+          {key:'sandbox',label:'Runtime',children:task.report.sandbox},
+          {key:'network',label:'Mạng',children:task.report.network},
+          {key:'source',label:'Nguồn',children:task.report.source_mount},
+          {key:'checks',label:'Kiểm thử',children:(task.report.checks||[]).join(', ')},
+        ]}/>
+      </Card>}
       {task.report?.kind==='storyboard'&&<Card title={task.report.title||'Kịch bản video'}
         style={{marginTop:18}} extra={<Button onClick={()=>navigator.clipboard?.writeText(
           JSON.stringify({title:task.report.title,scenes:task.report.scenes},null,2)
