@@ -60,7 +60,7 @@ class AIReactDeveloperTests(unittest.TestCase):
             proposal = DEV.propose(slug, BRIEF)
             model.assert_called_once()
             self.assertEqual(model.call_args.args[1], DEV.CODE_SCHEMA)
-            self.assertEqual(model.call_args.kwargs["worker_id"], "product_builder")
+            self.assertEqual(model.call_args.kwargs["worker_id"], "webapp_developer")
             process.assert_not_called()
         return proposal
 
