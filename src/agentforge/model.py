@@ -18,6 +18,9 @@ DEFAULT_MODEL_REF = "local_primary"
 # gateway-internal reasoning needs more space than a short research answer.
 # This is an upper bound, not a request to consume all tokens. No auto-retry.
 BUILDER_CLOUD_TEXT_MAX_TOKENS = 8192
+# A React app embedded as structured JSON takes substantially more output
+# tokens than a short research answer. Still one Owner-approved call; no retry.
+DEVELOPER_CLOUD_JSON_MAX_TOKENS = 8192
 
 DEFAULT_TEXT_SYSTEM = (
     "You are an AI Company research worker. "
@@ -139,9 +142,13 @@ def _anthropic_chat(runtime, prompt, schema, *, worker_id=None):
             + json.dumps(schema, ensure_ascii=False)
         )
 
-    max_tokens = (4096 if schema is not None else
-                  BUILDER_CLOUD_TEXT_MAX_TOKENS if worker_id in {"product_builder", "webapp_developer"}
-                  else 2048)
+    max_tokens = (
+        DEVELOPER_CLOUD_JSON_MAX_TOKENS
+        if schema is not None and worker_id == "webapp_developer"
+        else 4096 if schema is not None
+        else BUILDER_CLOUD_TEXT_MAX_TOKENS if worker_id == "product_builder"
+        else 2048
+    )
     payload = {
         "model": runtime["model"],
         "max_tokens": max_tokens,
