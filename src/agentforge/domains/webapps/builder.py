@@ -281,9 +281,10 @@ def _read_proposal(pid):
     return doc, path
 
 def inspect(pid):
-    doc, _ = _read_proposal(pid)
+    doc, path = _read_proposal(pid)
     return {
-        "proposal_id": pid, "project_slug": doc["project_slug"],
+        "proposal_id": pid, "proposal_path": str(path),
+        "project_slug": doc["project_slug"],
         "format": doc["format"], "sha256": doc["sha256"],
         "status": doc["status"], "execution_authorized": False,
         "files": [{"path": x["path"], "bytes": len(x["content"].encode("utf-8"))}
