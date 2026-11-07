@@ -288,12 +288,15 @@ def _read_proposal(pid):
     model_files = [item for item in files if item["path"] in ALLOWED]
     spec = validate_code({"title": title, "summary": summary,
                           "files": model_files})
-    if _compile(spec, slug) != files:
-        raise ValueError("APP_CODE_INVALID: trusted project files were altered")
     if not isinstance(doc["sha256"], str) or not base.SHA.fullmatch(doc["sha256"]):
         raise ValueError("Invalid AI Developer digest")
     if _digest(slug, brief, title, summary, files) != doc["sha256"]:
         raise ValueError("AI Developer proposal SHA mismatch")
+    # A hash alone is not an authentication signature; recompute the fixed
+    # trusted scaffold to prevent a locally edited proposal from replacing
+    # package scripts, dependencies or the React entrypoint.
+    if _compile(spec, slug) != files:
+        raise ValueError("APP_CODE_INVALID: trusted project files were altered")
     return doc, path
 
 
