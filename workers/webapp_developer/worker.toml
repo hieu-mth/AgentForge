@@ -1,0 +1,7 @@
+id = "webapp_developer"
+model_ref = "local_primary"
+runtime = "manual"
+
+capabilities = [
+    "propose_react_source_only"
+]
