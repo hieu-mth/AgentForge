@@ -148,9 +148,9 @@ def _validate_files(output):
         # Validate its exact schema rather than running regexes for HTML/JS
         # syntax against harmless customer-facing copy inside JSON strings.
         if name == "site.json":
-            from agentforge.domains.websites.ai_designer import validate_spec
+            from agentforge.domains.websites.ai_designer import decode_spec
             try:
-                validate_spec(json.loads(content))
+                decode_spec(content)
             except (json.JSONDecodeError, ValueError, TypeError) as exc:
                 raise ValueError("AI_DESIGN_INVALID: signed design spec file") from exc
         unsafe = _suspicious_match(content) if name != "site.json" else None
@@ -282,7 +282,7 @@ def propose(slug, brief, *, model_client=None, source_proposal_id=None,
         # HTML, CSS or JS. The compiled artifact remains SHA-gated and offline.
         from agentforge.model import generate_json
         from agentforge.domains.websites.ai_designer import (
-            DESIGN_SCHEMA, render as render_design, encode_spec, validate_spec,
+            DESIGN_SCHEMA, render as render_design, encode_spec, validate_spec, decode_spec,
         )
         from agentforge.domains.websites.structured_builder import owner_phone
         prior_spec = None
@@ -291,7 +291,7 @@ def propose(slug, brief, *, model_client=None, source_proposal_id=None,
                 (item["content"] for item in source_doc["files"]
                  if item["path"] == "site.json"), None)
             if spec_file is not None:
-                prior_spec = validate_spec(json.loads(spec_file))
+                prior_spec = decode_spec(spec_file)
         prompt = (
             "You are an expert product designer and Vietnamese conversion "
             "copywriter. Build an ORIGINAL, distinctive static landing page "
