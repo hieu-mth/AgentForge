@@ -67,7 +67,7 @@ different briefs, a content revision, a visual revision, an unchanged
 revision, and desktop/mobile preview on the owner's hardware.
 
 Still fixed as implementation primitives: 7 section families, 4 hero variants,
-4 section variants, 4 system font stacks and 4 abstract CSS art options.
+4 section variants, 4 system font stacks and 4 abstract CSS art options (or no art).
 These are *composable*, not open-ended component/code generation. The user
 can request a carousel, checkout, custom forms or external integrations only
 through a separate future app-development workflow with explicit capabilities
