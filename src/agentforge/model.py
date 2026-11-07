@@ -35,6 +35,12 @@ DEFAULT_JSON_SYSTEM = (
 def resolve_runtime(worker_id, default_system):
     # Process environment takes precedence over the local, gitignored .env.
     load_dotenv(DOTENV_PATH, override=False)
+    from agentforge.ai.role_routing import ROLE_WORKERS, require_worker_model
+    if worker_id in ROLE_WORKERS.values():
+        # Cloud/model switching requires separate process-level Owner consent
+        # and has no automatic fallback. This check makes V5 model routing
+        # enforceable, not merely a static display.
+        require_worker_model(worker_id)
 
     if worker_id is None:
         default_ref = DEFAULT_MODEL_REF
@@ -134,7 +140,7 @@ def _anthropic_chat(runtime, prompt, schema, *, worker_id=None):
         )
 
     max_tokens = (4096 if schema is not None else
-                  BUILDER_CLOUD_TEXT_MAX_TOKENS if worker_id == "product_builder"
+                  BUILDER_CLOUD_TEXT_MAX_TOKENS if worker_id in {"product_builder", "webapp_developer"}
                   else 2048)
     payload = {
         "model": runtime["model"],
