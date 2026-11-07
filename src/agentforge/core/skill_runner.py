@@ -139,6 +139,12 @@ def _dispatch(skill_id, payload):
         return propose(payload["slug"], payload["brief"])
     if skill_id == "webapp.create":
         from agentforge.webapp_builder import propose
+        if "source_proposal_id" in payload:
+            return propose(
+                payload["slug"], payload["brief"],
+                source_proposal_id=payload["source_proposal_id"],
+                source_sha256=payload["source_sha256"],
+                revision_feedback=payload["revision_feedback"])
         return propose(payload["slug"], payload["brief"])
     if skill_id == "web.browser_test":
         from agentforge.browser_validation import validate
@@ -296,6 +302,12 @@ def _safe_failure(skill_id, exc):
             return "APP_SPEC_INVALID: AI data was not valid marketplace demo data."
         if isinstance(exc, ValueError) and str(exc).startswith("APP_TOO_LARGE"):
             return "APP_TOO_LARGE: Application proposal exceeded safe limits."
+        if isinstance(exc, ValueError) and str(exc).startswith("APP_REVISION_UNCHANGED:"):
+            return "APP_REVISION_UNCHANGED: AI returned no visible changes; original retained."
+        if isinstance(exc, PermissionError) and str(exc).startswith("APP_SOURCE_STALE:"):
+            return "APP_SOURCE_STALE: Reviewed application proposal changed."
+        if isinstance(exc, ValueError) and str(exc).startswith("APP_REVISION_INVALID:"):
+            return "APP_REVISION_INVALID: Source or change request did not pass validation."
         return "WEBAPP_BUILD_FAILED: No app was executed or published."
     if skill_id.startswith("analytics."):
         from agentforge.analytics_store import AnalyticsError

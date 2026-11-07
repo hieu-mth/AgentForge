@@ -11,6 +11,8 @@ TEMPLATES = {
     "website.campaign": ("slug", "dataset"),
     "website.draft": ("slug", "brief"),
     "webapp.draft": ("slug", "brief"),
+    "webapp.revision": ("slug", "brief", "source_proposal_id",
+                        "source_sha256", "revision_feedback"),
     "website.browser": ("slug",),
     "media.produce": ("slug", "title", "scenes"),
     "media.review": ("run_id",),
@@ -66,12 +68,19 @@ def _steps(template, inputs):
         steps = [("web.create", {key: inputs[key] for key in
                  ("slug", "brief", "source_proposal_id", "source_sha256", "revision_feedback")
                  if key in inputs})]
-    elif template == "webapp.draft":
-        from agentforge.webapp_builder import SLUG, _text, _name
+    elif template in {"webapp.draft", "webapp.revision"}:
+        from agentforge.webapp_builder import SLUG, PROPOSAL, SHA, _text, _name
         _name(inputs["slug"], SLUG, "slug")
         _text(inputs["brief"], "brief", 6000)
-        steps = [("webapp.create", {
-            "slug": inputs["slug"], "brief": inputs["brief"]})]
+        if template == "webapp.revision":
+            _name(inputs["source_proposal_id"], PROPOSAL, "source proposal id")
+            digest = inputs["source_sha256"]
+            if not isinstance(digest, str) or not SHA.fullmatch(digest):
+                raise brain_store.BrainError("Invalid application source SHA")
+            feedback = _text(inputs["revision_feedback"], "revision feedback", 3000)
+            if len(feedback) < 10:
+                raise brain_store.BrainError("Feedback must have 10+ characters")
+        steps = [("webapp.create", dict(inputs))]
     elif template == "website.campaign":
         payload = {"dataset": inputs["dataset"]}
         if "campaign" in inputs:

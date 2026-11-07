@@ -1,6 +1,6 @@
 schema_version = 1
 id = "webapp.create"
-version = "0.1.0"
+version = "0.2.0"
 description = "Create an owner-reviewed interactive React marketplace demo source proposal from structured local AI data; no execution or deployment."
 worker_id = "product_builder"
 execution_mode = "owner_gated"
@@ -21,6 +21,9 @@ additional_properties = false
 [input_schema.properties]
 slug = "string"
 brief = "string"
+source_proposal_id = "string"
+source_sha256 = "string"
+revision_feedback = "string"
 
 [output_schema]
 type = "object"

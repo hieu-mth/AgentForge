@@ -11,6 +11,7 @@ import { useThemeMode } from './theme.jsx';
 import { badge, clip, PageHeader } from './components/shared.jsx';
 import { Workspace, GoalDrawer } from './features/Workspace.jsx';
 import { Websites, ProposalDrawer } from './features/Websites.jsx';
+import { WebappProposalDrawer } from './features/Webapps.jsx';
 import { Overview, ReadOnlyPage } from './features/Operations.jsx';
 import { Projects } from './features/Projects.jsx';
 import { Retention } from './features/Retention.jsx';
@@ -76,6 +77,7 @@ export default function App() {
   const [section,setSection]=useState(()=>parseSection(window.location.hash));
   const [goal,setGoal]=useState(null);
   const [proposal,setProposal]=useState(null);
+  const [webapp,setWebapp]=useState(null);
   const [task,setTask]=useState(null);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState(null);
@@ -136,6 +138,9 @@ export default function App() {
         // completed live website. Open the existing sandboxed visual preview.
         await openProposal(detail.web_proposal.proposal_id);
         setGoal(null);
+      }else if(detail.report?.kind==='webapp'&&detail.report.proposal_id){
+        await openWebapp(detail.report.proposal_id);
+        setGoal(null);
       }else{
         setTask(detail);
       }
@@ -174,6 +179,22 @@ export default function App() {
     try{setProposal(await api('/api/proposals/'+encodeURIComponent(id)));}
     catch(e){authError(e);}
   };
+  const openWebapp=async id => {
+    try{setWebapp(await api('/api/webapps/'+encodeURIComponent(id)));}
+    catch(e){authError(e);}
+  };
+  const reviseWebapp=(p,feedback)=>ask('Duyệt việc tạo Goal sửa ứng dụng?',
+    'Phiên bản gốc được giữ nguyên; Goal mới cần duyệt SHA và quyền gọi model riêng.',
+    async()=>{const out=await runAction(()=>post('/api/webapps/'+p.proposal_id+'/revision',
+      {ack:'REQUEST_REVISION',sha256:p.sha256,feedback:feedback.trim()}));
+      if(out){setWebapp(null);message.success('Đã lập kế hoạch sửa ứng dụng');await openGoal(out.goal_id);}});
+  const applyWebapp=p=>ask('Duyệt SHA và lưu mã nguồn React?',
+    <><Paragraph>Mã nguồn sẽ được lưu vào workspace/webapps trong thư mục mới.</Paragraph>
+       <Text code>{p.sha256}</Text>
+       <Paragraph type="secondary">Hệ thống không tự chạy npm, cài package hay deploy.</Paragraph></>,
+    async()=>{const out=await runAction(()=>post('/api/webapps/'+p.proposal_id+'/apply',
+      {ack:'APPLY_WEBAPP',sha256:p.sha256}));
+      if(out){setWebapp(null);message.success('Đã lưu mã nguồn: workspace/webapps/'+out.project_slug);}});
   const revise=(p,feedback)=>ask('Tạo kế hoạch chỉnh sửa?',
     'Đề xuất cũ được giữ nguyên. Bạn sẽ duyệt kế hoạch mới trước khi gọi model.',
     async()=>{const out=await runAction(()=>post('/api/proposals/'+p.proposal_id+'/revision',
@@ -275,6 +296,8 @@ export default function App() {
       onExecute={execute} onViewResult={openGoalResult} busy={busy} externalEnabled={!!data.external_actions_enabled}/>
     <ProposalDrawer proposal={proposal} onClose={()=>setProposal(null)}
       onRevise={revise} onApply={apply} busy={busy}/>
+    <WebappProposalDrawer proposal={webapp} onClose={()=>setWebapp(null)}
+      onRevise={reviseWebapp} onApply={applyWebapp} busy={busy}/>
     <Drawer title="Chi tiết tác vụ" size={720} open={!!task} onClose={()=>setTask(null)}>
       {task && <><Descriptions bordered column={1} size="small" items={[
         {key:'1',label:'Task ID',children:<code>{task.task_id}</code>},
@@ -297,7 +320,8 @@ export default function App() {
         </div>)}
       </Card>}
       {task.report?.kind==='webapp'&&<Card title="Ứng dụng React marketplace — bản nháp mã nguồn"
-        style={{marginTop:18}}>
+        style={{marginTop:18}} extra={<Button onClick={()=>openWebapp(task.report.proposal_id)}>
+          Xem mã nguồn & yêu cầu sửa</Button>}>
         <Alert type="warning" showIcon
           message="Mã nguồn mới chỉ được tạo đề xuất, chưa thực thi"
           description="V4.0b tạo dữ liệu demo do AI đề xuất và kết hợp với React code đã được kiểm tra. Chưa có AI tự viết logic tùy ý, chưa chạy npm, không có thanh toán thật."/>
