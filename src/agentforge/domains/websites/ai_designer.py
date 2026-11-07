@@ -324,5 +324,20 @@ def render(spec, *, phone=None):
             '</div></footer></body></html>')
 
 def encode_spec(spec):
-    """Store validated design as signed, non-executable JSON alongside HTML."""
-    return json.dumps(validate_spec(spec), ensure_ascii=False, separators=(",", ":"))
+    """Versioned, validated and non-executable design JSON for signed proposal."""
+    record = {"format": SITE_FORMAT, "design": validate_spec(spec)}
+    return json.dumps(record, ensure_ascii=False, separators=(",", ":"))
+
+
+def decode_spec(text):
+    """Reject mismatched/unknown versions before consuming previous design."""
+    if not isinstance(text, str) or len(text.encode("utf-8")) > 48_000:
+        raise ValueError("AI_DESIGN_INVALID: design file size")
+    try:
+        record = json.loads(text)
+    except (ValueError, TypeError) as exc:
+        raise ValueError("AI_DESIGN_INVALID: JSON file") from exc
+    if (not isinstance(record, dict) or set(record) != {"format", "design"}
+            or record["format"] != SITE_FORMAT):
+        raise ValueError("AI_DESIGN_INVALID: design format")
+    return validate_spec(record["design"])
