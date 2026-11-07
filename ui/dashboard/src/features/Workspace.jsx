@@ -81,7 +81,7 @@ export function Workspace({data, onPlan, openGoal, loading}) {
         <Divider style={{margin:'14px 0'}}/>
         <div className="feature-row"><CheckCircleOutlined/> Duyệt SHA kế hoạch trước khi gọi model</div>
         <div className="feature-row"><FolderOpenOutlined/> Thành phẩm lưu tại workspace local</div>
-        <Text type="secondary" className="subtle">Hiện hỗ trợ website và storyboard. Workflow chuyên sâu nằm trong các mục Dự án, Kinh doanh và Cài đặt.</Text>
+        <Text type="secondary" className="subtle">Hiện hỗ trợ website do AI chọn bố cục/nội dung và storyboard. Workflow chuyên sâu nằm trong các mục Dự án, Kinh doanh và Cài đặt.</Text>
       </Card>
     </div>
   </div>;
