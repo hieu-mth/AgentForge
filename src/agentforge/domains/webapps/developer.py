@@ -211,7 +211,8 @@ def propose(slug, brief):
         "2-8 code files. Include src/App.jsx with a default React export "
         "and src/styles.css. Optionally add src/data.js, src/helpers.js, "
         "src/components/Header.jsx, ProductCard.jsx, Sidebar.jsx, Modal.jsx. "
-        "Local imports must refer to files you create. Use ONLY React, "
+        "Local imports must refer to files you create and use explicit "
+        ".jsx or .js extensions. Use ONLY React, "
         "React hooks, browser DOM interaction and plain CSS. No other "
         "packages, CDN, Internet images, external URLs, APIs, payment, "
         "login, network calls, localStorage, eval, shell or Node code. "
@@ -270,7 +271,7 @@ def _read_proposal(pid):
     brief = _text(doc["brief"], 6000, "brief")
     summary = _text(doc["summary"], 240, "summary")
     files = doc["files"]
-    if (not isinstance(files, list) or len(files) > 12
+    if (not isinstance(files, list) or not 8 <= len(files) <= 14
             or any(not isinstance(x, dict) or set(x) != {"path", "content"}
                    for x in files)
             or any(not isinstance(x["path"], str) or not isinstance(
