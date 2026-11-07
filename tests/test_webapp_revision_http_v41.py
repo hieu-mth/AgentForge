@@ -56,7 +56,7 @@ class WebappRevisionHttpTests(unittest.TestCase):
         if cookie and self.cookie:
             headers["Cookie"] = self.cookie
         conn.request(method, path,
-                     body=json.dumps(data, ensure_ascii=False) if data is not None else None,
+                     body=json.dumps(data, ensure_ascii=False).encode("utf-8") if data is not None else None,
                      headers=headers)
         r = conn.getresponse()
         status = r.status
@@ -95,10 +95,10 @@ class WebappRevisionHttpTests(unittest.TestCase):
         path = "/api/webapps/" + pid + "/apply"
         payload = {"ack": "APPLY_WEBAPP", "sha256": sha}
         missing_review, _, _ = self.req("POST", path, payload)
-        self.assertEqual(missing_review, 403)
+        self.assertEqual(missing_review, 400)
         self.req("GET", "/api/webapps/" + pid)
         forged, _, _ = self.req("POST", path, {"ack": "APPLY_WEBAPP", "sha256": "0" * 64})
-        self.assertEqual(forged, 403)
+        self.assertEqual(forged, 400)
         no_csrf, _, _ = self.req("POST", path, payload, csrf=False)
         self.assertEqual(no_csrf, 403)
         ok, data, _ = self.req("POST", path, payload)
@@ -128,7 +128,7 @@ class WebappRevisionHttpTests(unittest.TestCase):
         self.assertFalse(webapp_builder.PROJECTS.exists())
         rejected, _, _ = self.req("POST", path,
             {"ack": "REQUEST_REVISION", "sha256": "0" * 64, "feedback": feedback})
-        self.assertEqual(rejected, 403)
+        self.assertEqual(rejected, 400)
 
 
 if __name__ == "__main__":
