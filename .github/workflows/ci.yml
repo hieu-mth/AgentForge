@@ -56,6 +56,22 @@ jobs:
       - name: Validate built dashboard routing and assets
         run: python -m unittest tests.test_react_dashboard_v27 -v
 
+      - name: Install NovaMart reference dependencies
+        working-directory: examples/novamart
+        run: npm install --no-audit --no-fund
+
+      - name: Test NovaMart interactive commerce logic
+        working-directory: examples/novamart
+        run: npm test
+
+      - name: Build NovaMart reference React app
+        working-directory: examples/novamart
+        run: npm run build
+
+      - name: Browser-test NovaMart interactions in Microsoft Edge
+        working-directory: examples/novamart
+        run: npm run test:browser
+
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
 
