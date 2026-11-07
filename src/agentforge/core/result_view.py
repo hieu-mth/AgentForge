@@ -53,6 +53,20 @@ def _picked(data, names):
 
 def present(skill_id, result):
     """Return only preapproved owner-visible statistics; no raw result fallback."""
+    if skill_id == "webapp.create" and isinstance(result, dict):
+        import re
+        pid = result.get("proposal_id")
+        sha = result.get("sha256")
+        slug = result.get("project_slug")
+        if (isinstance(pid, str) and re.fullmatch(r"[a-f0-9]{32}", pid)
+                and isinstance(sha, str) and re.fullmatch(r"[a-f0-9]{64}", sha)
+                and isinstance(slug, str) and re.fullmatch(r"[a-z][a-z0-9-]{2,39}", slug)):
+            return {"kind": "webapp", "project_slug": slug,
+                    "proposal_id": pid, "sha256": sha,
+                    "status": "PROPOSED_NOT_APPLIED",
+                    "execution_authorized": False, "deployment_authorized": False}
+        return {"kind": "webapp", "status": "INVALID_RESULT"}
+
     if not isinstance(result, dict):
         return None
     if skill_id == "media.copy_draft":

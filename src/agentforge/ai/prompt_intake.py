@@ -34,10 +34,20 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
         "trang gioi thieu", "thiet ke web"))
     wants_storyboard = any(k in normalized for k in (
         "storyboard", "kich ban video", "noi dung video", "video script"))
+    wants_webapp = any(k in normalized for k in (
+        "shopee", "marketplace", "san thuong mai dien tu",
+        "thuong mai dien tu", "gio hang", "web app", "webapp",
+        "ung dung mua sam", "ecommerce"))
     if wants_website and wants_storyboard:
         return {"status": "NEEDS_CLARIFICATION",
                 "message": "Hãy chọn làm website hoặc storyboard trước. Một yêu cầu tạo một kế hoạch."}
-    if wants_website:
+    if wants_webapp:
+        # Only a trusted local marketplace scaffold, NOT arbitrary AI code.
+        slug = "app-" + uuid4().hex[:12]
+        template = "webapp.draft"
+        inputs = {"slug": slug, "brief": text}
+        title = "Tạo ứng dụng marketplace demo React để Owner duyệt"
+    elif wants_website:
         # A new slug ensures no overwrite. User-provided prompt is never auto-executed.
         slug = "web-" + uuid4().hex[:12]
         template = "website.draft"
@@ -51,9 +61,9 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
         title = "Soạn storyboard theo yêu cầu owner"
     else:
         return {"status": "NEEDS_CLARIFICATION",
-                "message": "Hiện hỗ trợ website/landing page và storyboard video. Hãy mô tả một trong hai mục tiêu; chưa tự chọn skill khác."}
+                "message": "Hiện hỗ trợ marketplace React demo, website/landing page và storyboard video. Hãy mô tả một trong hai mục tiêu; chưa tự chọn skill khác."}
     policy = workspace_policy.read(db_path=policy_db_path)
-    if (template == "website.draft" and not policy["website_enabled"] or
+    if (template in {"website.draft", "webapp.draft"} and not policy["website_enabled"] or
             template == "creative.storyboard" and not policy["storyboard_enabled"]):
         raise PermissionError("Role/workflow đã bị owner tắt trong Settings.")
     if max_model_calls > policy["max_estimated_model_calls"]:
