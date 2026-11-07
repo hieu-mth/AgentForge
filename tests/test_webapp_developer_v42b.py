@@ -64,6 +64,15 @@ class AIReactDeveloperTests(unittest.TestCase):
             process.assert_not_called()
         return proposal
 
+    def test_code_worker_has_independent_instructions_from_static_designer(self):
+        from agentforge.worker_registry import load_worker
+        designer = load_worker("product_builder")
+        developer = load_worker("webapp_developer")
+        self.assertEqual(developer["model_ref"], designer["model_ref"])
+        self.assertNotEqual(developer["instructions"], designer["instructions"])
+        self.assertIn("React JSX", developer["instructions"])
+        self.assertIn("propose_react_source_only", developer["capabilities"])
+
     def test_create_source_only_with_trusted_dependencies(self):
         receipt = self.propose()
         self.assertFalse(DEV.PROJECTS.exists())
