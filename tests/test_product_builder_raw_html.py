@@ -1,4 +1,5 @@
-"""web.create production: structured model copy, safe deterministic template."""
+"""Production web.create: variable AI design spec -> offline, SHA-gated files."""
+from copy import deepcopy
 import json
 import tempfile
 import unittest
@@ -6,20 +7,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from agentforge import product_builder as builder, product_quality
-from agentforge.domains.websites.structured_builder import COPY_SCHEMA, render, owner_phone
+from agentforge.domains.websites.ai_designer import DESIGN_SCHEMA, render, validate_spec
+from agentforge.domains.websites.structured_builder import owner_phone
+from tests.designer_fixture import DESIGN, revised_design, longer_design
 
-COPY = {
-    "brand": "Minh Studio",
-    "headline": "Ảnh đẹp kể câu chuyện của bạn",
-    "subtitle": "Portfolio nhiếp ảnh phong cách tinh giản với bố cục nhiều khoảng trắng.",
-    "introduction": "Giới thiệu phong cách ảnh, cách làm việc và hướng kết nối trực tiếp.",
-    "highlights": [
-        {"title": "Chân dung", "description": "Lưu lại những khoảnh khắc tự nhiên."},
-        {"title": "Không gian", "description": "Góc nhìn giàu chất liệu và cảm xúc."},
-        {"title": "Câu chuyện", "description": "Bố cục có chủ đích, dễ đọc trên điện thoại."},
-    ],
-    "call_to_action": "Bắt đầu trao đổi về ý tưởng của bạn",
-}
 BRIEF = "Thiết kế website portfolio cho nhiếp ảnh gia Việt Nam, phong cách tối giản."
 GOOD = '<!doctype html><html lang="vi"><head><style>body{margin:0}</style></head><body><h1>Xin chào</h1></body></html>'
 
@@ -43,18 +34,18 @@ class TestReliableWebBuilder(unittest.TestCase):
         self.tmp.cleanup()
 
     def _create(self, data=None):
-        answer = COPY if data is None else data
+        answer = DESIGN if data is None else data
         with (patch("agentforge.model.generate_json", return_value=answer) as model,
               patch("agentforge.model.generate") as raw):
             receipt = builder.propose("portfolio-demo", BRIEF)
             model.assert_called_once()
             self.assertEqual(model.call_args.kwargs, {"worker_id": "product_builder"})
-            self.assertEqual(model.call_args.args[1], COPY_SCHEMA)
+            self.assertEqual(model.call_args.args[1], DESIGN_SCHEMA)
             self.assertIn(BRIEF, model.call_args.args[0])
             raw.assert_not_called()
         return receipt
 
-    def test_one_structured_model_call_creates_only_review_proposal(self):
+    def test_one_model_call_creates_only_review_proposal_with_editable_design(self):
         receipt = self._create()
         self.assertFalse(builder.PRODUCTS.exists())
         doc = json.loads(Path(receipt["proposal_path"]).read_text(encoding="utf-8"))
@@ -62,81 +53,124 @@ class TestReliableWebBuilder(unittest.TestCase):
         self.assertFalse(doc["execution_authorized"])
         self.assertFalse(doc["spending_authorized"])
         self.assertFalse(doc["deployment_authorized"])
-        self.assertEqual(len(doc["files"]), 1)
+        self.assertEqual([x["path"] for x in doc["files"]], ["index.html", "site.json"])
         source = doc["files"][0]["content"]
-        self.assertIn("<h1 id=\"hero-heading\">Ảnh đẹp", source)
-        self.assertIn("Minh Studio", source)
+        self.assertIn(DESIGN["hero"]["headline"], source)
+        self.assertIn(DESIGN["brand"], source)
         self.assertIn("Content-Security-Policy", source)
         self.assertIn("prefers-reduced-motion", source)
         self.assertIn("grid-template-columns", source)
         self.assertIn('lang="vi"', source)
-        self.assertIn('href="#lien-he"', source)
+        self.assertIn('href="#contact"', source)
         self.assertNotIn("<script", source)
-        self.assertNotIn('src="https:', source)
-        report = product_quality.analyze(source)
-        self.assertNotEqual(report["status"], "FAIL", report["findings"])
+        self.assertNotIn("https://", source)
+        self.assertEqual(json.loads(doc["files"][1]["content"]),
+                         {"format": "agentforge.design.v1", "design": validate_spec(DESIGN)})
+        self.assertNotEqual(product_quality.analyze(source)["status"], "FAIL")
         self.assertLess(len(source.encode("utf-8")), builder.MAX_FILE_BYTES)
 
-    def test_model_text_never_becomes_html_code_or_remote_resource(self):
-        attack = dict(COPY)
-        attack["headline"] = '<script>alert("x")</script>'
-        attack["subtitle"] = 'Ảnh ở https://example.invalid/image.jpg và fetch("/api")'
-        attack["introduction"] = '@import url(data:text/html,whatever) <img src=x onerror=alert(1)>'
+    def test_model_copy_is_escaped_and_never_executes_as_markup(self):
+        attack = deepcopy(DESIGN)
+        attack["hero"]["headline"] = '<script>alert("x")</script>'
+        attack["hero"]["description"] = 'Ảnh ở https://invalid.example/image.jpg'
+        attack["sections"][0]["items"][0]["body"] = '@import url(data:text/html,x) <img onerror=alert(1)>'
         receipt = self._create(attack)
         doc = json.loads(Path(receipt["proposal_path"]).read_text(encoding="utf-8"))
         source = doc["files"][0]["content"]
         self.assertIn("&lt;script&gt;", source)
         self.assertIn("&lt;img", source)
         self.assertNotIn("<script>", source)
-        self.assertNotIn("https://example.invalid", source)
+        self.assertNotIn("https://invalid.example", source)
         self.assertNotIn("@import", source)
         self.assertIsNone(builder._suspicious_match(source))
         self.assertNotEqual(product_quality.analyze(source)["status"], "FAIL")
 
-    def test_legacy_html_parser_rejects_untrusted_raw_code(self):
+    def test_two_different_ai_designs_generate_genuinely_different_pages(self):
+        a = render(DESIGN)
+        b = render(longer_design())
+        self.assertNotEqual(a, b)
+        self.assertIn('class="wrapper hero hero-editorial"', b)
+        self.assertIn('class="section section--gallery', b)
+        self.assertIn('class="section section--steps', b)
+        self.assertIn("--accent:#d2ac6b", b)
+        self.assertNotIn('class="section section--steps', a)
+        self.assertNotEqual(product_quality.analyze(b)["status"], "FAIL")
+
+    def test_text_only_story_is_not_rendered_twice(self):
+        concept = longer_design()
+        html = render(concept)
+        self.assertEqual(html.count("Chúng tôi tập trung vào trải nghiệm."), 1)
+        self.assertIn('class="section section--story', html)
+
+    def test_ai_can_remove_hero_art_and_second_cta(self):
+        simple = deepcopy(DESIGN)
+        simple["style"]["art"] = "none"
+        simple["hero"]["secondary_action"] = ""
+        html = render(simple)
+        self.assertIn('data-af-layout="centered"', html)
+        self.assertNotIn('class="hero-art', html)
+        self.assertNotIn('class="button ghost"', html)
+        self.assertEqual(product_quality.analyze(html)["failures"], 0)
+
+    def test_low_contrast_ai_accent_uses_readable_text_fallback(self):
+        poor = deepcopy(DESIGN)
+        poor["style"].update({"background": "#ffffff", "surface": "#ffffff",
+                              "accent": "#fdfdfd"})
+        html = render(poor)
+        self.assertIn("--accent:#fdfdfd", html)
+        self.assertIn("--label-ink:#17212b", html)
+        self.assertIn("--accent-ink:#17212b", html)
+        self.assertNotEqual(product_quality.analyze(html)["status"], "FAIL")
+
+    def test_legacy_html_parser_still_rejects_untrusted_code(self):
         fence = chr(96) * 3
         self.assertEqual(builder._standalone_html(fence + "html\n" + GOOD + "\n" + fence), GOOD)
         for bad in ['{"files":', "Explanation: " + GOOD, GOOD[:-18]]:
-            with self.subTest(bad=bad[:20]):
-                with self.assertRaises(ValueError):
-                    builder._standalone_html(bad)
+            with self.subTest(bad=bad[:20]), self.assertRaises(ValueError):
+                builder._standalone_html(bad)
 
-    def test_invalid_model_json_fails_without_proposal(self):
-        cases = [
-            {"brand": "Only a brand"},
-            {**COPY, "highlights": []},
-            {**COPY, "headline": ""},
-            {**COPY, "headline": "x" * 101},
-            {**COPY, "highlights": [{"title": "One", "description": "Only one"}]},
-            {**COPY, "highlights": [COPY["highlights"][0], {"title": "Two", "description": ""}]},
-        ]
-        for idx, data in enumerate(cases):
+    def test_invalid_model_design_fails_without_proposal(self):
+        bad_style = deepcopy(DESIGN)
+        bad_style["style"]["accent"] = "red;url(https://bad.example)"
+        bad_kind = deepcopy(DESIGN)
+        bad_kind["sections"][0]["kind"] = "script"
+        no_sections = deepcopy(DESIGN)
+        no_sections["sections"] = []
+        bad_font = deepcopy(DESIGN)
+        bad_font["style"]["font"] = "https://evil.example/font.css"
+        for idx, data in enumerate([
+            {"brand": "Only a brand"}, bad_style, bad_kind, no_sections, bad_font,
+            {**DESIGN, "brand": ""}, {**DESIGN, "page_title": "T" * 111},
+        ]):
             with self.subTest(case=idx):
                 with patch("agentforge.model.generate_json", return_value=data) as model:
-                    with self.assertRaisesRegex(ValueError, "Structured website content invalid"):
+                    with self.assertRaisesRegex(ValueError, "AI_DESIGN_INVALID"):
                         builder.propose("portfolio-demo", BRIEF)
                     model.assert_called_once()
                 self.assertFalse(builder.PROPOSALS.exists())
 
-    def test_no_model_auto_retry_or_fabricated_success_on_outage(self):
+    def test_no_auto_retry_or_fabricated_success_on_model_outage(self):
         with patch("agentforge.model.generate_json", side_effect=RuntimeError("Offline gateway unavailable")) as model:
             with self.assertRaises(RuntimeError):
                 builder.propose("portfolio-demo", BRIEF)
             model.assert_called_once()
         self.assertFalse(builder.PROPOSALS.exists())
 
-    def test_html_maximum_allowed_copy_stays_bounded(self):
-        maximal = {
-            "brand": "B" * 64, "headline": "H" * 100,
-            "subtitle": "S" * 210, "introduction": "I" * 380,
-            "highlights": [{"title": "T" * 65, "description": "D" * 185} for _ in range(4)],
-            "call_to_action": "C" * 120,
-        }
+    def test_long_content_stays_within_bounded_file_contract(self):
+        maximal = longer_design()
+        maximal["brand"] = "B" * 64
+        maximal["page_title"] = "T" * 110
+        maximal["description"] = "D" * 210
+        maximal["hero"]["headline"] = "H" * 110
+        maximal["hero"]["description"] = "L" * 300
+        maximal["sections"] = [deepcopy(maximal["sections"][1]) for _ in range(7)]
+        for section in maximal["sections"]:
+            section["items"] = [{"title": "T" * 105, "body": "D" * 240} for _ in range(4)]
         html = render(maximal)
         self.assertLess(len(html.encode("utf-8")), builder.MAX_FILE_BYTES)
         self.assertNotEqual(product_quality.analyze(html)["status"], "FAIL")
 
-    def test_review_sha_still_required_to_apply(self):
+    def test_sha_still_required_to_apply_both_files(self):
         receipt = self._create()
         with self.assertRaises(PermissionError):
             builder.apply(receipt["proposal_id"], sha256=receipt["sha256"])
@@ -145,28 +179,50 @@ class TestReliableWebBuilder(unittest.TestCase):
         done = builder.apply(receipt["proposal_id"], sha256=receipt["sha256"], confirm_write=True)
         self.assertEqual(done["status"], "FILES_WRITTEN_NOT_EXECUTED")
         self.assertTrue((builder.PRODUCTS / "portfolio-demo" / "index.html").is_file())
+        self.assertTrue((builder.PRODUCTS / "portfolio-demo" / "site.json").is_file())
         with self.assertRaises(FileExistsError):
             builder.apply(receipt["proposal_id"], sha256=receipt["sha256"], confirm_write=True)
 
-    def test_owner_supplied_phone_adds_only_local_dial_action(self):
+    def test_signed_design_json_rejects_tamper_and_unknown_version(self):
+        receipt = self._create()
+        path = Path(receipt["proposal_path"])
+        original = json.loads(path.read_text(encoding="utf-8"))
+        for mode in ("unknown_version", "modified_color"):
+            with self.subTest(mode=mode):
+                doc = deepcopy(original)
+                spec_file = next(x for x in doc["files"] if x["path"] == "site.json")
+                record = json.loads(spec_file["content"])
+                if mode == "unknown_version":
+                    record["format"] = "agentforge.design.v999"
+                else:
+                    record["design"]["style"]["accent"] = "#ff2233"
+                spec_file["content"] = json.dumps(record, ensure_ascii=False)
+                path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    builder._read_proposal(receipt["proposal_id"])
+        self.assertFalse(builder.PRODUCTS.exists())
+
+    def test_owner_phone_is_not_invented_and_invalid_number_is_rejected(self):
         self.assertEqual(owner_phone("Liên hệ 0879547988 để tư vấn"), "0879547988")
-        self.assertEqual(owner_phone("Số điện thoại +84 879 547 988"), "+84879547988")
-        self.assertIsNone(owner_phone("Chưa có số điện thoại, hãy đặt placeholder"))
-        with patch("agentforge.model.generate_json", return_value=COPY):
+        self.assertIsNone(owner_phone("Chưa có số điện thoại"))
+        with patch("agentforge.model.generate_json", return_value=DESIGN):
             receipt = builder.propose("portfolio-demo", BRIEF + " Hotline 0879547988")
         doc = json.loads(Path(receipt["proposal_path"]).read_text(encoding="utf-8"))
         html = doc["files"][0]["content"]
         self.assertIn('href="tel:0879547988"', html)
         self.assertNotEqual(product_quality.analyze(html)["status"], "FAIL")
         with self.assertRaises(ValueError):
-            render(COPY, phone="https://host.invalid")
+            render(DESIGN, phone="https://host.invalid")
 
-    def test_direct_renderer_has_no_network_or_process(self):
-        with (patch("subprocess.run") as process, patch("urllib.request.urlopen") as network):
-            rendered = render(COPY)
+    def test_renderer_has_no_network_process_or_model_call(self):
+        with (patch("subprocess.run") as process,
+              patch("urllib.request.urlopen") as network,
+              patch("agentforge.model.generate_json") as model):
+            rendered = render(DESIGN)
             process.assert_not_called()
             network.assert_not_called()
-        self.assertIn("Bắt đầu trao đổi", rendered)
+            model.assert_not_called()
+        self.assertIn("Trải nghiệm tư vấn", rendered)
 
 
 if __name__ == "__main__":
