@@ -17,6 +17,8 @@ POLICY = {
                           frozenset({"workspace.read"})),
     "web.create": ("product_builder", "owner_gated",
                    frozenset({"model.invoke", "workspace.propose"})),
+    "webapp.create": ("product_builder", "owner_gated",
+                      frozenset({"model.invoke", "workspace.propose"})),
     "web.browser_test": ("product_builder", "owner_gated",
                          frozenset({"workspace.read", "browser.run"})),
     "research.opportunity": ("opportunity_researcher", "owner_gated",
@@ -134,6 +136,9 @@ def _dispatch(skill_id, payload):
                 source_sha256=payload["source_sha256"],
                 revision_feedback=payload["revision_feedback"],
             )
+        return propose(payload["slug"], payload["brief"])
+    if skill_id == "webapp.create":
+        from agentforge.webapp_builder import propose
         return propose(payload["slug"], payload["brief"])
     if skill_id == "web.browser_test":
         from agentforge.browser_validation import validate
@@ -274,6 +279,24 @@ def _safe_failure(skill_id, exc):
                 return "HTML_INCOMPLETE: Model output was not a complete document."
             return "BUILDER_INVALID_OUTPUT: Generated website failed validation."
         return "BUILDER_EXECUTION_FAILED: Check model runtime and builder contracts."
+    if skill_id == "webapp.create":
+        import socket
+        from urllib.error import HTTPError, URLError
+        if isinstance(exc, HTTPError):
+            return "MODEL_HTTP_ERROR: Marketplace AI model returned an HTTP error."
+        if isinstance(exc, (TimeoutError, socket.timeout)):
+            return "MODEL_TIMEOUT: Marketplace AI call timed out."
+        if isinstance(exc, URLError):
+            return "MODEL_UNAVAILABLE: Cannot reach model endpoint."
+        if isinstance(exc, json.JSONDecodeError):
+            return "MODEL_JSON_INVALID: AI output was not valid JSON."
+        if isinstance(exc, FileExistsError):
+            return "APP_PROJECT_EXISTS: Choose a different app project name."
+        if isinstance(exc, ValueError) and str(exc).startswith("APP_SPEC_INVALID:"):
+            return "APP_SPEC_INVALID: AI data was not valid marketplace demo data."
+        if isinstance(exc, ValueError) and str(exc).startswith("APP_TOO_LARGE"):
+            return "APP_TOO_LARGE: Application proposal exceeded safe limits."
+        return "WEBAPP_BUILD_FAILED: No app was executed or published."
     if skill_id.startswith("analytics."):
         from agentforge.analytics_store import AnalyticsError
         if isinstance(exc, AnalyticsError):
