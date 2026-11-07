@@ -8,18 +8,9 @@ from agentforge import brain_planner, brain_runner, brain_store, task_history
 from agentforge import product_builder as builder
 from agentforge.domains.websites.preview import from_proposal
 
-CONTENT = {
-    "brand": "Studio Nệm Việt",
-    "headline": "Không gian ngủ được chăm chút",
-    "subtitle": "Tư vấn lựa chọn nệm theo nhu cầu và không gian sống.",
-    "introduction": "Đây là trang mẫu giới thiệu dịch vụ tư vấn. Chi tiết sản phẩm cần được chủ dự án xác minh.",
-    "highlights": [
-        {"title": "Tư vấn nhu cầu", "description": "Lắng nghe thói quen ngủ của bạn."},
-        {"title": "Tối ưu không gian", "description": "Gợi ý lựa chọn phù hợp với phòng ngủ."},
-        {"title": "Liên hệ trực tiếp", "description": "Trao đổi trước khi đặt hàng."},
-    ],
-    "call_to_action": "Trao đổi về chiếc nệm phù hợp",
-}
+from copy import deepcopy
+from tests.designer_fixture import DESIGN
+
 
 
 class TestWebGoalV34(unittest.TestCase):
@@ -63,7 +54,7 @@ class TestWebGoalV34(unittest.TestCase):
             model.assert_not_called()
         self.assertEqual(waiting["status"], "WAITING_APPROVAL")
         self.assertIn("model.invoke", waiting["missing"])
-        with patch("agentforge.model.generate_json", return_value=CONTENT) as model:
+        with patch("agentforge.model.generate_json", return_value=DESIGN) as model:
             completed = self._execute(
                 goal, grants=("model.invoke", "workspace.propose"),
                 confirm_model_call=True)
@@ -77,7 +68,7 @@ class TestWebGoalV34(unittest.TestCase):
         proposal = child["result"]
         self.assertRegex(proposal["sha256"], r"^[0-9a-f]{64}$")
         page = from_proposal(proposal["proposal_id"]).decode("utf-8")
-        self.assertIn("Studio Nệm Việt", page)
+        self.assertIn("Giấc Ngủ Việt", page)
         self.assertIn('href="tel:0879547988"', page)
         self.assertIn("Content-Security-Policy", page)
         self.assertNotIn("https://", page)
@@ -87,8 +78,8 @@ class TestWebGoalV34(unittest.TestCase):
 
     def test_invalid_copy_fails_without_proposal_or_second_model_call(self):
         goal = self._goal()
-        bad = dict(CONTENT)
-        bad["highlights"] = []
+        bad = deepcopy(DESIGN)
+        bad["sections"] = []
         with patch("agentforge.model.generate_json", return_value=bad) as model:
             done = self._execute(goal, grants=("model.invoke", "workspace.propose"),
                                  confirm_model_call=True)
