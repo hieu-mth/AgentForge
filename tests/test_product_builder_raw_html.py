@@ -183,6 +183,25 @@ class TestReliableWebBuilder(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             builder.apply(receipt["proposal_id"], sha256=receipt["sha256"], confirm_write=True)
 
+    def test_signed_design_json_rejects_tamper_and_unknown_version(self):
+        receipt = self._create()
+        path = Path(receipt["proposal_path"])
+        original = json.loads(path.read_text(encoding="utf-8"))
+        for mode in ("unknown_version", "modified_color"):
+            with self.subTest(mode=mode):
+                doc = deepcopy(original)
+                spec_file = next(x for x in doc["files"] if x["path"] == "site.json")
+                record = json.loads(spec_file["content"])
+                if mode == "unknown_version":
+                    record["format"] = "agentforge.design.v999"
+                else:
+                    record["design"]["style"]["accent"] = "#ff2233"
+                spec_file["content"] = json.dumps(record, ensure_ascii=False)
+                path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    builder._read_proposal(receipt["proposal_id"])
+        self.assertFalse(builder.PRODUCTS.exists())
+
     def test_owner_phone_is_not_invented_and_invalid_number_is_rejected(self):
         self.assertEqual(owner_phone("Liên hệ 0879547988 để tư vấn"), "0879547988")
         self.assertIsNone(owner_phone("Chưa có số điện thoại"))
