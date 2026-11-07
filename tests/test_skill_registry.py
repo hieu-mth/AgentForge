@@ -31,7 +31,7 @@ class TestSkillRegistry(unittest.TestCase):
         registry = skills.load_registry(root=self.root)
         self.assertEqual(list(registry), sorted(registry))
         self.assertEqual(set(registry), {
-            "web.create", "web.quality_check", "web.browser_test",
+            "web.create", "webapp.create", "web.quality_check", "web.browser_test",
             "research.opportunity", "research.source_review",
             "media.compose", "media.image_edit", "media.quality_check",
             "media.video_render", "media.tts", "media.copy_draft",
