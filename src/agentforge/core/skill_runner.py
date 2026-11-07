@@ -21,6 +21,12 @@ POLICY = {
                       frozenset({"model.invoke", "workspace.propose"})),
     "webapp.develop": ("webapp_developer", "owner_gated",
                        frozenset({"model.invoke", "workspace.propose"})),
+    "webapp.architect": ("webapp_architect", "owner_gated",
+                         frozenset({"model.invoke", "workspace.propose"})),
+    "webapp.audit": ("webapp_architect", "read_only",
+                     frozenset({"workspace.read"})),
+    "webapp.review": ("webapp_reviewer", "owner_gated",
+                      frozenset({"model.invoke", "workspace.propose"})),
     "webapp.sandbox_test": ("product_builder", "owner_gated",
                              frozenset({"workspace.read", "process.run"})),
     "web.browser_test": ("product_builder", "owner_gated",
@@ -150,9 +156,24 @@ def _dispatch(skill_id, payload):
                 source_sha256=payload["source_sha256"],
                 revision_feedback=payload["revision_feedback"])
         return propose(payload["slug"], payload["brief"])
+    if skill_id == "webapp.architect":
+        from agentforge.webapp_architect import propose
+        return propose(payload["slug"], payload["brief"])
     if skill_id == "webapp.develop":
         from agentforge.webapp_developer import propose
+        if "architecture_id" in payload:
+            return propose(payload["slug"], payload["brief"],
+                           architecture_id=payload["architecture_id"],
+                           architecture_sha=payload["architecture_sha"])
         return propose(payload["slug"], payload["brief"])
+    if skill_id == "webapp.audit":
+        from agentforge.webapp_static_qa import audit
+        return audit(payload["proposal_id"], payload["sha256"])
+    if skill_id == "webapp.review":
+        from agentforge.webapp_reviewer import review
+        return review(payload["architecture_id"], payload["architecture_sha"],
+                      payload["proposal_id"], payload["sha256"],
+                      payload["qa_report_id"], payload["qa_report_sha"])
     if skill_id == "webapp.sandbox_test":
         from agentforge.webapp_sandbox import verify
         return verify(payload["proposal_id"], payload["sha256"],
@@ -296,6 +317,18 @@ def _safe_failure(skill_id, exc):
                 return "HTML_INCOMPLETE: Model output was not a complete document."
             return "BUILDER_INVALID_OUTPUT: Generated website failed validation."
         return "BUILDER_EXECUTION_FAILED: Check model runtime and builder contracts."
+    if skill_id in {"webapp.architect", "webapp.audit", "webapp.review"}:
+        import socket
+        from urllib.error import HTTPError, URLError
+        if isinstance(exc, (TimeoutError, socket.timeout)):
+            return "V5_MODEL_TIMEOUT: Check chosen model and approved budget."
+        if isinstance(exc, (HTTPError, URLError)):
+            return "V5_MODEL_UNAVAILABLE: Configured model endpoint failed."
+        if isinstance(exc, PermissionError):
+            return "V5_SOURCE_OR_MODEL_DENIED: Source SHA or cloud consent required."
+        if isinstance(exc, (ValueError, json.JSONDecodeError)):
+            return "V5_OUTPUT_INVALID: Signed source or model schema validation failed."
+        return "V5_STAGE_FAILED: No code executed or deployed."
     if skill_id == "webapp.develop":
         import socket
         from urllib.error import HTTPError, URLError
