@@ -171,8 +171,14 @@ def _compile(spec, slug):
         "export const CATEGORIES = " + _js(categories) + ";\n"
         "export const PRODUCTS = " + _js(spec["products"]) + ";\n")
     files["tests/store.test.js"] = TEST_CODE
+    # Persist the INPUT schema, not the compiler-enriched React display fields
+    # (oldPrice/tag). This allows strict revalidation on later SHA review.
+    source_spec = {**spec, "products": [
+        {key: product[key] for key in PRODUCT["properties"]}
+        for product in spec["products"]
+    ]}
     files["app.json"] = json.dumps({"format": "agentforge.webapp.marketplace.v1",
-                                     "spec": spec}, ensure_ascii=False, indent=2)
+                                     "spec": source_spec}, ensure_ascii=False, indent=2)
     files["README.md"] = (
         "# Local marketplace demo\n\n"
         "React/Vite application; fictional data, no checkout or network APIs.\n"
