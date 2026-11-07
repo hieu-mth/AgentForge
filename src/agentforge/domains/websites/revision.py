@@ -18,7 +18,7 @@ from agentforge import product_builder as builder
 
 WORKER_ID = builder.WORKER_ID
 SUMMARY = "Owner-reviewed revision proposal for existing standalone index.html"
-MAX_PROPOSAL_BYTES = 30_000
+MAX_PROPOSAL_BYTES = 80_000
 
 
 def _hash(raw):
