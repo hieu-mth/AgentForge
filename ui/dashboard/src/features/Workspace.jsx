@@ -9,6 +9,7 @@ const { TextArea } = Input;
 
 const MIN_PROMPT = 20;
 const IDEAS = [
+  'AI Company V5: Tạo ứng dụng quản lý bán hàng React local với bảng sản phẩm, tìm kiếm, lọc và giỏ demo; yêu cầu Architect, Developer, QA và Reviewer phân tích độc lập.',
   'Thiết kế landing page nệm ngủ cao cấp, tối ưu điện thoại và có nút gọi nhanh.',
   'Viết storyboard video 30 giây giới thiệu cửa hàng cà phê rang xay thủ công.',
   'Tạo website portfolio tối giản cho nhiếp ảnh gia, tông màu ấm và nhiều khoảng trắng.',
@@ -81,7 +82,7 @@ export function Workspace({data, onPlan, openGoal, loading}) {
         <Divider style={{margin:'14px 0'}}/>
         <div className="feature-row"><CheckCircleOutlined/> Duyệt SHA kế hoạch trước khi gọi model</div>
         <div className="feature-row"><FolderOpenOutlined/> Thành phẩm lưu tại workspace local</div>
-        <Text type="secondary" className="subtle">Hiện hỗ trợ website, marketplace React demo, AI Developer React tùy biến (gõ rõ “AI Developer”), và storyboard. Workflow chuyên sâu nằm trong các mục Dự án, Kinh doanh và Cài đặt.</Text>
+        <Text type="secondary" className="subtle">Hiện hỗ trợ website, marketplace React demo, AI Developer tùy biến và AI Company V5 (3 lượt model riêng, cần tăng hạn mức ở Cài đặt). Không tự chạy mã AI. Workflow chuyên sâu nằm trong các mục Dự án, Kinh doanh và Cài đặt.</Text>
       </Card>
     </div>
   </div>;
@@ -146,6 +147,9 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, b
           </div>;
         })}
       </div>
+      {goal.template==='webapp.company'&&<Alert type="warning" showIcon
+        message="V5: duyệt từng lượt model riêng"
+        description="Quy trình có 3 lượt model được tính vào kế hoạch; mỗi lần nhấn Chạy/Tiếp tục chỉ xác nhận tối đa 1 lượt. QA ở bước 3 chỉ kiểm tra tĩnh, không build hoặc chạy trình duyệt."/>}
       {required.includes('model.invoke')&&<Alert type="warning" showIcon
         message="AI local hay cloud?"
         description="AgentForge dùng model đang cấu hình trong backend. Nếu cấu hình cloud, nội dung gửi tới nhà cung cấp có thể có chi phí; việc tick quyền này cũng là xác nhận gọi model cho lượt chạy."/>}
