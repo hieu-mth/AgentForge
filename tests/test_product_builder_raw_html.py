@@ -96,6 +96,12 @@ class TestReliableWebBuilder(unittest.TestCase):
         self.assertNotIn('class="section section--steps', a)
         self.assertNotEqual(product_quality.analyze(b)["status"], "FAIL")
 
+    def test_text_only_story_is_not_rendered_twice(self):
+        concept = longer_design()
+        html = render(concept)
+        self.assertEqual(html.count("Chúng tôi tập trung vào trải nghiệm."), 1)
+        self.assertIn('class="section section--story', html)
+
     def test_ai_can_remove_hero_art_and_second_cta(self):
         simple = deepcopy(DESIGN)
         simple["style"]["art"] = "none"
