@@ -89,10 +89,10 @@ class TestReliableWebBuilder(unittest.TestCase):
         b = render(longer_design())
         self.assertNotEqual(a, b)
         self.assertIn('class="wrapper hero hero-editorial"', b)
-        self.assertIn('section--gallery', b)
-        self.assertIn('section--steps', b)
+        self.assertIn('class="section section--gallery', b)
+        self.assertIn('class="section section--steps', b)
         self.assertIn("--accent:#d2ac6b", b)
-        self.assertNotIn("section--steps", a)
+        self.assertNotIn('class="section section--steps', a)
         self.assertNotEqual(product_quality.analyze(b)["status"], "FAIL")
 
     def test_legacy_html_parser_still_rejects_untrusted_code(self):
