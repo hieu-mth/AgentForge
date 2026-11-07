@@ -1,0 +1,4 @@
+id = "webapp_architect"
+model_ref = "local_primary"
+runtime = "manual"
+capabilities = ["design_react_app_requirements"]
