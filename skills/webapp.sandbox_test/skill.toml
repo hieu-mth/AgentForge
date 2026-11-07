@@ -1,0 +1,35 @@
+schema_version = 1
+id = "webapp.sandbox_test"
+version = "0.1.0"
+description = "Owner-approved offline Docker test and build of signed React app source; requires a pinned local image and process consent."
+worker_id = "product_builder"
+execution_mode = "owner_gated"
+required_permissions = ["workspace.read", "process.run"]
+required_tools = ["filesystem"]
+artifact_types = ["build_report"]
+quality_checks = ["offline_container", "node_unit", "vite_build"]
+
+[limits]
+timeout_seconds = 240
+estimated_model_calls = 0
+
+[input_schema]
+type = "object"
+required = ["proposal_id", "sha256", "confirm_external_run"]
+additional_properties = false
+
+[input_schema.properties]
+proposal_id = "string"
+sha256 = "string"
+confirm_external_run = "boolean"
+
+[output_schema]
+type = "object"
+required = ["status", "proposal_id", "sha256", "runtime"]
+additional_properties = true
+
+[output_schema.properties]
+status = "string"
+proposal_id = "string"
+sha256 = "string"
+runtime = "string"

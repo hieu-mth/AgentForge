@@ -183,6 +183,17 @@ export default function App() {
     try{setWebapp(await api('/api/webapps/'+encodeURIComponent(id)));}
     catch(e){authError(e);}
   };
+  const verifyWebapp=p=>ask('Lập kế hoạch QA container?',
+    'Chỉ tạo Goal mới. Chạy container cần Docker Linux, image local được pin bằng SHA và quyền process.run được cấp riêng.',
+    async()=>{
+      const out=await runAction(()=>post('/api/goals/propose',{
+        ack:'PROPOSE',title:'Kiểm thử nguồn React trong Docker offline',
+        template:'webapp.qa',
+        inputs:{proposal_id:p.proposal_id,sha256:p.sha256,confirm_external_run:true},
+        max_model_calls:0,max_external_runs:1,
+      }));
+      if(out){setWebapp(null);message.success('Đã lập Goal QA sandbox');await openGoal(out.goal_id);}
+    });
   const reviseWebapp=(p,feedback)=>ask('Duyệt việc tạo Goal sửa ứng dụng?',
     'Phiên bản gốc được giữ nguyên; Goal mới cần duyệt SHA và quyền gọi model riêng.',
     async()=>{const out=await runAction(()=>post('/api/webapps/'+p.proposal_id+'/revision',
@@ -297,7 +308,8 @@ export default function App() {
     <ProposalDrawer proposal={proposal} onClose={()=>setProposal(null)}
       onRevise={revise} onApply={apply} busy={busy}/>
     <WebappProposalDrawer proposal={webapp} onClose={()=>setWebapp(null)}
-      onRevise={reviseWebapp} onApply={applyWebapp} busy={busy}/>
+      onRevise={reviseWebapp} onApply={applyWebapp}
+      onVerify={verifyWebapp} busy={busy}/>
     <Drawer title="Chi tiết tác vụ" size={720} open={!!task} onClose={()=>setTask(null)}>
       {task && <><Descriptions bordered column={1} size="small" items={[
         {key:'1',label:'Task ID',children:<code>{task.task_id}</code>},
@@ -305,6 +317,18 @@ export default function App() {
         {key:'3',label:'Status',children:badge(task.status)},
         {key:'4',label:'Error',children:task.error||'Không có'},
       ]}/>
+      {task.report?.kind==='webapp_qa'&&<Card title="Kết quả QA React trong Docker"
+        style={{marginTop:18}}>
+        <Alert type={task.report.status==='PASS'?'success':'error'} showIcon
+          message={task.report.status==='PASS'?'Đã chạy unit test và build trong container offline':'Không có kết quả QA hợp lệ'}
+          description="Không có truy cập mạng, không mount mã nguồn ở chế độ ghi. Kết quả không có nghĩa là ứng dụng đã được deploy hoặc đã qua kiểm thử giao diện trên máy Owner."/>
+        <Descriptions column={1} size="small" bordered style={{marginTop:14}} items={[
+          {key:'sandbox',label:'Runtime',children:task.report.sandbox},
+          {key:'network',label:'Mạng',children:task.report.network},
+          {key:'source',label:'Nguồn',children:task.report.source_mount},
+          {key:'checks',label:'Kiểm thử',children:(task.report.checks||[]).join(', ')},
+        ]}/>
+      </Card>}
       {task.report?.kind==='storyboard'&&<Card title={task.report.title||'Kịch bản video'}
         style={{marginTop:18}} extra={<Button onClick={()=>navigator.clipboard?.writeText(
           JSON.stringify({title:task.report.title,scenes:task.report.scenes},null,2)

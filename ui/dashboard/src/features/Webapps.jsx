@@ -8,7 +8,7 @@ const LABELS = {
 };
 const COLOR = /^#[0-9a-fA-F]{6}$/;
 
-export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,busy}) {
+export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,onVerify,busy}) {
   const [feedback,setFeedback]=useState('');
   useEffect(()=>setFeedback(''),[proposal?.proposal_id]);
   if(!proposal)return null;
@@ -69,6 +69,9 @@ export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,busy}) {
         <Space wrap style={{display:'flex',justifyContent:'flex-end',marginTop:22}}>
           <Button disabled={feedback.trim().length<10} loading={busy}
             onClick={()=>onRevise(proposal,feedback)}>Tạo kế hoạch chỉnh sửa</Button>
+          <Button loading={busy} onClick={()=>onVerify(proposal)}>
+            Lập Goal QA sandbox
+          </Button>
           <Button type="primary" loading={busy} onClick={()=>onApply(proposal)}>
             Duyệt SHA & lưu mã nguồn local
           </Button>

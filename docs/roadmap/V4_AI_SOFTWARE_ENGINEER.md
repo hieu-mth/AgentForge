@@ -24,7 +24,7 @@ landing page that resembles an ecommerce site.
 | V4.0a — Interactive reference | Standalone Vite + React NovaMart with searchable catalogue, category filters, sort, product details, working client-side cart, mobile layout and tests | \`npm ci && npm test && npm run build\` succeeds, browser flows work, no backend/CDN/payment |
 | V4.0b — Owner-gated webapp proposals | New \`webapp.create\` skill and \`webapp.draft\` Goal, model-controlled typed ecommerce data/spec, audited React source renderer, SHA-bound read/apply, no code execution | Planner → permission gate → one model call → immutable source proposal; safe paths and source validation; isolated tests |
 | V4.1 — Revision and versioning | Source-aware app revision with patch/diff view, project version records, changed-file scoped reviews | Edit a single feature without losing unrelated parts, SHA prevents stale apply |
-| V4.2 — Sandboxed build and QA | Explicitly configured isolated build executor, no host secrets/network by default, browser interaction tests and screenshots | Fail closed when sandbox unavailable; independent approval for each bounded build |
+| V4.2 — Sandboxed build and QA | Explicitly configured pinned offline Docker build/test, no host secrets/network, separate Owner approval; browser screenshots remain future work | Fail closed when Docker or local image unavailable; QA may run only after process.run consent |
 | V4.3 — Multi-model routing | User-selectable local/cloud worker model profiles with costs and caps | Predictable cost ceiling and no provider changes without permission |
 | V5.0 — Multi-agent product loop | Architect, Designer, Developer, QA and Reviewer skill orchestration around the same versioned artifact | Demonstrated 3-step real-app edit flow with gated execution and reproducible tests |
 
@@ -54,3 +54,13 @@ inside AgentForge's authenticated server and does not receive credentials.
 To run, an Owner manually starts Vite in a separate terminal, only after
 reviewing code and choosing to install dependencies. V4.0b proposal generation
 must remain unexecuted until a reviewed, isolated build runner is available.
+
+## V4.2 implementation note
+
+The optional Docker-based runner tests a signed React proposal in an isolated
+Linux container. It never auto-installs Docker, fetches an image or runs npm
+on the host. The Owner must prepare a local image and pin its sha256 ID;
+otherwise `SANDBOX_UNAVAILABLE` is returned without executing generated code.
+This is an integration harness, **not** proof of complete sandbox security and
+not a browser automation or code-generation feature. Instructions live in
+`sandbox/webapp/README.md`.

@@ -19,6 +19,8 @@ POLICY = {
                    frozenset({"model.invoke", "workspace.propose"})),
     "webapp.create": ("product_builder", "owner_gated",
                       frozenset({"model.invoke", "workspace.propose"})),
+    "webapp.sandbox_test": ("product_builder", "owner_gated",
+                             frozenset({"workspace.read", "process.run"})),
     "web.browser_test": ("product_builder", "owner_gated",
                          frozenset({"workspace.read", "browser.run"})),
     "research.opportunity": ("opportunity_researcher", "owner_gated",
@@ -146,6 +148,10 @@ def _dispatch(skill_id, payload):
                 source_sha256=payload["source_sha256"],
                 revision_feedback=payload["revision_feedback"])
         return propose(payload["slug"], payload["brief"])
+    if skill_id == "webapp.sandbox_test":
+        from agentforge.webapp_sandbox import verify
+        return verify(payload["proposal_id"], payload["sha256"],
+                      confirm_external_run=True)
     if skill_id == "web.browser_test":
         from agentforge.browser_validation import validate
         return validate("project", payload["slug"], confirm_browser_run=True,
@@ -285,6 +291,18 @@ def _safe_failure(skill_id, exc):
                 return "HTML_INCOMPLETE: Model output was not a complete document."
             return "BUILDER_INVALID_OUTPUT: Generated website failed validation."
         return "BUILDER_EXECUTION_FAILED: Check model runtime and builder contracts."
+    if skill_id == "webapp.sandbox_test":
+        label = str(exc)
+        if isinstance(exc, (RuntimeError, PermissionError)) and label.startswith(
+                "SANDBOX_UNAVAILABLE"):
+            return "SANDBOX_UNAVAILABLE: Configure Docker and a pinned local Linux QA image."
+        if isinstance(exc, RuntimeError) and label.startswith("SANDBOX_TIMEOUT"):
+            return "SANDBOX_TIMEOUT: Container build/test exceeded its time limit."
+        if isinstance(exc, RuntimeError) and label.startswith("SANDBOX_BUILD_FAILED"):
+            return "SANDBOX_BUILD_FAILED: React tests/build did not pass in the container."
+        if isinstance(exc, PermissionError) and label.startswith("SANDBOX_SOURCE_STALE"):
+            return "SANDBOX_SOURCE_STALE: Proposal SHA no longer matches."
+        return "SANDBOX_FAILED: Review local Docker setup; no native code executed."
     if skill_id == "webapp.create":
         import socket
         from urllib.error import HTTPError, URLError
