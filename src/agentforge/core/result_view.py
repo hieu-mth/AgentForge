@@ -64,7 +64,7 @@ def present(skill_id, result):
                     "network": "none", "source_mount": "read_only",
                     "deploy": False}
         return {"kind": "webapp_qa", "status": "INVALID_RESULT"}
-    if skill_id == "webapp.create" and isinstance(result, dict):
+    if skill_id in {"webapp.create", "webapp.develop"} and isinstance(result, dict):
         import re
         pid = result.get("proposal_id")
         sha = result.get("sha256")
@@ -74,6 +74,9 @@ def present(skill_id, result):
                 and isinstance(slug, str) and re.fullmatch(r"[a-z][a-z0-9-]{2,39}", slug)):
             return {"kind": "webapp", "project_slug": slug,
                     "proposal_id": pid, "sha256": sha,
+                    "format": ("agentforge.webapp.ai-code.v1"
+                               if skill_id == "webapp.develop"
+                               else "agentforge.webapp.react.v1"),
                     "status": "PROPOSED_NOT_APPLIED",
                     "execution_authorized": False, "deployment_authorized": False}
         return {"kind": "webapp", "status": "INVALID_RESULT"}
