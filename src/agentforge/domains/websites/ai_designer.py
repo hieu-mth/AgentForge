@@ -145,6 +145,11 @@ def _luminance(color):
     channel = [v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4 for v in rgb]
     return .2126 * channel[0] + .7152 * channel[1] + .0722 * channel[2]
 
+def _contrast(first, second):
+    left, right = _luminance(first), _luminance(second)
+    return (max(left, right) + .05) / (min(left, right) + .05)
+
+
 def _best_text(background):
     brightness = _luminance(background)
     dark = "#17212b"
@@ -174,7 +179,7 @@ background:transparent;color:var(--ink)}.button:focus-visible{outline-offset:4px
 padding:var(--spacing) 0}.hero h1{font-size:clamp(2.6rem,6vw,5.6rem);line-height:1.06;margin-bottom:24px}
 .hero p.summary{color:var(--ink);opacity:.8;font-size:clamp(1rem,1.8vw,1.2rem);max-width:580px}
 .eyebrow{font-size:.8rem;letter-spacing:.14em;font-weight:800;text-transform:uppercase;
-margin:0 0 18px;color:var(--accent)}.actions{display:flex;gap:14px;flex-wrap:wrap;margin-top:32px}
+margin:0 0 18px;color:var(--label-ink)}.actions{display:flex;gap:14px;flex-wrap:wrap;margin-top:32px}
 .hero-art{min-height:360px;border-radius:var(--art-radius);overflow:hidden;
 position:relative;background:linear-gradient(145deg,var(--accent),var(--surface))}
 .hero-art:before,.hero-art:after{content:"";position:absolute;display:block}
@@ -247,8 +252,10 @@ def render(spec, *, phone=None):
     bg, surface, accent = (style[k] for k in ("background", "surface", "accent"))
     ink, surface_ink, accent_ink = (_best_text(c) for c in (bg, surface, accent))
     radius = style["radius"]
+    # Preserve model palette, but never sacrifice small text readability.
+    label_ink = accent if _contrast(accent, bg) >= 4.5 else ink
     vars_css = (":root{--background:" + bg + ";--surface:" + surface +
-                ";--accent:" + accent + ";--ink:" + ink +
+                ";--accent:" + accent + ";--label-ink:" + label_ink + ";--ink:" + ink +
                 ";--surface-ink:" + surface_ink + ";--accent-ink:" + accent_ink +
                 ";--line:" + ("#d2d3d3" if ink=="#17212b" else "#59616c") +
                 ";--family:" + FONT_STACKS[style["font"]] +
