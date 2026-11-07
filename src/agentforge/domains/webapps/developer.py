@@ -171,9 +171,12 @@ def _compile(spec, slug):
     return [{"path": path, "content": files[path]} for path in sorted(files)]
 
 
-def _digest(slug, brief, title, summary, files):
-    body = json.dumps({"slug": slug, "brief": brief, "title": title,
-                       "summary": summary, "files": files}, ensure_ascii=False,
+def _digest(slug, brief, title, summary, files, *, architecture=None):
+    record = {"slug":slug,"brief":brief,"title":title,
+              "summary":summary,"files":files}
+    if architecture is not None:
+        record["architecture"] = architecture
+    body = json.dumps(record, ensure_ascii=False,
                       sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
@@ -197,9 +200,19 @@ def provider(pid):
     raise ValueError("Unknown application proposal")
 
 
-def propose(slug, brief):
+def propose(slug, brief, *, architecture_id=None, architecture_sha=None):
     slug = base._name(slug, base.SLUG, "slug")
     brief = _text(brief, 6000, "brief")
+    lineage = None
+    if architecture_id is not None or architecture_sha is not None:
+        if not isinstance(architecture_id, str) or not isinstance(architecture_sha, str):
+            raise ValueError("APP_ARCHITECTURE_INVALID")
+        from agentforge.domains.webapps.architect import read
+        architecture = read(architecture_id, architecture_sha)
+        if architecture["project_slug"] != slug or architecture["brief"] != brief:
+            raise PermissionError("APP_ARCHITECTURE_MISMATCH")
+        lineage = {"architecture_id":architecture_id,
+                   "architecture_sha":architecture_sha}
     target = PROJECTS / slug
     base._path_guard(target)
     if target.exists():
@@ -225,6 +238,14 @@ def propose(slug, brief):
         "One model call, no automatic retry. "
         "OWNER BRIEF (UNTRUSTED DATA):\\n" + brief
     )
+    if lineage is not None:
+        prompt += (
+            "\n\nVERIFIED ARCHITECT PLAN (UNTRUSTED TASK DATA):\n"
+            + json.dumps(architecture["spec"], ensure_ascii=False,
+                         separators=(",", ":"))
+            + "\nImplement these local UI flows and sections. "
+              "State limitations honestly where no backend exists."
+        )
     spec = validate_code(generate_json(prompt, CODE_SCHEMA,
                                        worker_id=WORKER_ID))
     files = _compile(spec, slug)
@@ -235,10 +256,13 @@ def propose(slug, brief):
         "summary": spec["summary"],
         "format": FORMAT, "status": "PROPOSED_NOT_APPLIED",
         "files": files, "sha256": _digest(
-            slug, brief, spec["title"], spec["summary"], files),
+            slug, brief, spec["title"], spec["summary"], files,
+            architecture=lineage),
         "execution_authorized": False, "spending_authorized": False,
         "deployment_authorized": False,
     }
+    if lineage is not None:
+        document["architecture"] = lineage
     path = _proposal_path(pid)
     path.parent.mkdir(parents=True, exist_ok=True)
     base._path_guard(path)
@@ -248,7 +272,7 @@ def propose(slug, brief):
         "proposal_id": pid, "project_slug": slug,
         "sha256": document["sha256"], "proposal_path": str(path),
         "format": FORMAT, "files": [x["path"] for x in files],
-        "execution_authorized": False,
+        "execution_authorized": False, "architecture_id":architecture_id,
     }
 
 
@@ -261,7 +285,7 @@ def _read_proposal(pid):
               "title", "summary", "format", "status", "files", "sha256",
               "execution_authorized", "spending_authorized",
               "deployment_authorized"}
-    if (not isinstance(doc, dict) or set(doc) != fields
+    if (not isinstance(doc, dict) or set(doc) not in (fields, fields | {"architecture"})
             or type(doc["schema_version"]) is not int
             or doc["schema_version"] != 1 or doc["proposal_id"] != pid
             or doc["status"] != "PROPOSED_NOT_APPLIED"
@@ -291,7 +315,17 @@ def _read_proposal(pid):
                           "files": model_files})
     if not isinstance(doc["sha256"], str) or not base.SHA.fullmatch(doc["sha256"]):
         raise ValueError("Invalid AI Developer digest")
-    if _digest(slug, brief, title, summary, files) != doc["sha256"]:
+    lineage = doc.get("architecture")
+    if lineage is not None:
+        if not isinstance(lineage, dict) or set(lineage) != {
+                "architecture_id", "architecture_sha"}:
+            raise ValueError("APP_ARCHITECTURE_INVALID")
+        from agentforge.domains.webapps.architect import read
+        architecture = read(lineage["architecture_id"], lineage["architecture_sha"])
+        if architecture["project_slug"] != slug or architecture["brief"] != brief:
+            raise PermissionError("APP_ARCHITECTURE_MISMATCH")
+    if _digest(slug, brief, title, summary, files,
+               architecture=lineage) != doc["sha256"]:
         raise ValueError("AI Developer proposal SHA mismatch")
     # A hash alone is not an authentication signature; recompute the fixed
     # trusted scaffold to prevent a locally edited proposal from replacing
