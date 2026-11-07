@@ -282,16 +282,15 @@ def render(spec, *, phone=None):
                 '</div><h3>' + _safe(item["title"]) + '</h3><p>' +
                 _safe(item["body"]) + '</p></article>'
             )
-        if not item_html and section["kind"] in ("story", "callout"):
-            item_html = '<p class="intro">' + _safe(section["intro"]) + '</p>'
         intro = '<p class="intro">' + _safe(section["intro"]) + '</p>' if section["intro"] else ""
+        items_html = '<div class="items">' + item_html + '</div>' if item_html else ""
         content.append(
             '<section class="section section--' + section["kind"] +
             ' variant-' + section["variant"] + '" id="sec-' + str(index) +
             '" aria-labelledby="section-heading-' + str(index) + '"><div class="wrapper">' +
             ('<p class="eyebrow">' + _safe(section["eyebrow"]) + '</p>' if section["eyebrow"] else '') +
             '<h2 id="section-heading-' + str(index) + '">' + _safe(section["title"]) +
-            '</h2>' + intro + '<div class="items">' + item_html + '</div></div></section>'
+            '</h2>' + intro + items_html + '</div></section>'
         )
     primary = ("tel:" + escape(phone, quote=True)) if phone else "#contact"
     contact_action = ('<a class="button" href="tel:' + escape(phone, quote=True) +
