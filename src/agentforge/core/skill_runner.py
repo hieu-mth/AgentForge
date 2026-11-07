@@ -19,7 +19,7 @@ POLICY = {
                    frozenset({"model.invoke", "workspace.propose"})),
     "webapp.create": ("product_builder", "owner_gated",
                       frozenset({"model.invoke", "workspace.propose"})),
-    "webapp.develop": ("product_builder", "owner_gated",
+    "webapp.develop": ("webapp_developer", "owner_gated",
                        frozenset({"model.invoke", "workspace.propose"})),
     "webapp.sandbox_test": ("product_builder", "owner_gated",
                              frozenset({"workspace.read", "process.run"})),
