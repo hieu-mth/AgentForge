@@ -16,6 +16,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from agentforge import webapp_builder as builder
+from agentforge import webapp_developer
 from agentforge.paths import REPOSITORY_ROOT
 
 ROOT = REPOSITORY_ROOT
@@ -82,7 +83,8 @@ def verify(proposal_id, sha256, *, confirm_external_run=False):
     """Bounded local container build after separate explicit Owner approval."""
     if confirm_external_run is not True:
         raise PermissionError("SANDBOX_APPROVAL_REQUIRED")
-    document, _ = builder._read_proposal(proposal_id)
+    provider = webapp_developer.provider(proposal_id)
+    document, _ = provider._read_proposal(proposal_id)
     if sha256 != document["sha256"]:
         raise PermissionError("SANDBOX_SOURCE_STALE")
     # Never try native npm or any process if pinned Docker is unavailable.
@@ -157,6 +159,7 @@ def verify(proposal_id, sha256, *, confirm_external_run=False):
         "source_mount": "read_only",
         "model_called": False,
         "deployment_authorized": False,
+        "ai_code_experimental": provider is not builder,
     }
 
 

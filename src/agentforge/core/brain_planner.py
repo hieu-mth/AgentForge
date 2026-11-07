@@ -11,6 +11,7 @@ TEMPLATES = {
     "website.campaign": ("slug", "dataset"),
     "website.draft": ("slug", "brief"),
     "webapp.draft": ("slug", "brief"),
+    "webapp.develop": ("slug", "brief"),
     "webapp.revision": ("slug", "brief", "source_proposal_id",
                         "source_sha256", "revision_feedback"),
     "webapp.qa": ("proposal_id", "sha256", "confirm_external_run"),
@@ -82,6 +83,11 @@ def _steps(template, inputs):
             if len(feedback) < 10:
                 raise brain_store.BrainError("Feedback must have 10+ characters")
         steps = [("webapp.create", dict(inputs))]
+    elif template == "webapp.develop":
+        from agentforge.webapp_builder import SLUG, _name, _text
+        _name(inputs["slug"], SLUG, "slug")
+        _text(inputs["brief"], "brief", 6000)
+        steps = [("webapp.develop", dict(inputs))]
     elif template == "webapp.qa":
         from agentforge.webapp_builder import PROPOSAL, SHA, _name
         _name(inputs["proposal_id"], PROPOSAL, "proposal id")

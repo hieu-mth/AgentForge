@@ -1,0 +1,34 @@
+schema_version = 1
+id = "webapp.develop"
+version = "0.1.0"
+description = "Experimental owner-reviewed AI-authored React JSX/CSS proposals; no automatic code execution, package install or deployment."
+worker_id = "webapp_developer"
+execution_mode = "owner_gated"
+required_permissions = ["model.invoke", "workspace.propose"]
+required_tools = ["model", "filesystem"]
+artifact_types = ["app_proposal", "react_source"]
+quality_checks = ["source_allowlist", "security_screen"]
+
+[limits]
+timeout_seconds = 240
+estimated_model_calls = 1
+
+[input_schema]
+type = "object"
+required = ["slug", "brief"]
+additional_properties = false
+
+[input_schema.properties]
+slug = "string"
+brief = "string"
+
+[output_schema]
+type = "object"
+required = ["proposal_id", "project_slug", "sha256", "execution_authorized"]
+additional_properties = true
+
+[output_schema.properties]
+proposal_id = "string"
+project_slug = "string"
+sha256 = "string"
+execution_authorized = "boolean"

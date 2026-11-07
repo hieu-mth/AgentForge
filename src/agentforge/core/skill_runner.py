@@ -19,6 +19,8 @@ POLICY = {
                    frozenset({"model.invoke", "workspace.propose"})),
     "webapp.create": ("product_builder", "owner_gated",
                       frozenset({"model.invoke", "workspace.propose"})),
+    "webapp.develop": ("webapp_developer", "owner_gated",
+                       frozenset({"model.invoke", "workspace.propose"})),
     "webapp.sandbox_test": ("product_builder", "owner_gated",
                              frozenset({"workspace.read", "process.run"})),
     "web.browser_test": ("product_builder", "owner_gated",
@@ -147,6 +149,9 @@ def _dispatch(skill_id, payload):
                 source_proposal_id=payload["source_proposal_id"],
                 source_sha256=payload["source_sha256"],
                 revision_feedback=payload["revision_feedback"])
+        return propose(payload["slug"], payload["brief"])
+    if skill_id == "webapp.develop":
+        from agentforge.webapp_developer import propose
         return propose(payload["slug"], payload["brief"])
     if skill_id == "webapp.sandbox_test":
         from agentforge.webapp_sandbox import verify
@@ -291,6 +296,24 @@ def _safe_failure(skill_id, exc):
                 return "HTML_INCOMPLETE: Model output was not a complete document."
             return "BUILDER_INVALID_OUTPUT: Generated website failed validation."
         return "BUILDER_EXECUTION_FAILED: Check model runtime and builder contracts."
+    if skill_id == "webapp.develop":
+        import socket
+        from urllib.error import HTTPError, URLError
+        if isinstance(exc, HTTPError):
+            return "MODEL_HTTP_ERROR: AI Developer model endpoint returned HTTP error."
+        if isinstance(exc, (TimeoutError, socket.timeout)):
+            return "MODEL_TIMEOUT: AI Developer inference timed out."
+        if isinstance(exc, URLError):
+            return "MODEL_UNAVAILABLE: Cannot reach model."
+        if isinstance(exc, FileExistsError):
+            return "APP_PROJECT_EXISTS: Use a new project slug."
+        if isinstance(exc, json.JSONDecodeError):
+            return "APP_CODE_JSON_INVALID: Model did not produce valid JSON."
+        if isinstance(exc, ValueError) and str(exc).startswith("APP_CODE_UNSAFE:"):
+            return "APP_CODE_UNSAFE: Generated code includes blocked remote/active patterns."
+        if isinstance(exc, ValueError) and str(exc).startswith("APP_CODE_INVALID:"):
+            return "APP_CODE_INVALID: Generated React source failed schema validation."
+        return "APP_CODE_FAILED: No code was executed or deployed."
     if skill_id == "webapp.sandbox_test":
         label = str(exc)
         if isinstance(exc, (RuntimeError, PermissionError)) and label.startswith(

@@ -343,12 +343,16 @@ export default function App() {
           <Typography.Paragraph>{scene.caption}</Typography.Paragraph>
         </div>)}
       </Card>}
-      {task.report?.kind==='webapp'&&<Card title="Ứng dụng React marketplace — bản nháp mã nguồn"
+      {task.report?.kind==='webapp'&&<Card title={task.report.format==='agentforge.webapp.ai-code.v1'
+        ? 'AI Developer thử nghiệm — mã React cần kiểm duyệt'
+        : 'Ứng dụng React marketplace — bản nháp mã nguồn'}
         style={{marginTop:18}} extra={<Button onClick={()=>openWebapp(task.report.proposal_id)}>
-          Xem mã nguồn & yêu cầu sửa</Button>}>
+          Xem mã nguồn & duyệt</Button>}>
         <Alert type="warning" showIcon
           message="Mã nguồn mới chỉ được tạo đề xuất, chưa thực thi"
-          description="V4.0b tạo dữ liệu demo do AI đề xuất và kết hợp với React code đã được kiểm tra. Chưa có AI tự viết logic tùy ý, chưa chạy npm, không có thanh toán thật."/>
+          description={task.report.format==='agentforge.webapp.ai-code.v1'
+            ? 'AI đã đề xuất mã JSX/CSS tùy biến. Mã không được thực thi hay chứng minh an toàn; không chạy npm trên máy chủ. Chỉ kiểm thử trong Docker với quyền riêng.'
+            : 'V4.0b tạo dữ liệu demo do AI đề xuất và kết hợp với React code đã được kiểm tra. Chưa chạy npm, không có thanh toán thật.'}/>
         <Descriptions style={{marginTop:16}} column={1} bordered size="small" items={[
           {key:'project',label:'Dự án',children:task.report.project_slug},
           {key:'proposal',label:'Proposal',children:<code>{task.report.proposal_id}</code>},
@@ -357,17 +361,24 @@ export default function App() {
         <Typography.Paragraph type="secondary" style={{marginTop:14}}>
           Kiểm tra proposal và mã nguồn trên máy Windows trước khi duyệt lưu:
         </Typography.Paragraph>
-        <pre className="source-text">{[
-          'cd D:\\AgentForge',
-          '.\\.venv\\Scripts\\python.exe -m agentforge.webapp_builder inspect '+task.report.proposal_id,
-          'notepad .\\data\\company\\webapp_builder\\proposals\\'+task.report.proposal_id+'.json',
-          '.\\.venv\\Scripts\\python.exe -m agentforge.webapp_builder apply '+task.report.proposal_id+' --sha256 '+task.report.sha256+' --confirm-write',
-          'cd workspace\\webapps\\'+task.report.project_slug,
-          'npm.cmd install',
-          'npm.cmd test',
-          'npm.cmd run build',
-          'npm.cmd run dev',
-        ].join('\n')}</pre>
+        <pre className="source-text">{(task.report.format==='agentforge.webapp.ai-code.v1'
+          ? [
+            'cd D:\\AgentForge',
+            '.\\.venv\\Scripts\\python.exe -m agentforge.webapp_developer inspect '+task.report.proposal_id,
+            'notepad .\\data\\company\\webapp_developer\\proposals\\'+task.report.proposal_id+'.json',
+            '# REVIEW source; do not execute untrusted JSX on Windows.',
+            '# Use the Dashboard sandbox QA Goal with separate process.run approval.',
+          ] : [
+            'cd D:\\AgentForge',
+            '.\\.venv\\Scripts\\python.exe -m agentforge.webapp_builder inspect '+task.report.proposal_id,
+            'notepad .\\data\\company\\webapp_builder\\proposals\\'+task.report.proposal_id+'.json',
+            '.\\.venv\\Scripts\\python.exe -m agentforge.webapp_builder apply '+task.report.proposal_id+' --sha256 '+task.report.sha256+' --confirm-write',
+            'cd workspace\\webapps\\'+task.report.project_slug,
+            'npm.cmd install',
+            'npm.cmd test',
+            'npm.cmd run build',
+            'npm.cmd run dev',
+          ]).join('\n')}</pre>
         <Typography.Paragraph type="secondary">
           Lệnh apply là bước phê duyệt bổ sung; chỉ chạy sau khi tự xem mã nguồn. npm install và npm run dev không được AgentForge tự động gọi.
         </Typography.Paragraph>

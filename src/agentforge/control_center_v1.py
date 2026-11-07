@@ -349,7 +349,7 @@ def _owner_action(server, path, request, session=None):
         return ops_control.set_mode(mode, confirm=True)
     if path.startswith("/api/webapps/") and (
             path.endswith("/revision") or path.endswith("/apply")):
-        from agentforge import webapp_builder
+        from agentforge import webapp_developer
         parts = path.split("/")
         if len(parts) != 5 or parts[1:3] != ["api", "webapps"]:
             raise ValueError("Invalid application action")
@@ -357,13 +357,16 @@ def _owner_action(server, path, request, session=None):
         if set(request) != ({"ack", "sha256", "feedback"} if action == "revision"
                               else {"ack", "sha256"}):
             raise ValueError("Invalid application request fields")
-        proposal = webapp_builder.inspect(proposal_id)
+        provider = webapp_developer.provider(proposal_id)
+        proposal = provider.inspect(proposal_id)
         if request.get("sha256") != proposal["sha256"]:
             raise PermissionError("Application proposal SHA mismatch")
         if (session is None or session.get("reviewed_webapps", {}).get(proposal_id)
                 != proposal["sha256"]):
             raise PermissionError("Inspect this exact app proposal before authorizing")
         if action == "revision":
+            if provider is not webapp_developer.base:
+                raise PermissionError("AI Developer source revision is not supported yet")
             if request["ack"] != "REQUEST_REVISION":
                 raise PermissionError("Explicit app revision acknowledgment required")
             from agentforge.webapp_feedback import request_revision
@@ -374,7 +377,7 @@ def _owner_action(server, path, request, session=None):
                 growth_db_path=server.growth_db_path)
         if request["ack"] != "APPLY_WEBAPP":
             raise PermissionError("Explicit app source approval required")
-        return webapp_builder.apply(
+        return provider.apply(
             proposal_id, sha256=proposal["sha256"], confirm_write=True)
     if path.startswith("/api/proposals/") and path.endswith("/revision"):
         from agentforge.website_feedback import request_revision
@@ -681,15 +684,19 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._reply(200, brain_store.list_memory(
                     db_path=self.server.brain_db_path))
             if route.startswith("/api/webapps/"):
-                from agentforge import webapp_builder
+                from agentforge import webapp_developer
                 parts = route.split("/")
                 if len(parts) != 4 or parts[1:3] != ["api", "webapps"]:
                     raise ValueError("Invalid application review route")
                 proposal_id = parts[3]
-                document, _ = webapp_builder._read_proposal(proposal_id)
+                provider = webapp_developer.provider(proposal_id)
+                document, _ = provider._read_proposal(proposal_id)
                 session = self._session()
                 session.setdefault("reviewed_webapps", {})[proposal_id] = document["sha256"]
-                comparison = webapp_builder.compare(proposal_id)
+                comparison = (provider.compare(proposal_id)
+                              if provider is webapp_developer.base
+                              else {"revision": False, "changed_fields": [],
+                                    "changed_files": []})
                 return self._reply(200, {
                     "proposal_id": proposal_id,
                     "sha256": document["sha256"],
@@ -698,6 +705,7 @@ class _Handler(BaseHTTPRequestHandler):
                     "format": document["format"],
                     "revision": document.get("revision"),
                     "comparison": comparison,
+                    "ai_code_experimental": provider is not webapp_developer.base,
                     "files": [{"path": file["path"], "content": file["content"]}
                               for file in document["files"]],
                     "execution_authorized": False,
