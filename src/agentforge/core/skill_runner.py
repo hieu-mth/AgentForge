@@ -332,21 +332,49 @@ def _safe_failure(skill_id, exc):
     if skill_id == "webapp.develop":
         import socket
         from urllib.error import HTTPError, URLError
+        from agentforge.model_registry import ModelConfigError
+        from agentforge.worker_registry import WorkerConfigError
         if isinstance(exc, HTTPError):
-            return "MODEL_HTTP_ERROR: AI Developer model endpoint returned HTTP error."
+            if getattr(exc, "code", None) == 429:
+                return "MODEL_RATE_LIMITED: Model provider rate limit; no automatic retry."
+            return "MODEL_HTTP_ERROR: AI Developer model endpoint rejected the request."
         if isinstance(exc, (TimeoutError, socket.timeout)):
             return "MODEL_TIMEOUT: AI Developer inference timed out."
         if isinstance(exc, URLError):
-            return "MODEL_UNAVAILABLE: Cannot reach model."
+            return "MODEL_UNAVAILABLE: Cannot reach the configured model."
+        if isinstance(exc, PermissionError):
+            return "MODEL_PERMISSION_DENIED: Check cloud consent and source SHA permissions."
+        if isinstance(exc, (ModelConfigError, WorkerConfigError)):
+            return "MODEL_CONFIG_INVALID: Check worker model and provider configuration."
         if isinstance(exc, FileExistsError):
             return "APP_PROJECT_EXISTS: Use a new project slug."
         if isinstance(exc, json.JSONDecodeError):
-            return "APP_CODE_JSON_INVALID: Model did not produce valid JSON."
-        if isinstance(exc, ValueError) and str(exc).startswith("APP_CODE_UNSAFE:"):
-            return "APP_CODE_UNSAFE: Generated code includes blocked remote/active patterns."
-        if isinstance(exc, ValueError) and str(exc).startswith("APP_CODE_INVALID:"):
-            return "APP_CODE_INVALID: Generated React source failed schema validation."
-        return "APP_CODE_FAILED: No code was executed or deployed."
+            return "APP_CODE_JSON_INVALID: Model returned incomplete or invalid JSON."
+        if isinstance(exc, ValueError):
+            if str(exc).startswith("APP_CODE_UNSAFE:"):
+                return "APP_CODE_UNSAFE: Generated code includes blocked remote/active patterns."
+            if str(exc).startswith("APP_CODE_INVALID:"):
+                return "APP_CODE_INVALID: Generated React source failed the file contract."
+            if str(exc).startswith("APP_ARCHITECTURE_"):
+                return "APP_ARCHITECTURE_INVALID: Signed Architect input is invalid."
+            return "APP_CODE_CONTRACT_INVALID: Generated React metadata/fields failed validation."
+        if isinstance(exc, RuntimeError):
+            reason = str(exc)
+            # Match only fixed errors originating from our trusted model adapter,
+            # never copy the exception body or model output to task history.
+            if reason.startswith("Gateway response stopped at max_tokens"):
+                return ("MODEL_OUTPUT_LIMIT: React JSON exceeded the cloud response "
+                        "token budget. Try a smaller app scope or a capable model.")
+            if (reason.startswith("Gateway returned no text content")
+                    or reason.startswith("Gateway response has no content blocks")
+                    or reason.startswith("Ollama returned an empty answer")):
+                return "MODEL_EMPTY_OUTPUT: Model returned no usable text."
+            if reason.startswith("Model did not return a JSON object"):
+                return "MODEL_JSON_OBJECT_REQUIRED: Model returned a non-object JSON value."
+            return "MODEL_RUNTIME_FAILED: Model gateway or generation failed."
+        if isinstance(exc, OSError):
+            return "APP_LOCAL_IO_FAILED: Cannot read the local template or write proposal."
+        return "APP_CODE_INTERNAL: Unexpected builder exception; no code was executed."
     if skill_id == "webapp.sandbox_test":
         label = str(exc)
         if isinstance(exc, (RuntimeError, PermissionError)) and label.startswith(
