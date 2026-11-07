@@ -152,7 +152,9 @@ export default function App() {
   const plan=async prompt => {
     const outcome=await runAction(()=>post('/api/workspace/request',
       {ack:'PLAN_ONLY',prompt,
-       max_model_calls:/ai company v5|agentforge v5|software company v5|công ty ai v5|multi.agent v5/i.test(prompt)?3:1}));
+       max_model_calls:(/ai company v5|agentforge v5|software company v5|công ty ai v5|multi.agent v5/i.test(prompt)
+         || (['ai architect','ai developer','ai reviewer'].every(role=>prompt.toLocaleLowerCase('vi-VN').includes(role))
+             && /\bqa\b|kiểm tra|kiểm thử/i.test(prompt)))?3:1}));
     if(!outcome)return false;
     if(outcome.status==='NEEDS_CLARIFICATION'){message.warning(outcome.message);return false;}
     message.success('Đã lập kế hoạch, chưa gọi model');await openGoal(outcome.goal_id);return true;

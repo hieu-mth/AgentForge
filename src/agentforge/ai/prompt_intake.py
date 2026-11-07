@@ -34,7 +34,14 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
         "trang gioi thieu", "thiet ke web"))
     wants_storyboard = any(k in normalized for k in (
         "storyboard", "kich ban video", "noi dung video", "video script"))
-    wants_company = any(k in normalized for k in (
+    # Full-role requests such as "AI Architect ..., AI Developer ..., QA ...,
+    # AI Reviewer ..." are intentional V5 requests, even without a magic
+    # English prefix. The ordinary "AI Developer" prompt remains single-role.
+    full_company_roles = (
+        all(role in normalized for role in ("ai architect", "ai developer", "ai reviewer"))
+        and any(role in normalized for role in ("qa", "kiem thu", "kiem tra"))
+    )
+    wants_company = full_company_roles or any(k in normalized for k in (
         "ai company v5", "agentforge v5", "software company v5",
         "cong ty ai v5", "multi agent v5"))
     wants_advanced = any(k in normalized for k in (
@@ -53,7 +60,7 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
         inputs = {"slug": slug, "brief": text}
         title = "V5 AI Company: Architect → Developer → QA → Reviewer"
         if max_model_calls != 3:
-            raise ValueError("V5 requires 3 explicitly approved model-call slots.")
+            raise ValueError("V5 cần 3 lượt model dự kiến trong Cài đặt/Goal. Chưa gọi AI.")
     elif wants_advanced:
         # Advanced source generation is explicit opt-in, never inferred from
         # marketplace keywords. Owner still approves model & source SHA.
