@@ -312,6 +312,7 @@ export default function App() {
         <pre className="source-text">{[
           'cd D:\\AgentForge',
           '.\\.venv\\Scripts\\python.exe -m agentforge.webapp_builder inspect '+task.report.proposal_id,
+          'notepad .\\data\\company\\webapp_builder\\proposals\\'+task.report.proposal_id+'.json',
           '.\\.venv\\Scripts\\python.exe -m agentforge.webapp_builder apply '+task.report.proposal_id+' --sha256 '+task.report.sha256+' --confirm-write',
           'cd workspace\\webapps\\'+task.report.project_slug,
           'npm.cmd install',
