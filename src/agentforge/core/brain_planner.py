@@ -10,6 +10,7 @@ TEMPLATES = {
     "campaign.review": ("dataset",),
     "website.campaign": ("slug", "dataset"),
     "website.draft": ("slug", "brief"),
+    "webapp.draft": ("slug", "brief"),
     "website.browser": ("slug",),
     "media.produce": ("slug", "title", "scenes"),
     "media.review": ("run_id",),
@@ -65,6 +66,12 @@ def _steps(template, inputs):
         steps = [("web.create", {key: inputs[key] for key in
                  ("slug", "brief", "source_proposal_id", "source_sha256", "revision_feedback")
                  if key in inputs})]
+    elif template == "webapp.draft":
+        from agentforge.webapp_builder import SLUG, _text, _name
+        _name(inputs["slug"], SLUG, "slug")
+        _text(inputs["brief"], "brief", 6000)
+        steps = [("webapp.create", {
+            "slug": inputs["slug"], "brief": inputs["brief"]})]
     elif template == "website.campaign":
         payload = {"dataset": inputs["dataset"]}
         if "campaign" in inputs:
