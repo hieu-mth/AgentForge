@@ -165,7 +165,7 @@ class WebappSandboxV42Tests(unittest.TestCase):
             "webapp.sandbox_test", payload=payload),
             ["confirm_external_run", "process.run"])
         self.assertEqual(skill_runner.missing_grants(
-            "webapp.sandbox_test", grants=("process.run",),
+            "webapp.sandbox_test", granted=("process.run",),
             confirm_external_run=True, payload=payload), [])
         self.assertEqual(skill_runner._safe_failure(
             "webapp.sandbox_test", RuntimeError("SANDBOX_UNAVAILABLE: abc")),
