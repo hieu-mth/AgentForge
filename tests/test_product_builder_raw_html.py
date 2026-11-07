@@ -64,7 +64,8 @@ class TestReliableWebBuilder(unittest.TestCase):
         self.assertIn('href="#contact"', source)
         self.assertNotIn("<script", source)
         self.assertNotIn("https://", source)
-        self.assertEqual(json.loads(doc["files"][1]["content"]), validate_spec(DESIGN))
+        self.assertEqual(json.loads(doc["files"][1]["content"]),
+                         {"format": "agentforge.design.v1", "design": validate_spec(DESIGN)})
         self.assertNotEqual(product_quality.analyze(source)["status"], "FAIL")
         self.assertLess(len(source.encode("utf-8")), builder.MAX_FILE_BYTES)
 
