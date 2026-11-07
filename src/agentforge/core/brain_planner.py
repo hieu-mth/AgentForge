@@ -12,6 +12,7 @@ TEMPLATES = {
     "website.draft": ("slug", "brief"),
     "webapp.draft": ("slug", "brief"),
     "webapp.develop": ("slug", "brief"),
+    "webapp.company": ("slug", "brief"),
     "webapp.revision": ("slug", "brief", "source_proposal_id",
                         "source_sha256", "revision_feedback"),
     "webapp.qa": ("proposal_id", "sha256", "confirm_external_run"),
@@ -25,6 +26,21 @@ TEMPLATES = {
                             "description", "rights_attested"),
 }
 OPTIONAL = {"campaign", "photo_name", "rights_confirmed"}
+# Exact producer/field/length contracts for V5 output bindings. No arbitrary
+# LLM-selected paths or fields are allowed to flow between skills.
+V5_BINDINGS = {
+    ("webapp.develop", "architecture_id"): ("webapp.architect", "architecture_id", 32),
+    ("webapp.develop", "architecture_sha"): ("webapp.architect", "architecture_sha", 64),
+    ("webapp.audit", "proposal_id"): ("webapp.develop", "proposal_id", 32),
+    ("webapp.audit", "sha256"): ("webapp.develop", "sha256", 64),
+    ("webapp.review", "architecture_id"): ("webapp.architect", "architecture_id", 32),
+    ("webapp.review", "architecture_sha"): ("webapp.architect", "architecture_sha", 64),
+    ("webapp.review", "proposal_id"): ("webapp.develop", "proposal_id", 32),
+    ("webapp.review", "sha256"): ("webapp.develop", "sha256", 64),
+    ("webapp.review", "qa_report_id"): ("webapp.audit", "qa_report_id", 32),
+    ("webapp.review", "qa_report_sha"): ("webapp.audit", "qa_report_sha", 64),
+}
+
 ALIASES = {
     "campaign": "campaign.review", "website": "website.campaign",
     "browser": "website.browser", "media": "media.produce",
@@ -83,11 +99,32 @@ def _steps(template, inputs):
             if len(feedback) < 10:
                 raise brain_store.BrainError("Feedback must have 10+ characters")
         steps = [("webapp.create", dict(inputs))]
-    elif template == "webapp.develop":
+    elif template in {"webapp.develop", "webapp.company"}:
         from agentforge.webapp_builder import SLUG, _name, _text
         _name(inputs["slug"], SLUG, "slug")
         _text(inputs["brief"], "brief", 6000)
-        steps = [("webapp.develop", dict(inputs))]
+        if template == "webapp.develop":
+            steps = [("webapp.develop", dict(inputs))]
+        else:
+            # Four fixed roles and only three explicit model calls. Static QA
+            # checks provenance only; no build/browser/process is auto-started.
+            bind = lambda index, field: {"from_step":index,"field":field}
+            steps = [
+                ("webapp.architect", dict(inputs)),
+                ("webapp.develop", {**inputs,
+                    "architecture_id":bind(0,"architecture_id"),
+                    "architecture_sha":bind(0,"architecture_sha")}),
+                ("webapp.audit", {
+                    "proposal_id":bind(1,"proposal_id"),
+                    "sha256":bind(1,"sha256")}),
+                ("webapp.review", {
+                    "architecture_id":bind(0,"architecture_id"),
+                    "architecture_sha":bind(0,"architecture_sha"),
+                    "proposal_id":bind(1,"proposal_id"),
+                    "sha256":bind(1,"sha256"),
+                    "qa_report_id":bind(2,"qa_report_id"),
+                    "qa_report_sha":bind(2,"qa_report_sha")}),
+            ]
     elif template == "webapp.qa":
         from agentforge.webapp_builder import PROPOSAL, SHA, _name
         _name(inputs["proposal_id"], PROPOSAL, "proposal id")
@@ -159,19 +196,25 @@ def _steps(template, inputs):
     plan = []
     for skill_id, payload in steps:
         skill, required_permissions = skill_runner._contract(skill_id)
+        validated = dict(payload)
         for key, value in payload.items():
-            if isinstance(value, dict) and set(value) == {"from_step", "field"}:
-                if not (key == "run_id" and value["field"] == "run_id"
-                        and type(value["from_step"]) is int
-                        and 0 <= value["from_step"] < len(plan)):
-                    raise brain_store.BrainError("Invalid output binding")
-                check_payload = {**payload, key: "0" * 32}
-                skill_registry.validate_payload(skill, check_payload)
+            if not isinstance(value, dict):
+                continue
+            if set(value) != {"from_step", "field"}:
+                raise brain_store.BrainError("Untrusted nested goal input")
+            ref_idx, field = value["from_step"], value["field"]
+            if type(ref_idx) is not int or not 0 <= ref_idx < len(plan):
+                raise brain_store.BrainError("Invalid output binding index")
+            if key == "run_id" and field == "run_id":
+                size = 32  # preserve older vetted media / growth bindings
             else:
-                # Validate the whole payload below only after references filled.
-                pass
-        if not any(isinstance(v, dict) and "from_step" in v for v in payload.values()):
-            skill_registry.validate_payload(skill, payload)
+                contract = V5_BINDINGS.get((skill_id, key))
+                if (contract is None or field != contract[1]
+                        or plan[ref_idx]["skill_id"] != contract[0]):
+                    raise brain_store.BrainError("Unauthorized V5 output binding")
+                size = contract[2]
+            validated[key] = "0" * size
+        skill_registry.validate_payload(skill, validated)
         plan.append({
             "skill_id": skill_id, "worker_id": skill["worker_id"],
             "payload": payload,
@@ -224,7 +267,7 @@ def propose(title, template, inputs, *, max_model_calls=0,
 
 
 def resolve_payload(goal, index, *, task_db_path=None):
-    """Only allow hardcoded reference to a successful previous run_id."""
+    """Only allow typed, allowlisted previous-step refs and signed SHA values."""
     from agentforge import task_history
     plan = goal["plan"]
     step = plan[index]
@@ -233,25 +276,32 @@ def resolve_payload(goal, index, *, task_db_path=None):
         if not isinstance(value, dict):
             result[key] = value
             continue
-        if set(value) != {"from_step", "field"} or value["field"] != "run_id":
+        if set(value) != {"from_step", "field"}:
             raise brain_store.BrainError("Unsupported dataflow binding")
         source_index = value["from_step"]
+        field = value["field"]
         if type(source_index) is not int or source_index >= index or source_index < 0:
             raise brain_store.BrainError("Forward/cyclic dataflow reference forbidden")
+        if key == "run_id" and field == "run_id":
+            size = 32
+        else:
+            contract = V5_BINDINGS.get((step["skill_id"], key))
+            if (contract is None or field != contract[1]
+                    or plan[source_index]["skill_id"] != contract[0]):
+                raise brain_store.BrainError("Unauthorized V5 dataflow binding")
+            size = contract[2]
         previous = next((x for x in goal["steps"]
                          if x["step_index"] == source_index), None)
         if previous is None or previous["status"] != "SUCCEEDED":
             raise brain_store.BrainError("Dependent step has not succeeded")
-        from agentforge import task_history
         child = task_history.get_task(previous["child_task_id"], db_path=task_db_path)
         if child["status"] != "SUCCEEDED" or not isinstance(child["result"], dict):
             raise brain_store.BrainError("Missing immutable task result")
-        inner = child["result"]
-        run_id = inner.get("run_id")
-        if (not isinstance(run_id, str) or len(run_id) != 32
-                or not all(c in "0123456789abcdef" for c in run_id)):
-            raise brain_store.BrainError("Malformed produced run_id")
-        result[key] = run_id
+        output = child["result"].get(field)
+        if (not isinstance(output, str) or len(output) != size
+                or not all(c in "0123456789abcdef" for c in output)):
+            raise brain_store.BrainError("Malformed signed produced output")
+        result[key] = output
     skill, _ = skill_runner._contract(step["skill_id"])
     skill_registry.validate_payload(skill, result)
     return result
