@@ -15,7 +15,7 @@ KINDS = ("features", "story", "steps", "faq", "gallery", "comparison", "callout"
 VARIANTS = ("grid", "split", "list", "accent")
 FONTS = ("modern", "editorial", "rounded", "technical")
 HEROS = ("split", "centered", "stacked", "editorial")
-ARTS = ("orbit", "geometry", "gradient", "minimal")
+ARTS = ("orbit", "geometry", "gradient", "minimal", "none")
 DENSITIES = ("airy", "balanced", "compact")
 CARDS = ("elevated", "bordered", "flat")
 
@@ -103,7 +103,7 @@ def validate_spec(raw):
         raise ValueError("AI_DESIGN_INVALID: radius")
     clean["style"]["radius"] = style["radius"]
     hero = _shape(raw["hero"], HERO_SCHEMA["properties"], "hero")
-    clean["hero"] = {key: _text(hero[key], key, maximum, empty=key=="eyebrow")
+    clean["hero"] = {key: _text(hero[key], key, maximum, empty=key in ("eyebrow", "secondary_action"))
                      for key, maximum in (("eyebrow", 75), ("headline", 110),
                      ("description", 300), ("primary_action", 54),
                      ("secondary_action", 54))}
@@ -263,6 +263,13 @@ def render(spec, *, phone=None):
                 "px;--spacing:" + SPACING[style["density"]] + "}")
     css = vars_css + BASE_CSS
     hero = data["hero"]
+    hero_layout = style["hero_layout"] if style["art"] != "none" else "centered"
+    art_html = ('<div class="hero-art art-' + style["art"] +
+                '" role="img" aria-label="Minh họa trang trí bằng CSS, không phải ảnh sản phẩm"></div>'
+                if style["art"] != "none" else '')
+    secondary_html = ('<a class="button ghost" href="#sec-1">' +
+                      _safe(hero["secondary_action"]) + '</a>'
+                      if hero["secondary_action"] else '')
     sections = data["sections"]
     nav = "".join('<a href="#sec-' + str(index) + '">' + _safe(section["title"]) + '</a>'
                   for index, section in enumerate(sections[:2], 1))
@@ -293,7 +300,7 @@ def render(spec, *, phone=None):
     disclaimer = ("Số điện thoại được lấy từ yêu cầu của Owner và cần kiểm tra trước khi công bố."
                   if phone else "Chưa có thông tin liên hệ đã xác minh; Owner cần bổ sung trước khi sử dụng.")
     return ('<!doctype html><html lang="vi" data-af-version="designer-v1"'
-            ' data-af-layout="' + style["hero_layout"] + '"><head><meta charset="utf-8">'
+            ' data-af-layout="' + hero_layout + '"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
             '<meta name="color-scheme" content="light dark">'
             '<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;;'
@@ -305,16 +312,14 @@ def render(spec, *, phone=None):
             '<a class="brand" href="#top">' + _safe(data["brand"]) + '</a>'
             '<nav class="navigation" aria-label="Điều hướng">' + nav +
             '<a href="#contact">Liên hệ</a></nav></div></header><main>'
-            '<section class="wrapper hero hero-' + style["hero_layout"] +
+            '<section class="wrapper hero hero-' + hero_layout +
             '" aria-labelledby="hero-heading"><div class="hero-copy">' +
             ('<p class="eyebrow">' + _safe(hero["eyebrow"]) + '</p>' if hero["eyebrow"] else '') +
             '<h1 id="hero-heading">' + _safe(hero["headline"]) + '</h1>'
             '<p class="summary">' + _safe(hero["description"]) + '</p>'
             '<div class="actions"><a class="button" href="' + primary + '">' +
-            _safe(hero["primary_action"]) + '</a><a class="button ghost" href="#sec-1">' +
-            _safe(hero["secondary_action"]) + '</a></div></div>'
-            '<div class="hero-art art-' + style["art"] +
-            '" role="img" aria-label="Minh họa trang trí bằng CSS, không phải ảnh sản phẩm"></div></section>'
+            _safe(hero["primary_action"]) + '</a>' + secondary_html + '</div></div>' +
+            art_html + '</section>'
             + "".join(content) +
             '<section class="contact" id="contact"><div class="wrapper contact-inner">'
             '<p class="eyebrow">Liên hệ</p><h2>Trao đổi để tìm giải pháp phù hợp</h2><p>' +
