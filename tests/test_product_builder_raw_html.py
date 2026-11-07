@@ -95,6 +95,16 @@ class TestReliableWebBuilder(unittest.TestCase):
         self.assertNotIn('class="section section--steps', a)
         self.assertNotEqual(product_quality.analyze(b)["status"], "FAIL")
 
+    def test_low_contrast_ai_accent_uses_readable_text_fallback(self):
+        poor = deepcopy(DESIGN)
+        poor["style"].update({"background": "#ffffff", "surface": "#ffffff",
+                              "accent": "#fdfdfd"})
+        html = render(poor)
+        self.assertIn("--accent:#fdfdfd", html)
+        self.assertIn("--label-ink:#17212b", html)
+        self.assertIn("--accent-ink:#17212b", html)
+        self.assertNotEqual(product_quality.analyze(html)["status"], "FAIL")
+
     def test_legacy_html_parser_still_rejects_untrusted_code(self):
         fence = chr(96) * 3
         self.assertEqual(builder._standalone_html(fence + "html\n" + GOOD + "\n" + fence), GOOD)
