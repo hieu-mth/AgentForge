@@ -3,6 +3,9 @@ import { Alert, Button, Card, Collapse, Drawer, Input, Segmented, Space, Table, 
 import { badge, clip, needPreviewId } from '../components/shared.jsx';
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
+const FONT_LABELS={modern:'Hiện đại',editorial:'Thanh lịch',rounded:'Mềm mại',technical:'Công nghệ'};
+const HERO_LABELS={split:'Chia đôi',centered:'Căn giữa',stacked:'Xếp dọc',editorial:'Phong cách tạp chí'};
+
 
 export function Websites({data, showProposal}) {
   const proposals=(data?.tasks||[]).filter(x=>x.web_proposal);
@@ -39,10 +42,10 @@ export function ProposalDrawer({proposal, onClose, onRevise, onApply, busy}) {
       {design?.style && Array.isArray(design.sections) && <Card size="small"
         title="Thiết kế riêng do AI lựa chọn">
         <Space wrap>
-          <Text>Font: <strong>{design.style.font}</strong></Text>
-          <Text>Hero: <strong>{design.style.hero_layout}</strong></Text>
+          <Text>Kiểu chữ: <strong>{FONT_LABELS[design.style.font]||'Theo AI'}</strong></Text>
+          <Text>Bố cục mở đầu: <strong>{HERO_LABELS[design.style.hero_layout]||'Theo AI'}</strong></Text>
           <Text>Bảng màu: <Text code>{[design.style.background,design.style.surface,design.style.accent].join(' · ')}</Text></Text>
-          <Text>Section: <strong>{design.sections.length}</strong></Text>
+          <Text>Mục nội dung: <strong>{design.sections.length}</strong></Text>
         </Space>
         <Paragraph type="secondary" style={{margin:'8px 0 0'}}>
           {design.sections.map(item=>item.title).join(' → ')}
@@ -68,7 +71,7 @@ export function ProposalDrawer({proposal, onClose, onRevise, onApply, busy}) {
           description="Có thể đổi thứ tự/số lượng section, màu HEX, font, hero, kiểu thẻ và nội dung. Không tự viết JavaScript hoặc gọi Internet. Nếu không có thay đổi hiển thị, hệ thống sẽ báo lỗi thay vì trả lại bản y hệt."/>
         <TextArea rows={3} maxLength={3000} showCount value={feedback}
           onChange={e=>setFeedback(e.target.value)}
-          placeholder="Ví dụ: Hero nhìn còn thô, thay bố cục cho sang trọng hơn, có hình ảnh nệm và CTA rõ ràng trên điện thoại..."/>
+          placeholder="Ví dụ: Thay hero sang phong cách tạp chí, đổi bảng màu sang kem và nâu, thêm mục câu hỏi thường gặp, giữ nút tư vấn rõ trên điện thoại..."/>
         <Space wrap style={{marginTop:20,justifyContent:'flex-end',width:'100%'}}>
           <Button loading={busy} disabled={feedback.trim().length<10}
             onClick={()=>onRevise(proposal,feedback)}>Yêu cầu chỉnh sửa</Button>
