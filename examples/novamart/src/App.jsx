@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CATEGORIES, PRODUCTS } from './catalog.js';
+import { CATEGORIES, PRODUCTS, SHOP } from './catalog.js';
 import { cartTotals, changeCart, currency, listProducts, removeFromCart } from './store.js';
 
 const KNOWN=new Set(PRODUCTS.map(x=>x.id));
@@ -57,7 +57,7 @@ export default function App() {
     setCategory(id);
     document.getElementById('products')?.scrollIntoView({behavior:'smooth'});
   };
-  return <div className="app-shell">
+  return <div className="app-shell" style={{'--accent':SHOP.accent}}>
     <div className="utility-bar">
       <div className="site-container utility-inner">
         <span>✦ Marketplace thử nghiệm · Dữ liệu minh họa</span>
@@ -67,7 +67,7 @@ export default function App() {
     <header className="site-header">
       <div className="site-container header-inner">
         <a className="logo" href="#top" aria-label="NovaMart - về đầu trang">
-          <span className="logo-mark">n<span>✦</span></span><span>nova<span className="logo-tail">mart</span></span>
+          <span className="logo-mark">n<span>✦</span></span><span className="logo-wordmark">{SHOP.brand}</span>
         </a>
         <label className="header-search"><span aria-hidden="true" className="search-symbol">⌕</span>
           <span className="sr-only">Tìm kiếm sản phẩm</span>
@@ -90,9 +90,9 @@ export default function App() {
     <main id="top">
       <section className="site-container hero-area" aria-label="Giới thiệu NovaMart">
         <div className="hero-copy">
-          <div className="eyebrow"><span className="eyebrow-dot"/> NOVAMART COLLECTION 2026</div>
-          <h1>Chạm vào điều <em>bạn yêu thích.</em></h1>
-          <p>Khám phá một không gian mua sắm trực quan với trải nghiệm tìm kiếm, lọc sản phẩm và giỏ hàng demo hoạt động thật.</p>
+          <div className="eyebrow"><span className="eyebrow-dot"/> {SHOP.brand.toLocaleUpperCase('vi-VN')} · MARKETPLACE DEMO</div>
+          <h1>{SHOP.headline}</h1>
+          <p>{SHOP.tagline}</p>
           <div className="hero-actions">
             <a className="hero-primary" href="#products">Khám phá sản phẩm <span aria-hidden="true">↗</span></a>
             <a className="hero-secondary" href="#categories">Xem danh mục <span aria-hidden="true">→</span></a>
@@ -153,11 +153,11 @@ export default function App() {
       </section>
       <section className="site-container footer-banner"><div><span>HÀNH TRÌNH TIẾP THEO</span>
         <h2>Từ ý tưởng đến <em>ứng dụng thực tế.</em></h2>
-        <p>NovaMart là bài kiểm tra tính tương tác cho AgentForge V4. Không kết nối tài khoản, thanh toán hay giao vận.</p>
+        <p>{SHOP.brand} là bài kiểm tra tính tương tác cho AgentForge V4. Không kết nối tài khoản, thanh toán hay giao vận.</p>
       </div><span className="footer-banner-art" aria-hidden="true">↗</span></section>
     </main>
     <footer className="site-footer"><div className="site-container footer-inner"><div>
-      <strong>nova<span>mart</span><i>.</i></strong><p>Marketplace demo · AgentForge V4</p></div>
+      <strong>{SHOP.brand}<i>.</i></strong><p>Marketplace demo · AgentForge V4</p></div>
       <p>Dữ liệu giả lập · Không có đơn hàng thật · Hoạt động offline sau khi build</p></div></footer>
     {toast&&<div className="toast" role="status">{toast}</div>}
     {selected&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null);}}>
@@ -173,7 +173,7 @@ export default function App() {
       </section></div>}
     {cartOpen&&<div className="overlay drawer-overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setCartOpen(false);}}>
       <aside className="cart-drawer" role="dialog" aria-modal="true" aria-label="Giỏ hàng demo">
-        <div className="drawer-header"><div><span className="section-eyebrow">NOVA CART</span><h2>Giỏ hàng của bạn</h2>
+        <div className="drawer-header"><div><span className="section-eyebrow">{SHOP.brand.toLocaleUpperCase('vi-VN')} CART</span><h2>Giỏ hàng của bạn</h2>
           <p>{totals.items} sản phẩm demo</p></div>
           <button className="close-button" onClick={()=>setCartOpen(false)} aria-label="Đóng giỏ hàng">×</button></div>
         <div className="drawer-content">
