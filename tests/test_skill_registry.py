@@ -132,7 +132,7 @@ class TestSkillRegistry(unittest.TestCase):
               patch("subprocess.run") as shell,
               patch("urllib.request.urlopen") as network):
             registry = skills.load_registry(root=self.root)
-            self.assertEqual(len(registry), 24)
+            self.assertEqual(len(registry), 25)
             model.assert_not_called()
             shell.assert_not_called()
             network.assert_not_called()
@@ -151,9 +151,9 @@ class TestSkillRegistry(unittest.TestCase):
                         skills.main()
                     result = json.loads(stdout.getvalue())
                     if command == "validate":
-                        self.assertEqual(result["skill_count"], 24)
+                        self.assertEqual(result["skill_count"], 25)
                     elif command == "list":
-                        self.assertEqual(len(result), 24)
+                        self.assertEqual(len(result), 25)
                         self.assertTrue(all(not item["invocation_enabled"] for item in result))
                     else:
                         self.assertFalse(result["invocation_enabled"])
