@@ -1,12 +1,12 @@
 schema_version = 1
 id = "web.create"
-version = "0.3.0"
-description = "Create an owner-reviewable offline website from structured AI copy and audited local HTML/CSS."
+version = "0.4.0"
+description = "AI designs the site structure, sections, typography, palette and content as signed JSON; trusted compiler outputs offline HTML/CSS."
 worker_id = "product_builder"
 execution_mode = "owner_gated"
 required_permissions = ["model.invoke", "workspace.propose"]
 required_tools = ["model", "filesystem"]
-artifact_types = ["web_proposal", "static_html"]
+artifact_types = ["web_proposal", "static_html", "design_spec"]
 quality_checks = ["static_html_check"]
 
 [limits]
