@@ -170,9 +170,9 @@ def _compile(spec, slug):
     return [{"path": path, "content": files[path]} for path in sorted(files)]
 
 
-def _digest(slug, brief, summary, files):
-    body = json.dumps({"slug": slug, "brief": brief, "summary": summary,
-                       "files": files}, ensure_ascii=False,
+def _digest(slug, brief, title, summary, files):
+    body = json.dumps({"slug": slug, "brief": brief, "title": title,
+                       "summary": summary, "files": files}, ensure_ascii=False,
                       sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
@@ -230,9 +230,11 @@ def propose(slug, brief):
     pid = uuid4().hex
     document = {
         "schema_version": 1, "proposal_id": pid,
-        "project_slug": slug, "brief": brief, "summary": spec["summary"],
+        "project_slug": slug, "brief": brief, "title": spec["title"],
+        "summary": spec["summary"],
         "format": FORMAT, "status": "PROPOSED_NOT_APPLIED",
-        "files": files, "sha256": _digest(slug, brief, spec["summary"], files),
+        "files": files, "sha256": _digest(
+            slug, brief, spec["title"], spec["summary"], files),
         "execution_authorized": False, "spending_authorized": False,
         "deployment_authorized": False,
     }
@@ -255,7 +257,7 @@ def _read_proposal(pid):
         raise ValueError("Invalid AI Developer proposal")
     doc = json.loads(path.read_text(encoding="utf-8"))
     fields = {"schema_version", "proposal_id", "project_slug", "brief",
-              "summary", "format", "status", "files", "sha256",
+              "title", "summary", "format", "status", "files", "sha256",
               "execution_authorized", "spending_authorized",
               "deployment_authorized"}
     if (not isinstance(doc, dict) or set(doc) != fields
@@ -269,6 +271,7 @@ def _read_proposal(pid):
         raise ValueError("Invalid AI Developer proposal metadata")
     slug = base._name(doc["project_slug"], base.SLUG, "slug")
     brief = _text(doc["brief"], 6000, "brief")
+    title = _text(doc["title"], 100, "title")
     summary = _text(doc["summary"], 240, "summary")
     files = doc["files"]
     if (not isinstance(files, list) or not 8 <= len(files) <= 14
@@ -283,11 +286,13 @@ def _read_proposal(pid):
             or sum(len(x["content"].encode("utf-8")) for x in files) > MAX_TOTAL_BYTES):
         raise ValueError("Invalid AI Developer file set")
     model_files = [item for item in files if item["path"] in ALLOWED]
-    validate_code({"title": "Verified", "summary": summary,
-                   "files": model_files})
+    spec = validate_code({"title": title, "summary": summary,
+                          "files": model_files})
+    if _compile(spec, slug) != files:
+        raise ValueError("APP_CODE_INVALID: trusted project files were altered")
     if not isinstance(doc["sha256"], str) or not base.SHA.fullmatch(doc["sha256"]):
         raise ValueError("Invalid AI Developer digest")
-    if _digest(slug, brief, summary, files) != doc["sha256"]:
+    if _digest(slug, brief, title, summary, files) != doc["sha256"]:
         raise ValueError("AI Developer proposal SHA mismatch")
     return doc, path
 
