@@ -1,0 +1,4 @@
+id = "webapp_reviewer"
+model_ref = "local_primary"
+runtime = "manual"
+capabilities = ["review_signed_react_app"]
