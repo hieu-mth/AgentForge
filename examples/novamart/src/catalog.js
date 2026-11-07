@@ -1,4 +1,10 @@
 /** Demo-only catalogue. All titles/prices are fictional test data. */
+export const SHOP = Object.freeze({
+  brand: 'NovaMart',
+  headline: 'Chạm vào điều bạn yêu thích.',
+  tagline: 'Khám phá một không gian mua sắm trực quan với trải nghiệm tìm kiếm, lọc sản phẩm và giỏ hàng demo hoạt động thật.',
+  accent: '#ff633b',
+});
 export const CATEGORIES = [
   {id:'all',name:'Tất cả',icon:'✦'},
   {id:'electronics',name:'Điện tử',icon:'⌁'},
