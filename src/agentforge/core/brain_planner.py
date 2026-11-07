@@ -13,6 +13,7 @@ TEMPLATES = {
     "webapp.draft": ("slug", "brief"),
     "webapp.revision": ("slug", "brief", "source_proposal_id",
                         "source_sha256", "revision_feedback"),
+    "webapp.qa": ("proposal_id", "sha256", "confirm_external_run"),
     "website.browser": ("slug",),
     "media.produce": ("slug", "title", "scenes"),
     "media.review": ("run_id",),
@@ -81,6 +82,15 @@ def _steps(template, inputs):
             if len(feedback) < 10:
                 raise brain_store.BrainError("Feedback must have 10+ characters")
         steps = [("webapp.create", dict(inputs))]
+    elif template == "webapp.qa":
+        from agentforge.webapp_builder import PROPOSAL, SHA, _name
+        _name(inputs["proposal_id"], PROPOSAL, "proposal id")
+        if (not isinstance(inputs["sha256"], str)
+                or not SHA.fullmatch(inputs["sha256"])):
+            raise brain_store.BrainError("Invalid app QA proposal digest")
+        if inputs["confirm_external_run"] is not True:
+            raise brain_store.BrainError("Owner must explicitly request external QA")
+        steps = [("webapp.sandbox_test", dict(inputs))]
     elif template == "website.campaign":
         payload = {"dataset": inputs["dataset"]}
         if "campaign" in inputs:
