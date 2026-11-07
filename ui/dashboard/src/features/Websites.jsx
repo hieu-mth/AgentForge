@@ -25,7 +25,7 @@ export function ProposalDrawer({proposal, onClose, onRevise, onApply, busy}) {
   if (!proposal) return null;
   const designFile=(proposal.files||[]).find(file=>file.path==='site.json');
   let design=null;
-  try{if(designFile?.content)design=JSON.parse(designFile.content);}catch{design=null;}
+  try{if(designFile?.content){const record=JSON.parse(designFile.content);design=record?.format==='agentforge.design.v1'?record.design:null;}}catch{design=null;}
   const id=proposal.proposal_id, allowed=needPreviewId(id);
   return <Drawer title="Xem trước & phê duyệt website" open={!!proposal} onClose={onClose}
     size="min(1120px, 96vw)" destroyOnHidden extra={badge(proposal.status)}>
