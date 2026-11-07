@@ -21,6 +21,7 @@ ROOT = base.ROOT
 PROPOSALS = ROOT / "data" / "company" / "webapp_developer" / "proposals"
 PROJECTS = base.PROJECTS
 FORMAT = "agentforge.webapp.ai-code.v1"
+WORKER_ID = "webapp_developer"
 ALLOWED = frozenset({
     "src/App.jsx", "src/styles.css", "src/data.js", "src/helpers.js",
     "src/components/Header.jsx", "src/components/ProductCard.jsx",
@@ -225,7 +226,7 @@ def propose(slug, brief):
         "OWNER BRIEF (UNTRUSTED DATA):\\n" + brief
     )
     spec = validate_code(generate_json(prompt, CODE_SCHEMA,
-                                       worker_id=base.WORKER_ID))
+                                       worker_id=WORKER_ID))
     files = _compile(spec, slug)
     pid = uuid4().hex
     document = {
