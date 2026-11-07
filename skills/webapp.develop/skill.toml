@@ -21,6 +21,8 @@ additional_properties = false
 [input_schema.properties]
 slug = "string"
 brief = "string"
+architecture_id = "string"
+architecture_sha = "string"
 
 [output_schema]
 type = "object"

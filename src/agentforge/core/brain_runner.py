@@ -71,6 +71,10 @@ def _run_steps(goal_id, *, grants, confirm_model_call,
                brain_db_path, task_db_path):
     goal = store.get_goal(goal_id, db_path=brain_db_path)
     parent = goal["parent_task_id"]
+    # Each execute()/resume call can authorize AT MOST ONE model invocation
+    # and one external process. A single click must never spend 3 V5 calls.
+    model_used = False
+    process_used = False
     try:
         _verify(goal)
         while True:
@@ -93,17 +97,19 @@ def _run_steps(goal_id, *, grants, confirm_model_call,
                                  db_path=brain_db_path)
                 receipt = skill_runner.invoke(
                     step["skill_id"], payload, parent_id=parent,
-                    grants=grants, confirm_model_call=confirm_model_call,
+                    grants=grants,
+                    confirm_model_call=confirm_model_call and not model_used,
                     confirm_browser_run=confirm_browser_run,
-                    confirm_external_run=confirm_external_run, db_path=task_db_path)
+                    confirm_external_run=confirm_external_run and not process_used,
+                    db_path=task_db_path)
                 store.finish_step(goal_id, index, receipt["task_id"], receipt["status"],
                                   db_path=brain_db_path)
             elif previous["status"] == "WAITING_APPROVAL":
                 receipt = skill_runner.resume_waiting(
                     previous["child_task_id"], grants=grants,
-                    confirm_model_call=confirm_model_call,
+                    confirm_model_call=confirm_model_call and not model_used,
                     confirm_browser_run=confirm_browser_run,
-                    confirm_external_run=confirm_external_run,
+                    confirm_external_run=confirm_external_run and not process_used,
                     db_path=task_db_path)
                 if receipt["status"] != "WAITING_APPROVAL":
                     store.resume_step(goal_id, index, receipt["status"],
@@ -111,6 +117,11 @@ def _run_steps(goal_id, *, grants, confirm_model_call,
             else:
                 # DISPATCHING / terminal markers must NEVER cause a second invoke.
                 raise store.BrainError("Previously dispatched step cannot be replayed")
+            if receipt["status"] == "SUCCEEDED":
+                if "model.invoke" in step["required_permissions"]:
+                    model_used = True
+                if "process.run" in step["required_permissions"]:
+                    process_used = True
             if receipt["status"] == "WAITING_APPROVAL":
                 return _pause(goal_id, parent, index, receipt,
                               brain_db_path=brain_db_path, task_db_path=task_db_path)

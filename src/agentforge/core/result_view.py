@@ -53,6 +53,44 @@ def _picked(data, names):
 
 def present(skill_id, result):
     """Return only preapproved owner-visible statistics; no raw result fallback."""
+    if skill_id in {"webapp.architect","webapp.audit","webapp.review"}:
+        import re
+        if not isinstance(result,dict):
+            return {"kind":"v5_stage","status":"INVALID_RESULT"}
+        id_key = {"webapp.architect":"architecture_id",
+                  "webapp.audit":"qa_report_id",
+                  "webapp.review":"review_id"}[skill_id]
+        sha_key = {"webapp.architect":"architecture_sha",
+                   "webapp.audit":"qa_report_sha",
+                   "webapp.review":"review_sha"}[skill_id]
+        if (not isinstance(result.get(id_key),str)
+                or not re.fullmatch(r"[a-f0-9]{32}",result[id_key])
+                or not isinstance(result.get(sha_key),str)
+                or not re.fullmatch(r"[a-f0-9]{64}",result[sha_key])):
+            return {"kind":"v5_stage","status":"INVALID_RESULT"}
+        if skill_id=="webapp.architect":
+            return {"kind":"v5_architect","status":"REVIEW_REQUIRED",
+                    "architecture_id":result[id_key],
+                    "summary":str(result.get("summary",""))[:100]}
+        if skill_id=="webapp.audit":
+            return {"kind":"v5_static_qa","status":result.get("status"),
+                    "build_verified":False,"browser_verified":False,
+                    "message":"Static provenance/allowlist check only"}
+        if result.get("status")!="REVIEWED_NOT_APPROVED":
+            return {"kind":"v5_review","status":"INVALID_RESULT"}
+        missing = result.get("missing_features")
+        risks = result.get("risks")
+        return {"kind":"v5_review","status":"REVIEWED_NOT_APPROVED",
+                "recommendation":result.get("recommendation"),
+                "summary":str(result.get("summary",""))[:400],
+                "proposal_id":result.get("proposal_id"),
+                "missing_features":[x[:150] for x in missing[:8]
+                                     if isinstance(x,str)] if isinstance(missing,list) else [],
+                "risks":[x[:150] for x in risks[:8]
+                         if isinstance(x,str)] if isinstance(risks,list) else [],
+                "build_verified":False,"browser_verified":False,
+                "execution_authorized":False}
+
     if skill_id == "webapp.sandbox_test" and isinstance(result, dict):
         if (result.get("status") == "PASS"
                 and result.get("runtime") == "docker-local-linux"

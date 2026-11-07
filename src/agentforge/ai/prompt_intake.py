@@ -34,6 +34,9 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
         "trang gioi thieu", "thiet ke web"))
     wants_storyboard = any(k in normalized for k in (
         "storyboard", "kich ban video", "noi dung video", "video script"))
+    wants_company = any(k in normalized for k in (
+        "ai company v5", "agentforge v5", "software company v5",
+        "cong ty ai v5", "multi agent v5"))
     wants_advanced = any(k in normalized for k in (
         "ai developer", "react tuy bien", "web app tuy bien",
         "webapp tuy bien", "ung dung react tuy bien", "ai viet code"))
@@ -44,7 +47,14 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
     if wants_website and wants_storyboard:
         return {"status": "NEEDS_CLARIFICATION",
                 "message": "Hãy chọn làm website hoặc storyboard trước. Một yêu cầu tạo một kế hoạch."}
-    if wants_advanced:
+    if wants_company:
+        slug = "company-" + uuid4().hex[:12]
+        template = "webapp.company"
+        inputs = {"slug": slug, "brief": text}
+        title = "V5 AI Company: Architect → Developer → QA → Reviewer"
+        if max_model_calls != 3:
+            raise ValueError("V5 requires 3 explicitly approved model-call slots.")
+    elif wants_advanced:
         # Advanced source generation is explicit opt-in, never inferred from
         # marketplace keywords. Owner still approves model & source SHA.
         slug = "code-" + uuid4().hex[:12]
@@ -73,7 +83,7 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
         return {"status": "NEEDS_CLARIFICATION",
                 "message": "Hiện hỗ trợ marketplace React demo, website/landing page và storyboard video. Hãy mô tả một trong hai mục tiêu; chưa tự chọn skill khác."}
     policy = workspace_policy.read(db_path=policy_db_path)
-    if (template in {"website.draft", "webapp.draft", "webapp.develop"} and not policy["website_enabled"] or
+    if (template in {"website.draft", "webapp.draft", "webapp.develop", "webapp.company"} and not policy["website_enabled"] or
             template == "creative.storyboard" and not policy["storyboard_enabled"]):
         raise PermissionError("Role/workflow đã bị owner tắt trong Settings.")
     if max_model_calls > policy["max_estimated_model_calls"]:

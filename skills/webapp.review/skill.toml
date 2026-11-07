@@ -1,0 +1,33 @@
+schema_version = 1
+id = "webapp.review"
+version = "1.0.0"
+description = "Advisory model review of Architect goals versus SHA-bound React source after static QA."
+worker_id = "webapp_reviewer"
+execution_mode = "owner_gated"
+required_permissions = ["model.invoke", "workspace.propose"]
+required_tools = ["model", "filesystem"]
+artifact_types = ["review_advisory"]
+quality_checks = ["review_schema", "signed_qa_lineage"]
+[limits]
+timeout_seconds = 240
+estimated_model_calls = 1
+[input_schema]
+type = "object"
+required = ["architecture_id", "architecture_sha", "proposal_id", "sha256", "qa_report_id", "qa_report_sha"]
+additional_properties = false
+[input_schema.properties]
+architecture_id = "string"
+architecture_sha = "string"
+proposal_id = "string"
+sha256 = "string"
+qa_report_id = "string"
+qa_report_sha = "string"
+[output_schema]
+type = "object"
+required = ["review_id", "review_sha", "status", "execution_authorized"]
+additional_properties = true
+[output_schema.properties]
+review_id = "string"
+review_sha = "string"
+status = "string"
+execution_authorized = "boolean"

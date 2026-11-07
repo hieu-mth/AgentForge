@@ -1,0 +1,29 @@
+schema_version = 1
+id = "webapp.architect"
+version = "1.0.0"
+description = "Model-created, SHA-bound functional React requirements; no executable code."
+worker_id = "webapp_architect"
+execution_mode = "owner_gated"
+required_permissions = ["model.invoke", "workspace.propose"]
+required_tools = ["model", "filesystem"]
+artifact_types = ["architecture_proposal"]
+quality_checks = ["architecture_schema"]
+[limits]
+timeout_seconds = 240
+estimated_model_calls = 1
+[input_schema]
+type = "object"
+required = ["slug", "brief"]
+additional_properties = false
+[input_schema.properties]
+slug = "string"
+brief = "string"
+[output_schema]
+type = "object"
+required = ["architecture_id", "architecture_sha", "project_slug", "execution_authorized"]
+additional_properties = true
+[output_schema.properties]
+architecture_id = "string"
+architecture_sha = "string"
+project_slug = "string"
+execution_authorized = "boolean"

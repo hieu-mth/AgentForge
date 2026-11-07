@@ -129,7 +129,10 @@ export default function App() {
     }catch(e){authError(e);}
   };
   const openGoalResult=async selectedGoal=>{
-    const completed=(selectedGoal.step_runs||[]).find(step=>step.status==='SUCCEEDED'&&step.child_task_id);
+    const ordered=(selectedGoal.step_runs||[]).filter(step=>step.status==='SUCCEEDED'&&step.child_task_id);
+    const completed=selectedGoal.template==='webapp.company'
+      ? ordered.find(step=>step.skill_id==='webapp.review')||ordered.find(step=>step.skill_id==='webapp.develop')||ordered[0]
+      : ordered[0];
     if(!completed){message.warning('Không tìm thấy thành phẩm của kế hoạch này');return;}
     try{
       const detail=await api('/api/tasks/'+encodeURIComponent(completed.child_task_id));
@@ -148,7 +151,8 @@ export default function App() {
   };
   const plan=async prompt => {
     const outcome=await runAction(()=>post('/api/workspace/request',
-      {ack:'PLAN_ONLY',prompt,max_model_calls:1}));
+      {ack:'PLAN_ONLY',prompt,
+       max_model_calls:/ai company v5|agentforge v5|software company v5|công ty ai v5|multi.agent v5/i.test(prompt)?3:1}));
     if(!outcome)return false;
     if(outcome.status==='NEEDS_CLARIFICATION'){message.warning(outcome.message);return false;}
     message.success('Đã lập kế hoạch, chưa gọi model');await openGoal(outcome.goal_id);return true;
@@ -317,6 +321,28 @@ export default function App() {
         {key:'3',label:'Status',children:badge(task.status)},
         {key:'4',label:'Error',children:task.error||'Không có'},
       ]}/>
+      {task.report?.kind==='v5_review'&&<Card title="V5 — AI Reviewer (chưa duyệt sản phẩm)" style={{marginTop:18}}>
+        <Alert showIcon type="warning" message="Đánh giá mang tính tư vấn"
+          description="Đã kiểm tra nguồn và QA tĩnh. Chưa xác nhận ứng dụng chạy đúng, chưa build, chưa kiểm thử trình duyệt hoặc kiểm toán bảo mật."/>
+        <Descriptions bordered column={1} size="small" style={{marginTop:14}} items={[
+          {key:'status',label:'Trạng thái',children:task.report.status},
+          {key:'recommendation',label:'Đề xuất',children:task.report.recommendation},
+          {key:'summary',label:'Nhận xét',children:task.report.summary},
+        ]}/>
+        {(task.report.missing_features||[]).length>0&&<Typography.Paragraph style={{marginTop:14}}>
+          <strong>Chức năng có thể thiếu:</strong> {(task.report.missing_features||[]).join(' · ')}
+        </Typography.Paragraph>}
+        {(task.report.risks||[]).length>0&&<Typography.Paragraph>
+          <strong>Rủi ro:</strong> {(task.report.risks||[]).join(' · ')}
+        </Typography.Paragraph>}
+        <Button onClick={()=>openWebapp(task.report.proposal_id)}>
+          Mở mã nguồn React để Owner duyệt
+        </Button>
+      </Card>}
+      {task.report?.kind==='v5_static_qa'&&<Card title="V5 — QA tĩnh" style={{marginTop:18}}>
+        <Alert type="info" showIcon message="Chỉ kiểm tra mã nguồn, SHA và allowlist"
+          description="Không chạy npm, không chạy trình duyệt và không bảo đảm chức năng hoạt động."/>
+      </Card>}
       {task.report?.kind==='webapp_qa'&&<Card title="Kết quả QA React trong Docker"
         style={{marginTop:18}}>
         <Alert type={task.report.status==='PASS'?'success':'error'} showIcon
