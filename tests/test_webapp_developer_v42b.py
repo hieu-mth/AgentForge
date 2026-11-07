@@ -147,6 +147,21 @@ class AIReactDeveloperTests(unittest.TestCase):
             DEV._read_proposal(receipt["proposal_id"])
         self.assertFalse(DEV.PROJECTS.exists())
 
+    def test_forged_local_digest_cannot_replace_trusted_package_scripts(self):
+        receipt = self.propose()
+        path = Path(receipt["proposal_path"])
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        package = next(item for item in doc["files"] if item["path"] == "package.json")
+        content = json.loads(package["content"])
+        content["scripts"]["postinstall"] = "node -e 'process.exit(1)'"
+        package["content"] = json.dumps(content, ensure_ascii=False)
+        doc["sha256"] = DEV._digest(doc["project_slug"], doc["brief"],
+                                     doc["title"], doc["summary"], doc["files"])
+        path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "trusted project files"):
+            DEV._read_proposal(receipt["proposal_id"])
+        self.assertFalse(DEV.PROJECTS.exists())
+
     def test_manual_apply_only_writes_without_running_npm_or_overwriting(self):
         receipt = self.propose()
         with patch("subprocess.run") as process:
