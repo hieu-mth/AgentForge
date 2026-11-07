@@ -53,6 +53,17 @@ def _picked(data, names):
 
 def present(skill_id, result):
     """Return only preapproved owner-visible statistics; no raw result fallback."""
+    if skill_id == "webapp.sandbox_test" and isinstance(result, dict):
+        if (result.get("status") == "PASS"
+                and result.get("runtime") == "docker-local-linux"
+                and result.get("network") == "none"
+                and result.get("source_mount") == "read_only"):
+            return {"kind": "webapp_qa", "status": "PASS",
+                    "checks": ["node-unit-tests", "vite-production-build"],
+                    "sandbox": "docker-local-linux",
+                    "network": "none", "source_mount": "read_only",
+                    "deploy": False}
+        return {"kind": "webapp_qa", "status": "INVALID_RESULT"}
     if skill_id == "webapp.create" and isinstance(result, dict):
         import re
         pid = result.get("proposal_id")
