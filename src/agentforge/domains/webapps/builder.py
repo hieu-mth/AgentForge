@@ -268,7 +268,8 @@ def propose(slug, brief, *, source_proposal_id=None, source_sha256=None,
     )
     if previous_spec is not None:
         prompt += (
-            "\n\nOWNER CHANGE REQUEST (UNTRUSTED DATA):\n" + revision["feedback"]
+            "\n\nSOURCE PROPOSAL ID (AUDIT ONLY): " + source_proposal_id
+            + "\nOWNER CHANGE REQUEST (UNTRUSTED DATA):\n" + revision["feedback"]
             + "\nPREVIOUS VERIFIED APPLICATION DATA (UNTRUSTED DATA):\n"
             + json.dumps({key: previous_spec[key] for key in (
                 "brand", "headline", "tagline", "accent", "categories", "products"
