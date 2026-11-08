@@ -22,6 +22,31 @@ BUILDER_CLOUD_TEXT_MAX_TOKENS = 8192
 # tokens than a short research answer. Still one Owner-approved call; no retry.
 DEVELOPER_CLOUD_JSON_MAX_TOKENS = 8192
 
+# Ollama in non-streaming mode sends no answer until the whole React app is
+# generated. Keep shorter requests on the original 180s socket timeout; give
+# the explicitly approved Developer call room for larger structured output.
+DEFAULT_MODEL_TIMEOUT_SECONDS = 180
+DEFAULT_DEVELOPER_TIMEOUT_SECONDS = 600
+MAX_DEVELOPER_TIMEOUT_SECONDS = 900
+MAX_OLLAMA_DEVELOPER_STREAM_BYTES = 512_000
+MAX_OLLAMA_DEVELOPER_STREAM_EVENTS = 30_000
+
+
+def _request_timeout(worker_id):
+    if worker_id != "webapp_developer":
+        return DEFAULT_MODEL_TIMEOUT_SECONDS
+    raw = os.getenv("AGENTFORGE_DEVELOPER_TIMEOUT_SECONDS", "").strip()
+    if not raw:
+        return DEFAULT_DEVELOPER_TIMEOUT_SECONDS
+    if not raw.isascii() or not raw.isdecimal():
+        raise ModelConfigError(
+            "AGENTFORGE_DEVELOPER_TIMEOUT_SECONDS must be 60-900")
+    seconds = int(raw)
+    if not 60 <= seconds <= MAX_DEVELOPER_TIMEOUT_SECONDS:
+        raise ModelConfigError(
+            "AGENTFORGE_DEVELOPER_TIMEOUT_SECONDS must be 60-900")
+    return seconds
+
 DEFAULT_TEXT_SYSTEM = (
     "You are an AI Company research worker. "
     "Be accurate. Do not fabricate evidence. "
@@ -104,10 +129,11 @@ def resolve_runtime(worker_id, default_system):
     }
 
 
-def _ollama_chat(runtime, prompt, schema):
+def _ollama_chat(runtime, prompt, schema, *, worker_id=None):
+    stream_developer = worker_id == "webapp_developer" and schema is not None
     payload = {
         "model": runtime["model"],
-        "stream": False,
+        "stream": stream_developer,
         "think": False,
         "messages": [
             {"role": "system", "content": runtime["system_prompt"]},
@@ -124,10 +150,46 @@ def _ollama_chat(runtime, prompt, schema):
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=180) as response:
-        raw = json.load(response)
-
-    answer = raw["message"]["content"]
+    with urllib.request.urlopen(request, timeout=_request_timeout(worker_id)) as response:
+        if stream_developer:
+            parts = []
+            received_bytes = 0
+            completed = False
+            for event_count, line in enumerate(response, start=1):
+                # Each Ollama token repeats substantial JSON metadata; cap
+                # actual generated text, not inflated NDJSON transport bytes.
+                if (event_count > MAX_OLLAMA_DEVELOPER_STREAM_EVENTS
+                        or len(line) > MAX_OLLAMA_DEVELOPER_STREAM_BYTES):
+                    raise RuntimeError("Ollama stream exceeds safe size limit")
+                if not line.strip():
+                    continue
+                try:
+                    event = json.loads(line)
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    raise RuntimeError("Ollama stream returned invalid JSON") from None
+                if not isinstance(event, dict) or "error" in event:
+                    raise RuntimeError("Ollama stream returned invalid event")
+                message = event.get("message")
+                if message is not None:
+                    if (not isinstance(message, dict)
+                            or not isinstance(message.get("content"), str)):
+                        raise RuntimeError("Ollama stream returned invalid event")
+                    chunk = message["content"]
+                    received_bytes += len(chunk.encode("utf-8"))
+                    if received_bytes > MAX_OLLAMA_DEVELOPER_STREAM_BYTES:
+                        raise RuntimeError("Ollama stream exceeds safe size limit")
+                    parts.append(chunk)
+                elif event.get("done") is not True:
+                    raise RuntimeError("Ollama stream returned invalid event")
+                if event.get("done") is True:
+                    completed = True
+                    break
+            if not completed:
+                raise RuntimeError("Ollama stream ended before done")
+            answer = "".join(parts)
+        else:
+            raw = json.load(response)
+            answer = raw["message"]["content"]
     if not isinstance(answer, str) or not answer.strip():
         raise RuntimeError("Ollama returned an empty answer")
     return answer.strip()
@@ -165,7 +227,7 @@ def _anthropic_chat(runtime, prompt, schema, *, worker_id=None):
         },
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=180) as response:
+    with urllib.request.urlopen(request, timeout=_request_timeout(worker_id)) as response:
         raw = json.load(response)
 
     if not isinstance(raw, dict):
@@ -217,7 +279,7 @@ def _chat(prompt, *, worker_id=None, schema=None):
     default_system = DEFAULT_JSON_SYSTEM if schema is not None else DEFAULT_TEXT_SYSTEM
     runtime = resolve_runtime(worker_id, default_system)
     if runtime["provider"] == "ollama":
-        return _ollama_chat(runtime, prompt, schema)
+        return _ollama_chat(runtime, prompt, schema, worker_id=worker_id)
     if runtime["provider"] == "anthropic":
         return _anthropic_chat(runtime, prompt, schema, worker_id=worker_id)
     raise NotImplementedError("Model adapter is not implemented")
