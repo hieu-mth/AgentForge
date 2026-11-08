@@ -141,11 +141,11 @@ def validate_code(raw):
                 if target == "react":
                     continue
                 if not target.startswith("./"):
-                    raise ValueError("APP_CODE_UNSAFE: external package import")
+                    raise ValueError("APP_CODE_UNSAFE: EXTERNAL_PACKAGE")
                 local = posixpath.normpath(posixpath.join(
                     posixpath.dirname(name), target))
                 if local not in ALLOWED:
-                    raise ValueError("APP_CODE_UNSAFE: unapproved module path")
+                    raise ValueError("APP_CODE_UNSAFE: UNAPPROVED_MODULE")
         sources[name] = code
     if not {"src/App.jsx", "src/styles.css"}.issubset(sources):
         raise ValueError("APP_CODE_INVALID: root React files missing")
