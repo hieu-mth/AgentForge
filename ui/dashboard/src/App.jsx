@@ -10,6 +10,7 @@ import { api } from './api.js';
 import { useThemeMode } from './theme.jsx';
 import { badge, clip, PageHeader } from './components/shared.jsx';
 import { Workspace, GoalDrawer } from './features/Workspace.jsx';
+import { modelCallsForPrompt } from './workspace_quota.js';
 import { Websites, ProposalDrawer } from './features/Websites.jsx';
 import { WebappProposalDrawer } from './features/Webapps.jsx';
 import { Overview, ReadOnlyPage } from './features/Operations.jsx';
@@ -75,6 +76,8 @@ export default function App() {
   const [data,setData]=useState(null);
   const [loginNeeded,setLoginNeeded]=useState(false);
   const [section,setSection]=useState(()=>parseSection(window.location.hash));
+  // Preserve the Owner's request when navigating to quota Settings.
+  const [workspacePrompt,setWorkspacePrompt]=useState('');
   const [goal,setGoal]=useState(null);
   const [proposal,setProposal]=useState(null);
   const [webapp,setWebapp]=useState(null);
@@ -152,9 +155,7 @@ export default function App() {
   const plan=async prompt => {
     const outcome=await runAction(()=>post('/api/workspace/request',
       {ack:'PLAN_ONLY',prompt,
-       max_model_calls:(/ai company v5|agentforge v5|software company v5|công ty ai v5|multi.agent v5/i.test(prompt)
-         || (['ai architect','ai developer','ai reviewer'].every(role=>prompt.toLocaleLowerCase('vi-VN').includes(role))
-             && /\bqa\b|kiểm tra|kiểm thử/i.test(prompt)))?3:1}));
+       max_model_calls:modelCallsForPrompt(prompt)}));
     if(!outcome)return false;
     if(outcome.status==='NEEDS_CLARIFICATION'){message.warning(outcome.message);return false;}
     message.success('Đã lập kế hoạch, chưa gọi model');await openGoal(outcome.goal_id);return true;
@@ -281,7 +282,9 @@ export default function App() {
           <Tabs className="workspace-tabs" activeKey={section}
             items={activeTabs} onChange={navigate}/>}
         <div className="page-body" key={section}>
-          {section==='workspace'&&<Workspace data={data} onPlan={plan} openGoal={openGoal} loading={busy}/>}
+          {section==='workspace'&&<Workspace data={data} onPlan={plan} openGoal={openGoal}
+              prompt={workspacePrompt} setPrompt={setWorkspacePrompt}
+              onOpenSettings={()=>navigate('settings')} loading={busy}/>} 
           {section==='overview'&&<Overview data={data} onNavigate={navigate}/>}
           {section==='goals'&&<Card><Table dataSource={goals} rowKey="goal_id"
             pagination={{pageSize:10,hideOnSinglePage:true}} scroll={{x:'max-content'}}
