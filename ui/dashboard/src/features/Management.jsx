@@ -206,6 +206,9 @@ export function OwnerSettings({data,mutate,onReload}) {
     });
   return <div className="two-cols">
     <Card title="Prompt Workspace · Role/Calls">
+      <Alert type="info" showIcon style={{marginBottom:16}}
+        message="V5 cần 3 lượt model dự kiến cho mỗi Goal"
+        description={`Giới hạn hiện tại: ${p.max_estimated_model_calls??1} lượt/Goal. Để chạy AI Company V5, đặt giá trị bên dưới thành 3 và bấm Lưu prompt policy → Xác nhận. Đây không phải quyền chi tiền hay tự gọi AI; từng lượt vẫn cần Owner duyệt.`}/>
       <Form form={form} layout="vertical" onFinish={save}>
         <Form.Item name="max_estimated_model_calls" label="Ước tính lượt model tối đa / Goal (0–3)"
           rules={[{required:true,type:'number',min:0,max:3}]}>
