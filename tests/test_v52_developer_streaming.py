@@ -64,6 +64,38 @@ class DeveloperInferenceTests(unittest.TestCase):
         self.assertEqual(network.call_args.kwargs["timeout"], 180)
         network.assert_called_once()
 
+    def test_stream_metadata_overhead_does_not_exhaust_code_size_budget(self):
+        content = '{"ok":true}'
+        pieces = [{"message": {"content": char}, "done": False}
+                  for char in content]
+        raw = events(*pieces, {"done": True})
+        # Raw NDJSON has repeated headers much larger than 256 bytes;
+        # actual generated JSON is only 11 bytes.
+        with patch.dict(os.environ, {}, clear=True), \
+             patch.object(model, "MAX_OLLAMA_DEVELOPER_STREAM_BYTES", 256), \
+             patch.object(model.urllib.request, "urlopen",
+                          return_value=raw) as network:
+            output = model._ollama_chat(OLLAMA, "Prompt", {"type": "object"},
+                                        worker_id="webapp_developer")
+        self.assertEqual(json.loads(output), {"ok": True})
+        network.assert_called_once()
+
+    def test_stream_event_count_is_bounded(self):
+        raw = events(
+            {"message": {"content": "a"}, "done": False},
+            {"message": {"content": "b"}, "done": False},
+            {"message": {"content": "c"}, "done": False},
+            {"done": True},
+        )
+        with patch.dict(os.environ, {}, clear=True), \
+             patch.object(model, "MAX_OLLAMA_DEVELOPER_STREAM_EVENTS", 2), \
+             patch.object(model.urllib.request, "urlopen",
+                          return_value=raw) as network:
+            with self.assertRaisesRegex(RuntimeError, "safe size limit"):
+                model._ollama_chat(OLLAMA, "Prompt", {"type": "object"},
+                                   worker_id="webapp_developer")
+        network.assert_called_once()
+
     def test_closed_stream_does_not_accept_partial_json_or_retry(self):
         partial = events({"message": {"content": '{"ok":true}'}, "done": False})
         with patch.dict(os.environ, {}, clear=True), \
