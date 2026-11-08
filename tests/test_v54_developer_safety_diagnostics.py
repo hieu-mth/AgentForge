@@ -54,7 +54,7 @@ class DeveloperSafetyDiagnosticsTests(unittest.TestCase):
             ('const cart = fetch("/orders");', "ACTIVE_API"),
             ('const cart = window.location;', "ACTIVE_API"),
             ('const x = import("./helpers.js");', "DYNAMIC_IMPORT"),
-            ('const x = new Function("return true");', "ACTIVE_API"),
+            ('const x = new Function("return true");', "DYNAMIC_IMPORT"),
             ('const x = eval("alert(1)");', "ACTIVE_API"),
         )
         for source, reason in cases:
