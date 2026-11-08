@@ -47,16 +47,36 @@ CODE_SCHEMA = _obj({
     "files": {"type": "array", "minItems": 2, "maxItems": 8,
               "items": FILE_SCHEMA},
 })
+# Static screening is intentionally conservative (not a JS security sandbox).
+# Named branches provide fixed, Owner-safe diagnostics without ever storing
+# untrusted source snippets or provider responses in task history.
 FORBIDDEN = re.compile(
-    r"https?://|\b(?:fetch|eval|require|XMLHttpRequest|WebSocket|"
+    r"(?P<REMOTE_URL>https?://)|"
+    r"(?P<ACTIVE_API>\b(?:fetch|eval|require|XMLHttpRequest|WebSocket|"
     r"EventSource|localStorage|sessionStorage|indexedDB|sendBeacon|"
     r"serviceWorker|SharedWorker|Worker|Deno|Bun)\b|"
     r"\bprocess\s*\.|document\s*\.cookie|window\s*\.location|"
-    r"dangerouslySetInnerHTML|\.innerHTML\b|"
-    r"\bimport\s*\(|\bnew\s+Function\s*\(|"
-    r"<\s*(?:script|iframe|object|embed|base)\b|"
-    r"@import|url\s*\(|expression\s*\(|-moz-binding",
+    r"dangerouslySetInnerHTML|\.innerHTML\b)|"
+    r"(?P<DYNAMIC_IMPORT>\bimport\s*\(|\bnew\s+Function\s*\()|"
+    r"(?P<EMBEDDED_HTML><\s*(?:script|iframe|object|embed|base)\b)|"
+    r"(?P<CSS_ASSET>@import\b|\burl\s*\(|\bexpression\s*\(|-moz-binding)",
     re.IGNORECASE)
+
+# React SVG icons frequently include namespace identifiers. These are static
+# XML identifiers, not requests or browser resource URLs. Ignore only the two
+# exact standard namespace values when used as JSX attributes; do not alter
+# source files or permit href/src, URLs in data, CSS url(), or network APIs.
+SVG_NAMESPACE_ATTRIBUTE = re.compile(
+    r"""(?:\bxmlns\s*=\s*['"]http://www\.w3\.org/2000/svg['"]|"""
+    r"""\bxmlnsXlink\s*=\s*['"]http://www\.w3\.org/1999/xlink['"])"""
+)
+
+
+def _unsafe_reason(source, path):
+    scanned = (SVG_NAMESPACE_ATTRIBUTE.sub("", source)
+               if path.endswith(".jsx") else source)
+    match = FORBIDDEN.search(scanned)
+    return match.lastgroup if match else None
 STATIC_IMPORT = re.compile(
     r"(?m)^\s*import\s+(?:[^\n;]*\s+from\s+)?['\"]([^'\"]+)['\"]\s*;?")
 IMPORT_TOKEN = re.compile(r"\bimport\b")
@@ -106,11 +126,12 @@ def validate_code(raw):
                 or not 20 <= len(code.encode("utf-8")) <= MAX_SOURCE_BYTES
                 or "\x00" in code or code.lstrip().startswith(chr(96) * 3)):
             raise ValueError("APP_CODE_INVALID: path or code")
-        if FORBIDDEN.search(code):
-            raise ValueError("APP_CODE_UNSAFE: forbidden browser/network API")
+        reason = _unsafe_reason(code, name)
+        if reason:
+            raise ValueError("APP_CODE_UNSAFE: " + reason)
         if name.endswith(".css"):
             if "<" in code or ">" in code:
-                raise ValueError("APP_CODE_UNSAFE: CSS with markup")
+                raise ValueError("APP_CODE_UNSAFE: CSS_MARKUP")
         else:
             imports = list(STATIC_IMPORT.finditer(code))
             if len(imports) != len(IMPORT_TOKEN.findall(code)):
@@ -120,11 +141,11 @@ def validate_code(raw):
                 if target == "react":
                     continue
                 if not target.startswith("./"):
-                    raise ValueError("APP_CODE_UNSAFE: external package import")
+                    raise ValueError("APP_CODE_UNSAFE: EXTERNAL_PACKAGE")
                 local = posixpath.normpath(posixpath.join(
                     posixpath.dirname(name), target))
                 if local not in ALLOWED:
-                    raise ValueError("APP_CODE_UNSAFE: unapproved module path")
+                    raise ValueError("APP_CODE_UNSAFE: UNAPPROVED_MODULE")
         sources[name] = code
     if not {"src/App.jsx", "src/styles.css"}.issubset(sources):
         raise ValueError("APP_CODE_INVALID: root React files missing")
@@ -256,6 +277,12 @@ def propose(slug, brief, *, architecture_id=None, architecture_sha=None):
         "React hooks, browser DOM interaction and plain CSS. No other "
         "packages, CDN, Internet images, external URLs, APIs, payment, "
         "login, network calls, localStorage, eval, shell or Node code. "
+        "IMPORTANT: never place http/https URLs anywhere in JSX, JS or CSS, "
+        "including comments, sample product data, href/src attributes, "
+        "image placeholders or CSS url(). Do not use CSS @import. "
+        "For product images and icons use CSS gradients, emoji or inline "
+        "static SVG shapes (standard xmlns namespace attributes are allowed). "
+        "Avoid mentioning prohibited JS API names inside demo strings. "
         "Create real local state, filters, cart, modal and routes where "
         "required by the task; use fictitious demo data and label it. "
         "Write original fluent Vietnamese and support mobile screens. "
