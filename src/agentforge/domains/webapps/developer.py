@@ -75,7 +75,7 @@ def _display_metadata(value, maximum, name):
     """
     if not isinstance(value, str):
         raise ValueError("APP_CODE_METADATA_INVALID: " + name)
-    normalized = re.sub(r"\\s+", " ", value).strip()
+    normalized = re.sub(r"\s+", " ", value).strip()
     if not normalized or any(ord(c) < 32 for c in normalized):
         raise ValueError("APP_CODE_METADATA_INVALID: " + name)
     if len(normalized) > maximum:
