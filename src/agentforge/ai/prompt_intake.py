@@ -94,7 +94,12 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
             template == "creative.storyboard" and not policy["storyboard_enabled"]):
         raise PermissionError("Role/workflow đã bị owner tắt trong Settings.")
     if max_model_calls > policy["max_estimated_model_calls"]:
-        raise PermissionError("Model calls vượt hạn mức prompt được owner cấu hình.")
+        raise PermissionError(
+            "WORKSPACE_MODEL_CAP_EXCEEDED: Kế hoạch cần "
+            f"{max_model_calls} lượt model/Goal, giới hạn hiện tại là "
+            f"{policy['max_estimated_model_calls']}. Vào Cài đặt → "
+            "Prompt Workspace để thay đổi và xác nhận; chưa gọi AI."
+        )
     if max_model_calls < 1:
         raise ValueError("Workflow này cần tối thiểu 1 lượt model dự kiến.")
     goal_preflight.require_ready(
