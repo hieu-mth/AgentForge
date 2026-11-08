@@ -29,6 +29,7 @@ DEFAULT_MODEL_TIMEOUT_SECONDS = 180
 DEFAULT_DEVELOPER_TIMEOUT_SECONDS = 600
 MAX_DEVELOPER_TIMEOUT_SECONDS = 900
 MAX_OLLAMA_DEVELOPER_STREAM_BYTES = 512_000
+MAX_OLLAMA_DEVELOPER_STREAM_EVENTS = 30_000
 
 
 def _request_timeout(worker_id):
@@ -154,9 +155,11 @@ def _ollama_chat(runtime, prompt, schema, *, worker_id=None):
             parts = []
             received_bytes = 0
             completed = False
-            for line in response:
-                received_bytes += len(line)
-                if received_bytes > MAX_OLLAMA_DEVELOPER_STREAM_BYTES:
+            for event_count, line in enumerate(response, start=1):
+                # Each Ollama token repeats substantial JSON metadata; cap
+                # actual generated text, not inflated NDJSON transport bytes.
+                if (event_count > MAX_OLLAMA_DEVELOPER_STREAM_EVENTS
+                        or len(line) > MAX_OLLAMA_DEVELOPER_STREAM_BYTES):
                     raise RuntimeError("Ollama stream exceeds safe size limit")
                 if not line.strip():
                     continue
@@ -171,7 +174,11 @@ def _ollama_chat(runtime, prompt, schema, *, worker_id=None):
                     if (not isinstance(message, dict)
                             or not isinstance(message.get("content"), str)):
                         raise RuntimeError("Ollama stream returned invalid event")
-                    parts.append(message["content"])
+                    chunk = message["content"]
+                    received_bytes += len(chunk.encode("utf-8"))
+                    if received_bytes > MAX_OLLAMA_DEVELOPER_STREAM_BYTES:
+                        raise RuntimeError("Ollama stream exceeds safe size limit")
+                    parts.append(chunk)
                 elif event.get("done") is not True:
                     raise RuntimeError("Ollama stream returned invalid event")
                 if event.get("done") is True:
