@@ -42,7 +42,8 @@ FILE_SCHEMA = _obj({
     "content": {"type": "string"},
 })
 CODE_SCHEMA = _obj({
-    "title": {"type": "string"}, "summary": {"type": "string"},
+    "title": {"type": "string", "minLength": 1, "maxLength": 100},
+    "summary": {"type": "string", "minLength": 1, "maxLength": 240},
     "files": {"type": "array", "minItems": 2, "maxItems": 8,
               "items": FILE_SCHEMA},
 })
@@ -65,11 +66,33 @@ def _text(value, maximum, name):
     return base._text(value, name, maximum)
 
 
+def _display_metadata(value, maximum, name):
+    """Bound model-written labels, not JSX/CSS or trusted requirements.
+
+    Overlong title/summary are a presentation issue, not justification to
+    discard otherwise valid code or spend another Owner-approved model call.
+    Malformed/empty metadata still fail closed with a stable field label.
+    """
+    if not isinstance(value, str):
+        raise ValueError("APP_CODE_METADATA_INVALID: " + name)
+    normalized = re.sub(r"\s+", " ", value).strip()
+    if not normalized or any(ord(c) < 32 for c in normalized):
+        raise ValueError("APP_CODE_METADATA_INVALID: " + name)
+    if len(normalized) > maximum:
+        clipped = normalized[:maximum]
+        # Avoid ending in half a word where a reasonable word break exists.
+        boundary = clipped.rfind(" ")
+        if boundary >= maximum // 2:
+            clipped = clipped[:boundary]
+        normalized = clipped.rstrip()
+    return base._text(normalized, name, maximum)
+
+
 def validate_code(raw):
     if not isinstance(raw, dict) or set(raw) != set(CODE_SCHEMA["properties"]):
         raise ValueError("APP_CODE_INVALID: response fields")
-    title = _text(raw["title"], 100, "title")
-    summary = _text(raw["summary"], 240, "summary")
+    title = _display_metadata(raw["title"], 100, "title")
+    summary = _display_metadata(raw["summary"], 240, "summary")
     entries = raw["files"]
     if not isinstance(entries, list) or not 2 <= len(entries) <= 8:
         raise ValueError("APP_CODE_INVALID: file count")
@@ -221,8 +244,11 @@ def propose(slug, brief, *, architecture_id=None, architecture_sha=None):
     prompt = (
         "EXPERIMENTAL AI REACT DEVELOPER. Build an original functional "
         "responsive React web application, not a fixed landing page. "
-        "Return JSON exactly matching the schema: title, summary and "
-        "2-8 code files. Include src/App.jsx with a default React export "
+        "Return JSON exactly matching the schema: a concise title (at most "
+        "100 characters), a factual summary (at most 240 characters), and "
+        "2-8 code files. Keep metadata short; prioritize complete functional "
+        "React JSX and CSS over verbose title/summary. "
+        "Include src/App.jsx with a default React export "
         "and src/styles.css. Optionally add src/data.js, src/helpers.js, "
         "src/components/Header.jsx, ProductCard.jsx, Sidebar.jsx, Modal.jsx. "
         "Local imports must refer to files you create and use explicit "
