@@ -9,6 +9,10 @@ allowed filenames, local imports with .jsx/.js extensions, React hooks and
 trusted local Vite/React runtime. Do not propose package.json, dependencies,
 shell scripts, HTML entrypoints, network APIs, remote URLs, CDN assets, storage,
 authentication, real checkout, secrets or deployment instructions.
+Write JSX without URL strings, links to hosted images, CSS url(), @import,
+or commented-out network snippets. For visual content use CSS shapes/gradients,
+emoji or locally written inline SVG with static paths. The standard SVG xmlns
+attribute is a namespace identifier, not an external image request.
 
 Keep all sample products, prices, cart contents and user data explicitly
 fictional; explain limitations rather than claiming features work when you
