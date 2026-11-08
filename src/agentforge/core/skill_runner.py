@@ -339,8 +339,12 @@ def _safe_failure(skill_id, exc):
                 return "MODEL_RATE_LIMITED: Model provider rate limit; no automatic retry."
             return "MODEL_HTTP_ERROR: AI Developer model endpoint rejected the request."
         if isinstance(exc, (TimeoutError, socket.timeout)):
-            return "MODEL_TIMEOUT: AI Developer inference timed out."
+            return ("MODEL_TIMEOUT: AI Developer response timed out. "
+                    "Try a smaller scope or configure AGENTFORGE_DEVELOPER_TIMEOUT_SECONDS.")
         if isinstance(exc, URLError):
+            if isinstance(getattr(exc, "reason", None), (TimeoutError, socket.timeout)):
+                return ("MODEL_TIMEOUT: AI Developer response timed out. "
+                        "Try a smaller scope or configure AGENTFORGE_DEVELOPER_TIMEOUT_SECONDS.")
             return "MODEL_UNAVAILABLE: Cannot reach the configured model."
         if isinstance(exc, PermissionError):
             return "MODEL_PERMISSION_DENIED: Check cloud consent and source SHA permissions."
@@ -371,6 +375,10 @@ def _safe_failure(skill_id, exc):
                 return "MODEL_EMPTY_OUTPUT: Model returned no usable text."
             if reason.startswith("Model did not return a JSON object"):
                 return "MODEL_JSON_OBJECT_REQUIRED: Model returned a non-object JSON value."
+            if reason.startswith("Ollama stream ended before done"):
+                return "MODEL_STREAM_INCOMPLETE: Local model stopped before completing React JSON."
+            if reason.startswith("Ollama stream exceeds safe size limit"):
+                return "MODEL_STREAM_TOO_LARGE: Local model exceeded the response safety limit."
             return "MODEL_RUNTIME_FAILED: Model gateway or generation failed."
         if isinstance(exc, OSError):
             return "APP_LOCAL_IO_FAILED: Cannot read the local template or write proposal."
