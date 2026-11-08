@@ -15,7 +15,7 @@ from agentforge.model_registry import ModelConfigError
 
 
 OLLAMA = {
-    "model": "qwen3:8b", "base_url": "http://127.0.0.1:11434",
+    "provider": "ollama", "model": "qwen3:8b", "base_url": "http://127.0.0.1:11434",
     "system_prompt": "Trusted worker prompt",
 }
 CLOUD = {
