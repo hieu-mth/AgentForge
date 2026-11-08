@@ -4,6 +4,7 @@ import { BulbOutlined, CheckCircleOutlined, FolderOpenOutlined, SafetyCertificat
   SendOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { badge, clip, fallback, StatTile } from '../components/shared.jsx';
 import { PERMISSIONS, WORKERS, SKILLS, requiredPermissions, permissionsKnown, executionConsent } from '../permissions.js';
+import { quotaForPrompt } from '../workspace_quota.js';
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 
@@ -28,13 +29,17 @@ function greeting() {
   return 'Chào buổi tối';
 }
 
-export function Workspace({data, onPlan, openGoal, loading}) {
-  const [prompt, setPrompt] = useState('');
+export function Workspace({data, onPlan, openGoal, onOpenSettings, prompt, setPrompt, loading}) {
+  const limits = quotaForPrompt(prompt, data?.workspace_policy);
   const goals = data?.goals || [];
   const waiting = goals.filter(g => ['PLANNED', 'WAITING_APPROVAL'].includes(g.status)).length;
   const done = goals.filter(g => g.status === 'SUCCEEDED').length;
   const length = prompt.trim().length;
-  const submit = () => { if (length >= MIN_PROMPT && !loading) onPlan(prompt).then(ok => { if (ok) setPrompt(''); }); };
+  const submit = () => {
+    if (length >= MIN_PROMPT && !loading && !limits.blocked) {
+      onPlan(prompt).then(ok => { if (ok) setPrompt(''); });
+    }
+  };
   return <div className="workspace-page">
     <section className="hero">
       <div className="hero-glow" aria-hidden="true"/>
@@ -51,9 +56,22 @@ export function Workspace({data, onPlan, openGoal, loading}) {
             {length > 0 && length < MIN_PROMPT && <b> · cần thêm {MIN_PROMPT - length} ký tự</b>}</span>
           <span className="composer-count" aria-live="off">{prompt.length.toLocaleString('vi-VN')}/6.000 ký tự</span>
           <Button type="primary" size="large" icon={<SendOutlined/>} loading={loading}
-            disabled={length < MIN_PROMPT} onClick={submit}>Tạo kế hoạch</Button>
+            disabled={length < MIN_PROMPT || limits.blocked} onClick={submit}>Tạo kế hoạch</Button>
         </div>
       </div>
+      {length >= MIN_PROMPT && limits.blocked && <Alert
+        type="warning" showIcon style={{marginTop:14}}
+        message={`Giới hạn Workspace hiện là ${limits.allowed} lượt model/Goal, nhưng yêu cầu cần ${limits.required} lượt`}
+        description={<Space direction="vertical" size={8}>
+          <Text>{limits.isCompany
+            ? 'AI Company V5 cần 3 lượt model: Architect, Developer và Reviewer. QA tĩnh không gọi model.'
+            : 'Hãy chỉnh giới hạn cho phép lập kế hoạch trước khi gửi công việc.'}
+            {' '}Không có AI nào được gọi; không tự thay đổi chính sách Owner.</Text>
+          <Button size="small" onClick={onOpenSettings}>
+            Mở Cài đặt → Prompt Workspace
+          </Button>
+        </Space>}
+      />}
       <div className="idea-row" role="group" aria-label="Gợi ý nhanh">
         <span className="idea-label">Thử nhanh</span>
         {IDEAS.map(text => <button type="button" key={text} className="idea-chip"
