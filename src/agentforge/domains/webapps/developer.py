@@ -131,7 +131,7 @@ def validate_code(raw):
             raise ValueError("APP_CODE_UNSAFE: " + reason)
         if name.endswith(".css"):
             if "<" in code or ">" in code:
-                raise ValueError("APP_CODE_UNSAFE: CSS with markup")
+                raise ValueError("APP_CODE_UNSAFE: CSS_MARKUP")
         else:
             imports = list(STATIC_IMPORT.finditer(code))
             if len(imports) != len(IMPORT_TOKEN.findall(code)):
