@@ -363,7 +363,21 @@ def _safe_failure(skill_id, exc):
                     return "APP_CODE_SUMMARY_INVALID: AI returned an empty or invalid React summary."
                 return "APP_CODE_METADATA_INVALID: AI returned invalid display metadata."
             if str(exc).startswith("APP_CODE_UNSAFE:"):
-                return "APP_CODE_UNSAFE: Generated code includes blocked remote/active patterns."
+                # Only trusted, fixed categories may reach task history. Never
+                # echo matched source text, file paths or exception contents.
+                code = str(exc).split(":", 1)[1].strip()
+                guidance = {
+                    "REMOTE_URL": "Remote URL in generated React. Use local CSS or SVG shapes.",
+                    "ACTIVE_API": "Blocked browser or runtime API. Use local React state only.",
+                    "DYNAMIC_IMPORT": "Dynamic import or code execution is not permitted.",
+                    "EMBEDDED_HTML": "Blocked embedded HTML tag; use safe React components.",
+                    "CSS_ASSET": "CSS imports, url() and active expressions are disallowed.",
+                    "CSS_MARKUP": "HTML markup inside CSS is disallowed.",
+                    "EXTERNAL_PACKAGE": "Only React and allowlisted local imports are permitted.",
+                    "UNAPPROVED_MODULE": "Import does not resolve to an allowlisted local module.",
+                }
+                return ("APP_CODE_UNSAFE: " + guidance.get(
+                    code, "Generated code includes blocked remote/active patterns."))
             if str(exc).startswith("APP_CODE_INVALID:"):
                 return "APP_CODE_INVALID: Generated React source failed the file contract."
             if str(exc).startswith("APP_ARCHITECTURE_"):
