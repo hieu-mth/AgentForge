@@ -355,6 +355,13 @@ def _safe_failure(skill_id, exc):
         if isinstance(exc, json.JSONDecodeError):
             return "APP_CODE_JSON_INVALID: Model returned incomplete or invalid JSON."
         if isinstance(exc, ValueError):
+            if str(exc).startswith("APP_CODE_METADATA_INVALID:"):
+                field = str(exc).split(":", 1)[1].strip()
+                if field == "title":
+                    return "APP_CODE_TITLE_INVALID: AI returned an empty or invalid React title."
+                if field == "summary":
+                    return "APP_CODE_SUMMARY_INVALID: AI returned an empty or invalid React summary."
+                return "APP_CODE_METADATA_INVALID: AI returned invalid display metadata."
             if str(exc).startswith("APP_CODE_UNSAFE:"):
                 return "APP_CODE_UNSAFE: Generated code includes blocked remote/active patterns."
             if str(exc).startswith("APP_CODE_INVALID:"):
