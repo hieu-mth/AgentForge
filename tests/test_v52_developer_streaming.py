@@ -53,7 +53,7 @@ class DeveloperInferenceTests(unittest.TestCase):
         network.assert_called_once()
 
     def test_other_workers_remain_nonstreaming_with_original_180s_timeout(self):
-        raw = io.BytesIO(b'{"message":{"content":"{\"ok\":true}"}}')
+        raw = io.BytesIO(json.dumps({"message": {"content": '{"ok":true}'}}).encode())
         with patch.dict(os.environ, {}, clear=True), \
              patch.object(model, "resolve_runtime", return_value=OLLAMA), \
              patch.object(model.urllib.request, "urlopen", return_value=raw) as network:
