@@ -131,7 +131,7 @@ def main():
         if args.campaign is not None:
             payload["campaign"] = args.campaign
         output = _run(REPORT_SKILLS[args.kind], payload)
-    print(json.dumps(output, ensure_ascii=False, indent=2))
+    print(json.dumps(output, ensure_ascii=True, indent=2))
     if output["status"] == "FAILED":
         parser.exit(2)
     if output["status"] == "WAITING_APPROVAL":

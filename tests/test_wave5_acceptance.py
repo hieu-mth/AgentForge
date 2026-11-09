@@ -90,6 +90,18 @@ class Wave5BaseAcceptanceTests(unittest.TestCase):
             base_acceptance.main()
         self.assertEqual(json.loads(stream.getvalue().decode("ascii")), record)
 
+    def test_analytics_cli_datasets_cp1252_non_ascii_names(self):
+        from agentforge import analytics_pipeline
+        stream = io.BytesIO()
+        writer = io.TextIOWrapper(stream, encoding="cp1252", write_through=True)
+        with patch.object(analytics_pipeline.store, "list_datasets",
+                          return_value=[{"dataset": "kế hoạch nội địa"}]), \
+             patch.object(sys, "argv", ["analytics_pipeline", "datasets"]), \
+             patch.object(sys, "stdout", writer):
+            analytics_pipeline.main()
+        body = json.loads(stream.getvalue().decode("ascii"))
+        self.assertEqual(body["datasets"][0]["dataset"], "kế hoạch nội địa")
+
     def test_owner_api_requires_real_session_for_health_and_models(self):
         from tests.test_webapp_revision_http_v41 import WebappRevisionHttpTests
         fixture = WebappRevisionHttpTests(
