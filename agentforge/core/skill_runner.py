@@ -224,7 +224,7 @@ def _safe_failure(skill_id, exc):
         if isinstance(exc, OSError):
             return "APP_LOCAL_IO_FAILED: Cannot read the local template or write proposal."
         return "APP_CODE_INTERNAL: Unexpected builder exception; no code was executed."
-    if skill_id == "webapp.sandbox_test":
+    if skill_id in {"webapp.sandbox_test", "webapp.browser_qa"}:
         label = str(exc)
         if isinstance(exc, ValueError) and label.startswith("TOOLCHAIN_STALE"):
             return "TOOLCHAIN_STALE: Create a new proposal using the patched locked scaffold."
@@ -233,6 +233,10 @@ def _safe_failure(skill_id, exc):
             return "SANDBOX_UNAVAILABLE: Configure Docker and a pinned local Linux QA image."
         if isinstance(exc, RuntimeError) and label.startswith("SANDBOX_TIMEOUT"):
             return "SANDBOX_TIMEOUT: Container build/test exceeded its time limit."
+        if isinstance(exc, RuntimeError) and label.startswith("BROWSER_QA_RUNTIME_FAILED"):
+            return "BROWSER_QA_RUNTIME_FAILED: Trusted offline browser process failed."
+        if isinstance(exc, ValueError) and label.startswith("BROWSER_QA_"):
+            return "BROWSER_QA_INVALID_RESULT: Browser evidence did not pass validation."
         if isinstance(exc, RuntimeError) and label.startswith("SANDBOX_BUILD_FAILED"):
             return "SANDBOX_BUILD_FAILED: React tests/build did not pass in the container."
         if isinstance(exc, PermissionError) and label.startswith("SANDBOX_SOURCE_STALE"):

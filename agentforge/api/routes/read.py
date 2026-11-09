@@ -76,6 +76,36 @@ def dispatch(self, route):
     if route == "/api/memory":
         return self._reply(200, brain_store.list_memory(
             db_path=self.server.brain_db_path))
+    if route.startswith("/api/webapps/qa/"):
+        from agentforge.features.webapps import browser_qa
+        parts = route.split("/")
+        if (len(parts) != 7 or parts[:4] != ["", "api", "webapps", "qa"]
+                or parts[6] not in {"desktop.png", "mobile.png"}):
+            raise ValueError("Invalid browser QA image route")
+        report_id, report_sha, filename = parts[4], parts[5], parts[6]
+        report = browser_qa.read_report(report_id, report_sha)
+        if self._session().get("reviewed_webapps", {}).get(
+                report["proposal_id"]) != report["source_sha256"]:
+            raise PermissionError("Review this signed React proposal before viewing QA screenshot")
+        return self._reply(200, browser_qa.image(report_id, report_sha, filename),
+                           mime="image/png")
+    if route.startswith("/api/webapps/") and route.endswith("/export"):
+        from agentforge.features.webapps.exporter import create_zip
+        from agentforge import webapp_developer
+        parts = route.split("/")
+        if len(parts) != 5 or parts[1:3] != ["api", "webapps"]:
+            raise ValueError("Invalid webapp export route")
+        pid = parts[3]
+        provider = webapp_developer.provider(pid)
+        info = provider.inspect(pid)
+        if self._session().get("reviewed_webapps", {}).get(pid) != info["sha256"]:
+            raise PermissionError("Review exact source SHA before export")
+        record = create_zip(pid, info["sha256"])
+        return self._reply(200, record["data"], mime="application/zip",
+                           headers=(("Content-Disposition",
+                                     'attachment; filename="' + record["filename"] + '"'),
+                                    ("X-Archive-SHA256", record["zip_sha256"]),
+                                    ("X-Source-SHA256", info["sha256"])))
     if route.startswith("/api/webapps/"):
         from agentforge import webapp_developer
         parts = route.split("/")

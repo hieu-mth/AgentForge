@@ -91,6 +91,31 @@ def present(skill_id, result):
                 "build_verified":False,"browser_verified":False,
                 "execution_authorized":False}
 
+    if skill_id == "webapp.browser_qa" and isinstance(result, dict):
+        import re
+        valid = (
+            result.get("status") in {"PASS_SMOKE_ONLY", "FAIL"}
+            and result.get("runtime") == "docker-local-linux-chromium"
+            and result.get("network") == "none"
+            and isinstance(result.get("qa_report_id"), str)
+            and bool(re.fullmatch(r"[a-f0-9]{32}", result["qa_report_id"]))
+            and isinstance(result.get("qa_report_sha"), str)
+            and bool(re.fullmatch(r"[a-f0-9]{64}", result["qa_report_sha"]))
+        )
+        if valid:
+            return {"kind": "webapp_browser_qa", "status": result["status"],
+                    "report_id": result["qa_report_id"],
+                    "report_sha": result["qa_report_sha"],
+                    "code": result.get("code"),
+                    "checks": {k: v for k, v in (result.get("checks") or {}).items()
+                               if k in {"desktop_main", "body_content", "interactive_button",
+                                        "mobile_no_overflow", "no_page_errors", "no_external_requests"}
+                               and type(v) is bool},
+                    "build_verified": bool(result.get("build_verified")),
+                    "browser_smoke_verified": result["status"] == "PASS_SMOKE_ONLY",
+                    "functional_flows_verified": False, "security_verified": False,
+                    "network": "none", "deploy": False}
+        return {"kind": "webapp_browser_qa", "status": "INVALID_RESULT"}
     if skill_id == "webapp.sandbox_test" and isinstance(result, dict):
         if (result.get("status") == "PASS"
                 and result.get("runtime") == "docker-local-linux"

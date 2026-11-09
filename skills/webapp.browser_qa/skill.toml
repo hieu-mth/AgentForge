@@ -1,0 +1,35 @@
+schema_version = 1
+id = "webapp.browser_qa"
+version = "0.1.0"
+description = "Explicit Owner-approved offline Chromium smoke of signed React proposal in a locally pinned Docker image."
+worker_id = "product_builder"
+execution_mode = "owner_gated"
+required_permissions = ["workspace.read", "process.run"]
+required_tools = ["filesystem"]
+artifact_types = ["browser_qa_report"]
+quality_checks = ["offline_container", "vite_build", "chromium_smoke"]
+
+[limits]
+timeout_seconds = 240
+estimated_model_calls = 0
+
+[input_schema]
+type = "object"
+required = ["proposal_id", "sha256", "confirm_external_run"]
+additional_properties = false
+
+[input_schema.properties]
+proposal_id = "string"
+sha256 = "string"
+confirm_external_run = "boolean"
+
+[output_schema]
+type = "object"
+required = ["status", "proposal_id", "sha256", "runtime"]
+additional_properties = true
+
+[output_schema.properties]
+status = "string"
+proposal_id = "string"
+sha256 = "string"
+runtime = "string"

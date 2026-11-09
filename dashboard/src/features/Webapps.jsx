@@ -9,7 +9,7 @@ const LABELS = {
 };
 const COLOR = /^#[0-9a-fA-F]{6}$/;
 
-export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,onVerify,onDecide,onValidate,onRollback,busy}) {
+export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,onVerify,onDecide,onValidate,onRollback,onBrowserQA,busy}) {
   const [feedback,setFeedback]=useState('');
   const isCode=proposal?.ai_code_experimental===true;
   useEffect(()=>setFeedback(''),[proposal?.proposal_id]);
@@ -97,7 +97,14 @@ export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,onVerify
           <Button disabled={feedback.trim().length<10} loading={busy}
             onClick={()=>onRevise(proposal,feedback)}>Tạo kế hoạch chỉnh sửa</Button>
           <Button loading={busy} onClick={()=>onVerify(proposal)}>
-            Lập Goal QA sandbox
+            QA build Docker
+          </Button>
+          <Button loading={busy} onClick={()=>onBrowserQA?.(proposal)}>
+            QA Chromium offline
+          </Button>
+          <Button href={'/api/webapps/'+proposal.proposal_id+'/export'}
+            target="_self" download loading={busy}>
+            Tải ZIP source + SHA
           </Button>
           <Button type="primary" loading={busy} onClick={()=>onApply(proposal)}>
             Duyệt SHA & lưu mã nguồn local
