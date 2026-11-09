@@ -15,6 +15,7 @@ import { Websites, ProposalDrawer } from './features/Websites.jsx';
 import { WebappProposalDrawer } from './features/Webapps.jsx';
 import { Overview, ReadOnlyPage } from './features/Operations.jsx';
 import { Projects } from './features/Projects.jsx';
+import { ModelHub } from './features/Models.jsx';
 import { Retention } from './features/Retention.jsx';
 import { Reviews } from './features/Reviews.jsx';
 import { Schedules, OperationsControl, Intelligence, Growth, OwnerSettings, OwnerMemory } from './features/Management.jsx';
@@ -328,6 +329,7 @@ export default function App() {
           {section==='intelligence'&&<Intelligence data={data}/>}
           {section==='growth'&&<Growth data={data} mutate={mutate} onReload={refresh}/>}
           {section==='settings'&&<OwnerSettings data={data} mutate={mutate} onReload={refresh}/>}
+          {section==='models'&&<ModelHub mutate={mutate}/>}
           {section==='memory'&&<OwnerMemory mutate={mutate}/>}
           {['finance','channels','team'].includes(section)&&<ReadOnlyPage section={section} data={data}/>}
         </div>

@@ -249,3 +249,6 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .storyboard-scene{border:1px solid var(--line);background:var(--surface-2);
   border-radius:12px;padding:16px;margin:12px 0;overflow-wrap:anywhere}
 .storyboard-scene:last-child{margin-bottom:0}
+
+/* Model Hub overview numbers follow the active Dashboard theme. */
+.hub-stat { font-size: 28px; font-weight: 650; line-height: 1.3; margin: 5px 0; font-variant-numeric: tabular-nums; }

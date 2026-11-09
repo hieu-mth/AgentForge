@@ -5,7 +5,7 @@ import { NAV_GROUPS, DEFAULT_TAB, groupFor, defaultSection,
 
 const originalScreens=[
   'workspace','overview','goals','tasks','reviews','websites','projects','retention',
-  'team','intelligence','growth','schedules','operations','channels','finance','settings','memory',
+  'team','intelligence','growth','schedules','operations','channels','finance','settings','memory','models',
 ];
 test('sidebar contains exactly six business-facing groups',()=>{
   assert.deepEqual(NAV_GROUPS.map(x=>x.label),[
@@ -42,6 +42,8 @@ test('business and owner tools remain reachable in expected groups',()=>{
   assert.equal(groupFor('tasks'),'team');
   assert.equal(groupFor('operations'),'settings');
   assert.equal(groupFor('memory'),'settings');
+  assert.equal(groupFor('models'),'settings');
+  assert.equal(parseSection('#/models'),'models');
   assert.equal(defaultSection('unknown'),'overview');
 });
 
