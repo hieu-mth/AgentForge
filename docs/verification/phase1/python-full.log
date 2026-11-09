@@ -102,3 +102,56 @@ test_risky_skills_and_extra_payload_fields_rejected
 test_schedule_does_not_enqueue_when_disabled_or_paused 
 (test_autopilot_v13.AutopilotV13Tests.test_schedule_does_not_enqueue_when_disabled_or_paused) ... ok
 test_two_workers_claim_distinct_jobs_without_double_spend 
+(test_autopilot_v13.AutopilotV13Tests.test_two_workers_claim_distinct_jobs_without_double_spend) ... ok
+test_waiting_owner_review_never_autoresumes 
+(test_autopilot_v13.AutopilotV13Tests.test_waiting_owner_review_never_autoresumes) ... ok
+test_ambiguous_report_id_rejected (test_browser_fix.TestBrowserFix.test_ambiguous_report_id_rejected) ... ok
+test_cloud_generation_error_does_not_modify_product 
+(test_browser_fix.TestBrowserFix.test_cloud_generation_error_does_not_modify_product) ... ok
+test_confirmed_issue_yields_c8b_proposal_no_file_write 
+(test_browser_fix.TestBrowserFix.test_confirmed_issue_yields_c8b_proposal_no_file_write) ... ok
+test_finding_report_does_not_forward_arbitrary_text 
+(test_browser_fix.TestBrowserFix.test_finding_report_does_not_forward_arbitrary_text) ... ok
+test_fixable_failure_plan_is_read_only (test_browser_fix.TestBrowserFix.test_fixable_failure_plan_is_read_only) ... ok
+test_fixable_report_requires_owner_consent_before_model 
+(test_browser_fix.TestBrowserFix.test_fixable_report_requires_owner_consent_before_model) ... ok
+test_generated_revision_still_requires_c8b_apply_gate 
+(test_browser_fix.TestBrowserFix.test_generated_revision_still_requires_c8b_apply_gate) ... ok
+test_inconsistent_failure_count_rejected (test_browser_fix.TestBrowserFix.test_inconsistent_failure_count_rejected) 
+... ok
+test_invalid_metrics_rejected (test_browser_fix.TestBrowserFix.test_invalid_metrics_rejected) ... ok
+test_mismatch_report_id_rejected (test_browser_fix.TestBrowserFix.test_mismatch_report_id_rejected) ... ok
+test_missing_report_is_not_generated (test_browser_fix.TestBrowserFix.test_missing_report_is_not_generated) ... ok
+test_optional_explicit_apply_still_creates_backup 
+(test_browser_fix.TestBrowserFix.test_optional_explicit_apply_still_creates_backup) ... ok
+test_oversized_report_rejected (test_browser_fix.TestBrowserFix.test_oversized_report_rejected) ... ok
+test_pass_plan_requires_no_model_or_new_files 
+(test_browser_fix.TestBrowserFix.test_pass_plan_requires_no_model_or_new_files) ... ok
+test_pass_propose_short_circuits_even_without_confirmation 
+(test_browser_fix.TestBrowserFix.test_pass_propose_short_circuits_even_without_confirmation) ... ok
+test_report_changed_after_preflight_refuses_model 
+(test_browser_fix.TestBrowserFix.test_report_changed_after_preflight_refuses_model) ... ok
+test_report_does_not_trigger_browser_execution 
+(test_browser_fix.TestBrowserFix.test_report_does_not_trigger_browser_execution) ... ok
+test_report_no_product_modified_flag_rejected 
+(test_browser_fix.TestBrowserFix.test_report_no_product_modified_flag_rejected) ... ok
+test_stale_report_refuses_plan_and_model (test_browser_fix.TestBrowserFix.test_stale_report_refuses_plan_and_model) 
+... ok
+test_static_only_warn_requires_manual_review 
+(test_browser_fix.TestBrowserFix.test_static_only_warn_requires_manual_review) ... ok
+test_tampered_diagnostic_message_is_never_forwarded 
+(test_browser_fix.TestBrowserFix.test_tampered_diagnostic_message_is_never_forwarded) ... ok
+test_unapproved_browser_run_cannot_trigger_model 
+(test_browser_fix.TestBrowserFix.test_unapproved_browser_run_cannot_trigger_model) ... ok
+test_unknown_findings_require_manual_review_no_model 
+(test_browser_fix.TestBrowserFix.test_unknown_findings_require_manual_review_no_model) ... ok
+test_unsafe_run_id_rejected (test_browser_fix.TestBrowserFix.test_unsafe_run_id_rejected) ... ok
+test_applied_revision_cannot_run_again 
+(test_browser_validation.TestBrowserValidation.test_applied_revision_cannot_run_again) ... ok
+test_approval_does_not_call_model_or_network 
+(test_browser_validation.TestBrowserValidation.test_approval_does_not_call_model_or_network) ... ok
+test_browser_channel_does_not_bypass_owner_consent 
+(test_browser_validation.TestBrowserValidation.test_browser_channel_does_not_bypass_owner_consent) ... ok
+test_browser_import_is_lazy (test_browser_validation.TestBrowserValidation.test_browser_import_is_lazy) ... ok
+test_bundled_remains_default_with_no_channel 
+(test_browser_validation.TestBrowserValidation.test_bundled_remains_default_with_no_channel) ... ok
