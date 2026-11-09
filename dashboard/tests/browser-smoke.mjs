@@ -70,7 +70,7 @@ try {
     throw new Error('Workflow success counted as accepted product');
   }
   if(errors.length)throw new Error('React runtime errors: '+errors.join(' | '));
-  await acceptancePage.screenshot({path:'../../docs/verification/phase1/acceptance-workspace.png',fullPage:true});
+  await acceptancePage.screenshot({path:'../docs/verification/phase1/acceptance-workspace.png',fullPage:true});
   console.log('React acceptance states: PASS (API fixtures; execution separate from Owner acceptance)');
 } finally {
   if (browser) await browser.close();
