@@ -10,8 +10,8 @@ CATALOG = ROOT / "docs" / "architecture" / "FILE_CATALOG.md"
 class ArchitectureFileCatalogTests(unittest.TestCase):
     def test_every_current_python_module_has_inventory_entry(self):
         inventory = CATALOG.read_text(encoding="utf-8")
-        source = ROOT / "src" / "agentforge"
-        self.assertTrue(source.is_dir(), "This test targets pre-migration package layout")
+        source = ROOT / "agentforge"
+        self.assertTrue(source.is_dir(), "This test targets the root-level Python package")
         modules = sorted(source.rglob("*.py"))
         self.assertGreaterEqual(len(modules), 100)
         for module in modules:
@@ -24,7 +24,7 @@ class ArchitectureFileCatalogTests(unittest.TestCase):
         runtime = (ROOT / "docs" / "architecture" / "REPOSITORY_STRUCTURE.md").read_text(encoding="utf-8")
         self.assertIn("CHƯA MIGRATE", target)
         self.assertIn("CURRENT IMPLEMENTATION", runtime)
-        self.assertIn("src/agentforge", runtime)
+        self.assertIn("agentforge/", runtime)
         self.assertIn("dashboard/", target)
 
 

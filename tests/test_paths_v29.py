@@ -9,6 +9,7 @@ class PathAndRegistryTests(unittest.TestCase):
     def test_root_points_to_real_source_tree(self):
         root = paths.REPOSITORY_ROOT
         self.assertTrue((root / "pyproject.toml").is_file())
+        self.assertTrue((root / "agentforge" / "__main__.py").is_file())
         self.assertEqual(root / "data", paths.DATA_DIR)
         self.assertEqual(root / "workspace", paths.WORKSPACE_DIR)
         self.assertEqual(root / "dashboard", paths.UI_DASHBOARD_DIR)

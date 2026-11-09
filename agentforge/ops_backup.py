@@ -20,7 +20,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-ROOT = Path(__file__).resolve().parents[2]
+from agentforge.paths import REPOSITORY_ROOT
+
+ROOT = REPOSITORY_ROOT
 DATA_DIR = ROOT / "data" / "company"
 WORKSPACE = ROOT / "workspace"
 OUT = ROOT / "workspace" / "backups"

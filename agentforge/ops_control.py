@@ -15,7 +15,9 @@ from uuid import uuid4
 
 from agentforge.ops_backup import _safe
 
-STATE_FILE = Path(__file__).resolve().parents[2] / "data" / "company" / "ops_control.json"
+from agentforge.paths import REPOSITORY_ROOT
+
+STATE_FILE = REPOSITORY_ROOT / "data" / "company" / "ops_control.json"
 MAX_BYTES = 4096
 MODES = {"ACTIVE", "PAUSED"}
 
