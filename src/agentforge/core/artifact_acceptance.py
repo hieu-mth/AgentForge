@@ -86,3 +86,71 @@ def record_validation(pid, sha, artifact_type, kind, outcome, evidence_id, *, db
     if kind == "TOOLCHAIN_CURRENT" and outcome == "PASS":
         from agentforge.domains.webapps.toolchain import require_current
         require_current(doc["files"])
+    if (kind not in CHECKS or outcome not in ({"REVISE", "MANUAL_REVIEW"} if kind == "REVIEW" else {"PASS", "FAIL"})
+            or not isinstance(evidence_id, str) or not 1 <= len(evidence_id) <= 128):
+        raise ValueError("ACCEPTANCE_INVALID_EVIDENCE")
+    with closing(_connect(db_path, write=True)) as db, db:
+        db.execute("BEGIN IMMEDIATE")
+        _register(db, pid, sha, artifact_type)
+        inserted = db.execute("INSERT OR IGNORE INTO artifact_validations"
+                              "(proposal_id,source_sha,kind,outcome,evidence_id,at) VALUES(?,?,?,?,?,?)",
+                              (pid, sha, kind, outcome, evidence_id, datetime.now(timezone.utc).isoformat()))
+        if inserted.rowcount:
+            db.execute("UPDATE artifact_acceptance SET revision=revision+1 WHERE proposal_id=? AND source_sha=?",
+                       (pid, sha))
+        else:
+            prior = db.execute("SELECT outcome FROM artifact_validations WHERE proposal_id=? AND source_sha=? "
+                               "AND kind=? AND evidence_id=?", (pid, sha, kind, evidence_id)).fetchone()
+            if prior[0] != outcome:
+                raise ValueError("ACCEPTANCE_EVIDENCE_CONFLICT")
+
+
+def _view(db, pid, sha, artifact_type):
+    row = None if db is None else db.execute(
+        "SELECT * FROM artifact_acceptance WHERE proposal_id=? AND source_sha=?", (pid, sha)).fetchone()
+    if row is not None and row["artifact_type"] != artifact_type:
+        raise ValueError("ACCEPTANCE_TYPE_MISMATCH")
+    reports = [] if db is None else [dict(r) for r in db.execute(
+        "SELECT kind,outcome,evidence_id FROM artifact_validations WHERE proposal_id=? AND source_sha=? ORDER BY seq",
+        (pid, sha))]
+    latest = {report["kind"]: report for report in reports}
+    # Failed build tasks from the trusted runner also invalidate earlier evidence.
+    # A successful later build replaces that failure only when recorded explicitly.
+    failed_build = None
+    if db is not None and db.execute("SELECT 1 FROM sqlite_master WHERE name='tasks'").fetchone():
+        for task in db.execute("SELECT task_id,status,request_json FROM tasks WHERE skill_id='webapp.sandbox_test' "
+                               "AND status IN ('SUCCEEDED','FAILED') ORDER BY rowid"):
+            request = json.loads(task["request_json"])
+            if request.get("proposal_id") == pid and request.get("sha256") == sha:
+                failed_build = task["task_id"] if task["status"] == "FAILED" else None
+    if failed_build:
+        latest["BUILD_VALID"] = {"kind": "BUILD_VALID", "outcome": "FAIL", "evidence_id": failed_build}
+    required = list(POLICIES[artifact_type])
+    missing = [check for check in required if latest.get(check, {}).get("outcome") != "PASS"]
+    evidence_sha = _sha({"source_sha": sha, "artifact_type": artifact_type, "reports": latest})
+    if row is not None and row["decision"] == "REJECTED":
+        status = "REJECTED"
+    elif (any(r["outcome"] == "FAIL" for r in latest.values())
+          or latest.get("REVIEW", {}).get("outcome") == "REVISE"):
+        status = "NEEDS_REVISION"
+    elif missing:
+        status = "NEEDS_VALIDATION"
+    elif row is not None and row["decision"] == "ACCEPTED" and row["decision_evidence"] == evidence_sha:
+        status = "ACCEPTED"
+    else:
+        status = "READY_FOR_REVIEW"
+    return {"proposal_id": pid, "source_sha": sha, "artifact_type": artifact_type,
+            "status": status, "required_checks": required, "missing_checks": missing,
+            "checks": latest, "revision": row["revision"] if row else 0,
+            "evidence_sha": evidence_sha, "owner_accepted": status == "ACCEPTED",
+            "interactive_preview_enabled": False}
+
+
+def source(pid, sha, namespace):
+    _identity(pid, sha)
+    if namespace == "webapps":
+        from agentforge import webapp_developer as dev
+        provider = dev.provider(pid)
+        doc, _ = provider._read_proposal(pid)
+        artifact_type = "react_template" if provider is dev.base else "react_ai"
+    elif namespace == "proposals":
