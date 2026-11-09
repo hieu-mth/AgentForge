@@ -428,3 +428,51 @@ test_cross_opportunity_reference_is_rejected
 (test_evaluation.TestEvaluation.test_cross_opportunity_reference_is_rejected) ... ok
 test_evidenced_hard_blocker_kills (test_evaluation.TestEvaluation.test_evidenced_hard_blocker_kills) ... ok
 test_fabricated_blocker_cannot_kill (test_evaluation.TestEvaluation.test_fabricated_blocker_cannot_kill) ... ok
+test_fabricated_reference_cannot_go (test_evaluation.TestEvaluation.test_fabricated_reference_cannot_go) ... ok
+test_go_requires_all_checks_and_approval (test_evaluation.TestEvaluation.test_go_requires_all_checks_and_approval) ... 
+ok
+test_invalid_blocker_also_prevents_go (test_evaluation.TestEvaluation.test_invalid_blocker_also_prevents_go) ... ok
+test_missing_opportunity_id_rejects_go (test_evaluation.TestEvaluation.test_missing_opportunity_id_rejects_go) ... ok
+test_missing_registry_fails_closed (test_evaluation.TestEvaluation.test_missing_registry_fails_closed) ... ok
+test_missing_source_file_is_rejected (test_evaluation.TestEvaluation.test_missing_source_file_is_rejected) ... ok
+test_mixed_valid_and_invalid_refs_are_rejected 
+(test_evaluation.TestEvaluation.test_mixed_valid_and_invalid_refs_are_rejected) ... ok
+test_path_traversal_source_is_rejected (test_evaluation.TestEvaluation.test_path_traversal_source_is_rejected) ... ok
+test_unreviewed_record_is_rejected (test_evaluation.TestEvaluation.test_unreviewed_record_is_rejected) ... ok
+test_vendor_price_alone_is_not_go (test_evaluation.TestEvaluation.test_vendor_price_alone_is_not_go) ... ok
+test_wrong_scope_is_rejected (test_evaluation.TestEvaluation.test_wrong_scope_is_rejected) ... ok
+test_changed_candidate_quote_cannot_register 
+(test_evidence_registration.TestEvidenceRegistration.test_changed_candidate_quote_cannot_register) ... ok
+test_changed_review_quote_cannot_register 
+(test_evidence_registration.TestEvidenceRegistration.test_changed_review_quote_cannot_register) ... ok
+test_duplicate_registration_never_overwrites 
+(test_evidence_registration.TestEvidenceRegistration.test_duplicate_registration_never_overwrites) ... ok
+test_existing_registry_entries_are_preserved 
+(test_evidence_registration.TestEvidenceRegistration.test_existing_registry_entries_are_preserved) ... ok
+test_invalid_candidate_id_cannot_escape_directory 
+(test_evidence_registration.TestEvidenceRegistration.test_invalid_candidate_id_cannot_escape_directory) ... ok
+test_invalid_existing_registry_fails_without_writing 
+(test_evidence_registration.TestEvidenceRegistration.test_invalid_existing_registry_fails_without_writing) ... ok
+test_invalid_source_review_provenance_is_rejected 
+(test_evidence_registration.TestEvidenceRegistration.test_invalid_source_review_provenance_is_rejected) ... ok
+test_manual_confirmation_cannot_be_removed 
+(test_evidence_registration.TestEvidenceRegistration.test_manual_confirmation_cannot_be_removed) ... ok
+test_missing_decision_cannot_register 
+(test_evidence_registration.TestEvidenceRegistration.test_missing_decision_cannot_register) ... ok
+test_registration_creates_valid_local_evidence 
+(test_evidence_registration.TestEvidenceRegistration.test_registration_creates_valid_local_evidence) ... ok
+test_registration_never_triggers_go 
+(test_evidence_registration.TestEvidenceRegistration.test_registration_never_triggers_go) ... ok
+test_rejected_decision_cannot_register 
+(test_evidence_registration.TestEvidenceRegistration.test_rejected_decision_cannot_register) ... ok
+test_report_cannot_claim_verified_customer_demand 
+(test_evidence_registration.TestEvidenceRegistration.test_report_cannot_claim_verified_customer_demand) ... ok
+test_weak_quote_cannot_be_reclassified_as_payment_proof 
+(test_evidence_registration.TestEvidenceRegistration.test_weak_quote_cannot_be_reclassified_as_payment_proof) ... ok
+test_authorized_write_and_read (test_gateway.TestToolGateway.test_authorized_write_and_read) ... ok
+test_idempotent_write (test_gateway.TestToolGateway.test_idempotent_write) ... ok
+test_prevent_absolute_path (test_gateway.TestToolGateway.test_prevent_absolute_path) ... ok
+test_prevent_path_traversal (test_gateway.TestToolGateway.test_prevent_path_traversal) ... ok
+test_prevent_unknown_tools (test_gateway.TestToolGateway.test_prevent_unknown_tools) ... ok
+test_reject_conflicting_write (test_gateway.TestToolGateway.test_reject_conflicting_write) ... ok
+test_builder_receives_larger_budget 
