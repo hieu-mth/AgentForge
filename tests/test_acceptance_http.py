@@ -30,3 +30,15 @@ class AcceptanceHttpTests(unittest.TestCase):
         self.assertEqual(outcome["status"], "REJECTED")
         self.assertEqual(self.fixture.req("POST", self.path, body)[0], 400)
         self.assertEqual(self.fixture.req("GET", "/api/webapps/" + self.pid)[1]["artifact_acceptance"]["status"], "REJECTED")
+
+    def test_syntax_validation_is_source_bound_and_never_claims_runtime(self):
+        self.fixture.login()
+        self.fixture.req("GET", "/api/webapps/" + self.pid)
+        path = "/api/artifacts/webapps/" + self.pid + "/syntax"
+        self.assertEqual(self.fixture.req("POST", path, {"ack": "VALIDATE_SYNTAX", "sha256": "0" * 64})[0], 400)
+        status, result, _ = self.fixture.req("POST", path, {"ack": "VALIDATE_SYNTAX", "sha256": self.sha})
+        self.assertEqual(status, 200, result)
+        self.assertEqual(result["syntax"]["source_sha"], self.sha)
+        self.assertFalse(result["syntax"]["build_verified"])
+        self.assertFalse(result["syntax"]["browser_verified"])
+        self.assertEqual(result["artifact_acceptance"]["status"], "NEEDS_VALIDATION")
