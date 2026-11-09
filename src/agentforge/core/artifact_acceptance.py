@@ -225,3 +225,30 @@ def observe(skill_id, result, *, db_path=None):
             report = static_qa.read(result["qa_report_id"], result["qa_report_sha"])
             if "syntax" in report:
                 record_validation(pid, sha, kind, "SYNTAX_VALID", report["syntax"]["status"],
+                                  result["qa_report_sha"], db_path=db_path)
+        elif (result.get("status") == "PASS" and result.get("runtime") == "docker-local-linux"
+              and result.get("network") == "none" and result.get("source_mount") == "read_only"):
+            record_validation(pid, sha, kind, "BUILD_VALID", "PASS", _sha(result), db_path=db_path)
+
+
+def for_task(task, *, db_path=None):
+    result = task.get("result")
+    if not isinstance(result, dict) or not result.get("proposal_id") or not result.get("sha256"):
+        return None
+    namespace = "proposals" if task.get("skill_id") == "web.create" else "webapps"
+    try:
+        return inspect(result["proposal_id"], result["sha256"], namespace, db_path=db_path)
+    except (ValueError, KeyError, OSError, PermissionError):
+        return {"status": "NEEDS_VALIDATION", "owner_accepted": False, "reason": "SOURCE_UNAVAILABLE_OR_STALE"}
+
+
+def for_goal(goal, *, task_db_path=None):
+    for step in reversed(goal.get("steps", [])):
+        if step.get("child_task_id"):
+            try:
+                found = for_task(task_history.get_task(step["child_task_id"], db_path=task_db_path), db_path=task_db_path)
+                if found is not None:
+                    return found
+            except (KeyError, ValueError, OSError):
+                continue
+    return None
