@@ -202,6 +202,15 @@ export default function App() {
       }));
       if(out){if(namespace==='webapps')await openWebapp(p.proposal_id);else await openProposal(p.proposal_id);}
     });
+  const validateArtifact=async(p,namespace='webapps')=>{
+    const out=await runAction(()=>post('/api/artifacts/'+namespace+'/'+p.proposal_id+'/syntax',
+      {ack:'VALIDATE_SYNTAX',sha256:p.sha256}));
+    if(out){
+      if(out.syntax.status==='PASS')message.info('Cú pháp hợp lệ; chưa xác nhận build hoặc tương tác.');
+      else message.error('Source sai cú pháp: '+out.syntax.diagnostics.map(d=>`${d.path}:${d.line}:${d.column}`).join(', '));
+      if(namespace==='webapps')await openWebapp(p.proposal_id);else await openProposal(p.proposal_id);
+    }
+  };
   const verifyWebapp=p=>ask('Lập kế hoạch QA container?',
     'Chỉ tạo Goal mới. Chạy container cần Docker Linux, image local được pin bằng SHA và quyền process.run được cấp riêng.',
     async()=>{
@@ -326,9 +335,9 @@ export default function App() {
     </Layout>
     <GoalDrawer goal={goal} onClose={()=>setGoal(null)} onApprove={approve}
       onExecute={execute} onViewResult={openGoalResult} busy={busy} externalEnabled={!!data.external_actions_enabled}/>
-    <ProposalDrawer proposal={proposal} onClose={()=>setProposal(null)} onDecide={(p,d)=>decideArtifact(p,d,'proposals')}
+    <ProposalDrawer proposal={proposal} onClose={()=>setProposal(null)} onDecide={(p,d)=>decideArtifact(p,d,'proposals')} onValidate={p=>validateArtifact(p,'proposals')}
       onRevise={revise} onApply={apply} busy={busy}/>
-    <WebappProposalDrawer proposal={webapp} onClose={()=>setWebapp(null)} onDecide={decideArtifact}
+    <WebappProposalDrawer proposal={webapp} onClose={()=>setWebapp(null)} onDecide={decideArtifact} onValidate={validateArtifact}
       onRevise={reviseWebapp} onApply={applyWebapp}
       onVerify={verifyWebapp} busy={busy}/>
     <Drawer title="Chi tiết tác vụ" size={720} open={!!task} onClose={()=>setTask(null)}>
