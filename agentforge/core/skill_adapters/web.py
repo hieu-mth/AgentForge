@@ -19,6 +19,8 @@ POLICY = {
                       frozenset({"model.invoke", "workspace.propose"})),
     "webapp.sandbox_test": ("product_builder", "owner_gated",
                              frozenset({"workspace.read", "process.run"})),
+    "webapp.browser_qa": ("product_builder", "owner_gated",
+                          frozenset({"workspace.read", "process.run"})),
     "web.browser_test": ("product_builder", "owner_gated",
                          frozenset({"workspace.read", "browser.run"})),
 }
@@ -71,6 +73,10 @@ def dispatch(skill_id, payload):
         return review(payload["architecture_id"], payload["architecture_sha"],
                       payload["proposal_id"], payload["sha256"],
                       payload["qa_report_id"], payload["qa_report_sha"])
+    if skill_id == "webapp.browser_qa":
+        from agentforge.features.webapps.browser_qa import verify
+        return verify(payload["proposal_id"], payload["sha256"],
+                      confirm_external_run=True)
     if skill_id == "webapp.sandbox_test":
         from agentforge.webapp_sandbox import verify
         return verify(payload["proposal_id"], payload["sha256"],

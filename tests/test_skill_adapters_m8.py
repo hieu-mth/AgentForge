@@ -14,7 +14,7 @@ class DomainSkillAdapterTests(unittest.TestCase):
         registry = skill_registry.load_registry()
         self.assertEqual(set(registry), set(skill_adapters.POLICY))
         modules = (web, research, media, analytics, growth)
-        self.assertEqual(sum(len(module.POLICY) for module in modules), 30)
+        self.assertEqual(sum(len(module.POLICY) for module in modules), 31)
         for skill_id, contract in registry.items():
             with self.subTest(skill_id=skill_id):
                 worker, mode, permissions = skill_adapters.POLICY[skill_id]

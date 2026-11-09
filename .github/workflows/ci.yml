@@ -96,6 +96,9 @@ jobs:
         working-directory: templates/novamart
         run: npm run test:browser
 
+      - name: Check trusted offline Chromium runner syntax
+        run: node --check sandbox/webapp/browser_runner.mjs
+
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
 

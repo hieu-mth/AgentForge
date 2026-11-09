@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { App as AntApp, Alert, Button, Card, Collapse, Descriptions, Drawer, Form, Grid, Input,
-  Layout, Menu, Space, Spin, Table, Tabs, Tooltip, Typography } from 'antd';
+  Image, Layout, Menu, Space, Spin, Table, Tabs, Tooltip, Typography } from 'antd';
 import {
   BarChartOutlined, DashboardOutlined, FolderOpenOutlined,
   LeftOutlined, MenuOutlined, MoonOutlined, ReloadOutlined, RobotOutlined,
@@ -398,6 +398,25 @@ export default function App() {
       {task.report?.kind==='v5_static_qa'&&<Card title="V5 — QA tĩnh" style={{marginTop:18}}>
         <Alert type="info" showIcon message="Chỉ kiểm tra mã nguồn, SHA và allowlist"
           description="Không chạy npm, không chạy trình duyệt và không bảo đảm chức năng hoạt động."/>
+      </Card>}
+      {task.report?.kind==='webapp_browser_qa'&&<Card title="QA Chromium Docker offline" style={{marginTop:18}}>
+        <Alert type={task.report.status==='PASS_SMOKE_ONLY'?'success':'warning'} showIcon
+          message={task.report.status==='PASS_SMOKE_ONLY'?'Browser smoke đạt — không đồng nghĩa đúng nghiệp vụ':'Browser QA chưa đạt'}
+          description="Container Linux offline; screenshot, exceptions và mobile layout chỉ là smoke tests, không chứng minh mọi tính năng hoặc bảo mật."/>
+        <Descriptions bordered size="small" column={1} style={{marginTop:12}} items={[
+          {key:'code',label:'Mã kết quả',children:task.report.code},
+          {key:'checks',label:'Kiểm tra',children:Object.entries(task.report.checks||{})
+            .map(([k,v])=>k+': '+(v?'PASS':'FAIL')).join(', ')||'Không có'},
+          {key:'report',label:'Report SHA',children:<Text code>{task.report.report_sha}</Text>},
+        ]}/>
+        <Alert type="info" showIcon style={{marginTop:12}} message="Xem source trước khi mở ảnh QA"
+          description="Ảnh chỉ hiện khi phiên Owner đã xem đúng source SHA."/>
+        {task.report.report_id&&task.report.report_sha&&<Space wrap style={{marginTop:14}}>
+          <Button onClick={()=>openWebapp(task.report.proposal_id)}>Xem source QA</Button>
+          {['desktop.png','mobile.png'].map(filename=><Image key={filename} width={160}
+            alt={filename==='desktop.png'?'Screenshot desktop offline':'Screenshot mobile offline'}
+            src={'/api/webapps/qa/'+task.report.report_id+'/'+task.report.report_sha+'/'+filename}/>)}
+        </Space>}
       </Card>}
       {task.report?.kind==='webapp_qa'&&<Card title="Kết quả QA React trong Docker"
         style={{marginTop:18}}>

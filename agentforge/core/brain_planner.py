@@ -18,6 +18,7 @@ TEMPLATES = {
     "webapp.source_revision": ("slug", "brief", "source_proposal_id",
                                "source_sha256", "revision_feedback"),
     "webapp.qa": ("proposal_id", "sha256", "confirm_external_run"),
+    "webapp.browser_qa": ("proposal_id", "sha256", "confirm_external_run"),
     "website.browser": ("slug",),
     "media.produce": ("slug", "title", "scenes"),
     "media.review": ("run_id",),
@@ -139,7 +140,7 @@ def _steps(template, inputs):
                     "qa_report_id":bind(2,"qa_report_id"),
                     "qa_report_sha":bind(2,"qa_report_sha")}),
             ]
-    elif template == "webapp.qa":
+    elif template in {"webapp.qa", "webapp.browser_qa"}:
         from agentforge.webapp_builder import PROPOSAL, SHA, _name
         _name(inputs["proposal_id"], PROPOSAL, "proposal id")
         if (not isinstance(inputs["sha256"], str)
@@ -147,7 +148,8 @@ def _steps(template, inputs):
             raise brain_store.BrainError("Invalid app QA proposal digest")
         if inputs["confirm_external_run"] is not True:
             raise brain_store.BrainError("Owner must explicitly request external QA")
-        steps = [("webapp.sandbox_test", dict(inputs))]
+        steps = [("webapp.browser_qa" if template == "webapp.browser_qa"
+                  else "webapp.sandbox_test", dict(inputs))]
     elif template == "website.campaign":
         payload = {"dataset": inputs["dataset"]}
         if "campaign" in inputs:

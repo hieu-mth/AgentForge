@@ -58,6 +58,7 @@ export const SKILLS = Object.freeze({
   'webapp.audit': 'QA tĩnh kiểm tra SHA và mã nguồn (V5)',
   'webapp.review': 'AI Reviewer phản biện mã nguồn, không duyệt tự động (V5)',
   'webapp.sandbox_test': 'Kiểm thử React bằng Docker offline',
+  'webapp.browser_qa': 'Kiểm tra React trên Chromium Docker offline (smoke test)',
   'web.quality_check': 'Kiểm tra chất lượng website',
   'web.browser_test': 'Kiểm thử website trên trình duyệt',
   'research.opportunity': 'Nghiên cứu cơ hội kinh doanh',
