@@ -1,0 +1,86 @@
+# Owner defaults. Keep task/worker mapping reviewed in Git; Dashboard overrides
+# store only selected model IDs in data/company/model_hub.sqlite3.
+# "wired": existing LLM runtime reads the selected model.
+# "config_only": UI assignment only; does NOT execute image/video generation.
+# "rules": deterministic system monitoring, no model call.
+
+[routes."general.text"]
+label = "Chat / phân tích chung"
+kind = "text"
+execution = "wired"
+default_model = "local_primary"
+
+[routes."web.create"]
+label = "Tạo Website"
+kind = "text"
+execution = "wired"
+worker = "product_builder"
+
+[routes."webapp.architect"]
+label = "Phân tích WebApp"
+kind = "text"
+execution = "wired"
+worker = "webapp_architect"
+
+[routes."webapp.develop"]
+label = "Viết mã React"
+kind = "text"
+execution = "wired"
+worker = "webapp_developer"
+
+[routes."webapp.review"]
+label = "Review mã React"
+kind = "text"
+execution = "wired"
+worker = "webapp_reviewer"
+
+[routes."research.opportunity"]
+label = "Nghiên cứu cơ hội"
+kind = "text"
+execution = "wired"
+worker = "opportunity_researcher"
+
+[routes."research.source_review"]
+label = "Đánh giá nguồn"
+kind = "text"
+execution = "wired"
+worker = "source_reviewer"
+
+[routes."media.copy_draft"]
+label = "Viết kịch bản video ngắn"
+kind = "text"
+execution = "wired"
+worker = "media_producer"
+
+[routes."analytics.quality_check"]
+label = "Phân tích dữ liệu"
+kind = "text"
+execution = "wired"
+worker = "analytics_analyst"
+
+[routes."growth.report"]
+label = "Báo cáo Growth"
+kind = "text"
+execution = "wired"
+worker = "growth_operator"
+
+[routes."film.storyboard"]
+label = "Kịch bản phim dài"
+kind = "text"
+execution = "config_only"
+default_model = "local_primary"
+
+[routes."film.motion"]
+label = "Tạo video chuyển động"
+kind = "video"
+execution = "config_only"
+
+[routes."image.generate"]
+label = "Sinh hình ảnh"
+kind = "image"
+execution = "config_only"
+
+[routes."ops.monitor"]
+label = "Theo dõi hệ thống"
+kind = "rules"
+execution = "rules"
