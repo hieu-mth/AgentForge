@@ -24,10 +24,20 @@ QA_STAGING = ROOT / "workspace" / ".webapp-qa-staging"
 IMAGE_ID = re.compile(r"sha256:[a-f0-9]{64}\Z")
 MAX_TIMEOUT_SECONDS = 150
 CHECKS = ["node-unit-tests", "vite-production-build"]
+# Fixed trusted code checks the cached image, not generated package scripts.
+# Vite's supported esbuild range includes 0.28; an old cached image must fail.
+TOOLCHAIN_CHECK = (
+    "node -e 'const {createRequire}=require(\"node:module\");"
+    "const r=createRequire(\"/opt/agentforge/package.json\");"
+    "const v=r(\"vite/package.json\");"
+    "const e=createRequire(r.resolve(\"vite/package.json\"))(\"esbuild/package.json\");"
+    "if(v.version!==\"7.3.7\"||e.version!==\"0.28.1\")process.exit(70)' && "
+)
 # The only shell text executed is fixed trusted code *inside* the isolated
 # container. Nothing from an AI model or Owner prompt becomes shell syntax.
 CONTAINER_SCRIPT = (
     "test -d /opt/agentforge/node_modules && "
+    + TOOLCHAIN_CHECK +
     "cp -R /input/. /work/ && "
     "ln -s /opt/agentforge/node_modules /work/node_modules && "
     "npm run test && npm run build"
@@ -87,6 +97,11 @@ def verify(proposal_id, sha256, *, confirm_external_run=False):
     document, _ = provider._read_proposal(proposal_id)
     if sha256 != document["sha256"]:
         raise PermissionError("SANDBOX_SOURCE_STALE")
+    from agentforge.domains.webapps import toolchain, syntax
+    toolchain.require_current(document["files"])
+    report = syntax.check_files(document["files"], sha256)
+    if report["status"] != "PASS":
+        raise syntax.SourceSyntaxError(report)
     # Never try native npm or any process if pinned Docker is unavailable.
     image = _pinned_image()
     docker, host = _docker_executable(), _local_docker_host()
@@ -123,19 +138,19 @@ def verify(proposal_id, sha256, *, confirm_external_run=False):
             "--env", "npm_config_offline=true",
             "--entrypoint", "/bin/sh", image, "-ec", CONTAINER_SCRIPT,
         ]
-        timed_out = False
+        needs_cleanup = True
         try:
             result = subprocess.run(
                 args, stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 env=_env(), timeout=MAX_TIMEOUT_SECONDS, check=False)
+            needs_cleanup = False  # --rm removes a normally exited container.
         except subprocess.TimeoutExpired as exc:
-            timed_out = True
             raise RuntimeError("SANDBOX_TIMEOUT: Container exceeded build deadline") from exc
         except OSError as exc:
             raise RuntimeError("SANDBOX_UNAVAILABLE: Cannot start Docker") from exc
         finally:
-            if timed_out:
+            if needs_cleanup:
                 # Killing the CLI does not necessarily kill the container.
                 # Force-remove only the unique container created for this run.
                 try:
@@ -146,10 +161,13 @@ def verify(proposal_id, sha256, *, confirm_external_run=False):
                         check=False)
                 except (OSError, subprocess.TimeoutExpired):
                     pass
+        if result.returncode == 70:
+            raise RuntimeError("SANDBOX_UNAVAILABLE: Rebuild the pinned QA image with the patched lockfile")
         if result.returncode != 0:
             raise RuntimeError("SANDBOX_BUILD_FAILED: Reviewed app did not pass npm test/build")
     return {
         "status": "PASS",
+        "stage": "BUILD_VALID", "build_verified": True, "browser_verified": False,
         "project_slug": document["project_slug"],
         "proposal_id": proposal_id,
         "sha256": sha256,
