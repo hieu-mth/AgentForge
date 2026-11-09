@@ -1,0 +1,20 @@
+✔ Task ID click opens native modal, no page navigation or forced scroll (3.218ms)
+✔ Safe error rendering escapes untrusted HTML within modal (0.7295ms)
+✔ Close button, backdrop and native dialog close reset selected task (1.2744ms)
+✔ Task can open from Overview without switching page (0.5947ms)
+✔ Native dialog has accessible title, close control and keyboard behavior (0.1711ms)
+✔ Goal form defaults to existing dataset, not demo-example placeholder (1.2605ms)
+✔ If there is no dataset the form warns rather than suggesting fake ID (0.544ms)
+✔ Completed Goal step offers a direct safe Task Result button (0.6898ms)
+✔ Result Viewer renders synthetic and uncertainty, escapes injected HTML (10.8015ms)
+✔ Owner can pause active system without hiding dashboard (1.0096ms)
+✔ Paused system displays fail-closed state and explicit resume action (0.6918ms)
+✔ Owner attention queue HTML escapes titles from local records (0.5673ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 33.8983
