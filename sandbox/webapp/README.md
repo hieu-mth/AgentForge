@@ -20,9 +20,12 @@ same PowerShell terminal running Control Center:
 The image contains locally preinstalled dependencies (React/Vite) and no user
 project files. Building this image can use the network once under the
 Owner's manual control; the later application QA container has **no network**.
+Rebuild the image after Phase 1: Vite 7.3.7 / esbuild 0.28.1 are locked by
+the reviewed reference package-lock.json and installed with npm ci. An old
+cached image must not be reused after dependency changes.
 Review npm dependency provenance before preparing the image. Upstream Node
 image tag is not cryptographically pinned here; for production, replace it
-with an Owner-reviewed digest and maintain a lockfile.
+with an Owner-reviewed digest. The application dependency lockfile is committed.
 
 ## Performing the isolated app test
 
