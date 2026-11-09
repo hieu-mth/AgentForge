@@ -902,3 +902,66 @@ class _Handler(BaseHTTPRequestHandler):
             return self._reply(400, {"error": type(exc).__name__,
                                      "message": msg})
         except Exception:
+            return self._reply(500, {"error": "internal_error",
+                                     "message": "Inspect local task/goal status; no automatic retry"})
+
+    def do_PUT(self):
+        return self._blocked(405, "method_not_allowed")
+
+    def do_DELETE(self):
+        return self._blocked(405, "method_not_allowed")
+
+    def do_OPTIONS(self):
+        return self._blocked(405, "no_cors")
+
+
+def create_server(port=8780, *, owner_code=None, allow_external_actions=False,
+                  task_db_path=None, brain_db_path=None, analytics_db_path=None,
+                  growth_db_path=None):
+    if type(port) is not int or not 0 <= port <= 65535:
+        raise ValueError("Invalid port")
+    if owner_code is not None and (
+            not isinstance(owner_code, str) or not 12 <= len(owner_code) <= 128):
+        raise ValueError("Owner code must be 12-128 characters")
+    server = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
+    server.daemon_threads = True
+    server.owner_code = owner_code or secrets.token_urlsafe(24)
+    server.sessions = {}
+    server.failed_logins = []
+    server.auth_lock = threading.RLock()
+    server.task_db_path = task_db_path
+    server.brain_db_path = brain_db_path
+    server.analytics_db_path = analytics_db_path
+    server.growth_db_path = growth_db_path
+    server.allow_external_actions = allow_external_actions is True
+    return server
+
+
+def main():
+    cli = argparse.ArgumentParser(
+        description="Owner-authenticated localhost AgentForge Control Center V1")
+    cli.add_argument("--port", type=int, default=8780)
+    cli.add_argument("--allow-external-tools", action="store_true",
+                     help="Explicitly enable gated model/network/browser/process workflows")
+    args = cli.parse_args()
+    server = create_server(args.port, allow_external_actions=args.allow_external_tools)
+    print(f"Control Center V1: http://127.0.0.1:{server.server_port}/", flush=True)
+    print("ONE-TIME OWNER CODE (do not share, paste into Git or logs):",
+          server.owner_code, flush=True)
+    print("Localhost only. Session expires in 8h; Ctrl+C to stop.", flush=True)
+    if args.allow_external_tools:
+        print("External-capable tools are ENABLED but still require per-action approvals.",
+              flush=True)
+    else:
+        print("External-capable tools DISABLED. Read-only and owner-gated local actions only.",
+              flush=True)
+    try:
+        server.serve_forever(poll_interval=.3)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+
+
+if __name__ == "__main__":
+    main()
