@@ -528,3 +528,91 @@ def _owner_action(server, path, request, session=None):
             pieces[3], target, confirm_write=True, db_path=server.brain_db_path)
     if path == "/api/campaigns/create":
         if request.get("ack") != "CREATE_CAMPAIGN":
+            raise PermissionError("Explicit CREATE_CAMPAIGN required")
+        return growth_store.create_campaign(
+            request.get("data"), confirm_write=True,
+            db_path=server.growth_db_path, analytics_db_path=server.analytics_db_path)
+    if path == "/api/campaigns/event":
+        if request.get("ack") != "RECORD_EVENT":
+            raise PermissionError("Explicit RECORD_EVENT required")
+        # Strict nested validation occurs before any storage; does not log PII.
+        growth_store.validate_event_payload(request.get("kind"),
+                                            request.get("data"))
+        return growth_store.record_event(
+            request["kind"], request["data"], confirm_write=True,
+            db_path=server.growth_db_path)
+    if path == "/api/memory/set":
+        if request.get("ack") != "SAVE_NOTE":
+            raise PermissionError("Explicit SAVE_NOTE required")
+        return brain_store.set_memory(
+            request.get("key"), request.get("note"),
+            request.get("evidence_ref"), confirm_write=True,
+            db_path=server.brain_db_path)
+    raise ValueError("Unknown mutation route")
+
+
+class _Handler(BaseHTTPRequestHandler):
+    # No persistent request bodies: malformed Content-Length cannot desync keep-alive.
+    protocol_version = "HTTP/1.0"
+
+    def log_message(self, format, *args):
+        return  # Do not log authentication credentials, URLs or customer data.
+
+    def _origin(self):
+        return f"http://{self.headers.get('Host', '')}"
+
+    def _host_ok(self):
+        host = self.headers.get("Host", "")
+        port = self.server.server_port
+        return (host in (f"127.0.0.1:{port}", f"localhost:{port}") and
+                self.client_address[0] in {"127.0.0.1", "::1"})
+
+    def _reply(self, code, data, *, mime="application/json", headers=(),
+               isolated_preview=False):
+        if isinstance(data, (dict, list)):
+            raw = json.dumps(data, ensure_ascii=False, allow_nan=False).encode("utf-8")
+        elif isinstance(data, bytes):
+            raw = data
+        else:
+            raw = str(data).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(len(raw)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        if not isolated_preview:
+            self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        if isolated_preview:
+            # Opaque-origin sandbox: NO JS, forms, network, navigation or top access.
+            # Only inline CSS and bounded local document rendering are allowed.
+            self.send_header("Content-Security-Policy",
+                "sandbox; default-src 'none'; script-src 'none'; "
+                "style-src 'unsafe-inline'; img-src data:; font-src data:; "
+                "connect-src 'none'; form-action 'none'; base-uri 'none'; "
+                "frame-ancestors 'self'")
+        else:
+            self.send_header("Content-Security-Policy",
+                ("default-src 'none'; script-src 'self'; style-src 'self'"+
+                 (" 'unsafe-inline'" if self.path.startswith("/dashboard") else "")+
+                 "; connect-src 'self'; img-src 'self' data:; font-src 'self' data:; "+
+                 "frame-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"))
+        for k, v in headers:
+            self.send_header(k, v)
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def _session(self):
+        raw = self.headers.get("Cookie", "")
+        if len(raw) > 2048:
+            return None
+        try:
+            jar = cookies.SimpleCookie()
+            jar.load(raw)
+            item = jar.get(COOKIE)
+        except cookies.CookieError:
+            return None
+        if item is None:
+            return None
