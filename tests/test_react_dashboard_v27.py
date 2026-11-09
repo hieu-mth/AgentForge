@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from agentforge import control_center_v1 as cc
+from agentforge.api import static as dashboard_static
 
 
 class ReactDashboardTests(unittest.TestCase):
@@ -22,7 +23,7 @@ class ReactDashboardTests(unittest.TestCase):
             'console.log("safe react bundle")', encoding="utf-8")
         (self.dist / "assets" / "main-abc123.css").write_text(
             'body{color:#000}', encoding="utf-8")
-        self.patch = patch.object(cc, "REACT_DIST", self.dist)
+        self.patch = patch.object(dashboard_static, "REACT_DIST", self.dist)
         self.patch.start()
         self.addCleanup(self.patch.stop)
         self.server = cc.create_server(port=0, owner_code="test-owner-code-1234",
@@ -91,7 +92,7 @@ class ReactDashboardTests(unittest.TestCase):
         status, _, _ = self.get("/dashboard/")
         self.assertEqual(404, status)
         (self.dist / "index.html").write_text("ok", encoding="utf-8")
-        with patch.object(cc, "REACT_ASSET_RE") as matcher:
+        with patch.object(dashboard_static, "REACT_ASSET_RE") as matcher:
             matcher.fullmatch.return_value = None
             status, _, _ = self.get("/dashboard/assets/main-abc123.js")
             self.assertEqual(404, status)

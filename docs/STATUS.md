@@ -1,6 +1,6 @@
 # AgentForge — Trạng thái thực tế
 
-**Baseline tính năng:** sau PR #61 (09/11/2026); **đường dẫn code hiện tại:** M1 `dashboard/`, M2 `agentforge/` tại root. Đây là refactor packaging/path, không mở rộng khả năng AI.
+**Baseline tính năng:** sau PR #61 (09/11/2026); **đường dẫn code hiện tại:** M1 `dashboard/`, M2 `agentforge/` ở root; M3 canonical HTTP ở `agentforge/api/`. Đây là refactor/contract hardening, không mở rộng khả năng AI.
 
 Các nhãn được dùng thống nhất:
 
@@ -13,13 +13,13 @@ Các nhãn được dùng thống nhất:
 
 | Tính năng | Trạng thái | Bằng chứng trong source | Không được hiểu nhầm |
 | --- | --- | --- | --- |
-| Dashboard React + Owner session | IMPLEMENTED | `dashboard/`, `agentforge/control_center_v1.py` | Không có multi-tenant/public hosting |
+| Dashboard React + Owner session | IMPLEMENTED | `dashboard/`, `agentforge/api/server.py` | Không có multi-tenant/public hosting |
 | Task orchestration và approvals | IMPLEMENTED | `agentforge/core/`, `skills/` | Không tự động trao quyền tool cho AI |
 | Artifact acceptance gắn SHA | IMPLEMENTED | `agentforge/core/artifact_acceptance.py` | Workflow `SUCCEEDED` chưa chắc artifact `ACCEPTED` |
 | Static Website Builder | PARTIAL | `agentforge/domains/websites/` | Thiết kế và section bị giới hạn bởi schema; không có backend chung |
 | Marketplace React demo | PARTIAL | `agentforge/domains/webapps/builder.py`, `templates/novamart/` | Cart/search demo, không có checkout thanh toán |
 | AI React Developer | PARTIAL | `agentforge/domains/webapps/developer.py` | Danh sách file giới hạn; source là đề xuất, không tự chạy |
-| Source revision cho AI React | NOT IMPLEMENTED | `agentforge/control_center_v1.py` hiện trả về `PermissionError` | Website/marketplace **có** revision riêng theo data/schema, không phải sửa source AI |
+| Source revision cho AI React | NOT IMPLEMENTED | `agentforge/api/routes/products.py` hiện trả về `PermissionError` | Website/marketplace **có** revision riêng theo data/schema, không phải sửa source AI |
 | Build + browser QA source AI | UNVERIFIED | `agentforge/domains/webapps/sandbox.py` | Docker bị thiếu ở máy Owner; CI không chạy generated source |
 | Media ảnh tĩnh → MP4 | IMPLEMENTED (bounded) | `agentforge/domains/media/assets.py`, `render.py` | Không đồng nghĩa phim AI chuyển động |
 | AI Film planner nhiều giờ | IMPLEMENTED (planning) | `agentforge/domains/media/long_form.py` | 900 shot được **lập kế hoạch**, chưa render 900 clip |

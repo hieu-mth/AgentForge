@@ -1,6 +1,6 @@
 # Kiến trúc repository AgentForge
 
-> **CURRENT IMPLEMENTATION** — code hiện đã có `agentforge/` (Python) và `dashboard/` (React) tại repository root theo M1–M2. Kiến trúc đầy đủ [đã chốt](TARGET_STRUCTURE.md) nhưng **M3–M5 chia API/features/integrations chưa thực hiện**. Xem [catalog từng file](FILE_CATALOG.md) và [kế hoạch migration](MIGRATION_PLAN.md).
+> **CURRENT IMPLEMENTATION** — M1/M2 đặt Python `agentforge/` và React `dashboard/` tại root; **M3 đã tách API thành `agentforge/api/`**. M4/M5 chuyển features/integrations/compatibility aliases **chưa thực hiện**. Xem [catalog từng file](FILE_CATALOG.md) và [kế hoạch migration](MIGRATION_PLAN.md).
 
 **Current source of truth:** Python modular monolith, một React dashboard, local SQLite + workspace. Đã loại bỏ frontend HTML/CSS/JS V0 và Python dashboard V0.
 
@@ -10,7 +10,12 @@
 AgentForge/
 ├── agentforge/
 │   ├── __main__.py                 # python -m agentforge
-│   ├── control_center_v1.py       # Owner HTTP, session/CSRF, JSON API, React dist
+│   ├── control_center_v1.py       # Compatibility facade cho import/CLI cũ
+│   ├── api/                       # Canonical localhost HTTP, auth, static, routes
+│   │   ├── server.py              # HTTP transport, CSP, CSRF, request parsing
+│   │   ├── auth.py                # Owner sessions/login
+│   │   ├── static.py              # Strictly trusted React assets
+│   │   └── routes/                # Bootstrap, GET and domain-specific mutations
 │   ├── ai/                        # AI intake, routing, provider profiles
 │   ├── core/                      # workflow, tasks, permissions, artifact acceptance
 │   ├── domains/
@@ -33,7 +38,7 @@ AgentForge/
 └── workspace/                     # Owner products/films/proposals (gitignored)
 ~~~
 
-`agentforge/` là **backend Python đang chạy** ở root, còn `dashboard/` là frontend React; URL vẫn `/dashboard/`. Namespace Python `agentforge.*`, các CLI và SQLite paths không đổi về ý nghĩa. M3–M5 là các đợt refactor nội bộ riêng. Những Python compatibility aliases root-level được giữ nếu còn CLI, imports hoặc tests phụ thuộc. Không tự tái tổ chức tất cả folder chỉ để đẹp cây thư mục.
+`agentforge/` là **backend Python đang chạy** ở root, còn `dashboard/` là frontend React; URL vẫn `/dashboard/`. Namespace Python `agentforge.*`, các CLI và SQLite paths không đổi về ý nghĩa. M3 đã hoàn thành trong scope API; M4/M5 là các đợt refactor domain và aliases còn lại. Những Python compatibility aliases root-level được giữ nếu còn CLI, imports hoặc tests phụ thuộc. Không tự tái tổ chức tất cả folder chỉ để đẹp cây thư mục.
 
 ## Vòng đời sản phẩm
 

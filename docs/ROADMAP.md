@@ -4,7 +4,7 @@
 
 ## Quyết định kiến trúc repository
 
-Đã chốt [flat-root architecture](architecture/TARGET_STRUCTURE.md): **M1 Dashboard và M2 Python package đã chuyển** thành `dashboard/` và `agentforge/` ngay root. Kiến trúc Feature-First Modular Monolith vẫn là đích; chia API, features, integrations và xóa aliases (M3–M5) **chưa làm**. Xem [migration plan](architecture/MIGRATION_PLAN.md).
+Đã chốt [flat-root architecture](architecture/TARGET_STRUCTURE.md): **M1 Dashboard và M2 Python package đã chuyển** thành `dashboard/` và `agentforge/` ngay root. Kiến trúc Feature-First Modular Monolith vẫn là đích; chia API **M3 đã xong**; features/integrations và xóa aliases (M4–M5) **chưa làm**. Xem [migration plan](architecture/MIGRATION_PLAN.md).
 
 ## Hai hướng sản phẩm cần hoàn thiện
 
