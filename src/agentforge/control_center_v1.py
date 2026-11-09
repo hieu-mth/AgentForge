@@ -692,3 +692,69 @@ class _Handler(BaseHTTPRequestHandler):
             if route == "/api/artifacts":
                 from agentforge.artifact_catalog import report
                 return self._reply(200, report())
+            if route == "/api/ops/health":
+                from agentforge import ops_doctor
+                source_paths = {
+                    "S1 tasks": self.server.task_db_path or task_history.DEFAULT_DB,
+                    "S3 analytics": self.server.analytics_db_path or analytics_store.DB,
+                    "S4 goals": self.server.brain_db_path or brain_store.DB,
+                    "S5 growth": self.server.growth_db_path or growth_store.DB,
+                }
+                return self._reply(200, ops_doctor.inspect(
+                    paths=source_paths, task_db=self.server.task_db_path,
+                    brain_db=self.server.brain_db_path))
+            if route == "/api/memory":
+                return self._reply(200, brain_store.list_memory(
+                    db_path=self.server.brain_db_path))
+            if route.startswith("/api/webapps/"):
+                from agentforge import webapp_developer
+                parts = route.split("/")
+                if len(parts) != 4 or parts[1:3] != ["api", "webapps"]:
+                    raise ValueError("Invalid application review route")
+                proposal_id = parts[3]
+                provider = webapp_developer.provider(proposal_id)
+                document, _ = provider._read_proposal(proposal_id)
+                session = self._session()
+                session.setdefault("reviewed_webapps", {})[proposal_id] = document["sha256"]
+                comparison = (provider.compare(proposal_id)
+                              if provider is webapp_developer.base
+                              else {"revision": False, "changed_fields": [],
+                                    "changed_files": []})
+                return self._reply(200, {
+                    "proposal_id": proposal_id,
+                    "sha256": document["sha256"],
+                    "project_slug": document["project_slug"],
+                    "status": document["status"],
+                    "format": document["format"],
+                    "revision": document.get("revision"),
+                    "comparison": comparison,
+                    "ai_code_experimental": provider is not webapp_developer.base,
+                    "artifact_acceptance": artifact_acceptance.inspect(
+                            proposal_id, document["sha256"], db_path=self.server.task_db_path),
+                    "files": [{"path": file["path"], "content": file["content"]}
+                              for file in document["files"]],
+                    "execution_authorized": False,
+                    "deployment_authorized": False,
+                })
+            if route.startswith("/api/proposals/") and route.endswith("/preview"):
+                from agentforge.website_preview import from_proposal
+                ident = route[len("/api/proposals/"):-len("/preview")]
+                page = from_proposal(ident)
+                return self._reply(200, page, mime="text/html; charset=utf-8",
+                                   isolated_preview=True)
+            if route.startswith("/api/proposals/"):
+                from agentforge import product_builder
+                ident = route.removeprefix("/api/proposals/")
+                document, _ = product_builder._read_proposal(ident)
+                if document["status"] != "PROPOSED_NOT_APPLIED":
+                    raise ValueError("Proposal cannot be reviewed")
+                session = self._session()
+                session.setdefault("reviewed_proposals", {})[ident] = document["sha256"]
+                return self._reply(200, {
+                    "proposal_id": ident, "project_slug": document["project_slug"],
+                    "sha256": document["sha256"],
+                    "status": document["status"],
+                    "summary": document["summary"],
+                    "artifact_acceptance": artifact_acceptance.inspect(
+                            ident, document["sha256"], "proposals", db_path=self.server.task_db_path),
+                    "files": [{"path": f["path"], "content": f["content"]}
