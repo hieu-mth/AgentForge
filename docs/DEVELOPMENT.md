@@ -1,6 +1,6 @@
 # Phát triển và vận hành trên Windows
 
-> **Đường dẫn hiện tại: `agentforge/` (Python) và `dashboard/` (React), đều ở repository root.** [M1+M2](architecture/MIGRATION_PLAN.md) đã chuyển, M3 đã chia API; M8 chia skill adapters, còn migration features/integrations/aliases (M4–M5) chưa thực hiện.
+> **Đường dẫn hiện tại: `agentforge/` (Python) và `dashboard/` (React), đều ở repository root.** [M1+M2](architecture/MIGRATION_PLAN.md) đã chuyển, M3 đã chia API; M8 chia skill adapters; M4a–M4d1 đã chuyển Growth/Website/Webapp/Media/Film canonical features. ComfyUI integration (M4d2) và cleanup aliases (M5) vẫn chờ.
 
 **Đối tượng:** Owner/developer làm việc trực tiếp tại `D:\AgentForge`. Có thể dùng folder khác; các lệnh bên dưới giả định repo đã clone.
 
