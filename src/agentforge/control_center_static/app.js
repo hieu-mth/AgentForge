@@ -354,3 +354,62 @@ function renderGoalDetail(){
   '<label class="check-row"><input type="checkbox" id="confirm-browser">Cho phép browser</label>'+
   '<label class="check-row"><input type="checkbox" id="confirm-process">Cho phép process/FFmpeg</label></div>'+
   '<div class="form-actions"><button class="btn btn-primary" data-'+action+'-goal="'+
+  esc(g.goal_id)+'">'+(action==="run"?"Chạy kế hoạch":"Tiếp tục từ approval gate")+'</button></div>':"";
+ const approve=g.status==="PLANNED"?
+  '<div class="form-actions"><button class="btn btn-primary" data-approve-goal="'+
+  esc(g.goal_id)+'">Duyệt SHA và mở quyền chạy</button></div>':"";
+ return '<div class="detail-header"><div><h2>'+esc(g.title)+'</h2><div class="small muted">'+
+ esc(g.template)+' · '+short(g.goal_id)+'</div></div>'+badge(g.status)+(g.artifact_acceptance?' <span class="small muted">Sản phẩm: '+esc(g.artifact_acceptance.status)+'</span>':'')+'</div>'+
+ '<p class="small muted" style="margin-top:12px">SHA-256 kế hoạch (bắt buộc khớp)</p>'+
+ '<div class="mono callout">'+esc(g.plan_sha256)+'</div>'+
+ '<ol class="step-list">'+stepRows+'</ol>'+approve+permissions+
+ '<details class="section"><summary class="small muted">Xem đầy đủ inputs và plan để kiểm tra</summary>'+
+ '<pre class="code-box">'+esc(JSON.stringify({inputs:g.inputs,plan:g.plan},null,2))+'</pre></details>';
+}
+function renderResultReport(report){
+ if(!report)return "";
+ const human=v=>v===null?"Chưa xác minh":typeof v==="boolean"?(v?"Có":"Không"):
+   typeof v==="number"?v.toLocaleString("vi-VN"):String(v);
+ const rows=Object.entries(report.fields||{}).map(([key,value])=>
+  '<tr><td>'+esc(key)+'</td><td>'+esc(human(value))+'</td></tr>');
+ const metricRows=Object.entries(report.metrics||{}).map(([key,value])=>
+  '<tr><td>'+esc(key)+'</td><td>'+esc(human(value))+'</td></tr>');
+ const channels=(report.channels||[]).map(x=>
+  '<tr><td>'+esc(x.name)+'</td><td>'+esc(JSON.stringify(x.metrics))+'</td></tr>');
+ const signals=(report.signals||[]).map(x=>
+  '<li>'+esc(JSON.stringify(x))+'</li>').join("");
+ const notices=(report.notices||[]).map(x=>'<li>'+esc(x)+'</li>').join("");
+ return '<section class="result-report section"><h3>Kết quả phân tích</h3>'+
+  '<div class="callout warning">Dữ liệu import từ owner có thể chưa được xác minh. DEMO không phải doanh thu thật;'+
+  ' kết quả phân tích không tự cấp quyền chi tiền.</div>'+
+  (rows.length?table(["CHỈ SỐ / TRẠNG THÁI","GIÁ TRỊ"],rows):"")+
+  (metricRows.length?'<h3>Hiệu quả tổng hợp</h3>'+table(["METRIC","VALUE"],metricRows):"")+
+  (channels.length?'<h3>Theo kênh</h3>'+table(["CHANNEL","METRICS"],channels):"")+
+  (signals?'<h3>Tín hiệu cần kiểm chứng</h3><ul class="report-list">'+signals+'</ul>':"")+
+  (notices?'<h3>Hạn chế & cảnh báo</h3><ul class="report-list">'+notices+'</ul>':"")+
+  '<p class="small muted">Số nguồn nhập: '+esc(report.source_count??"Chưa có")+
+  ' · Doanh thu xác minh độc lập: Không</p></section>';
+}
+function renderTaskDetail(task){
+ const events=(task.events||[]).map(x=>
+  '<tr><td>'+esc(x.at)+'</td><td>'+esc(x.name)+'</td></tr>');
+ return '<div class="detail-header"><h3 class="mono">'+esc(task.task_id)+'</h3>'+
+  badge(task.status)+'</div>'+
+  '<p class="small muted">Skill / workflow: '+esc(task.skill_id)+'</p>'+
+  (task.error?'<div class="callout warning"><strong>Lỗi thực thi:</strong> '+
+    esc(task.error)+'</div>':"")+
+  '<div class="callout">Artifacts: '+esc((task.artifacts||[]).join(", ")||"None")+'</div>'+
+  renderResultReport(task.report)+
+  (task.web_proposal?'<div class="form-actions"><button class="btn btn-primary" data-view-proposal="'+
+    esc(task.web_proposal.proposal_id)+'">Xem và duyệt website proposal</button></div>':"")+
+  '<div class="section"><h3>Lịch sử sự kiện</h3>'+
+  table(["AT","EVENT"],events)+'</div>';
+}
+function renderTasks(){
+ const rows=state.data.tasks.map(t=>
+ '<tr><td><button class="link-button" data-detail-task="'+esc(t.task_id)+'">'+
+ short(t.task_id)+'</button></td><td>'+esc(t.kind)+'</td><td>'+esc(t.skill_id)+
+ '</td><td>'+badge(t.status)+'</td><td>'+esc(String(t.updated_at||"").slice(0,19))+
+ '</td></tr>');
+ return header("AUDIT TRAIL","Task History",
+  "Bấm Task ID để xem lỗi, artifacts và log sự kiện ngay trong cửa sổ chi tiết.")+
