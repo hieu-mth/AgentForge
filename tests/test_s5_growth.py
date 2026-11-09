@@ -1,10 +1,8 @@
 """S5 end-to-end tests: actual MP4 handoff, owner gates, cash and S3/S4."""
 import csv
-import http.client
 import importlib.util
 import json
 import tempfile
-import threading
 import unittest
 import zipfile
 from pathlib import Path

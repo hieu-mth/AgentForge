@@ -1,9 +1,6 @@
 """S3 real CSV/SQLite/Task History tests; no external APIs or fabricated revenue."""
 import csv
-import http.client
-import json
 import tempfile
-import threading
 import unittest
 from datetime import date, timedelta
 from pathlib import Path

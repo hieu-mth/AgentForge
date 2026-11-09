@@ -1,4 +1,4 @@
-"""S1 end-to-end website audit, source checkpoint and local dashboard tests."""
+"""S1 end-to-end website audit and source checkpoint tests."""
 import tempfile
 import unittest
 from pathlib import Path
