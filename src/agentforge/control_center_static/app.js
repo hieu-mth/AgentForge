@@ -252,3 +252,56 @@ function renderOverview(){
  const safety='<div class="callout '+(paused?'warning':'')+'">'+
    '<strong>Operations: '+esc(operations.mode)+'</strong> — '+
    esc(paused?'Đã dừng phân phối nhiệm vụ mới. Việc đang chạy có thể kết thúc hoặc bị gián đoạn.':
+       'Có thể chạy nhiệm vụ theo quyền đã cấp. Tạm dừng khi cần kiểm tra sự cố.')+
+   '<div class="form-actions"><button class="btn btn-outline" type="button" data-ops-mode="'+
+   (paused?'ACTIVE':'PAUSED')+'">'+(paused?'Tiếp tục vận hành':'Tạm dừng hệ thống')+
+   '</button></div></div>';
+ const health=card("Trạng thái vận hành",
+  '<div class="stack"><div class="goal-tile"><span class="goal-mark">◷</span>'+
+  '<div class="goal-main"><strong>Scheduler</strong><small>'+
+  esc(h.fresh?'Heartbeat gần đây':'Chưa có daemon đang hoạt động được xác minh')+
+  '</small></div>'+badge(engine)+'</div>'+
+  '<div class="goal-tile"><span class="goal-mark">⎔</span><div class="goal-main">'+
+  '<strong>Kênh phân phối</strong><small>YouTube · TikTok</small></div>'+
+  badge("MANUAL_ONLY")+'</div>'+
+  '<div class="callout">Mọi chỉ số revenue từ S3/S5 đều do owner nhập hoặc là DEMO. Không có doanh thu được đối soát độc lập.</div></div>');
+ return header("OPERATIONS / OVERVIEW","Trung tâm điều hành",
+  "Nắm toàn bộ công việc, tiến độ và quyết định của AgentForge ở một nơi.",
+  '<button class="btn btn-primary" data-view="goals">+ Tạo mục tiêu</button>')+
+ '<div class="hero"><div class="hero-content"><div class="eyebrow">LOCAL-FIRST AUTONOMY</div>'+
+ '<h2>Điều hành theo mục tiêu.<br>Giữ quyền quyết định.</h2>'+
+ '<p>Các workflow được điều phối bởi Company Brain. Mọi quyền ghi, gọi model, mở trình duyệt hoặc chạy công cụ đều qua cổng phê duyệt.</p>'+
+ '</div><span class="hero-pill">● 24 skills · 5 MVP layers</span></div>'+
+ '<div class="metrics">'+tiles+'</div>'+
+ '<div class="section">'+safety+'</div>'+
+ '<div class="grid-2 section">'+apCard+companyCard+'</div>'+
+ '<div class="section">'+reviewCard+'</div>'+
+ '<div class="section">'+videoCard+'</div>'+
+ '<div class="section">'+editorCard+'</div>'+
+ '<div class="section">'+card("Cần owner xử lý",
+  attention?'<div class="stack">'+attention+'</div>':
+   '<p class="small muted">Chưa có Goal đang chờ phê duyệt hoặc sự cố cần xem xét.</p>')+'</div>'+
+ '<div class="grid-2 section">'+card("Mục tiêu gần đây",
+  '<div class="stack">'+(goals||empty("Tạo mục tiêu đầu tiên từ Goal Manager."))+'</div>',
+  '<button class="section-link" data-view="goals">Xem tất cả →</button>')+
+ health+'</div><div class="section">'+card("Hoạt động mới nhất",
+ table(["TASK","SKILL / WORKFLOW","STATUS","UPDATED (UTC)"],recent),
+ '<button class="section-link" data-view="tasks">Xem Task History →</button>')+'</div>';
+}
+function goalRows(){
+ return state.data.goals.map(g=>
+ '<tr><td><button type="button" class="link-button" data-detail-goal="'+esc(g.goal_id)+'">'+
+ short(g.goal_id)+'</button></td><td>'+esc(g.title)+'</td><td>'+esc(g.template)+
+ '</td><td>'+badge(g.status)+(g.artifact_acceptance?' <span class="small muted">Sản phẩm: '+esc(g.artifact_acceptance.status)+'</span>':'')+'</td><td>'+fmt(g.current_step)+'</td></tr>');
+}
+function renderGoals(){
+ const templates=Object.keys(state.data.templates);
+ const selected=templates.includes("campaign.review")?"campaign.review":templates[0];
+ const templateOptions=templates.map(k=>'<option value="'+esc(k)+'"'+(k===selected?' selected':'')+'>'+esc(k)+'</option>').join("");
+ const datasets=state.data.datasets||[];
+ const defaultDataset=datasets.length?datasets[0].dataset:"";
+ const options=datasets.map(d=>'<option value="'+esc(d.dataset)+'">'+esc(d.dataset)+
+    (d.synthetic?' · DEMO':' · owner supplied')+'</option>').join("");
+ const dataControl='<div class="form-field" id="goal-dataset-control"><label for="goal-dataset-pick">Dataset từ Intelligence</label>'+
+  (datasets.length?'<select id="goal-dataset-pick">'+options+'</select>':
+    '<p class="small muted">Chưa có dataset. Tạo/import dữ liệu tại Intelligence trước khi lập Goal phân tích.</p>')+'</div>';
