@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1 --port 5173",
     "check": "node --check src/api.js",
-    "test:navigation": "node --test tests/navigation.test.js tests/permissions.test.js tests/workspace-quota.test.js tests/acceptance.test.js tests/models.test.js",
+    "test:navigation": "node --test tests/navigation.test.js tests/permissions.test.js tests/workspace-quota.test.js tests/acceptance.test.js tests/models.test.js tests/preflight.test.js",
     "test:browser": "node tests/browser-smoke.mjs"
   },
   "dependencies": {

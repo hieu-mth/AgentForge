@@ -4,6 +4,10 @@
 
 > **Trạng thái: bản thử nghiệm dùng nội bộ.** CI xác minh code đáng tin cậy; không có bằng chứng rằng mọi ứng dụng/phim do AI sinh ra đều chạy đúng, sẵn sàng thương mại hoặc đã tạo doanh thu.
 
+## Setup an toàn (M9)
+
+Chạy kiểm tra read-only trước: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1`. Để cài dependency và build Dashboard, dùng `-Install -AllowNetwork` (cho phép pip/npm truy cập registry), xem [hướng dẫn](docs/DEVELOPMENT.md). Xem kết quả trong Dashboard → Cài đặt → Vận hành; các checks không tự gọi model/GPU.
+
 ## Bắt đầu nhanh trên Windows
 
 Yêu cầu: **Python 3.13+**, Node.js 22 và npm. Mở PowerShell tại repository:

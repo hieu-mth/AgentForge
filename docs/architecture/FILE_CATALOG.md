@@ -1,6 +1,6 @@
 # File Catalog — danh mục file AgentForge hiện tại
 
-**Source baseline:** sau M8 + M4a–M4d2 (09/11/2026). **197 file Python** (M0–M3 + Model Hub + M8 + M4a + M4b + M4c + M4d1 + M4d2); Dashboard đã có Model Hub tại `#/models`. M4a Growth, M4b Websites, M4c Webapps, M4d1 Media/Film Studio đã chuyển sang `features/`, đều giữ compatibility aliases; các domain khác và M5 chưa thực hiện. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
+**Source baseline:** sau M8 + M4a–M4d2 (09/11/2026). **199 file Python** (M0–M3 + Model Hub + M8 + M4a + M4b + M4c + M4d1 + M4d2); Dashboard đã có Model Hub tại `#/models`. M4a Growth, M4b Websites, M4c Webapps, M4d1 Media/Film Studio đã chuyển sang `features/`, đều giữ compatibility aliases; các domain khác và M5 chưa thực hiện. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
 
 - [Cấu trúc đã được chốt](TARGET_STRUCTURE.md) — `agentforge/` và `dashboard/` ngay root, feature-first.
 - [Kế hoạch chuyển](MIGRATION_PLAN.md) — không phá paths/import/SQLite.
@@ -16,7 +16,7 @@
 | **CLI** | Công cụ vận hành/demo theo lệnh, cần xem callers trước khi bỏ. |
 | **CONTRACT** | Module mô tả/kiểm tra hợp đồng cấu trúc, không tự chạy workflow. |
 
-**Tổng cộng: 197 file `.py`** (137 baseline + 15 M3 + 2 M6 + 6 M8 adapters + 5 M4a + 13 M4b + 9 M4c + 8 M4d1 + 2 M4d2 integration modules). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
+**Tổng cộng: 199 file `.py`** (137 baseline + 15 M3 + 2 M6 + 6 M8 adapters + 5 M4a + 13 M4b + 9 M4c + 8 M4d1 + 2 M4d2 + 2 M9 ops modules). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
 
 ## **Entrypoints và modules tại package root**
 
@@ -268,6 +268,13 @@
 | `domains/websites/revision.py` | COMPAT alias tới `features/websites/revision.py`. |
 | `domains/websites/revision_context.py` | COMPAT alias tới `features/websites/revision_context.py`. |
 | `domains/websites/structured_builder.py` | COMPAT alias tới `features/websites/structured_builder.py`. |
+
+## **Operations: `ops/` (M9)**
+
+| File hiện tại dưới `agentforge/` | Vai trò |
+| --- | --- |
+| `ops/__init__.py` | Package operational helpers. |
+| `ops/preflight.py` | Read-only local environment preflight; no subprocess/network/model invocation. |
 
 ## **Integrations: `integrations/` (M4d2)**
 

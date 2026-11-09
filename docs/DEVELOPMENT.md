@@ -4,6 +4,23 @@
 
 **Đối tượng:** Owner/developer làm việc trực tiếp tại `D:\AgentForge`. Có thể dùng folder khác; các lệnh bên dưới giả định repo đã clone.
 
+## 0. Setup nhanh, có phân biệt read-only và install
+
+```powershell
+cd D:\AgentForge
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
+```
+
+Mặc định chỉ kiểm tra môi trường (Python, Node/npm, cấu hình, Dashboard build); **không** gọi mạng, cài package, chạy model hoặc xóa file. Với venv và Node.js 22 đã cài sẵn, muốn cài dependencies/build lại bằng lệnh thủ công có xác nhận:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1 -Install -AllowNetwork
+```
+
+`-Install -AllowNetwork` cho phép pip/npm liên hệ package registry và ghi **chỉ vùng code/caches** `.venv/`, `dashboard/node_modules/`, `dashboard/dist/`; không chạm `data/`, `workspace/`, `.env`. Script không cài Docker/GPU model/ComfyUI, không tạo Windows service, không chạy AI-generated source. Có thể thêm `-RunTests` để chạy Python + Dashboard unit tests hoặc `-StartDashboard` để chạy foreground (chỉ hợp lệ khi Install).
+
+Dashboard `Cài đặt → Vận hành` có bảng kiểm tra local từ `/api/ops/preflight` và `/api/ops/health`. Đây là kết quả đọc-only và cần Owner login; nó không tự sửa lỗi.
+
 ## 1. Chuẩn bị
 
 - Python **3.13+**: chạy `py -0p` để xác minh.
