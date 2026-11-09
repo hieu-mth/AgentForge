@@ -214,3 +214,41 @@ function renderOverview(){
   '<p class="small muted">Điều chỉnh hạn mức ước tính lượt model/UTC ngày. Bật delegation không tự tạo job và không chứng minh chi phí provider.</p>'+
   '<div class="form-field"><label for="ap-policy-cap">Giới hạn lượt model/ngày (0–10)</label>'+
   '<input id="ap-policy-cap" type="number" min="0" max="10" step="1" value="'+esc(ap.daily_cap)+'"></div>'+
+  '<div class="form-field"><label for="ap-policy-enabled">Standing delegation</label>'+
+  '<select id="ap-policy-enabled"><option value="false" '+(!ap.enabled?'selected':'')+'>Tắt</option>'+
+  '<option value="true" '+(ap.enabled?'selected':'')+'>Bật</option></select></div>'+
+  '<div class="form-actions"><button class="btn btn-outline" data-autopilot-configure="1">Áp dụng chính sách (xác nhận)</button></div>'+
+  '<p class="small muted">Quy trình chạy model vẫn dùng CLI hoặc processor riêng; bảng này không kích hoạt model ngay.</p>');
+ const healthV2=company.business||{};
+ const companyCard=card("V2.0 · Business Operations Pilot",
+  '<p class="small muted">MVP local-first, chưa xác nhận kinh doanh có lãi. Không sử dụng AI tự giao dịch hoặc tự đăng bài.</p>'+
+  '<div class="stack"><div class="goal-tile"><strong>Chiến dịch thật: '+fmt(healthV2.real_campaigns||0)+'</strong>'+
+  '<small>Khách tiềm năng do owner nhập: '+fmt(healthV2.owner_recorded_leads||0)+'</small></div>'+
+  '<div class="goal-tile"><strong>MP4 đã owner duyệt: '+fmt(company.content?.owner_approved_local_videos||0)+'</strong>'+
+  '<small>Bài đăng owner khai báo: '+fmt(healthV2.owner_attested_publications||0)+'</small></div>'+
+  '<div class="goal-tile"><strong>Điều kiện chưa đạt</strong>'+
+  '<small>'+esc((company.launch_blockers||[]).join(" · ")||"Chưa có blocker nội bộ")+'</small></div>'+
+  '<div class="goal-tile"><strong>Việc cần làm tiếp</strong>'+
+  '<small>'+esc((company.next_owner_actions||[]).join(" · "))+'</small></div></div>');
+ const videoData=d.local_video||{pending_count:0,items:[]};
+ const videoRows=(videoData.items||[]).slice(0,8).map(v=>
+  '<tr><td>'+short(v.production_id)+'</td><td>'+short(v.run_id)+'</td>'+
+  '<td>'+badge(v.status)+'</td><td>'+esc(v.quality||"—")+'</td>'+
+  '<td>'+(v.status==="VIDEO_READY"?'<button class="btn btn-small btn-outline" data-video-inspect="'+esc(v.production_id)+'">Duyệt MP4</button>':'—')+'</td></tr>');
+ const starterStoryboard={slug:"nem-ngu-edited",title:"Tư vấn chọn nệm ngủ",scenes:[
+   {headline:"Chọn nệm ngủ thế nào?",caption:"Xem xét nhu cầu nghỉ ngơi và độ nâng đỡ của nệm.",duration_seconds:5},
+   {headline:"Cần tư vấn chọn nệm?",caption:"Chia sẻ ngân sách và nhu cầu để được gợi ý phù hợp.",duration_seconds:5}
+ ]};
+ const editorCard=card("Storyboard Editor (local)",
+  '<p class="small muted">Chỉnh sửa JSON bản nháp của owner. Chuẩn bị chỉ tạo PNG, WAV, SRT trên máy và không gọi AI/FFmpeg. Dùng slug mới mỗi lần; kiểm tra nội dung trước khi bấm.</p>'+
+  '<div class="form-field"><label for="media-editor-json">Storyboard chỉnh sửa</label>'+
+  '<textarea id="media-editor-json" rows="13" spellcheck="false">'+
+  esc(JSON.stringify(starterStoryboard,null,2))+'</textarea></div>'+
+  '<div class="form-actions"><button type="button" class="btn btn-primary" data-media-prepare="1">Tạo tài nguyên local (xác nhận)</button></div>'+
+  '<p class="small muted">Muốn dựng MP4 và duyệt video, sử dụng CLI media_workflow_v15 và xem file trước khi phê duyệt. Không có tự động đăng bài.</p>');
+ const videoCard=card("Local Video Production · "+fmt(videoData.pending_count)+" chờ xem video",
+  '<p class="small muted">Storyboard chỉnh sửa → ảnh/phụ đề local → FFmpeg → VIDEO_PASS → owner duyệt. Video không tự xuất bản. Xem MP4 trong workspace/media/{run_id}/video.mp4; quyết định qua media_workflow_v15 CLI.</p>'+
+  table(["PRODUCTION","RUN","TRẠNG THÁI","QA","OWNER"],videoRows,"Chưa có video production"));
+ const safety='<div class="callout '+(paused?'warning':'')+'">'+
+   '<strong>Operations: '+esc(operations.mode)+'</strong> — '+
+   esc(paused?'Đã dừng phân phối nhiệm vụ mới. Việc đang chạy có thể kết thúc hoặc bị gián đoạn.':
