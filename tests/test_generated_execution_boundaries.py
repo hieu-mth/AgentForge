@@ -74,3 +74,62 @@ class GeneratedBoundaryTests(unittest.TestCase):
             self.assertIn("readonly", args[args.index("--mount") + 1])
             self.assertEqual(kwargs["timeout"], 150)
             return SimpleNamespace(returncode=0)
+        with patch("shutil.which", return_value="trusted-docker"), patch("subprocess.run", side_effect=fake):
+            result = self.verify()
+        self.assertEqual(result["stage"], "BUILD_VALID")
+        self.assertFalse(result["browser_verified"])
+        self.assertEqual(list(sandbox.QA_STAGING.iterdir()), [])
+
+    def test_unavailable_or_interrupted_process_cleans_only_its_container(self):
+        for failure in (OSError("test launch failure"), subprocess.TimeoutExpired("docker", 150), KeyboardInterrupt()):
+            commands = []
+            def fake(args, **kwargs):
+                commands.append(args)
+                if "image" in args:
+                    return SimpleNamespace(returncode=0, stdout="linux\n")
+                if "run" in args:
+                    raise failure
+                self.assertEqual(args[-4:-1], ["container", "rm", "-f"])
+                self.assertTrue(args[-1].startswith("af-qa-"))
+                self.assertEqual(kwargs["timeout"], 15)
+                return SimpleNamespace(returncode=0)
+            with self.subTest(failure=type(failure).__name__), patch("shutil.which", return_value="docker"), \
+                 patch("subprocess.run", side_effect=fake):
+                with self.assertRaises((RuntimeError, KeyboardInterrupt)):
+                    self.verify()
+                self.assertEqual(len(commands), 3)
+                self.assertEqual(list(sandbox.QA_STAGING.iterdir()), [])
+
+    def test_old_cached_image_cannot_report_build_valid(self):
+        def fake(args, **kwargs):
+            return SimpleNamespace(returncode=0, stdout="linux\n") if "image" in args else SimpleNamespace(returncode=70)
+        with patch("shutil.which", return_value="docker"), patch("subprocess.run", side_effect=fake):
+            with self.assertRaisesRegex(RuntimeError, "Rebuild the pinned QA image"):
+                self.verify()
+
+    def test_legacy_scaffold_never_executes_with_new_image(self):
+        doc, path = dev._read_proposal(self.pid)
+        model = {"title": doc["title"], "summary": doc["summary"],
+                 "files": [f for f in doc["files"] if f["path"] in dev.ALLOWED]}
+        doc["files"] = dev._compile(dev.validate_code(model), doc["project_slug"], legacy=True)
+        doc["sha256"] = dev._digest(doc["project_slug"], doc["brief"], doc["title"], doc["summary"], doc["files"])
+        path.write_text(json.dumps(doc), encoding="utf-8")
+        with patch("subprocess.run") as process:
+            with self.assertRaisesRegex(ValueError, "TOOLCHAIN_STALE"):
+                sandbox.verify(self.pid, doc["sha256"], confirm_external_run=True)
+            process.assert_not_called()
+
+
+class GeneratedPreviewHttpTests(unittest.TestCase):
+    def test_owner_origin_has_no_interactive_preview_route(self):
+        fixture = http_fixture.WebappRevisionHttpTests("test_get_requires_login_and_allows_signed_source_review")
+        fixture.setUp()
+        try:
+            fixture.login()
+            pid = fixture.proposal["proposal_id"]
+            for suffix in ("/preview", "/run", "/assets/src/App.jsx"):
+                status, _, _ = fixture.req("GET", "/api/webapps/" + pid + suffix)
+                self.assertEqual(status, 404)
+            self.assertFalse(fixture.req("GET", "/api/webapps/" + pid)[1]["artifact_acceptance"]["interactive_preview_enabled"])
+        finally:
+            fixture.doCleanups()
