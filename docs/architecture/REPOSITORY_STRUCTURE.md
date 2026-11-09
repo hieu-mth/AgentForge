@@ -1,6 +1,6 @@
 # Kiến trúc repository AgentForge
 
-> **CURRENT IMPLEMENTATION** — M1/M2 đặt Python `agentforge/` và React `dashboard/` tại root; **M3 đã tách API thành `agentforge/api/`**. M4/M5 chuyển features/integrations/compatibility aliases **chưa thực hiện**. Xem [catalog từng file](FILE_CATALOG.md) và [kế hoạch migration](MIGRATION_PLAN.md).
+> **CURRENT IMPLEMENTATION** — M1/M2 đặt Python `agentforge/` và React `dashboard/` tại root; **M3 đã tách API thành `agentforge/api/`**. M8 đã chia code-level skill policies/handlers theo domain; M4/M5 chuyển features/integrations/compatibility aliases **chưa thực hiện**. Xem [catalog từng file](FILE_CATALOG.md) và [kế hoạch migration](MIGRATION_PLAN.md).
 
 **Current source of truth:** Python modular monolith, một React dashboard, local SQLite + workspace. Đã loại bỏ frontend HTML/CSS/JS V0 và Python dashboard V0.
 
@@ -16,6 +16,7 @@ AgentForge/
 │   │   ├── auth.py                # Owner sessions/login
 │   │   ├── static.py              # Strictly trusted React assets
 │   │   └── routes/                # Bootstrap, GET and domain-specific mutations
+│   ├── core/skill_adapters/       # M8 static policies + lazy handlers theo domain
 │   ├── ai/                        # AI intake, routing, provider profiles
 │   ├── core/                      # workflow, tasks, permissions, artifact acceptance
 │   ├── domains/

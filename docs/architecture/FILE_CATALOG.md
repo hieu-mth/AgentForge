@@ -1,6 +1,6 @@
 # File Catalog — danh mục file AgentForge hiện tại
 
-**Source baseline:** sau M6 + M7 (09/11/2026). **154 file Python** (M0–M3 + Model Hub); Dashboard đã có Model Hub tại `#/models`. Feature-first M4 và alias cleanup M5 chưa thực hiện. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
+**Source baseline:** sau M6 + M7 (09/11/2026). **160 file Python** (M0–M3 + Model Hub); Dashboard đã có Model Hub tại `#/models`. Feature-first M4 và alias cleanup M5 chưa thực hiện. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
 
 - [Cấu trúc đã được chốt](TARGET_STRUCTURE.md) — `agentforge/` và `dashboard/` ngay root, feature-first.
 - [Kế hoạch chuyển](MIGRATION_PLAN.md) — không phá paths/import/SQLite.
@@ -16,7 +16,7 @@
 | **CLI** | Công cụ vận hành/demo theo lệnh, cần xem callers trước khi bỏ. |
 | **CONTRACT** | Module mô tả/kiểm tra hợp đồng cấu trúc, không tự chạy workflow. |
 
-**Tổng cộng: 154 file `.py`** (137 baseline + 15 M3 + 2 M6). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
+**Tổng cộng: 160 file `.py`** (137 baseline + 15 M3 + 2 M6 + 6 M8 skill adapters). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
 
 ## **Entrypoints và modules tại package root**
 
@@ -152,7 +152,13 @@
 | `core/public_serialization.py` | Projection metadata public không lộ prompt/absolute paths. |
 | `core/result_view.py` | Allowlisted read-only presentation của task results. |
 | `core/skill_registry.py` | Đọc skill contracts TOML và kiểm tra schema. |
-| `core/skill_runner.py` | Chạy skill adapters qua explicit permissions. |
+| `core/skill_runner.py` | Permission checks, task persistence và gọi trusted domain adapters. |
+| `core/skill_adapters/__init__.py` | Allowlisted domain adapter map, fail closed với unknown skill. |
+| `core/skill_adapters/web.py` | Policy + handlers cho website và React webapp. |
+| `core/skill_adapters/research.py` | Policy + handlers cho research, capture stdout. |
+| `core/skill_adapters/media.py` | Policy + handlers cho media với external-run approvals. |
+| `core/skill_adapters/analytics.py` | Policy + handlers cho import/report analytics. |
+| `core/skill_adapters/growth.py` | Policy + handlers cho campaign/growth handoff. |
 | `core/task_history.py` | Lịch sử task/events SQLite và recovery. |
 
 ## **Domains: `domains/growth/`**
