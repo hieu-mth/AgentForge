@@ -1,10 +1,10 @@
 # File Catalog — danh mục file AgentForge hiện tại
 
-**Snapshot:** commit `216c9d3` (09/11/2026), **trước migration**. Danh mục này giải thích **file hiện đang tồn tại**, không phải xác nhận chúng đã chuyển đến cây tương lai.
+**Baseline catalog Python:** commit `216c9d3` (09/11/2026); Python chưa di chuyển và 137 file giữ nguyên. **Frontend được chuyển ở M1** từ `ui/dashboard/` sang `dashboard/`. Danh mục giải thích file thực tế, không xác nhận M2–M5 đã hoàn tất.
 
 - [Cấu trúc đã được chốt](TARGET_STRUCTURE.md) — `agentforge/` và `dashboard/` ngay root, feature-first.
 - [Kế hoạch chuyển](MIGRATION_PLAN.md) — không phá paths/import/SQLite.
-- [Cấu trúc source đang chạy](REPOSITORY_STRUCTURE.md) — `src/agentforge/`, `ui/dashboard/`.
+- [Cấu trúc source đang chạy](REPOSITORY_STRUCTURE.md) — `src/agentforge/`, `dashboard/`.
 
 ## Phân loại
 
@@ -195,7 +195,7 @@
 | `storage/artifact_catalog.py` | Read-only artifact inventory, không xóa/chạy source. |
 | `storage/retention.py` | Backup/retention, reversible quarantine và restore không ghi đè. |
 
-## Frontend React hiện tại (`ui/dashboard/` → `dashboard/` sau migration)
+## Frontend React hiện tại (`dashboard/` tại root, M1 đã chuyển)
 
 | File/nhóm | Vai trò |
 | --- | --- |

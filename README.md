@@ -12,8 +12,8 @@ Yêu cầu: **Python 3.13+**, Node.js 22 và npm. Mở PowerShell tại reposito
 cd D:\AgentForge
 py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[media]"
-npm.cmd ci --prefix ui/dashboard --ignore-scripts --no-audit --no-fund
-npm.cmd run build --prefix ui/dashboard
+npm.cmd ci --prefix dashboard --ignore-scripts --no-audit --no-fund
+npm.cmd run build --prefix dashboard
 .\.venv\Scripts\python.exe -m agentforge --port 8780
 ~~~
 
@@ -40,7 +40,7 @@ Chi tiết và định nghĩa trạng thái: **[Current Status](docs/STATUS.md)*
 - **[Hướng dẫn Windows & kiểm thử](docs/DEVELOPMENT.md)** — setup, build, chạy Dashboard và các giới hạn an toàn.
 - **[Roadmap hiện hành](docs/ROADMAP.md)** — ưu tiên AI Source Revision và AI Film Studio.
 - **[Kiến trúc repository đang chạy](docs/architecture/REPOSITORY_STRUCTURE.md)** — module nào thực sự đang chạy.
-- **[Cấu trúc đã chốt (chưa migrate)](docs/architecture/TARGET_STRUCTURE.md)** — `agentforge/` + `dashboard/` ở root.
+- **[Cấu trúc đã chốt (Dashboard M1 xong, Python M2 chưa migrate)](docs/architecture/TARGET_STRUCTURE.md)** — `agentforge/` + `dashboard/` ở root.
 - **[Giải thích từng file Python/React](docs/architecture/FILE_CATALOG.md)** — inventory 137 module Python và Dashboard.
 - **[AI Film Studio 12 GB](docs/architecture/FILM_MOTION_12GB_PILOT.md)** — điều kiện cần trước khi tạo clip thật.
 - **[Bằng chứng Phase 1](docs/verification/phase1/README.md)** — snapshot kiểm thử, không phải trạng thái live.
@@ -53,4 +53,4 @@ Chi tiết và định nghĩa trạng thái: **[Current Status](docs/STATUS.md)*
 - `data/`, `workspace/`, `.env`, các model và backup là dữ liệu của Owner: **không dọn/xóa tự động**.
 - Chỉ xem một lần test PASS là xác minh đúng phạm vi của test, không phải nghiệm thu phim/app ngoài thực tế.
 
-Mã nguồn: `src/agentforge/` (backend), `ui/dashboard/` (frontend), `skills/`, `workers/`, `tests/`. Repository đã loại bỏ frontend V0; những compatibility module còn được sử dụng vẫn phải được giữ.
+Mã nguồn: `src/agentforge/` (backend), `dashboard/` (frontend), `skills/`, `workers/`, `tests/`. Repository đã loại bỏ frontend V0; những compatibility module còn được sử dụng vẫn phải được giữ.

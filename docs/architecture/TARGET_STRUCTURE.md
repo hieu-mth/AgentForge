@@ -1,8 +1,8 @@
 # ADR-001 — Cấu trúc AgentForge được chốt
 
-**Quyết định: ĐÃ CHỐT (approved target)** · **Triển khai: CHƯA MIGRATE** · 09/11/2026
+**Quyết định: ĐÃ CHỐT (approved target)** · **Triển khai: M1 DONE, M2–M5 CHƯA MIGRATE** · 09/11/2026
 
-Chủ dự án đã chọn **flat-root Python package + dashboard riêng**, thay vì `src/agentforge/` và `ui/dashboard/`. Đây là cấu trúc **đích cho các đợt chuyển đổi tiếp theo**, không phải sơ đồ của code đang chạy. Không tự chuyển các file chỉ vì tài liệu này được merge.
+Chủ dự án đã chọn **flat-root Python package + dashboard riêng**, thay vì `src/agentforge/` và `ui/dashboard/` ban đầu. **M1 đã chuyển React thành `dashboard/` ở root; Python vẫn ở `src/agentforge/`.** Cây dưới là cấu trúc đích sau M2–M5, không được hiểu nhầm tất cả đã tồn tại.
 
 - **Code thực tế hôm nay:** [REPOSITORY_STRUCTURE.md](REPOSITORY_STRUCTURE.md).
 - **Từng file Python và frontend hiện có:** [FILE_CATALOG.md](FILE_CATALOG.md).
@@ -120,9 +120,9 @@ Ví dụ Film Studio: script & character bible ở `features/film_studio/`; Comf
 
 | Hạng mục | Tình trạng tại ngày chốt |
 | --- | --- |
-| Cây đích `agentforge/` + `dashboard/` | **APPROVED** |
+| Cây đích `agentforge/` + `dashboard/` | **APPROVED, đang migrate từng bước** |
 | Đổi `src/agentforge/` thành `agentforge/` | **NOT STARTED** |
-| Đổi `ui/dashboard/` thành `dashboard/` | **NOT STARTED** |
+| Đổi `ui/dashboard/` thành `dashboard/` | **M1 DONE** — code/frontend, Python path, npm/CI, URL regression |
 | Refactor `control_center_v1.py` thành API routes | **NOT STARTED** |
 | Đổi `domains/` thành `features/` | **NOT STARTED** |
 | Tách integrations, ops, research, Film Studio | **NOT STARTED** |

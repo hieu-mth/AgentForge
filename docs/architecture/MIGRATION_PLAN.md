@@ -1,6 +1,6 @@
 # Kế hoạch chuyển AgentForge về flat-root architecture
 
-**Trạng thái: KẾ HOẠCH / CHƯA THỰC THI.** Cấu trúc đã được chốt tại [ADR-001](TARGET_STRUCTURE.md). Tài liệu này chỉ mô tả migration, không đổi code, import, SQLite hay UI.
+**Trạng thái: M1 FRONTEND ĐÃ CHUYỂN, M2–M5 CHƯA THỰC THI.** Cấu trúc đã chốt tại [ADR-001](TARGET_STRUCTURE.md). Đây là kế hoạch từng mốc; các dòng 'trước' ở phần rủi ro ghi lại path trước M1.
 
 ## Các rủi ro đã thấy trong source
 
@@ -27,7 +27,7 @@
 
 **Exit gate:** Không có dữ liệu Owner bị chạm; có danh sách path consumers và test baseline.
 
-### M1 — Di chuyển frontend nguyên khối
+### M1 — Di chuyển frontend nguyên khối (DONE, kiểm thử Windows theo PR migration)
 
 ~~~text
 ui/dashboard/  ->  dashboard/
@@ -37,7 +37,7 @@ ui/dashboard/  ->  dashboard/
 - Cập nhật Python React-dist route, npm prefixes, CI, `.gitignore`, browser test paths, docs và scripts.
 - Giữ URL `http://127.0.0.1:8780/dashboard/` không đổi.
 
-**Exit gate:** npm ci/build/tests/Edge smoke, HTTP auth/CSRF và static-asset regression PASS trên Windows.
+**Exit gate:** npm ci/build/tests/Edge smoke, HTTP auth/CSRF và static-asset regression PASS trên Windows. Source đã chuyển nguyên khối, backend `REACT_DIST` đọc `dashboard/dist`, URL `/dashboard/` giữ nguyên. Xem PR migration và CI để xác minh trạng thái cuối; không suy ra từ mock tests đơn lẻ.
 
 ### M2 — Di chuyển Python package nguyên khối
 
@@ -84,4 +84,4 @@ Owner yêu cầu kết quả đã kiểm thử được merge vào `main`. Dùng
 
 ## Việc cần làm khi chốt docs
 
-Chỉ merge **tài liệu ADR và danh mục file**, không move package hay dashboard. Lệnh cài đặt trong [DEVELOPMENT.md](../DEVELOPMENT.md) vẫn áp dụng cho layout thực tế hiện tại.
+**Đã hoàn thành M1:** di chuyển frontend, giữ `src/agentforge/` là Python package thực tế. Lệnh chạy hiện hành trong [DEVELOPMENT.md](../DEVELOPMENT.md) sử dụng `dashboard/` ở root. M2 package relocation vẫn là bước tiếp theo.

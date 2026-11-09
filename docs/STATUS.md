@@ -1,6 +1,6 @@
 # AgentForge — Trạng thái thực tế
 
-**Baseline xác minh:** `main` sau PR #61 (09/11/2026). Tham chiếu ở thời điểm viết: `347d833`.
+**Baseline tính năng:** sau PR #61 (09/11/2026); **cấu trúc frontend mới:** M1 chuyển `ui/dashboard/` → `dashboard/` (chỉ đổi đường dẫn, không đổi behavior).
 
 Các nhãn được dùng thống nhất:
 
@@ -13,7 +13,7 @@ Các nhãn được dùng thống nhất:
 
 | Tính năng | Trạng thái | Bằng chứng trong source | Không được hiểu nhầm |
 | --- | --- | --- | --- |
-| Dashboard React + Owner session | IMPLEMENTED | `ui/dashboard/`, `src/agentforge/control_center_v1.py` | Không có multi-tenant/public hosting |
+| Dashboard React + Owner session | IMPLEMENTED | `dashboard/`, `src/agentforge/control_center_v1.py` | Không có multi-tenant/public hosting |
 | Task orchestration và approvals | IMPLEMENTED | `src/agentforge/core/`, `skills/` | Không tự động trao quyền tool cho AI |
 | Artifact acceptance gắn SHA | IMPLEMENTED | `src/agentforge/core/artifact_acceptance.py` | Workflow `SUCCEEDED` chưa chắc artifact `ACCEPTED` |
 | Static Website Builder | PARTIAL | `src/agentforge/domains/websites/` | Thiết kế và section bị giới hạn bởi schema; không có backend chung |
