@@ -179,6 +179,64 @@ class Wave6SourceRevisionTests(unittest.TestCase):
             DEV._read_proposal(child["proposal_id"])
         self.assertFalse(DEV.PROJECTS.exists())
 
+    def test_approved_goal_dispatches_one_source_edit_after_owner_permission(self):
+        from agentforge import brain_runner
+        source = self.create_root()
+        inputs = {"slug": "goal-react-edited", "brief": BRIEF,
+                  "source_proposal_id": source["proposal_id"],
+                  "source_sha256": source["sha256"],
+                  "revision_feedback": FEEDBACK}
+        root = DEV.PROPOSALS.parent
+        goals, tasks = root / "brain.sqlite3", root / "tasks.sqlite3"
+        goal = brain_planner.propose(
+            "Sửa ứng dụng React demo", "webapp.source_revision", inputs,
+            max_model_calls=1, max_external_runs=0, db_path=goals)
+        with patch("agentforge.model.generate_json") as model:
+            with self.assertRaises(brain_store.BrainError):
+                brain_runner.execute(goal["goal_id"],
+                                     brain_db_path=goals, task_db_path=tasks)
+            model.assert_not_called()
+        brain_store.approve_goal(goal["goal_id"], goal["plan_sha256"], db_path=goals)
+        with patch("agentforge.model.generate_json", return_value=PATCH_CSS) as model, \
+             patch("subprocess.run") as process:
+            result = brain_runner.execute(
+                goal["goal_id"], brain_db_path=goals, task_db_path=tasks,
+                grants=("model.invoke", "workspace.propose"),
+                confirm_model_call=True)
+            model.assert_called_once()
+            process.assert_not_called()
+        self.assertEqual(result["status"], "SUCCEEDED", result)
+        proposals = sorted(DEV.PROPOSALS.glob("*.json"))
+        self.assertEqual(len(proposals), 2)
+        latest = next(json.loads(path.read_text(encoding="utf-8"))
+                      for path in proposals if json.loads(path.read_text(encoding="utf-8"))
+                      .get("revision") is not None)
+        self.assertEqual(latest["revision"]["source_sha256"], source["sha256"])
+
+    def test_architect_lineage_survives_source_revision_and_static_qa(self):
+        from agentforge.features.webapps import architect, static_qa
+        from tests.test_v5_company import ARCH
+        root = DEV.PROPOSALS.parent
+        with patch.object(architect, "ARCHITECTURES", root / "architect"), \
+             patch.object(static_qa, "REPORTS", root / "qa"), \
+             patch.object(architect, "require_worker_model"):
+            with patch("agentforge.model.generate_json", return_value=ARCH):
+                original_arch = architect.propose("react-root", BRIEF)
+            with patch("agentforge.model.generate_json", return_value=MODEL):
+                parent = DEV.propose(
+                    "react-root", BRIEF,
+                    architecture_id=original_arch["architecture_id"],
+                    architecture_sha=original_arch["architecture_sha"])
+            child = self.revise(parent)
+            signed, _ = DEV._read_proposal(child["proposal_id"])
+            self.assertEqual(signed["architecture"], {
+                "architecture_id": original_arch["architecture_id"],
+                "architecture_sha": original_arch["architecture_sha"]})
+            report = static_qa.audit(child["proposal_id"], child["sha256"])
+            self.assertEqual(report["status"], "PASS_STATIC_ONLY")
+            self.assertFalse(report["browser_verified"])
+            self.assertFalse(report["build_verified"])
+
     def test_model_revision_goal_is_one_gated_webapp_develop_call(self):
         source = self.create_root()
         from agentforge.core import brain_planner as planner
