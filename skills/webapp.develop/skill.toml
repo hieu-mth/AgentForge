@@ -23,6 +23,9 @@ slug = "string"
 brief = "string"
 architecture_id = "string"
 architecture_sha = "string"
+source_proposal_id = "string"
+source_sha256 = "string"
+revision_feedback = "string"
 
 [output_schema]
 type = "object"

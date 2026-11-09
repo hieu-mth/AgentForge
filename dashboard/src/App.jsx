@@ -228,6 +228,33 @@ export default function App() {
     async()=>{const out=await runAction(()=>post('/api/webapps/'+p.proposal_id+'/revision',
       {ack:'REQUEST_REVISION',sha256:p.sha256,feedback:feedback.trim()}));
       if(out){setWebapp(null);message.success('Đã lập kế hoạch sửa ứng dụng');await openGoal(out.goal_id);}});
+  const rollbackWebapp=async(p,version)=>{
+    try{
+      // Reading the target is intentional: display exact source and SHA before
+      // Owner confirms a separate restoration proposal.
+      const target=await api('/api/webapps/'+encodeURIComponent(version.proposal_id));
+      if(target.sha256!==version.sha256||!target.ai_code_experimental)
+        throw new Error('Phiên bản khôi phục không còn hợp lệ');
+      ask('Xem source & tạo phiên bản khôi phục?',
+        <Space orientation="vertical" style={{width:'100%'}}>
+          <Paragraph>Khôi phục source đã kiểm tra vào <b>proposal mới</b>. Không chạy model,
+            không ghi đè project hoặc tự deploy.</Paragraph>
+          <Text code>Current: {p.sha256}</Text>
+          <Text code>Target: {target.sha256}</Text>
+          <Collapse size="small" items={(target.files||[]).map(f=>({
+            key:f.path,label:f.path,children:<pre className="source-text">{f.content}</pre>,
+          }))}/>
+        </Space>,
+        async()=>{
+          const out=await runAction(()=>post('/api/webapps/'+p.proposal_id+'/rollback',{
+            ack:'RESTORE_REACT_VERSION',sha256:p.sha256,
+            target_proposal_id:target.proposal_id,target_sha256:target.sha256,
+          }));
+          if(out){message.success('Đã tạo proposal khôi phục, không ghi đè source cũ');
+            await openWebapp(out.proposal_id);}
+        });
+    }catch(e){authError(e);}
+  };
   const applyWebapp=p=>ask('Duyệt SHA và lưu mã nguồn React?',
     <><Paragraph>Mã nguồn sẽ được lưu vào workspace/webapps trong thư mục mới.</Paragraph>
        <Text code>{p.sha256}</Text>
@@ -340,7 +367,7 @@ export default function App() {
     <ProposalDrawer proposal={proposal} onClose={()=>setProposal(null)} onDecide={(p,d)=>decideArtifact(p,d,'proposals')} onValidate={p=>validateArtifact(p,'proposals')}
       onRevise={revise} onApply={apply} busy={busy}/>
     <WebappProposalDrawer proposal={webapp} onClose={()=>setWebapp(null)} onDecide={decideArtifact} onValidate={validateArtifact}
-      onRevise={reviseWebapp} onApply={applyWebapp}
+      onRevise={reviseWebapp} onApply={applyWebapp} onRollback={rollbackWebapp}
       onVerify={verifyWebapp} busy={busy}/>
     <Drawer title="Chi tiết tác vụ" size={720} open={!!task} onClose={()=>setTask(null)}>
       {task && <><Descriptions bordered column={1} size="small" items={[

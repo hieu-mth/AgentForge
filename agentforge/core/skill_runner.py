@@ -192,6 +192,12 @@ def _safe_failure(skill_id, exc):
                 }
                 return ("APP_CODE_UNSAFE: " + guidance.get(
                     code, "Generated code includes blocked remote/active patterns."))
+            if str(exc).startswith("APP_REVISION_UNCHANGED:"):
+                return ("APP_REVISION_UNCHANGED: AI did not edit source code. "
+                        "Please request specific file/UI changes; no proposal saved.")
+            if str(exc).startswith("APP_REVISION_INVALID:"):
+                return ("APP_REVISION_INVALID: Code edit failed the bounded patch contract; "
+                        "original source was preserved.")
             if str(exc).startswith("APP_CODE_INVALID:"):
                 return "APP_CODE_INVALID: Generated React source failed the file contract."
             if str(exc).startswith("APP_ARCHITECTURE_"):

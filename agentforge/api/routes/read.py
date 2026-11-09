@@ -86,10 +86,7 @@ def dispatch(self, route):
         document, _ = provider._read_proposal(proposal_id)
         session = self._session()
         session.setdefault("reviewed_webapps", {})[proposal_id] = document["sha256"]
-        comparison = (provider.compare(proposal_id)
-                      if provider is webapp_developer.base
-                      else {"revision": False, "changed_fields": [],
-                            "changed_files": []})
+        comparison = provider.compare(proposal_id)
         return self._reply(200, {
             "proposal_id": proposal_id,
             "sha256": document["sha256"],

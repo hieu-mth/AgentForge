@@ -33,7 +33,7 @@ Nếu báo không tìm thấy `.venv\Scripts\python.exe`, chạy `py -0p` để 
 | **Model Hub** | Chọn model text/code theo tác vụ, lưu SQLite revision/rollback; Dashboard quản lý profiles | Video/Image chỉ config-only, cloud cần quyền Owner |
 | **Website Builder** | Thiết kế website theo schema có giới hạn; feedback sinh phiên bản đề xuất | Không phải công cụ tạo full-stack tùy ý |
 | **Marketplace** | NovaMart demo, lọc/tìm kiếm/giỏ hàng, catalog do AI đề xuất | Không có thanh toán, backend bán hàng thật |
-| **AI React Developer** | Đề xuất source JSX/CSS và kiểm tra cú pháp | Chưa sửa source AI qua feedback; build/browser QA AI chưa xác minh |
+| **AI React Developer** | Đề xuất source JSX/CSS và kiểm tra cú pháp | Source AI có revision/diff/rollback theo feedback; model thật và build/browser QA AI chưa xác minh |
 | **AI Film Studio** | Lập kế hoạch phim dài và adapter gửi shot ComfyUI theo quyền Owner | **Chưa kiểm chứng render video động thật trên GPU 12 GB**, chưa tự dựng phim dài |
 | **Media / Growth** | Ảnh tĩnh, SRT, TTS tùy chọn, FFmpeg MP4, gói bàn giao | YouTube upload vẫn thủ công; không có doanh thu tự xác minh |
 
@@ -51,7 +51,7 @@ Chi tiết và định nghĩa trạng thái: **[Current Status](docs/STATUS.md)*
 - **[Compatibility M5](docs/architecture/COMPATIBILITY_POLICY.md)** — root aliases tới features và quy tắc cleanup an toàn.
 - **[API contract M0/M3](docs/architecture/API_CONTRACT_V1.md)** — Owner login, CSRF, routes và compatibility.
 - **[Cấu trúc đã chốt (M1–M4)](docs/architecture/TARGET_STRUCTURE.md)** — Python/React ở root, các feature canonical đã chuyển.
-- **[Giải thích từng file Python/React](docs/architecture/FILE_CATALOG.md)** — inventory 200 module Python và Dashboard.
+- **[Giải thích từng file Python/React](docs/architecture/FILE_CATALOG.md)** — inventory 201 module Python và Dashboard.
 - **[Templates](templates/README.md)** và **[Examples](examples/README.md)** — phân biệt template runtime với file JSON mẫu.
 - **[AI Film Studio 12 GB](docs/architecture/FILM_MOTION_12GB_PILOT.md)** — điều kiện cần trước khi tạo clip thật.
 - **[Bằng chứng Phase 1](docs/verification/phase1/README.md)** — snapshot kiểm thử, không phải trạng thái live.

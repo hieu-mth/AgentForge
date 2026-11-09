@@ -237,7 +237,7 @@ class AIReactHttpTests(unittest.TestCase):
     login = WebappRevisionHttpTests.login
     _shutdown = WebappRevisionHttpTests._shutdown
 
-    def test_ai_source_review_apply_and_revision_disabled(self):
+    def test_ai_source_review_apply_and_revision_creates_approved_goal_only(self):
         root = webapp_builder.PROPOSALS.parent
         patches = [
             patch.object(DEV, "PROPOSALS", root / "ai-proposals"),
@@ -258,10 +258,15 @@ class AIReactHttpTests(unittest.TestCase):
         self.assertEqual(doc["format"], DEV.FORMAT)
         self.assertFalse(doc["execution_authorized"])
         self.assertTrue(any(f["path"] == "src/App.jsx" for f in doc["files"]))
-        code, _, _ = self.req("POST", "/api/webapps/"+pid+"/revision", {
-            "ack": "REQUEST_REVISION", "sha256": sha,
-            "feedback": "Đổi bố cục trang mua sắm theo yêu cầu."})
-        self.assertEqual(code, 400)
+        with patch("agentforge.model.generate_json") as model:
+            code, revision, _ = self.req("POST", "/api/webapps/"+pid+"/revision", {
+                "ack": "REQUEST_REVISION", "sha256": sha,
+                "feedback": "Đổi bố cục trang mua sắm theo yêu cầu."})
+            model.assert_not_called()
+        self.assertEqual(code, 200, revision)
+        goal = brain_store.get_goal(revision["goal_id"], db_path=self.brain)
+        self.assertEqual(goal["template"], "webapp.source_revision")
+        self.assertEqual(goal["status"], "PLANNED")
         self.assertFalse((DEV.PROJECTS / "custom-ai-source").exists())
         code, response, _ = self.req("POST", "/api/webapps/"+pid+"/apply", {
             "ack": "APPLY_WEBAPP", "sha256": sha})

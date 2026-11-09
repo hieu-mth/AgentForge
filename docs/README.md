@@ -10,6 +10,7 @@ Không sử dụng các tài liệu milestone phiên bản cũ để suy luận 
 | --- | --- | --- |
 | Khởi chạy | [README tại root](../README.md) | Giới thiệu, lệnh chạy nhanh |
 | Xem hệ thống làm được gì | [STATUS.md](STATUS.md) | Matrix VERIFIED / PARTIAL / NOT IMPLEMENTED / UNVERIFIED |
+| AI React source revision (Đợt 6) | [Wave 6 acceptance](verification/wave6/README.md) | Chỉnh JSX/CSS theo feedback, SHA/diff/rollback, chưa QA model/browser thật |
 | Nghiệm thu Base V1 (Đợt 5) | [Base V1 acceptance](verification/base_v1/README.md) | CI gates, workflow/backup staging, checklist Owner Windows B1–B7 |
 | Cài, build, kiểm thử | [DEVELOPMENT.md](DEVELOPMENT.md) | M9 Windows preflight/setup an toàn, Python, npm, CI, kiểm tra docs |
 | Quyết định phát triển | [ROADMAP.md](ROADMAP.md) | Mốc, tiêu chí nghiệm thu, blocker |
@@ -19,7 +20,7 @@ Không sử dụng các tài liệu milestone phiên bản cũ để suy luận 
 | Feature-first module boundaries | [FEATURE_BOUNDARIES.md](architecture/FEATURE_BOUNDARIES.md) | M4: canonical features, compatibility, tích hợp ComfyUI và quy tắc thêm nghiệp vụ |
 | Cấu trúc source **đang chạy** | [REPOSITORY_STRUCTURE.md](architecture/REPOSITORY_STRUCTURE.md) | `agentforge/` + `dashboard/` đang chạy |
 | **Cấu trúc đã chốt (M1–M4 chính đã chuyển, M5 phase 2 còn chờ)** | [TARGET_STRUCTURE.md](architecture/TARGET_STRUCTURE.md) | `agentforge/` + `dashboard/` tại root, Feature-First Modular Monolith |
-| Giải thích **từng file** | [FILE_CATALOG.md](architecture/FILE_CATALOG.md) | Catalog 200 file Python, các file React và scripts |
+| Giải thích **từng file** | [FILE_CATALOG.md](architecture/FILE_CATALOG.md) | Catalog 201 file Python, các file React và scripts |
 | Hợp đồng API đã cố định | [API_CONTRACT_V1.md](architecture/API_CONTRACT_V1.md) | Localhost/Owner/CSRF, routes và quy tắc bảo mật M0–M3 |
 | Lộ trình đổi cấu trúc | [MIGRATION_PLAN.md](architecture/MIGRATION_PLAN.md) | Migration theo phase, kiểm chứng import/CLI/SQLite |
 | Tạo phim dài | [LONG_FORM_AI_FILM_STUDIO.md](architecture/LONG_FORM_AI_FILM_STUDIO.md) | Chapter/shot planner, không phải video thành phẩm |
