@@ -14,7 +14,7 @@
 | CI/hygiene | `.github/workflows/ci.yml`, `.gitignore`, `scripts/repo_hygiene.py` có prefix cũ | Điều chỉnh rồi kiểm tra không đụng dữ liệu Owner |
 | Kiến trúc runtime | `src/agentforge/architecture.py` có `LAYOUT` và `GENERATED_DIRS` cũ | Cập nhật **sau** khi layout thật chuyển, không đổi snapshot sớm |
 | Internal callers | Các import `agentforge.product_builder`, `brain_runner`, ... | Chỉ xóa wrapper khi đã migrate mọi caller và test module identity/monkeypatch |
-| Product generation | `examples/novamart/` là reference template | Không move hoặc xóa template chỉ để gọn |
+| Product generation | NovaMart là scaffold có dependency thật | Đã chuyển `examples/novamart/` → `templates/novamart/`, cập nhật Builder/Toolchain, CI và sandbox; **không xóa** hoặc thay đổi SHA các proposal cũ |
 | User data | `data/`, `workspace/`, `.env` được gitignore | Không copy/migrate/reset SQLite; tuyệt đối không `git clean -fdx` |
 
 ## Các bước triển khai được đề xuất

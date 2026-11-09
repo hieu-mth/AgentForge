@@ -25,8 +25,14 @@ ui/dashboard/dist/
 ui/dashboard/.vite/
 
 # Additional local front-end dependencies and generated tooling
+templates/novamart/node_modules/
+templates/novamart/.vite/
+templates/novamart/dist/
+
+# Leave old locally installed template caches ignored after git rename.
 examples/novamart/node_modules/
 examples/novamart/.vite/
+examples/novamart/dist/
 .mypy_cache/
 .ruff_cache/
 htmlcov/

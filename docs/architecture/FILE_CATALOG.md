@@ -239,8 +239,8 @@
 | `config/` | Model/Owner config đã review; không chứa token bí mật. |
 | `skills/` | Skill manifests và policy contracts. |
 | `workers/` | Worker TOML và instructions; không tự chạy code. |
-| `examples/novamart/` | Trusted React marketplace reference template. |
-| `examples/film_studio/` | Thông số phim fantasy mẫu, chưa là video đã render. |
+| `templates/novamart/` | Trusted React marketplace scaffold và integration test fixture: nguồn bắt buộc cho WebApp Builder; giữ lockfile. |
+| `examples/` | JSON minh họa, gồm film_studio/feature_fantasy.json và nem-ngu-storyboard-v15.json; không phải source generator. |
 | `sandbox/webapp/` | Docker QA specification/instructions, thực runtime còn phải kiểm chứng. |
 | `scripts/agentforge_acceptance_windows.ps1` | Read-only PowerShell acceptance smoke. |
 | `scripts/archive_local_state.py` | Công cụ archive local state theo quy tắc an toàn. |
