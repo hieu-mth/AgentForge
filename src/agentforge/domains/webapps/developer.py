@@ -178,7 +178,7 @@ test('React source contract',()=>{
 """
 
 
-def _compile(spec, slug):
+def _compile(spec, slug, *, legacy=False):
     trusted = {}
     for name in TRUSTED:
         path = base.REFERENCE / name
@@ -192,11 +192,8 @@ def _compile(spec, slug):
     trusted["index.html"] = trusted["index.html"].replace(
         marker, "<title>" + html.escape(spec["title"], quote=True) +
         " · AI Developer Draft</title>")
-    package = json.loads(trusted["package.json"])
-    package["name"] = "@agentforge/" + slug
-    package["scripts"].pop("test:browser", None)
-    package["devDependencies"].pop("playwright-core", None)
-    trusted["package.json"] = json.dumps(package, indent=2) + "\n"
+    from agentforge.domains.webapps.toolchain import project_files
+    trusted.update(project_files(slug, legacy=legacy))
     generated = {item["path"]: item["content"] for item in spec["files"]}
     files = {
         **trusted, **generated,
@@ -352,14 +349,14 @@ def _read_proposal(pid):
     title = _text(doc["title"], 100, "title")
     summary = _text(doc["summary"], 240, "summary")
     files = doc["files"]
-    if (not isinstance(files, list) or not 8 <= len(files) <= 14
+    if (not isinstance(files, list) or not 8 <= len(files) <= 15
             or any(not isinstance(x, dict) or set(x) != {"path", "content"}
                    for x in files)
             or any(not isinstance(x["path"], str) or not isinstance(
                 x["content"], str) for x in files)):
         raise ValueError("Invalid AI Developer files")
     paths = [item["path"] for item in files]
-    allowed = ALLOWED | set(TRUSTED) | {"tests/contract.test.js", "README.md"}
+    allowed = ALLOWED | set(TRUSTED) | {"tests/contract.test.js", "README.md", "package-lock.json"}
     if (paths != sorted(set(paths)) or set(paths) - allowed
             or sum(len(x["content"].encode("utf-8")) for x in files) > MAX_TOTAL_BYTES):
         raise ValueError("Invalid AI Developer file set")
@@ -383,7 +380,7 @@ def _read_proposal(pid):
     # A hash alone is not an authentication signature; recompute the fixed
     # trusted scaffold to prevent a locally edited proposal from replacing
     # package scripts, dependencies or the React entrypoint.
-    if _compile(spec, slug) != files:
+    if _compile(spec, slug, legacy="package-lock.json" not in paths) != files:
         raise ValueError("APP_CODE_INVALID: trusted project files were altered")
     return doc, path
 
