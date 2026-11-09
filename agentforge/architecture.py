@@ -14,6 +14,7 @@ LAYOUT = {
     "core": "agentforge/core",
     "website_domain": "agentforge/features/websites",
     "growth_feature": "agentforge/features/growth",
+    "webapp_feature": "agentforge/features/webapps",
     "storage": "agentforge/storage",
     "ui": "dashboard",
     "contracts": "skills",

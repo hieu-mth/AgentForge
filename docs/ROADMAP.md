@@ -8,7 +8,7 @@
 
 ## Base V1.0 — Model Hub
 
-**M0/M3:** API đã chia và có security contracts. **M6:** registry/text worker routing, SQLite Owner revision/rollback. **M7:** Dashboard AI Models & Routing, model profiles, local metadata probe và xác nhận Owner. **M8 (adapter foundation):** tách 30 skill policies + trusted handlers sang 5 nhóm domain, giữ permission gate hiện hữu. **M4a:** Growth đã chuyển sang `features/growth/` (giữ compatibility aliases). **M4b:** Website đã chuyển sang `features/websites/`, giữ CLI và import aliases. **M4c–M4d:** webapps, media/film/integrations tiếp tục theo PR riêng; M9 setup/ops, M5 cleanup còn chờ. Xem [Skill Engine](architecture/SKILL_ENGINE.md).
+**M0/M3:** API đã chia và có security contracts. **M6:** registry/text worker routing, SQLite Owner revision/rollback. **M7:** Dashboard AI Models & Routing, model profiles, local metadata probe và xác nhận Owner. **M8 (adapter foundation):** tách 30 skill policies + trusted handlers sang 5 nhóm domain, giữ permission gate hiện hữu. **M4a:** Growth đã chuyển sang `features/growth/` (giữ compatibility aliases). **M4b:** Website đã chuyển sang `features/websites/`, giữ CLI và import aliases. **M4c:** Webapps đã chuyển sang `features/webapps/`, giữ CLI/compatibility. **M4d:** media/film/integrations tiếp tục theo PR riêng; M9 setup/ops, M5 cleanup còn chờ. Xem [Skill Engine](architecture/SKILL_ENGINE.md).
 
 [Model Hub](architecture/MODEL_HUB.md) phân biệt routing đã nối ở text và video/image mới config-only, không tự chạy GPU/cloud.
 
