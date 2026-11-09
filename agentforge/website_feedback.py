@@ -1,5 +1,5 @@
-"""Compatibility shim. Canonical feedback: agentforge.domains.websites.feedback."""
-from agentforge.domains.websites.feedback import (
+"""Compatibility shim. Canonical feedback: agentforge.features.websites.feedback."""
+from agentforge.features.websites.feedback import (
     MAX_FEEDBACK, MIN_FEEDBACK, request_revision,
 )
 

@@ -48,6 +48,7 @@ Chi tiết và định nghĩa trạng thái: **[Current Status](docs/STATUS.md)*
 - **[Model Hub M6/M7](docs/architecture/MODEL_HUB.md)** — cấu hình provider/model/task routing trên Dashboard.
 - **[Skill Engine M8](docs/architecture/SKILL_ENGINE.md)** — code-owned permissions và adapter theo domain.
 - **[Feature Boundaries M4](docs/architecture/FEATURE_BOUNDARIES.md)** — nơi đặt code mới, compatibility và tích hợp ComfyUI.
+- **[Compatibility M5](docs/architecture/COMPATIBILITY_POLICY.md)** — root aliases tới features và quy tắc cleanup an toàn.
 - **[API contract M0/M3](docs/architecture/API_CONTRACT_V1.md)** — Owner login, CSRF, routes và compatibility.
 - **[Cấu trúc đã chốt (M1–M4)](docs/architecture/TARGET_STRUCTURE.md)** — Python/React ở root, các feature canonical đã chuyển.
 - **[Giải thích từng file Python/React](docs/architecture/FILE_CATALOG.md)** — inventory 197 module Python và Dashboard.

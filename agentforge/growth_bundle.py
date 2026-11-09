@@ -1,4 +1,4 @@
-"""Legacy alias to agentforge.domains.growth.bundle."""
+"""Legacy alias to agentforge.features.growth.bundle."""
 import sys
-from agentforge.domains.growth import bundle as _implementation
+from agentforge.features.growth import bundle as _implementation
 sys.modules[__name__] = _implementation

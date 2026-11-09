@@ -1,6 +1,6 @@
 # Phát triển và vận hành trên Windows
 
-> **Đường dẫn hiện tại: `agentforge/` (Python) và `dashboard/` (React), đều ở repository root.** [M1+M2](architecture/MIGRATION_PLAN.md) đã chuyển, M3 đã chia API; M8 chia skill adapters; M4a–M4d2 đã chuyển Growth/Website/Webapp/Media/Film canonical features và HTTP ComfyUI transport. ComfyUI transport đã tách tại M4d2; M4 research/ops và cleanup aliases (M5) vẫn chờ.
+> **Đường dẫn hiện tại: `agentforge/` (Python) và `dashboard/` (React), đều ở repository root.** [M1+M2](architecture/MIGRATION_PLAN.md) đã chuyển, M3 đã chia API; M8 chia skill adapters; M4a–M4d2 đã chuyển Growth/Website/Webapp/Media/Film canonical features và HTTP ComfyUI transport. ComfyUI transport đã tách tại M4d2; M4 research/ops còn review; M5 phase 1 đã chuyển 22 root aliases thẳng vào features + audit, xóa aliases phase 2 còn chờ.
 
 **Đối tượng:** Owner/developer làm việc trực tiếp tại `D:\AgentForge`. Có thể dùng folder khác; các lệnh bên dưới giả định repo đã clone.
 
@@ -60,6 +60,7 @@ Cờ này không cho phép tùy tiện public hệ thống hay chạy generated 
 ## 3. Kiểm thử an toàn
 
 ~~~powershell
+.\.venv\Scripts\python.exe scripts/compat_audit.py --check
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 .\.venv\Scripts\python.exe scripts/check_docs.py
 npm.cmd run test:navigation --prefix dashboard

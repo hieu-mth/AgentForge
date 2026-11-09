@@ -1,6 +1,6 @@
 # ADR-001 — Cấu trúc AgentForge được chốt
 
-**Quyết định: ĐÃ CHỐT (approved target)** · **Triển khai: M1 + M2 + M3 DONE, M4a–M4c + M4d1 Media/Film + M4d2 ComfyUI DONE; M4 research/ops + M5 CHƯA MIGRATE** · 09/11/2026
+**Quyết định: ĐÃ CHỐT (approved target)** · **Triển khai: M1 + M2 + M3 DONE, M4a–M4c + M4d1 Media/Film + M4d2 ComfyUI DONE; M4 research/ops PENDING + M5 phase 1 DONE (aliases giữ nguyên)** · 09/11/2026
 
 Chủ dự án đã chọn **flat-root Python package + dashboard riêng**, thay cho `src/agentforge/` và `ui/dashboard/` ban đầu. **M1 đã chuyển React sang `dashboard/`, M2 đã chuyển Python sang `agentforge/`.** `api/` đã triển khai ở M3; các business feature chính và `integrations/comfyui.py` đã triển khai M4a–M4d2. `ops/preflight.py` đã triển khai M9 read-only; các ops modules còn ở root và research cần review riêng; M5 compat cleanup chưa triển khai.
 
@@ -129,6 +129,7 @@ Ví dụ Film Studio: script & character bible ở `features/film_studio/`; Comf
 | Chuyển 5 nhóm nghiệp vụ `domains/` → `features/` | **M4a–M4d1 DONE** — có compatibility aliases; Growth/Websites/Webapps/Media/Film Studio |
 | Tách Film Studio và ComfyUI integration | **M4d1–M4d2 DONE** — chưa có GPU benchmark thực |
 | Chuyển các use case research/ops còn hoạt động | **PENDING** — chỉ migrate khi xác minh callers và ownership |
-| Dọn các compatibility aliases | **M5 NOT STARTED** — không xóa theo cảm tính |
+| Chuẩn hóa compatibility imports | **M5 phase 1 DONE** — 22 root aliases trỏ thẳng features + static audit; chưa xóa aliases |
+| Xóa aliases thực sự không còn cần thiết | **M5 phase 2 PENDING** — cần bằng chứng từ external callers và deprecation |
 
 Bắt đầu migration theo [MIGRATION_PLAN.md](MIGRATION_PLAN.md), không thực hiện một lần tất cả. Hướng dẫn cài đặt trong root README vẫn dùng cấu trúc **đang chạy** cho tới khi các bước chuyển thực sự được merge.

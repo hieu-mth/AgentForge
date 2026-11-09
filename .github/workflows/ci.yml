@@ -50,6 +50,9 @@ jobs:
       - name: Validate documentation links
         run: python scripts/check_docs.py
 
+      - name: Audit retained compatibility imports (read-only)
+        run: python scripts/compat_audit.py --check
+
       - name: Setup Node for standalone React Dashboard
         uses: actions/setup-node@v4
         with:
