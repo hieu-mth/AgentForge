@@ -1,4 +1,4 @@
-"""V2.7 React build serving stays isolated from legacy frontend and private files."""
+"""Canonical React Dashboard routes never expose source files or legacy assets."""
 import http.client
 import tempfile
 import threading
@@ -62,12 +62,16 @@ class ReactDashboardTests(unittest.TestCase):
         self.assertEqual(200, code)
         self.assertIn(b"color", body)
 
-    def test_existing_vanilla_dashboard_still_serves_with_strict_csp(self):
+    def test_root_redirects_to_react_and_legacy_assets_are_removed(self):
         code, headers, body = self.get("/")
-        self.assertEqual(200, code)
-        self.assertIn(b"AgentForge", body)
-        self.assertIn("style-src 'self';", headers["Content-Security-Policy"])
-        self.assertNotIn("style-src 'self' 'unsafe-inline'", headers["Content-Security-Policy"])
+        self.assertEqual(302, code)
+        self.assertEqual("/dashboard/", headers["Location"])
+        self.assertEqual("no-store", headers["Cache-Control"])
+        self.assertEqual(b"", body)
+        for route in ("/app.js", "/app.css", "/app.html"):
+            code, headers, _ = self.get(route)
+            self.assertEqual(404, code)
+            self.assertEqual("nosniff", headers["X-Content-Type-Options"])
 
     def test_no_source_file_or_traversal_access(self):
         for route in (

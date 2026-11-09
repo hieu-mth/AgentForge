@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlsplit
 from agentforge import analytics_store, analytics_insights, skill_registry, task_history
 from agentforge import brain_store, brain_scheduler
 from agentforge import growth_store, growth_reports
+from agentforge.core.public_serialization import _task_public, _artifact_names
 
 CSS = """body{margin:0;background:#101827;color:#e5eaf2;font:16px/1.55 system-ui,Segoe UI,Tahoma,sans-serif}
 main{max-width:1160px;margin:auto;padding:28px 20px}
@@ -30,38 +31,6 @@ th{font-size:.84rem;color:#b9c5d5}td{overflow-wrap:anywhere}
 
 def _safe(value):
     return html.escape(str(value), quote=True)
-
-
-def _task_public(task):
-    """Avoid exposing full prompts, file contents and model output via HTTP."""
-    return {key: task[key] for key in (
-        "task_id", "kind", "skill_id", "parent_id", "status",
-        "created_at", "updated_at", "error"
-    )}
-
-
-def _artifact_names(result):
-    """Show only artifact basenames, never full local paths or output bodies."""
-    found = []
-    def visit(value, depth=0):
-        if depth > 4 or len(found) >= 12:
-            return
-        if isinstance(value, dict):
-            for key, item in value.items():
-                if key in {"report_path", "proposal_path", "project_path",
-                           "preview_path", "screenshot_path", "image_path",
-                           "video_path", "audio_path", "caption_path"} and isinstance(item, str):
-                    label = item.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
-                    if label and label not in found:
-                        found.append(label[:100])
-                elif key == "screenshots" and isinstance(item, list):
-                    for image in item[:6]:
-                        if isinstance(image, str):
-                            visit({"screenshot_path": image}, depth + 1)
-                elif isinstance(item, dict):
-                    visit(item, depth + 1)
-    visit(result)
-    return found
 
 
 def analytics_overview(*, analytics_db_path=None):

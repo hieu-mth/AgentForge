@@ -24,20 +24,14 @@ from agentforge import brain_runner, brain_scheduler, brain_store, growth_report
 from agentforge import growth_store, skill_registry, task_history, goal_preflight, result_view
 from agentforge import ops_control
 from agentforge.core import artifact_acceptance
-from agentforge.dashboard_v0 import _artifact_names, _task_public
+from agentforge.core.public_serialization import _artifact_names, _task_public
 
-STATIC = Path(__file__).with_name("control_center_static")
 COOKIE = "af_owner_session"
 SESSION_SECONDS = 8 * 60 * 60
 MAX_BODY = 65536
 SENSITIVE_GRANTS = {"model.invoke", "network.read", "network.search",
                     "browser.run", "process.run"}
 LOCAL_GRANTS = {"workspace.write", "workspace.propose", "workspace.read"}
-
-
-def _read_static(name):
-    path = STATIC / name
-    return path.read_bytes()
 
 # React build output is a separate artifact, never a writable workspace file.
 REACT_DIST = Path(__file__).resolve().parents[2] / "ui" / "dashboard" / "dist"
@@ -647,13 +641,12 @@ class _Handler(BaseHTTPRequestHandler):
                 return self._reply(200, body, mime=mime)
             except (ValueError, FileNotFoundError, OSError):
                 return self._blocked(404, "react_dashboard_not_built_or_invalid_asset")
-        if route in ("/", "/app.css", "/app.js"):
-            filename, mime = {
-                "/": ("app.html", "text/html; charset=utf-8"),
-                "/app.css": ("app.css", "text/css; charset=utf-8"),
-                "/app.js": ("app.js", "text/javascript; charset=utf-8"),
-            }[route]
-            return self._reply(200, _read_static(filename), mime=mime)
+        if route == "/":
+            # One canonical frontend: redirect legacy bookmarks without serving old UI.
+            return self._reply(302, "", mime="text/plain; charset=utf-8",
+                               headers=(("Location", "/dashboard/"),))
+        if route in ("/app.css", "/app.js", "/app.html"):
+            return self._blocked(404, "not_found")
         if self._session() is None:
             return self._blocked(401, "authentication_required")
         try:
@@ -957,7 +950,7 @@ def main():
                      help="Explicitly enable gated model/network/browser/process workflows")
     args = cli.parse_args()
     server = create_server(args.port, allow_external_actions=args.allow_external_tools)
-    print(f"Control Center V1: http://127.0.0.1:{server.server_port}/", flush=True)
+    print(f"AgentForge Dashboard: http://127.0.0.1:{server.server_port}/dashboard/", flush=True)
     print("ONE-TIME OWNER CODE (do not share, paste into Git or logs):",
           server.owner_code, flush=True)
     print("Localhost only. Session expires in 8h; Ctrl+C to stop.", flush=True)
