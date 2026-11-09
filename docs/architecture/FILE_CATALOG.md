@@ -1,0 +1,255 @@
+# File Catalog — danh mục file AgentForge hiện tại
+
+**Snapshot:** commit `216c9d3` (09/11/2026), **trước migration**. Danh mục này giải thích **file hiện đang tồn tại**, không phải xác nhận chúng đã chuyển đến cây tương lai.
+
+- [Cấu trúc đã được chốt](TARGET_STRUCTURE.md) — `agentforge/` và `dashboard/` ngay root, feature-first.
+- [Kế hoạch chuyển](MIGRATION_PLAN.md) — không phá paths/import/SQLite.
+- [Cấu trúc source đang chạy](REPOSITORY_STRUCTURE.md) — `src/agentforge/`, `ui/dashboard/`.
+
+## Phân loại
+
+| Nhãn | Ý nghĩa |
+| --- | --- |
+| **ENTRY/API** | Entrypoint hoặc transport trực tiếp; cần giữ contract khi tách file. |
+| **COMPAT** | Alias/facade/wrapper sang module khác; **không mặc nhiên là duplicate thừa**. |
+| **LOGIC/CORE/AI/OPS** | Có implementation, store, adapter, orchestration hoặc policy thật. |
+| **CLI** | Công cụ vận hành/demo theo lệnh, cần xem callers trước khi bỏ. |
+| **CONTRACT** | Module mô tả/kiểm tra hợp đồng cấu trúc, không tự chạy workflow. |
+
+**Tổng cộng: 137 file `.py`**. Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
+
+## **Entrypoints và modules tại package root**
+
+| File hiện tại dưới `src/agentforge/` | Loại | Vai trò |
+| --- | --- | --- |
+| `__init__.py` | ENTRY | Dấu mốc package Python, không chứa business logic. |
+| `__main__.py` | ENTRY | Khởi chạy server Owner Dashboard bằng python -m agentforge. |
+| `analytics_insights.py` | LOGIC | Tính metrics/insights theo dữ liệu analytics đã ghi; nhãn synthetic và verified khác nhau. |
+| `analytics_pipeline.py` | CLI | Nhập CSV, tạo dataset demo và điều phối báo cáo S3. |
+| `analytics_store.py` | LOGIC | SQLite import/store dữ liệu analytics theo SHA và các khóa chống ghi trùng. |
+| `architecture.py` | CONTRACT | Snapshot đọc-only về đường dẫn, domain và danh sách compatibility aliases. |
+| `artifact_catalog.py` | COMPAT | Wrapper sang storage/artifact_catalog.py để đọc danh mục artifact. |
+| `asset_preview.py` | LOGIC | Đọc ảnh AI đã nhập, kiểm tra SHA và quyền truy cập. |
+| `autopilot_v13.py` | LOGIC | Hàng đợi draft có ủy quyền giới hạn; không tự cấp quyền mới hay retry. |
+| `brain_planner.py` | COMPAT | Alias sang core/brain_planner.py; giữ import/CLI cũ. |
+| `brain_runner.py` | COMPAT | Alias sang core/brain_runner.py; giữ module identity cho tests. |
+| `brain_scheduler.py` | LOGIC | Lịch thực thi theo tick có kiểm soát và slot chống lặp. |
+| `brain_store.py` | COMPAT | Alias sang core/brain_store.py; tương thích SQLite paths. |
+| `browser_fix.py` | LOGIC | Đề xuất sửa website từ browser QA report; không tự apply. |
+| `browser_validation.py` | COMPAT | Alias sang domains/websites/browser_validation.py. |
+| `company_brain.py` | CLI | CLI cho lập kế hoạch Goal, phê duyệt và chạy Company Brain. |
+| `company_flow.py` | CLI | Bàn giao research report thành task review thủ công. |
+| `company_v2.py` | CLI | Tổng hợp scorecard vận hành; không chứng minh lợi nhuận. |
+| `competitor_facts.py` | LOGIC | Trích xuất trường thông tin đối thủ từ nguồn báo cáo. |
+| `competitors.py` | LOGIC | Danh sách nguồn đối thủ và thu thập thông tin đối chiếu. |
+| `control_center_v1.py` | API | HTTP server localhost, session, CSRF, API và React dist; tên V1 là tên lịch sử. |
+| `customer_evidence_review.py` | LOGIC | Owner review ghi chú phỏng vấn khách hàng (không xác minh danh tính). |
+| `customer_problem_evidence.py` | LOGIC | Đăng ký các bằng chứng vấn đề khách hàng đã được Owner xác nhận. |
+| `customer_validation.py` | LOGIC | Nhập dữ liệu phỏng vấn khách hàng local. |
+| `evaluation.py` | LOGIC | Đánh giá mức độ sẵn sàng cơ hội từ bằng chứng. |
+| `evidence.py` | LOGIC | Tạo/chuẩn hóa claim evidence từ research. |
+| `evidence_registration.py` | LOGIC | Ghi đăng ký evidence có provenance sau review. |
+| `evidence_registry.py` | LOGIC | Kiểm tra references trong index evidence local. |
+| `gateway.py` | LOGIC | Gateway file path/write an toàn dưới workspace. |
+| `goal_preflight.py` | LOGIC | Kiểm tra entity tham chiếu trước khi duyệt Goal; read-only. |
+| `growth_bundle.py` | COMPAT | Alias sang domains/growth/bundle.py. |
+| `growth_pipeline.py` | CLI | CLI growth offline, report/reconcile và handoff. |
+| `growth_reports.py` | COMPAT | Alias sang domains/growth/reports.py. |
+| `growth_store.py` | COMPAT | Alias sang domains/growth/store.py. |
+| `image_studio_v24.py` | COMPAT | Alias sang domains/websites/image_studio.py. |
+| `media_assets.py` | COMPAT | Alias sang domains/media/assets.py. |
+| `media_pipeline.py` | CLI | CLI orchestrate S2 media demo và skill adapters. |
+| `media_quality.py` | COMPAT | Alias sang domains/media/quality.py. |
+| `media_render.py` | COMPAT | Alias sang domains/media/render.py. |
+| `media_workflow_v15.py` | COMPAT | Alias sang domains/media/workflow.py. |
+| `model.py` | AI | Gọi model qua provider Ollama/Anthropic; guard token/budget. |
+| `model_health.py` | COMPAT | Wrapper sang ai/model_health.py. |
+| `model_registry.py` | COMPAT | Wrapper sang ai/model_registry.py. |
+| `ops_backup.py` | OPS | Backup SQLite, xác minh ZIP/SHA và staged restore không ghi đè. |
+| `ops_control.py` | OPS | Owner pause/resume các dispatch mới, fail-closed khi hỏng trạng thái. |
+| `ops_daemon.py` | OPS | Foreground scheduler daemon có advisory lock và heartbeat. |
+| `ops_doctor.py` | OPS | Chẩn đoán read-only, trạng thái DB/task/scheduler/backup. |
+| `owner_review.py` | LOGIC | Owner review các candidates evidence; không tự đăng ký evidence. |
+| `pain_discovery.py` | LOGIC | Khám phá pain points từ tìm kiếm community, lưu đầu mối. |
+| `paths.py` | CORE | Định nghĩa repository root, data/workspace/UI paths và path guards. |
+| `product_builder.py` | COMPAT | Alias sang domains/websites/builder.py, giữ CLI/import. |
+| `product_cycle.py` | LOGIC | Build → browser check → fix-proposal loop có checkpoint. |
+| `product_quality.py` | COMPAT | Alias sang domains/websites/quality.py. |
+| `product_revision.py` | COMPAT | Alias sang domains/websites/revision.py. |
+| `prompt_intake.py` | COMPAT | Wrapper sang ai/prompt_intake.py. |
+| `quality_v14.py` | LOGIC | Business profile, conservative QA và Owner review inbox. |
+| `research.py` | CLI | Research LangGraph, checkpoints và local reports. |
+| `result_view.py` | COMPAT | Wrapper sang core/result_view.py. |
+| `review_handoff.py` | LOGIC | Chuyển observations thành Owner review candidates. |
+| `search_quality.py` | LOGIC | Lọc chất lượng search/community hits. |
+| `skill_registry.py` | COMPAT | Alias sang core/skill_registry.py. |
+| `skill_runner.py` | COMPAT | Alias sang core/skill_runner.py. |
+| `source_reader.py` | LOGIC | Đọc web nguồn allowlisted, có giới hạn host/nội dung. |
+| `source_review.py` | LOGIC | Review trích dẫn nguồn theo task, có owner consent. |
+| `task_history.py` | COMPAT | Alias sang core/task_history.py. |
+| `task_inbox.py` | LOGIC | Task inbox cho review thủ công, chỉ quản lý metadata. |
+| `tool_flow.py` | CLI | LangGraph flow demo write/read tool qua gateway. |
+| `web_assets.py` | COMPAT | Alias sang domains/websites/assets.py. |
+| `web_design_kit.py` | COMPAT | Alias sang domains/websites/design_kit.py. |
+| `web_design_v2.py` | CLI | Điều phối revision website theo design kit và QA. |
+| `web_tools.py` | LOGIC | Web search adapter DDGS, lọc response có giới hạn. |
+| `webapp_architect.py` | COMPAT | Facade sang domains/webapps/architect.py. |
+| `webapp_builder.py` | COMPAT | Alias sang domains/webapps/builder.py. |
+| `webapp_developer.py` | COMPAT | Alias CLI sang domains/webapps/developer.py. |
+| `webapp_feedback.py` | LOGIC | Mở Goal revision cho app template theo Owner feedback. |
+| `webapp_reviewer.py` | COMPAT | Facade sang domains/webapps/reviewer.py. |
+| `webapp_sandbox.py` | COMPAT | Alias CLI sang domains/webapps/sandbox.py. |
+| `webapp_static_qa.py` | COMPAT | Facade sang domains/webapps/static_qa.py. |
+| `website_feedback.py` | COMPAT | Facade sang domains/websites/feedback.py. |
+| `website_preview.py` | COMPAT | Facade sang domains/websites/preview.py. |
+| `worker_registry.py` | COMPAT | Wrapper sang ai/worker_registry.py. |
+| `workflow.py` | CLI | LangGraph workflow sample/checkpoint cũ, không phải dashboard entrypoint. |
+| `workflow_runner.py` | LOGIC | S1 bounded website quality/browser workflow với checkpoint. |
+| `workspace_policy.py` | LOGIC | SQLite quota/limits cho prompt-first workspace. |
+
+## **AI: `ai/`**
+
+| File hiện tại dưới `src/agentforge/` | Vai trò |
+| --- | --- |
+| `ai/__init__.py` | Package AI. |
+| `ai/model_health.py` | Đọc read-only trạng thái Ollama; không gọi generation. |
+| `ai/model_registry.py` | Load model profiles từ models.toml, không chứa credentials. |
+| `ai/prompt_intake.py` | Định tuyến natural language request vào template allowlisted. |
+| `ai/role_routing.py` | Định tuyến worker-to-model có cấu hình được duyệt. |
+| `ai/worker_registry.py` | Đọc và validate worker manifests. |
+
+## **Core: `core/`**
+
+| File hiện tại dưới `src/agentforge/` | Vai trò |
+| --- | --- |
+| `core/__init__.py` | Package lõi. |
+| `core/artifact_acceptance.py` | Artifact status, evidence SHA và Owner acceptance ledger. |
+| `core/brain_planner.py` | Đề xuất plans theo Goal templates có giới hạn. |
+| `core/brain_runner.py` | Điều phối thực thi từng step, durable dispatch/no-blind-retry. |
+| `core/brain_store.py` | SQLite Goal/plan/step state và audit. |
+| `core/public_serialization.py` | Projection metadata public không lộ prompt/absolute paths. |
+| `core/result_view.py` | Allowlisted read-only presentation của task results. |
+| `core/skill_registry.py` | Đọc skill contracts TOML và kiểm tra schema. |
+| `core/skill_runner.py` | Chạy skill adapters qua explicit permissions. |
+| `core/task_history.py` | Lịch sử task/events SQLite và recovery. |
+
+## **Domains: `domains/growth/`**
+
+| File hiện tại dưới `src/agentforge/` | Vai trò |
+| --- | --- |
+| `domains/growth/__init__.py` | Package nghiệp vụ growth. |
+| `domains/growth/bundle.py` | Tổng hợp handoff bundle/growth artifacts. |
+| `domains/growth/reports.py` | Tính báo cáo growth, synthetic vs verified. |
+| `domains/growth/store.py` | SQLite lưu campaign/growth records. |
+
+## **Domains: `domains/media/`**
+
+| File hiện tại dưới `src/agentforge/` | Vai trò |
+| --- | --- |
+| `domains/media/__init__.py` | Package media hiện tại. |
+| `domains/media/assets.py` | Media asset manifest/paths và scene content. |
+| `domains/media/long_form.py` | Lập kế hoạch chapters/cast/shot, SHA; chưa render phim. |
+| `domains/media/motion_comfy.py` | Adapter ComfyUI motion shot theo quyền Owner, giới hạn GPU 12 GB. |
+| `domains/media/quality.py` | Đánh giá quality media artifacts theo rules. |
+| `domains/media/render.py` | TTS/FFmpeg render từ assets/captions; bounded local. |
+| `domains/media/workflow.py` | Orchestration cho pipeline media. |
+
+## **Domains: `domains/webapps/`**
+
+| File hiện tại dưới `src/agentforge/` | Vai trò |
+| --- | --- |
+| `domains/webapps/__init__.py` | Package React WebApp. |
+| `domains/webapps/architect.py` | AI architect tạo brief có ID/SHA. |
+| `domains/webapps/builder.py` | Marketplace NovaMart proposal từ catalog data. |
+| `domains/webapps/developer.py` | AI React source proposal, chưa tự execute code. |
+| `domains/webapps/reviewer.py` | Reviewer advisory sau static QA, không auto-accept. |
+| `domains/webapps/sandbox.py` | Isolated Docker QA adapter (chưa xác minh trên máy Owner). |
+| `domains/webapps/static_qa.py` | Static checks source và SHA, không chạy browser. |
+| `domains/webapps/syntax.py` | Tree-sitter parse JSX/JS như dữ liệu, không execute. |
+| `domains/webapps/toolchain.py` | Reviewed/pinned React scaffold từ NovaMart. |
+
+## **Domains: `domains/websites/`**
+
+| File hiện tại dưới `src/agentforge/` | Vai trò |
+| --- | --- |
+| `domains/websites/__init__.py` | Package Website. |
+| `domains/websites/ai_designer.py` | Đọc bounded AI design JSON, compile HTML/CSS an toàn. |
+| `domains/websites/assets.py` | Quản lý website image files và asset paths. |
+| `domains/websites/browser_validation.py` | Browser QA cho website có giới hạn và Owner review. |
+| `domains/websites/builder.py` | Proposal website, hash/artifact & apply workflow. |
+| `domains/websites/design_kit.py` | Giao diện/visual primitives đã review. |
+| `domains/websites/feedback.py` | Yêu cầu revision qua Owner feedback. |
+| `domains/websites/image_studio.py` | Optional local ComfyUI image adapter, có approval. |
+| `domains/websites/preview.py` | Tạo preview website từ proposal đã ký SHA. |
+| `domains/websites/quality.py` | Kiểm tra chất lượng website output. |
+| `domains/websites/revision.py` | Sinh các version proposal website theo feedback. |
+| `domains/websites/revision_context.py` | Đọc bản trước được SHA-verify làm ngữ cảnh untrusted. |
+| `domains/websites/structured_builder.py` | Compile copy text thành HTML/CSS tĩnh có giới hạn. |
+
+## **Storage: `storage/` và package marker**
+
+| File hiện tại dưới `src/agentforge/` | Vai trò |
+| --- | --- |
+| `domains/__init__.py` | Container các domain implementations hiện tại. |
+| `storage/__init__.py` | Package storage. |
+| `storage/artifact_catalog.py` | Read-only artifact inventory, không xóa/chạy source. |
+| `storage/retention.py` | Backup/retention, reversible quarantine và restore không ghi đè. |
+
+## Frontend React hiện tại (`ui/dashboard/` → `dashboard/` sau migration)
+
+| File/nhóm | Vai trò |
+| --- | --- |
+| `index.html`, `src/main.jsx` | HTML shell và React entrypoint. |
+| `src/App.jsx` | App shell, login/Owner controls và navigation layout. |
+| `src/api.js` | HTTP/session/CSRF frontend client. |
+| `src/navigation.js` | Định nghĩa tabs/route mapping. |
+| `src/permissions.js` | Presentation/permission checks trong UI; backend vẫn là authority. |
+| `src/acceptance.js` | Projection/labels cho artifact acceptance states. |
+| `src/workspace_quota.js` | Ước lượng/presentation quota workspace. |
+| `src/styles.css` | Global CSS, responsive layout và dark theme. |
+| `src/theme.jsx` | Theme/token config React/Ant Design. |
+| `src/components/AcceptanceStatus.jsx` | Hiển thị trạng thái nghiệm thu. |
+| `src/components/shared.jsx` | UI primitives dùng lại. |
+| `src/features/Management.jsx` | Màn hình quản lý hệ thống. |
+| `src/features/Operations.jsx` | Màn hình Operations. |
+| `src/features/Projects.jsx` | Màn hình Projects. |
+| `src/features/Retention.jsx` | Màn hình backup/retention. |
+| `src/features/Reviews.jsx` | Màn hình Owner reviews. |
+| `src/features/Webapps.jsx` | Màn hình WebApp/React proposals. |
+| `src/features/Websites.jsx` | Màn hình Website Builder. |
+| `src/features/Workspace.jsx` | Màn hình giao việc/workspace. |
+| `tests/acceptance.test.js` | Regression UI acceptance. |
+| `tests/navigation.test.js` | Regression navigation. |
+| `tests/permissions.test.js` | Regression visibility/permission UI. |
+| `tests/workspace-quota.test.js` | Regression quota UX. |
+| `tests/browser-smoke.mjs` | Smoke browser trên trusted dashboard build. |
+| `vite.config.js` | Vite root/base/build config. |
+| `package.json`, `package-lock.json` | Scripts, dependencies và lockfile npm; không xóa lockfile. |
+| `README.md` | Tài liệu module frontend hiện hành. |
+
+## Các file ở repository root và scripts
+
+| File/nhóm | Vai trò |
+| --- | --- |
+| `README.md` | Giới thiệu, setup nhanh và link tài liệu hiện hành. |
+| `pyproject.toml` | Python packaging; đang dùng `where=["src"]`, bắt buộc đổi khi migrate package. |
+| `.gitignore` | Bỏ qua dữ liệu runtime, venv, npm dependencies/build output. |
+| `.env.example` | Ví dụ biến môi trường; không commit `.env` thật. |
+| `.github/workflows/ci.yml` | Windows Python/Node/Edge CI và docs lint. |
+| `config/` | Model/Owner config đã review; không chứa token bí mật. |
+| `skills/` | Skill manifests và policy contracts. |
+| `workers/` | Worker TOML và instructions; không tự chạy code. |
+| `examples/novamart/` | Trusted React marketplace reference template. |
+| `examples/film_studio/` | Thông số phim fantasy mẫu, chưa là video đã render. |
+| `sandbox/webapp/` | Docker QA specification/instructions, thực runtime còn phải kiểm chứng. |
+| `scripts/agentforge_acceptance_windows.ps1` | Read-only PowerShell acceptance smoke. |
+| `scripts/archive_local_state.py` | Công cụ archive local state theo quy tắc an toàn. |
+| `scripts/check_docs.py` | Kiểm tra Markdown relative links, chạy trong CI. |
+| `scripts/repo_hygiene.py` | Báo cáo/dọn cache bytecode có xác nhận, không xóa Owner data. |
+| `scripts/s2_tts_windows.ps1` | Thiết lập/kiểm tra TTS Windows cho media. |
+| `tests/` | Regression Python, browser/Node reference tests và security constraints. |
+| `data/`, `workspace/` | Owner SQLite/proposals/films; gitignored, **không bao giờ cleanup tự động**. |
+
+## Nguyên tắc cập nhật catalog
+
+Mỗi lần migration thực sự được merge, cập nhật đường dẫn trong catalog hoặc chuyển tài liệu này thành **migration baseline snapshot** và tạo catalog mới từ HEAD. Không gọi một tên file đã bỏ là active; không xóa một alias chỉ vì rất ngắn. Với mọi file chưa xác minh callers, giữ file và đánh dấu cần audit thay vì tự kết luận UNUSED.
