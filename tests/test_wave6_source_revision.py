@@ -71,8 +71,15 @@ class Wave6SourceRevisionTests(unittest.TestCase):
         self.assertEqual(newer["src/App.jsx"], original["src/App.jsx"])
         self.assertEqual(newer["src/styles.css"], NEW_CSS)
         self.assertEqual(original["src/styles.css"], CSS)
-        self.assertEqual(newer["package.json"], original["package.json"])
-        self.assertEqual(newer["package-lock.json"], original["package-lock.json"])
+        # Trusted package identity is regenerated for the new slug; model does
+        # not get to edit scripts/dependency versions or the lockfile contents.
+        new_package = json.loads(newer["package.json"])
+        old_package = json.loads(original["package.json"])
+        for key in ("scripts", "dependencies", "devDependencies", "overrides"):
+            self.assertEqual(new_package.get(key), old_package.get(key))
+        self.assertEqual(new_package["name"], "@agentforge/react-revised")
+        self.assertEqual(json.loads(newer["package-lock.json"])["packages"][""]["devDependencies"],
+                         json.loads(original["package-lock.json"])["packages"][""]["devDependencies"])
         self.assertEqual(doc["revision"]["source_sha256"], source["sha256"])
         comparison = DEV.compare(revised["proposal_id"])
         self.assertEqual(comparison["changed_files"], ["src/styles.css"])
