@@ -258,6 +258,10 @@ def _dispatch(skill_id, payload):
 
 def _safe_failure(skill_id, exc):
     """Stable, deliberately allowlisted errors; never serialize arbitrary exceptions."""
+    from agentforge.domains.webapps.syntax import SourceSyntaxError
+    if isinstance(exc, SourceSyntaxError):
+        # Typed parser diagnostics only; never expose generated source snippets.
+        return str(exc)
     if skill_id == "web.create":
         # Stable categories only: NEVER include model text, local paths or tokens.
         import socket
