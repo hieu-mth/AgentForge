@@ -9,7 +9,7 @@ without separate Goal and process.run approvals.
 
 On Windows PowerShell, from D:\AgentForge:
 
-    docker build --file sandbox/webapp/Dockerfile --tag agentforge-webapp-qa:local examples/novamart
+    docker build --file sandbox/webapp/Dockerfile --tag agentforge-webapp-qa:local templates/novamart
     docker image inspect agentforge-webapp-qa:local --format '{{.Id}}'
 
 Copy the returned exact **sha256:<64 hex>** image ID, then configure in the

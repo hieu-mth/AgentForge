@@ -17,7 +17,7 @@ from uuid import uuid4
 from agentforge.paths import REPOSITORY_ROOT
 
 ROOT = REPOSITORY_ROOT
-REFERENCE = ROOT / "examples" / "novamart"
+REFERENCE = ROOT / "templates" / "novamart"
 PROJECTS = ROOT / "workspace" / "webapps"
 PROPOSALS = ROOT / "data" / "company" / "webapp_builder" / "proposals"
 WORKER_ID = "product_builder"

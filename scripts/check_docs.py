@@ -12,7 +12,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
-SCOPES = ("docs", "dashboard", "examples", "sandbox", "workers")
+SCOPES = ("docs", "dashboard", "examples", "templates", "sandbox", "workers")
 IGNORED = frozenset({".git", ".venv", "node_modules", "__pycache__", "dist",
                      "build", "workspace", "data", ".pytest_cache", ".vite"})
 LINK = re.compile(r"!?\[[^\]\n]+\]\(([^)\n]+)\)")

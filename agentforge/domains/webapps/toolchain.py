@@ -2,7 +2,7 @@
 import json
 from agentforge.paths import REPOSITORY_ROOT
 
-REFERENCE = REPOSITORY_ROOT / "examples" / "novamart"
+REFERENCE = REPOSITORY_ROOT / "templates" / "novamart"
 
 
 def project_files(slug, *, legacy=False):
