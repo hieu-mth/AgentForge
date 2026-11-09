@@ -1,0 +1,93 @@
+AgentForge Local Operations Acceptance (no remote actions)
+Repository: D:\AgentForge
+Python: D:\AgentForge\.audit-venv\Scripts\python.exe
+
+=== Skill Registry ===
+{
+  "status": "VALID",
+  "skill_count": 30,
+  "invocation_enabled": false
+}
+
+=== Owner Dispatch State ===
+{
+  "mode": "ACTIVE",
+  "reason": "DEFAULT_LOCAL",
+  "persisted": false
+}
+
+=== Database / Scheduler / Backup Doctor ===
+{
+  "status": "REVIEW_REQUIRED",
+  "local_only": true,
+  "registry_valid": true,
+  "databases": {
+    "S1 tasks": {
+      "status": "NOT_CREATED",
+      "size_bytes": 0
+    },
+    "S3 analytics": {
+      "status": "NOT_CREATED",
+      "size_bytes": 0
+    },
+    "S4 goals": {
+      "status": "NOT_CREATED",
+      "size_bytes": 0
+    },
+    "S5 growth": {
+      "status": "NOT_CREATED",
+      "size_bytes": 0
+    }
+  },
+  "running_tasks": 0,
+  "running_goals": 0,
+  "scheduler": {
+    "status": "NOT_RUNNING",
+    "fresh": false
+  },
+  "operations": {
+    "mode": "ACTIVE",
+    "reason": "DEFAULT_LOCAL",
+    "persisted": false
+  },
+  "backup_count": 0,
+  "latest_backup_name": null,
+  "findings": [
+    {
+      "severity": "INFO",
+      "rule": "database_not_initialized",
+      "name": "S1 tasks"
+    },
+    {
+      "severity": "INFO",
+      "rule": "database_not_initialized",
+      "name": "S3 analytics"
+    },
+    {
+      "severity": "INFO",
+      "rule": "database_not_initialized",
+      "name": "S4 goals"
+    },
+    {
+      "severity": "INFO",
+      "rule": "database_not_initialized",
+      "name": "S5 growth"
+    },
+    {
+      "severity": "WARN",
+      "rule": "no_local_backups"
+    }
+  ],
+  "external_accounts_connected": false,
+  "verified_revenue": false,
+  "automatic_recovery_performed": false
+}
+
+=== Existing Intelligence Datasets ===
+{
+  "status": "OK",
+  "datasets": []
+}
+
+Local acceptance completed. Demo data is NOT verified business revenue.
+Owner pause/resume, deployments and external account grants remain separate.
