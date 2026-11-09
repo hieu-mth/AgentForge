@@ -10,7 +10,9 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+from agentforge.paths import REPOSITORY_ROOT
+
+ROOT = REPOSITORY_ROOT
 DATA_DIR = ROOT / "data" / "company"
 TASK_ID_PATTERN = re.compile(r"[a-f0-9]{32}-[a-z0-9-]{1,64}-review\Z")
 

@@ -12,6 +12,7 @@ class ArchitectureBoundaryTests(unittest.TestCase):
     def test_explicit_python_domain_layout(self):
         root = architecture.REPOSITORY_ROOT
         self.assertTrue((root / "pyproject.toml").is_file())
+        self.assertEqual(root / "agentforge", architecture.PACKAGE_ROOT)
         self.assertTrue((root / "dashboard" / "package.json").is_file())
         for key in ("ai", "core", "website_domain", "storage"):
             package = root / architecture.LAYOUT[key]

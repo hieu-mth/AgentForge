@@ -1,6 +1,6 @@
 # Phát triển và vận hành trên Windows
 
-> **Đường dẫn hiện tại: `src/agentforge/` (Python) và `dashboard/` (React ở root).** [Cấu trúc mục tiêu](architecture/TARGET_STRUCTURE.md) đã chốt; **M1 frontend đã chuyển, M2 Python chưa chuyển**. Đừng chạy lệnh cho `agentforge/` ở root trước khi migration Python hoàn tất.
+> **Đường dẫn hiện tại: `agentforge/` (Python) và `dashboard/` (React), đều ở repository root.** [M1+M2](architecture/MIGRATION_PLAN.md) đã chuyển, nhưng chia API/features/integrations (M3–M5) chưa thực hiện.
 
 **Đối tượng:** Owner/developer làm việc trực tiếp tại `D:\AgentForge`. Có thể dùng folder khác; các lệnh bên dưới giả định repo đã clone.
 
@@ -22,7 +22,7 @@ npm.cmd run build --prefix dashboard
 
 Nếu venv đã tồn tại, bỏ qua bước tạo lại. Nếu `py -3.13` không có, kiểm tra `py -0p` rồi dùng Python 3.13+ thật sự được cài. Không giả định file `.venv\Scripts\python.exe` luôn có sẵn.
 
-Nếu vừa cập nhật từ phiên bản cũ, Git sẽ chuyển source `ui/dashboard/` sang `dashboard/`. Thư mục `ui/dashboard/node_modules` hoặc `ui/dashboard/dist` cũ, nếu còn trên máy, chỉ là **cache local cũ** và vẫn được gitignore; không cần xóa để chạy app mới. Cài npm lại tại `dashboard/`.
+Nếu vừa cập nhật từ cấu trúc cũ, Git chuyển `ui/dashboard/` → `dashboard/` và `src/agentforge/` → `agentforge/`. Cache local cũ vẫn được gitignore; **không xóa cache/SQLite để hoàn thành migration**. Sau `git pull`, cài lại Python editable package bằng `python -m pip install -e ".[media]"` trong venv, đồng thời chạy `npm ci` tại `dashboard/`, để không dùng nhầm source path đã đổi.
 
 ## 2. Chạy Dashboard
 

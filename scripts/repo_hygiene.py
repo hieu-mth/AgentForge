@@ -1,6 +1,6 @@
 """Safe local repository hygiene. Default is inventory only; no touching user data.
 
-Scope: disposable Python cache files in src/ and tests/ only. Runtime data,
+Scope: disposable Python cache files in agentforge/ and tests/ only. Runtime data,
 workspace artifacts, model weights, .env, SQLite and proposal history are NEVER
 pruned by this tool. No recursive traversal through junctions or symlinks.
 """
@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCOPES = (ROOT / "src", ROOT / "tests")
+SCOPES = (ROOT / "agentforge", ROOT / "tests")
 
 
 def _link(path):
@@ -55,7 +55,7 @@ def report(*, clean=False, confirm=False):
     return {
         "mode": "CLEAN_CACHE" if clean else "READ_ONLY",
         "pyc_files": len(files), "bytes": total,
-        "deleted": deleted, "scopes": ["src/", "tests/"],
+        "deleted": deleted, "scopes": ["agentforge/", "tests/"],
         "runtime_data_deleted": False, "user_artifacts_deleted": False,
     }
 

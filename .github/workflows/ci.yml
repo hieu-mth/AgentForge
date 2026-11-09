@@ -26,6 +26,27 @@ jobs:
       - name: Install project
         run: python -m pip install -e ".[media]"
 
+      - name: Verify installed package from outside the repository
+        shell: pwsh
+        run: |
+          Push-Location $env:RUNNER_TEMP
+          try {
+            python -c "import os; from pathlib import Path; import agentforge; from agentforge import paths; root=Path(os.environ['GITHUB_WORKSPACE']).resolve(); assert paths.REPOSITORY_ROOT.resolve()==root; assert Path(agentforge.__file__).resolve().parent== (root/'agentforge').resolve()"
+            if ($LASTEXITCODE -ne 0) { throw "Flat Python package import failed outside checkout" }
+          } finally { Pop-Location }
+
+      - name: Verify wheel contains root agentforge package only
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'agentforge-wheel'
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          python -m pip wheel . --no-deps --wheel-dir $out
+          if ($LASTEXITCODE -ne 0) { throw "Python wheel build failed" }
+          $wheels = @(Get-ChildItem -Path $out -Filter 'agentforge-*.whl')
+          if ($wheels.Count -ne 1) { throw "Expected exactly one AgentForge wheel" }
+          python -c "import sys,zipfile; files=zipfile.ZipFile(sys.argv[1]).namelist(); assert 'agentforge/__main__.py' in files; assert 'agentforge/paths.py' in files; assert not any(p.startswith(('src/','dashboard/','tests/')) for p in files)" $wheels[0].FullName
+          if ($LASTEXITCODE -ne 0) { throw "Wheel incorrectly includes non-package content or lacks modules" }
+
       - name: Validate documentation links
         run: python scripts/check_docs.py
 

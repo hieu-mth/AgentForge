@@ -1,6 +1,6 @@
 # Kế hoạch chuyển AgentForge về flat-root architecture
 
-**Trạng thái: M1 FRONTEND ĐÃ CHUYỂN, M2–M5 CHƯA THỰC THI.** Cấu trúc đã chốt tại [ADR-001](TARGET_STRUCTURE.md). Đây là kế hoạch từng mốc; các dòng 'trước' ở phần rủi ro ghi lại path trước M1.
+**Trạng thái: M1 FRONTEND + M2 PYTHON ĐÃ CHUYỂN; M3–M5 CHƯA THỰC THI.** Cấu trúc đã chốt tại [ADR-001](TARGET_STRUCTURE.md). Các dòng 'trước' ở bảng rủi ro là baseline trước migration, không phải đường dẫn hiện đang chạy.
 
 ## Các rủi ro đã thấy trong source
 
@@ -39,7 +39,7 @@ ui/dashboard/  ->  dashboard/
 
 **Exit gate:** npm ci/build/tests/Edge smoke, HTTP auth/CSRF và static-asset regression PASS trên Windows. Source đã chuyển nguyên khối, backend `REACT_DIST` đọc `dashboard/dist`, URL `/dashboard/` giữ nguyên. Xem PR migration và CI để xác minh trạng thái cuối; không suy ra từ mock tests đơn lẻ.
 
-### M2 — Di chuyển Python package nguyên khối
+### M2 — Di chuyển Python package nguyên khối (DONE, kiểm thử Windows theo PR migration)
 
 ~~~text
 src/agentforge/  ->  agentforge/
@@ -49,7 +49,7 @@ src/agentforge/  ->  agentforge/
 - Sửa root path tính theo `__file__` ở tất cả module còn dùng hard-coded `parents[2]`, ưu tiên dùng `agentforge.paths`. Tránh vội sửa đường dẫn Owner data trong SQLite.
 - Chạy wheel build + pip install, kiểm tra `python -m agentforge` **từ ngoài repo**, rồi chạy unit/CI.
 
-**Exit gate:** import/CLI, task recovery, data ownership, no-duplicate-write và Windows CI PASS. Không mất `data/` hoặc `workspace/`.
+**Exit gate:** import/CLI, task recovery, data ownership, no-duplicate-write và Windows CI PASS. Source đã chuyển nguyên khối, `pyproject.toml` include chỉ `agentforge` và `agentforge.*`; đường dẫn dữ liệu vẫn ở repository root. Không mất `data/` hoặc `workspace/`. Xem PR/CI của M2 cho bằng chứng.
 
 ### M3 — Chia API thực tế, không đổi transport
 
@@ -84,4 +84,4 @@ Owner yêu cầu kết quả đã kiểm thử được merge vào `main`. Dùng
 
 ## Việc cần làm khi chốt docs
 
-**Đã hoàn thành M1:** di chuyển frontend, giữ `src/agentforge/` là Python package thực tế. Lệnh chạy hiện hành trong [DEVELOPMENT.md](../DEVELOPMENT.md) sử dụng `dashboard/` ở root. M2 package relocation vẫn là bước tiếp theo.
+**Đã hoàn thành M1 + M2:** frontend ở `dashboard/`, Python package ở `agentforge/`. Lệnh chạy hiện hành tại [DEVELOPMENT.md](../DEVELOPMENT.md), đặc biệt cài lại `pip install -e ".[media]"` sau khi pull. M3 chia API và M4 feature-first là các bước tiếp theo.

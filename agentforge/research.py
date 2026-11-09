@@ -12,7 +12,9 @@ from agentforge.model import generate, generate_json
 from agentforge.web_tools import web_search
 
 
-ROOT = Path(__file__).resolve().parents[2]
+from agentforge.paths import REPOSITORY_ROOT
+
+ROOT = REPOSITORY_ROOT
 DB = ROOT / "data" / "checkpoints.sqlite"
 REPORTS = ROOT / "data" / "research"
 

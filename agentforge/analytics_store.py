@@ -14,7 +14,9 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-ROOT = Path(__file__).resolve().parents[2]
+from agentforge.paths import REPOSITORY_ROOT
+
+ROOT = REPOSITORY_ROOT
 INBOX = ROOT / "workspace" / "analytics" / "inbox"
 DB = ROOT / "data" / "company" / "s3_analytics.sqlite3"
 DATASET = re.compile(r"[a-z][a-z0-9-]{2,39}\Z")

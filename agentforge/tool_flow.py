@@ -8,7 +8,9 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from agentforge.gateway import execute_tool
 
 
-ROOT = Path(__file__).resolve().parents[2]
+from agentforge.paths import REPOSITORY_ROOT
+
+ROOT = REPOSITORY_ROOT
 DB = ROOT / "data" / "tool_integration.sqlite"
 
 

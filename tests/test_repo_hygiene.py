@@ -14,14 +14,14 @@ class RepositoryHygieneTests(unittest.TestCase):
         spec.loader.exec_module(module)
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            src = root / "src" / "pkg" / "__pycache__"
+            src = root / "agentforge" / "pkg" / "__pycache__"
             src.mkdir(parents=True)
             cache = src / "sample.pyc"
             cache.write_bytes(b"compiled")
             data = root / "data" / "business.sqlite3"
             data.parent.mkdir()
             data.write_bytes(b"never delete")
-            with patch.object(module, "SCOPES", (root / "src", root / "tests")):
+            with patch.object(module, "SCOPES", (root / "agentforge", root / "tests")):
                 info = module.report()
                 self.assertEqual(1, info["pyc_files"])
                 self.assertTrue(cache.exists())

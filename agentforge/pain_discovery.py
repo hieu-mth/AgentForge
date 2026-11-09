@@ -8,7 +8,9 @@ from agentforge.web_tools import web_search
 from agentforge.search_quality import classify_community_hit
 
 
-ROOT = Path(__file__).resolve().parents[2]
+from agentforge.paths import REPOSITORY_ROOT
+
+ROOT = REPOSITORY_ROOT
 OUTPUT = (
     ROOT / "data" / "experiments"
     / "excel_tracker_v1" / "public_pain_leads.json"

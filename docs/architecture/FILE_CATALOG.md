@@ -1,10 +1,10 @@
 # File Catalog — danh mục file AgentForge hiện tại
 
-**Baseline catalog Python:** commit `216c9d3` (09/11/2026); Python chưa di chuyển và 137 file giữ nguyên. **Frontend được chuyển ở M1** từ `ui/dashboard/` sang `dashboard/`. Danh mục giải thích file thực tế, không xác nhận M2–M5 đã hoàn tất.
+**Baseline nội dung:** commit `216c9d3` (09/11/2026). Sau M1 và M2, **137 file Python đã được chuyển nguyên vẹn** sang `agentforge/` và frontend ở `dashboard/`. Catalog liệt kê vai trò file thực, chưa khẳng định M3–M5 tách modules xong.
 
 - [Cấu trúc đã được chốt](TARGET_STRUCTURE.md) — `agentforge/` và `dashboard/` ngay root, feature-first.
 - [Kế hoạch chuyển](MIGRATION_PLAN.md) — không phá paths/import/SQLite.
-- [Cấu trúc source đang chạy](REPOSITORY_STRUCTURE.md) — `src/agentforge/`, `dashboard/`.
+- [Cấu trúc source đang chạy](REPOSITORY_STRUCTURE.md) — `agentforge/`, `dashboard/`.
 
 ## Phân loại
 
@@ -20,7 +20,7 @@
 
 ## **Entrypoints và modules tại package root**
 
-| File hiện tại dưới `src/agentforge/` | Loại | Vai trò |
+| File hiện tại dưới `agentforge/` | Loại | Vai trò |
 | --- | --- | --- |
 | `__init__.py` | ENTRY | Dấu mốc package Python, không chứa business logic. |
 | `__main__.py` | ENTRY | Khởi chạy server Owner Dashboard bằng python -m agentforge. |
@@ -109,7 +109,7 @@
 
 ## **AI: `ai/`**
 
-| File hiện tại dưới `src/agentforge/` | Vai trò |
+| File hiện tại dưới `agentforge/` | Vai trò |
 | --- | --- |
 | `ai/__init__.py` | Package AI. |
 | `ai/model_health.py` | Đọc read-only trạng thái Ollama; không gọi generation. |
@@ -120,7 +120,7 @@
 
 ## **Core: `core/`**
 
-| File hiện tại dưới `src/agentforge/` | Vai trò |
+| File hiện tại dưới `agentforge/` | Vai trò |
 | --- | --- |
 | `core/__init__.py` | Package lõi. |
 | `core/artifact_acceptance.py` | Artifact status, evidence SHA và Owner acceptance ledger. |
@@ -135,7 +135,7 @@
 
 ## **Domains: `domains/growth/`**
 
-| File hiện tại dưới `src/agentforge/` | Vai trò |
+| File hiện tại dưới `agentforge/` | Vai trò |
 | --- | --- |
 | `domains/growth/__init__.py` | Package nghiệp vụ growth. |
 | `domains/growth/bundle.py` | Tổng hợp handoff bundle/growth artifacts. |
@@ -144,7 +144,7 @@
 
 ## **Domains: `domains/media/`**
 
-| File hiện tại dưới `src/agentforge/` | Vai trò |
+| File hiện tại dưới `agentforge/` | Vai trò |
 | --- | --- |
 | `domains/media/__init__.py` | Package media hiện tại. |
 | `domains/media/assets.py` | Media asset manifest/paths và scene content. |
@@ -156,7 +156,7 @@
 
 ## **Domains: `domains/webapps/`**
 
-| File hiện tại dưới `src/agentforge/` | Vai trò |
+| File hiện tại dưới `agentforge/` | Vai trò |
 | --- | --- |
 | `domains/webapps/__init__.py` | Package React WebApp. |
 | `domains/webapps/architect.py` | AI architect tạo brief có ID/SHA. |
@@ -170,7 +170,7 @@
 
 ## **Domains: `domains/websites/`**
 
-| File hiện tại dưới `src/agentforge/` | Vai trò |
+| File hiện tại dưới `agentforge/` | Vai trò |
 | --- | --- |
 | `domains/websites/__init__.py` | Package Website. |
 | `domains/websites/ai_designer.py` | Đọc bounded AI design JSON, compile HTML/CSS an toàn. |
@@ -188,7 +188,7 @@
 
 ## **Storage: `storage/` và package marker**
 
-| File hiện tại dưới `src/agentforge/` | Vai trò |
+| File hiện tại dưới `agentforge/` | Vai trò |
 | --- | --- |
 | `domains/__init__.py` | Container các domain implementations hiện tại. |
 | `storage/__init__.py` | Package storage. |
@@ -232,7 +232,7 @@
 | File/nhóm | Vai trò |
 | --- | --- |
 | `README.md` | Giới thiệu, setup nhanh và link tài liệu hiện hành. |
-| `pyproject.toml` | Python packaging; đang dùng `where=["src"]`, bắt buộc đổi khi migrate package. |
+| `pyproject.toml` | Python packaging flat-root: `where=["."]`, chỉ include `agentforge` và `agentforge.*`. |
 | `.gitignore` | Bỏ qua dữ liệu runtime, venv, npm dependencies/build output. |
 | `.env.example` | Ví dụ biến môi trường; không commit `.env` thật. |
 | `.github/workflows/ci.yml` | Windows Python/Node/Edge CI và docs lint. |

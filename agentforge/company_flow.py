@@ -8,7 +8,9 @@ from pathlib import Path
 from agentforge import source_reader, task_inbox
 
 
-ROOT = Path(__file__).resolve().parents[2]
+from agentforge.paths import REPOSITORY_ROOT
+
+ROOT = REPOSITORY_ROOT
 REPORTS = ROOT / "data" / "research"
 
 RESEARCH_ID_RE = re.compile(r"[a-f0-9]{32}\Z")

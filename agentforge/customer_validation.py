@@ -10,7 +10,9 @@ import re
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+from agentforge.paths import REPOSITORY_ROOT
+
+ROOT = REPOSITORY_ROOT
 DATA_DIR = ROOT / "data" / "company" / "customer_validation"
 OPPORTUNITY_RE = re.compile(r"research-[a-f0-9]{8}\Z")
 PARTICIPANT_RE = re.compile(r"[a-z][a-z0-9_-]{2,31}\Z")
