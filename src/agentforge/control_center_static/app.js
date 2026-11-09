@@ -890,3 +890,76 @@ async function handleClick(event){
   }
   if(button.dataset.opsMode){
    const mode=button.dataset.opsMode;
+   if(!["ACTIVE","PAUSED"].includes(mode))throw Error("Invalid operations action");
+   if(!confirm(mode==="PAUSED"?
+     "TẠM DỪNG: Chặn các lượt chạy Goal/skill/schedule mới? Việc đang chạy không bị dừng cưỡng bức.":
+     "TIẾP TỤC: Cho phép những tác vụ mới đã được duyệt chạy lại? Không tự replay công việc cũ."))return;
+   await mutate("/api/ops/control",{
+    mode,ack:mode==="PAUSED"?"PAUSE_OPERATIONS":"RESUME_OPERATIONS"
+   },mode==="PAUSED"?"Đã tạm dừng phân phối nhiệm vụ":"Đã mở lại phân phối nhiệm vụ");
+   return;
+  }
+  if(button.dataset.preflightGoal!==undefined){
+   const outcome=await api("/api/goals/preflight","POST",{
+    ack:"PREFLIGHT",template:$("goal-template").value,inputs:formJson("goal-json")});
+   $("goal-preflight-status").textContent=outcome.ready?
+    "Đã tìm thấy các tham chiếu local. Kiểm tra SHA và quyền trước khi chạy.":
+    outcome.issues.map(x=>x.code+": "+x.message).join(" · ");
+   if(!outcome.ready)notice("Kiểm tra dữ liệu: "+outcome.issues[0].code,true);
+   return;
+  }
+  if(button.dataset.detailGoal){
+   await showGoal(button.dataset.detailGoal,state.view==="workspace");return;
+  }
+  if(button.dataset.detailTask){await showTask(button.dataset.detailTask);return;}
+  if(button.dataset.openWorkspace!==undefined){selectView("workspace");return;}
+  if(button.dataset.newWebsite!==undefined){selectView("goals");
+   const field=$("goal-template");field.value="website.draft";
+   field.dispatchEvent(new Event("change"));
+   $("goal-title").value="Website tư vấn nệm";
+   return;
+  }
+  if(button.dataset.previewDevice){
+    state.previewDevice=button.dataset.previewDevice==="mobile"?"mobile":"desktop";
+    render();return;
+  }
+  if(button.dataset.viewProposal){await showProposal(button.dataset.viewProposal);return;}
+  if(button.dataset.reviseProposal){
+    const p=state.proposal;
+    if(!p||p.proposal_id!==button.dataset.reviseProposal)throw Error("Chọn bản nháp trước");
+    const feedback=$("website-feedback")?.value.trim()||"";
+    if(feedback.length<10||feedback.length>360)throw Error("Góp ý cần dài từ 10–360 ký tự");
+    if(!confirm("Tạo kế hoạch chỉnh sửa dựa trên góp ý?\n"+
+      "Proposal gốc được giữ nguyên, chưa gọi AI và chưa ghi website.\n"+
+      "Bạn sẽ duyệt kế hoạch và cấp quyền model riêng trước khi chạy."))return;
+    const out=await mutate("/api/proposals/"+encodeURIComponent(p.proposal_id)+"/revision",{
+      ack:"REQUEST_REVISION",sha256:p.sha256,feedback
+    },"Đã tạo kế hoạch chỉnh sửa mới");
+    await showGoal(out.goal_id);
+    return;
+  }
+  if(button.dataset.applyProposal){
+   const p=state.proposal;
+   if(!p||p.proposal_id!==button.dataset.applyProposal)throw Error("Hãy kiểm tra proposal trước");
+   if(!confirm("ĐÃ XEM WEBSITE? Duyệt bản nháp với SHA:\n"+p.sha256+
+    "\n\nKhông deploy, không ghi đè website đang có."))return;
+   const output=await mutate("/api/proposals/"+p.proposal_id+"/apply",{
+    ack:"APPLY_PROPOSAL",sha256:p.sha256},
+    "Website đã ghi vào workspace/products");
+   notice("Đã tạo website local: "+(output.project_path||""));
+   state.proposal=null;return;
+  }
+  if(button.dataset.detailGrowth){
+    const x=await api("/api/growth/"+encodeURIComponent(button.dataset.detailGrowth));
+    notice("Report: "+x.campaign+" · "+x.status);return;
+  }
+  const goalId=button.dataset.approveGoal||button.dataset.runGoal||
+               button.dataset.resumeGoal;
+  if(goalId){
+    if(!state.goal||state.goal.goal_id!==goalId)await showGoal(goalId);
+    const g=state.goal;
+    if(button.dataset.approveGoal){
+      if(!confirm("Duyệt kế hoạch SHA-256:\n"+g.plan_sha256+"\n\nDuyệt KHÔNG tự chạy task."))return;
+      await mutate("/api/goals/"+goalId+"/approve",{ack:"APPROVE",
+        plan_sha256:g.plan_sha256},"Đã duyệt plan");await showGoal(goalId,state.view==="workspace");return;
+    }
