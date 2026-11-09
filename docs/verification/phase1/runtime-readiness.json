@@ -1,0 +1,7 @@
+{
+  "docker_cli_available": false,
+  "sandbox_image_configured": false,
+  "real_isolation_verified": false,
+  "interactive_preview_enabled": false,
+  "paid_model_calls": 0
+}
