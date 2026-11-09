@@ -16,6 +16,7 @@ Các nhãn được dùng thống nhất:
 | Dashboard React + Owner session | IMPLEMENTED | `dashboard/`, `agentforge/api/server.py` | Không có multi-tenant/public hosting |
 | Model Hub & Task Routing | IMPLEMENTED (text), PARTIAL (media) | `agentforge/ai/model_hub.py`, `dashboard/src/features/Models.jsx` | Text routes đã nối; video/image config-only, không chứng minh GPU hay billing |
 | Task orchestration và approvals | IMPLEMENTED | `agentforge/core/`, `skills/` | Không tự động trao quyền tool cho AI |
+| M8 skill domain adapters | IMPLEMENTED (refactor) | `agentforge/core/skill_adapters/`, `tests/test_skill_adapters_m8.py` | Không phải runtime plugin động hay quyền mở rộng từ TOML |
 | Artifact acceptance gắn SHA | IMPLEMENTED | `agentforge/core/artifact_acceptance.py` | Workflow `SUCCEEDED` chưa chắc artifact `ACCEPTED` |
 | Static Website Builder | PARTIAL | `agentforge/domains/websites/` | Thiết kế và section bị giới hạn bởi schema; không có backend chung |
 | Marketplace React demo | PARTIAL | `agentforge/domains/webapps/builder.py`, `templates/novamart/` | Cart/search demo, không có checkout thanh toán |

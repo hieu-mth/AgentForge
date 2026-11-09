@@ -13,6 +13,7 @@ Không sử dụng các tài liệu milestone phiên bản cũ để suy luận 
 | Cài, build, kiểm thử | [DEVELOPMENT.md](DEVELOPMENT.md) | Windows, Python, npm, CI, kiểm tra docs |
 | Quyết định phát triển | [ROADMAP.md](ROADMAP.md) | Mốc, tiêu chí nghiệm thu, blocker |
 | Models & Routing Dashboard | [MODEL_HUB.md](architecture/MODEL_HUB.md) | M6/M7: providers, text runtime routing, video config-only, rollback |
+| Mở rộng skill engine | [SKILL_ENGINE.md](architecture/SKILL_ENGINE.md) | M8: code policy + adapter theo domain, không cấp quyền từ manifest |
 | Cấu trúc source **đang chạy** | [REPOSITORY_STRUCTURE.md](architecture/REPOSITORY_STRUCTURE.md) | `agentforge/` + `dashboard/` đang chạy |
 | **Cấu trúc đã chốt (M1–M3 đã chuyển, M4–M5 đang chờ)** | [TARGET_STRUCTURE.md](architecture/TARGET_STRUCTURE.md) | `agentforge/` + `dashboard/` tại root, Feature-First Modular Monolith |
 | Giải thích **từng file** | [FILE_CATALOG.md](architecture/FILE_CATALOG.md) | Catalog 154 file Python, các file React và scripts |
