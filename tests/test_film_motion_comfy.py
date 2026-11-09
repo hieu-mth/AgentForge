@@ -3,6 +3,7 @@ import copy
 import json
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
@@ -163,7 +164,7 @@ class MotionAdapterTests(unittest.TestCase):
                 "000": {}}):
             view = motion.job_status(job["job_id"], db_path=self.db)
         self.assertEqual(view["status"], "PROVIDER_QUEUED_OR_UNKNOWN")
-        with motion._db(self.db) as db:
+        with closing(motion._db(self.db)) as db:
             provider_id = db.execute(
                 "SELECT provider_id FROM motion_jobs WHERE job_id=?", (job["job_id"],)
             ).fetchone()[0]
