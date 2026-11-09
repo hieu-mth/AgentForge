@@ -9,6 +9,7 @@ from urllib.parse import urlsplit
 from dotenv import load_dotenv
 
 from agentforge.model_registry import ROOT, ModelConfigError, load_models
+from agentforge.ai import model_hub
 from agentforge.worker_registry import load_worker
 
 DOTENV_PATH = ROOT / ".env"
@@ -82,8 +83,14 @@ def resolve_runtime(worker_id, default_system):
             + profile["instructions"]
         )
 
-    model_ref = os.getenv("AGENTFORGE_MODEL_REF") or default_ref
-    models = load_models()
+    routed_ref, routing_revision, owner_routed = model_hub.model_for_worker(
+        worker_id, default_ref)
+    # Explicit process environment selection preserves existing CLI behavior
+    # and takes priority over Dashboard overrides. A saved cloud route never
+    # grants cloud consent: the process and each actual task still must approve.
+    env_ref = os.getenv("AGENTFORGE_MODEL_REF")
+    model_ref = env_ref or routed_ref
+    models = model_hub.effective_models()
     if model_ref not in models:
         raise ModelConfigError(f"Unknown model reference: {model_ref}")
 
@@ -92,6 +99,9 @@ def resolve_runtime(worker_id, default_system):
         raise ModelConfigError(f"Model is disabled: {model_ref}")
 
     provider = selected["provider"]
+    if (owner_routed and not env_ref and provider != "ollama"
+            and os.getenv("AGENTFORGE_CLOUD_MODEL_CONSENT") != "YES"):
+        raise PermissionError("CLOUD_MODEL_CONSENT_REQUIRED")
     if provider == "ollama":
         base_url = selected["base_url"]
         token = None
@@ -126,6 +136,9 @@ def resolve_runtime(worker_id, default_system):
         "base_url": base_url,
         "api_key": token,
         "system_prompt": system_prompt,
+        "routing_revision": routing_revision,
+        "route_source": "process_env" if env_ref else (
+            "owner" if owner_routed else "default"),
     }
 
 

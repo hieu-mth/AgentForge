@@ -23,6 +23,9 @@ def dispatch(self, route):
     if route == "/api/image/jobs":
         from agentforge.image_studio_v24 import report
         return self._reply(200, report())
+    if route == "/api/model-hub":
+        from agentforge.ai.model_hub import catalog
+        return self._reply(200, catalog())
     if route == "/api/model/health":
         from agentforge.model_health import check
         return self._reply(200, check())

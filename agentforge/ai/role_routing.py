@@ -5,6 +5,7 @@ configuration, never a task/LLM suggestion. This module does not call models.
 """
 import os
 from agentforge.ai.model_registry import load_models, ModelConfigError
+from agentforge.ai import model_hub
 from agentforge.ai.worker_registry import load_worker
 
 ROLE_WORKERS = {
@@ -21,7 +22,12 @@ def describe_role(role, *, root=None, model_ref_override=None, cloud_consent=Fal
     worker = ROLE_WORKERS[role]
     profile = load_worker(worker, root=root)
     models = load_models(root / "config" / "models.toml" if root is not None else None)
-    ref = model_ref_override if model_ref_override is not None else profile["model_ref"]
+    if root is None:
+        models = model_hub.effective_models()
+        selected, _, _ = model_hub.model_for_worker(worker, profile["model_ref"])
+        ref = model_ref_override if model_ref_override is not None else selected
+    else:
+        ref = model_ref_override if model_ref_override is not None else profile["model_ref"]
     if not isinstance(ref, str) or ref not in models or not models[ref]["enabled"]:
         raise ModelConfigError("Unknown or disabled role model")
     model = models[ref]
@@ -59,8 +65,9 @@ def require_worker_model(worker_id):
         raise ValueError("Unknown V5 worker")
     worker = load_worker(worker_id)
     override = os.environ.get("AGENTFORGE_MODEL_REF")
-    ref = override or worker["model_ref"]
-    models = load_models()
+    route_ref, _, _ = model_hub.model_for_worker(worker_id, worker["model_ref"])
+    ref = override or route_ref
+    models = model_hub.effective_models()
     if ref not in models or not models[ref]["enabled"]:
         raise ModelConfigError("Unknown or disabled V5 model")
     if models[ref]["provider"] != "ollama" and os.getenv(
