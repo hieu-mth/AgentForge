@@ -16,10 +16,8 @@ API and static React dist server.
 - `examples/novamart/`: trusted marketplace template, NOT an Owner UI
 
 Legacy import aliases are retained when tests/old callers depend on module
-identity, monkeypatch behavior or stable CLI names. The read-only Python
-`dashboard_v0.py` is no longer imported by the production HTTP server but
-has legacy tests; it is a future migration candidate, not a reason to delete
-active source or weaken privacy regression tests.
+identity, monkeypatch behavior or stable CLI names. The read-only Python `dashboard_v0.py` monitor has now been retired and
+its access-control coverage moved to the authenticated owner API.
 
 `python -m agentforge` now launches the canonical Owner dashboard.
 `python -m agentforge.workflow` still exposes the old LangGraph sample

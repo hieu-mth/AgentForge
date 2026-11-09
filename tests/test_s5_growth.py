@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from agentforge import analytics_store, brain_store, brain_runner, brain_planner
-from agentforge import dashboard_v0, growth_bundle, growth_pipeline, growth_reports
+from agentforge import growth_bundle, growth_pipeline, growth_reports
 from agentforge import growth_store as store
 from agentforge import media_assets, media_render, skill_runner, task_history
 
@@ -299,43 +299,13 @@ class TestS5Growth(unittest.TestCase):
         self.assertEqual(len(items), 4)
         self.assertEqual(len([t for t in items if t["parent_id"]]), 3)
 
-    def test_dashboard_api_is_read_only_and_synthetic_labeled(self):
+    def test_growth_aggregate_labels_synthetic_and_never_bank_verified(self):
         self.create(synthetic=True)
-        result = dashboard_v0.growth_overview(growth_db_path=self.growth_db)
-        self.assertTrue(result[0]["synthetic"])
-        self.assertIsNone(result[0]["verified_net_profit_vnd"])
-        html = dashboard_v0.render_dashboard(
-            growth_db_path=self.growth_db, db_path=self.task_db,
-            analytics_db_path=self.s3_db, brain_db_path=self.brain_db)
-        self.assertIn("S5 Revenue &amp; Growth", html.replace(
-            "S5 Revenue & Growth", "S5 Revenue &amp; Growth"))
-        self.assertIn("SYNTHETIC DEMO", html)
-        server = dashboard_v0.create_server(
-            0, growth_db_path=self.growth_db, db_path=self.task_db,
-            analytics_db_path=self.s3_db, brain_db_path=self.brain_db)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        try:
-            for endpoint in ("/api/growth", "/api/growth/nem-growth"):
-                conn = http.client.HTTPConnection("127.0.0.1",
-                                                   server.server_port, timeout=3)
-                conn.request("GET", endpoint)
-                response = conn.getresponse()
-                self.assertEqual(response.status, 200)
-                data = json.loads(response.read())
-                self.assertNotIn("evidence_ref", json.dumps(data))
-                self.assertNotIn("lead_id", json.dumps(data))
-                conn.close()
-            conn = http.client.HTTPConnection("127.0.0.1", server.server_port)
-            conn.request("POST", "/api/growth", body="{}")
-            response = conn.getresponse()
-            self.assertEqual(response.status, 405)
-            response.read()
-            conn.close()
-        finally:
-            server.shutdown()
-            server.server_close()
-            thread.join(3)
+        campaigns = store.list_campaigns(db_path=self.growth_db)
+        self.assertTrue(campaigns[0]["synthetic"])
+        report = growth_reports.report("nem-growth", db_path=self.growth_db)
+        self.assertIsNone(report.get("verified_net_profit_vnd"))
+        self.assertNotIn("lead_id", json.dumps(report))
 
     @unittest.skipUnless(HAS_MEDIA, "Install media extra for complete vertical demo")
     def test_full_real_local_s2_s3_s4_s5_demo_without_cloud(self):

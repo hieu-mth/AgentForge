@@ -12,7 +12,7 @@ from unittest.mock import patch
 from agentforge import analytics_store as store
 from agentforge import analytics_insights as insights
 from agentforge import analytics_pipeline as pipeline
-from agentforge import dashboard_v0, skill_runner, task_history
+from agentforge import skill_runner, task_history
 
 
 def metrics(day="2024-10-02", variant="A", clicks="10", impressions="100"):
@@ -288,40 +288,13 @@ class TestS3Analytics(unittest.TestCase):
         self.assertEqual(len(task_history.list_tasks(db_path=self.task_db)), 8)
         self.assertEqual(len(store.list_datasets(db_path=self.db)), 1)
 
-    def test_dashboard_analytics_is_local_read_only_and_synthetic_labeled(self):
+    def test_analytics_data_flags_synthetic_without_verifying_profit(self):
         demo = pipeline.synthetic_demo()
-        overview = dashboard_v0.analytics_overview(analytics_db_path=self.db)
-        self.assertEqual(overview[0]["dataset"], demo["dataset"])
-        self.assertTrue(overview[0]["synthetic"])
-        self.assertIsNone(overview[0]["verified_net_profit_vnd"])
-        html = dashboard_v0.render_dashboard(
-            db_path=self.task_db, analytics_db_path=self.db)
-        self.assertIn("SYNTHETIC DEMO", html)
-        self.assertIn("S3 Analytics datasets", html)
-        server = dashboard_v0.create_server(
-            0, db_path=self.task_db, analytics_db_path=self.db)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        try:
-            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
-            conn.request("GET", "/api/analytics")
-            response = conn.getresponse()
-            self.assertEqual(response.status, 200)
-            api = json.loads(response.read())
-            self.assertTrue(api[0]["synthetic"])
-            self.assertNotIn("evidence_ref", json.dumps(api))
-            conn.close()
-
-            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
-            conn.request("POST", "/api/analytics", body="{}")
-            response = conn.getresponse()
-            self.assertEqual(response.status, 405)
-            response.read()
-            conn.close()
-        finally:
-            server.shutdown()
-            server.server_close()
-            thread.join(3)
+        datasets = store.list_datasets(db_path=self.db)
+        self.assertEqual(datasets[0]["dataset"], demo["dataset"])
+        self.assertTrue(datasets[0]["synthetic"])
+        finance = insights.finance_report(demo["dataset"], db_path=self.db)
+        self.assertIsNone(finance["verified_net_profit_vnd"])
 
     def test_missing_dataset_read_is_not_a_side_effect(self):
         with self.assertRaises(store.AnalyticsError):

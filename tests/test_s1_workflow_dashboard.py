@@ -1,13 +1,10 @@
 """S1 end-to-end website audit, source checkpoint and local dashboard tests."""
-import http.client
-import json
 import tempfile
-import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from agentforge import dashboard_v0, product_builder, task_history, workflow_runner
+from agentforge import product_builder, task_history, workflow_runner
 
 
 SITE = ('<!doctype html><html lang="vi"><head><meta charset="utf-8">'
@@ -51,10 +48,8 @@ class TestS1WorkflowDashboard(unittest.TestCase):
         children = task_history.list_tasks(db_path=self.db)
         self.assertEqual(len(children), 2)
         self.assertEqual(sum(t["parent_id"] == parent["task_id"] for t in children), 1)
-        rendered = dashboard_v0.render_dashboard(db_path=self.db)
-        self.assertIn("AgentForge Control Center", rendered)
-        self.assertIn("web.quality_check", rendered)
-        self.assertIn("SUCCEEDED", rendered)
+        self.assertTrue(any(t["skill_id"] == "web.quality_check"
+                            and t["status"] == "SUCCEEDED" for t in children))
 
     def test_optional_browser_approval_resume_no_recheck(self):
         with patch("agentforge.browser_validation.validate") as browser:
@@ -109,70 +104,7 @@ class TestS1WorkflowDashboard(unittest.TestCase):
         self.assertEqual(result["status"], "FAILED")
         self.assertEqual(result["quality"]["result"]["status"], "FAIL")
 
-    def test_dashboard_http_loopback_is_read_only(self):
-        workflow_runner.run_web_audit("nem-tu-van", db_path=self.db)
-        server = dashboard_v0.create_server(0, db_path=self.db)
-        self.assertEqual(server.server_address[0], "127.0.0.1")
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        try:
-            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
-            conn.request("GET", "/api/tasks")
-            response = conn.getresponse()
-            self.assertEqual(response.status, 200)
-            tasks = json.loads(response.read())
-            self.assertEqual(len(tasks), 2)
-            self.assertTrue(all("request" not in task for task in tasks))
-            self.assertEqual(response.getheader("Cache-Control"), "no-store")
-            conn.close()
 
-            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
-            conn.request("GET", "/api/skills")
-            self.assertEqual(len(json.loads(conn.getresponse().read())), 30)
-            conn.close()
-
-            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
-            conn.request("POST", "/api/tasks", body="{}")
-            response = conn.getresponse()
-            self.assertEqual(response.status, 405)
-            response.read()
-            conn.close()
-
-            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
-            conn.request("GET", "/api/skills", headers={"Host": "evil.invalid"})
-            response = conn.getresponse()
-            self.assertEqual(response.status, 403)
-            response.read()
-            conn.close()
-        finally:
-            server.shutdown()
-            server.server_close()
-            thread.join(3)
-
-    def test_dashboard_escapes_html_and_exposes_no_prompt(self):
-        task_id = task_history.create_task(
-            "skill", "web.create",
-            {"brief": "<img src=x onerror=alert(1)>", "slug": "nem-tu-van"},
-            db_path=self.db)
-        result = dashboard_v0.render_dashboard(db_path=self.db, selected=task_id)
-        self.assertNotIn("<img src=x onerror=", result)
-        self.assertNotIn("alert(1)", result)
-        self.assertIn("web.create", result)
-        self.assertIn("product_builder", result)
-        self.assertIn("CREATED", result)
-
-    def test_dashboard_only_renders_artifact_basename(self):
-        task_id = task_history.create_task(
-            "skill", "web.create", {"slug": "nem-tu-van"},
-            db_path=self.db)
-        task_history.transition(task_id, "RUNNING", db_path=self.db)
-        task_history.transition(task_id, "SUCCEEDED", result={
-            "proposal_path": r"D:\Private\Customer\proposal.json",
-        }, db_path=self.db)
-        result = dashboard_v0.render_dashboard(db_path=self.db, selected=task_id)
-        self.assertIn("proposal.json", result)
-        self.assertNotIn("D:\\Private", result)
-        self.assertNotIn("Customer", result)
 
 
 if __name__ == "__main__":

@@ -18,9 +18,8 @@ It is not yet a production SaaS or a validated full-stack generator.
   be deleted as part of repository cleanup.
 
 The `src/agentforge/` directory is the **current backend**, not an obsolete
-source directory. Some compatibility imports and a legacy Python read-only
-monitor remain for historical tests/CLI consumers, but no second frontend is
-served by the Owner API.
+source directory. Compatibility imports used by historical callers remain, but the old Python
+read-only dashboard and static Owner frontend have both been removed.
 
 ## Run on Windows (PowerShell)
 
