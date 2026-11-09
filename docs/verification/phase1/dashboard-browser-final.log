@@ -1,0 +1,10 @@
+npm.cmd : npm notice run @agentforge/dashboard@0.1.0 test:browser
+At line:2 char:133
++ ... STEXITCODE; npm.cmd run test:browser --prefix ui/dashboard *> docs/ve ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (npm notice run ....0 test:browser:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+npm notice run node tests/browser-smoke.mjs
+React production boot: PASS; 2 assets fetched
+React acceptance states: PASS (API fixtures; execution separate from Owner acceptance)
