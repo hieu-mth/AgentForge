@@ -108,7 +108,7 @@ def _display_metadata(value, maximum, name):
     return base._text(normalized, name, maximum)
 
 
-def validate_code(raw):
+def validate_code(raw, *, check_syntax=True):
     if not isinstance(raw, dict) or set(raw) != set(CODE_SCHEMA["properties"]):
         raise ValueError("APP_CODE_INVALID: response fields")
     title = _display_metadata(raw["title"], 100, "title")
@@ -160,6 +160,13 @@ def validate_code(raw):
                         posixpath.dirname(name), target))
                     if local not in sources:
                         raise ValueError("APP_CODE_INVALID: imported module absent")
+    if check_syntax:
+        from agentforge.domains.webapps.syntax import check_files, SourceSyntaxError
+        # Stable source-content digest for a rejected candidate without a proposal.
+        candidate_sha = hashlib.sha256(json.dumps(sources, sort_keys=True).encode("utf-8")).hexdigest()
+        report = check_files([{"path": key, "content": value} for key, value in sources.items()], candidate_sha)
+        if report["status"] != "PASS":
+            raise SourceSyntaxError(report)
     return {
         "title": title, "summary": summary,
         "files": [{"path": key, "content": sources[key]} for key in sorted(sources)],
@@ -318,6 +325,8 @@ def propose(slug, brief, *, architecture_id=None, architecture_sha=None):
     base._path_guard(path)
     with path.open("x", encoding="utf-8") as output:
         json.dump(document, output, ensure_ascii=False, indent=2)
+    from agentforge.domains.webapps.syntax import save_report
+    save_report(PROPOSALS, pid, document["sha256"], files)
     return {
         "proposal_id": pid, "project_slug": slug,
         "sha256": document["sha256"], "proposal_path": str(path),
@@ -362,7 +371,7 @@ def _read_proposal(pid):
         raise ValueError("Invalid AI Developer file set")
     model_files = [item for item in files if item["path"] in ALLOWED]
     spec = validate_code({"title": title, "summary": summary,
-                          "files": model_files})
+                          "files": model_files}, check_syntax=False)
     if not isinstance(doc["sha256"], str) or not base.SHA.fullmatch(doc["sha256"]):
         raise ValueError("Invalid AI Developer digest")
     lineage = doc.get("architecture")
