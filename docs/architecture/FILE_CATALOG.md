@@ -1,6 +1,6 @@
 # File Catalog — danh mục file AgentForge hiện tại
 
-**Source baseline:** sau M6 + M7 (09/11/2026). **165 file Python** (M0–M3 + Model Hub + M8 + M4a); Dashboard đã có Model Hub tại `#/models`. M4a đã chuyển Growth sang `features/growth/` với compatibility aliases; các domain khác và M5 chưa thực hiện. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
+**Source baseline:** sau M6 + M7 (09/11/2026). **178 file Python** (M0–M3 + Model Hub + M8 + M4a); Dashboard đã có Model Hub tại `#/models`. M4a Growth và M4b Websites đã chuyển sang `features/growth/` với compatibility aliases; các domain khác và M5 chưa thực hiện. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
 
 - [Cấu trúc đã được chốt](TARGET_STRUCTURE.md) — `agentforge/` và `dashboard/` ngay root, feature-first.
 - [Kế hoạch chuyển](MIGRATION_PLAN.md) — không phá paths/import/SQLite.
@@ -16,7 +16,7 @@
 | **CLI** | Công cụ vận hành/demo theo lệnh, cần xem callers trước khi bỏ. |
 | **CONTRACT** | Module mô tả/kiểm tra hợp đồng cấu trúc, không tự chạy workflow. |
 
-**Tổng cộng: 165 file `.py`** (137 baseline + 15 M3 + 2 M6 + 6 M8 adapters + 5 M4a feature modules). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
+**Tổng cộng: 178 file `.py`** (137 baseline + 15 M3 + 2 M6 + 6 M8 adapters + 5 M4a + 13 M4b feature modules). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
 
 ## **Entrypoints và modules tại package root**
 
@@ -206,7 +206,25 @@
 | `domains/webapps/syntax.py` | Tree-sitter parse JSX/JS như dữ liệu, không execute. |
 | `domains/webapps/toolchain.py` | Reviewed/pinned React scaffold từ NovaMart. |
 
-## **Domains: `domains/websites/`**
+## **Feature-first: `features/websites/` (M4b)**
+
+| File hiện tại dưới `agentforge/` | Vai trò |
+| --- | --- |
+| `features/websites/__init__.py` | Package Canonical Website. |
+| `features/websites/ai_designer.py` | Canonical implementation cho `ai_designer`. |
+| `features/websites/assets.py` | Canonical implementation cho `assets`. |
+| `features/websites/browser_validation.py` | Canonical implementation cho `browser_validation`. |
+| `features/websites/builder.py` | Canonical implementation cho `builder`. |
+| `features/websites/design_kit.py` | Canonical implementation cho `design_kit`. |
+| `features/websites/feedback.py` | Canonical implementation cho `feedback`. |
+| `features/websites/image_studio.py` | Canonical implementation cho `image_studio`. |
+| `features/websites/preview.py` | Canonical implementation cho `preview`. |
+| `features/websites/quality.py` | Canonical implementation cho `quality`. |
+| `features/websites/revision.py` | Canonical implementation cho `revision`. |
+| `features/websites/revision_context.py` | Canonical implementation cho `revision_context`. |
+| `features/websites/structured_builder.py` | Canonical implementation cho `structured_builder`. |
+
+## **Domains: `domains/websites/` (COMPAT)**
 
 | File hiện tại dưới `agentforge/` | Vai trò |
 | --- | --- |

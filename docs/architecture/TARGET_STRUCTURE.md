@@ -1,6 +1,6 @@
 # ADR-001 — Cấu trúc AgentForge được chốt
 
-**Quyết định: ĐÃ CHỐT (approved target)** · **Triển khai: M1 + M2 + M3 DONE, M4a Growth DONE; M4b–M4d và M5 CHƯA MIGRATE** · 09/11/2026
+**Quyết định: ĐÃ CHỐT (approved target)** · **Triển khai: M1 + M2 + M3 DONE, M4a Growth + M4b Websites DONE; M4c–M4d và M5 CHƯA MIGRATE** · 09/11/2026
 
 Chủ dự án đã chọn **flat-root Python package + dashboard riêng**, thay cho `src/agentforge/` và `ui/dashboard/` ban đầu. **M1 đã chuyển React sang `dashboard/`, M2 đã chuyển Python sang `agentforge/`.** `api/` đã được triển khai ở M3; `features/`, `integrations/`, `ops/` trong cây vẫn là đích M4–M5, **chưa được tạo đầy đủ**.
 
