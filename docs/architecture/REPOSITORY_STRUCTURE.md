@@ -1,6 +1,6 @@
 # Kiến trúc repository AgentForge
 
-> **CURRENT IMPLEMENTATION** — cấu trúc dưới đây phản ánh code đang chạy, **chưa phải cấu trúc mục tiêu**. Phương án `agentforge/` và `dashboard/` tại root đã được [chốt](TARGET_STRUCTURE.md), nhưng **chưa di chuyển code**. Xem [catalog từng file](FILE_CATALOG.md) và [kế hoạch migration](MIGRATION_PLAN.md).
+> **CURRENT IMPLEMENTATION** — cấu trúc dưới đây phản ánh code đang chạy sau M1: **React đã ở `dashboard/` tại root**, còn Python vẫn ở `src/agentforge/`. Cấu trúc đầy đủ đã được [chốt](TARGET_STRUCTURE.md) nhưng **M2–M5 chưa thực hiện**. Xem [catalog từng file](FILE_CATALOG.md) và [kế hoạch migration](MIGRATION_PLAN.md).
 
 **Current source of truth:** Python modular monolith, một React dashboard, local SQLite + workspace. Đã loại bỏ frontend HTML/CSS/JS V0 và Python dashboard V0.
 
@@ -20,7 +20,7 @@ AgentForge/
 │   │   └── growth/                # demo campaigns, offline handoff
 │   ├── storage/                   # storage and retention logic
 │   └── paths.py                   # local root and path guards
-├── ui/dashboard/                  # ONLY Owner frontend (React + Vite)
+├── dashboard/                     # ONLY Owner frontend (React + Vite)
 ├── examples/novamart/             # trusted marketplace demo/template
 ├── skills/                        # skill contracts, tool permissions
 ├── workers/                       # worker manifests and instructions
@@ -32,7 +32,7 @@ AgentForge/
 └── workspace/                     # Owner products/films/proposals (gitignored)
 ~~~
 
-`src/agentforge/` là **backend đang chạy**, không phải một thư mục src legacy. Những Python compatibility aliases root-level được giữ nếu còn CLI, imports hoặc tests phụ thuộc. Không tự tái tổ chức tất cả folder chỉ để đẹp cây thư mục.
+`src/agentforge/` là **backend đang chạy** (dự kiến di chuyển ở M2), không phải một thư mục src legacy. `dashboard/` là frontend đã chuyển ở M1; URL vẫn `/dashboard/`. Những Python compatibility aliases root-level được giữ nếu còn CLI, imports hoặc tests phụ thuộc. Không tự tái tổ chức tất cả folder chỉ để đẹp cây thư mục.
 
 ## Vòng đời sản phẩm
 

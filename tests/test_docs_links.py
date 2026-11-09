@@ -35,7 +35,7 @@ class DocsLinksTests(unittest.TestCase):
                 "[Root](../README.md)", encoding="utf-8")
             (root / "README.md").write_text("# AgentForge", encoding="utf-8")
             for dirname in ("node_modules", "workspace", "data", ".venv"):
-                folder = root / "ui" / dirname
+                folder = root / "dashboard" / dirname
                 folder.mkdir(parents=True, exist_ok=True)
                 (folder / "README.md").write_text(
                     "[Broken](missing.md)", encoding="utf-8")

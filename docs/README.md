@@ -12,8 +12,8 @@ Không sử dụng các tài liệu milestone phiên bản cũ để suy luận 
 | Xem hệ thống làm được gì | [STATUS.md](STATUS.md) | Matrix VERIFIED / PARTIAL / NOT IMPLEMENTED / UNVERIFIED |
 | Cài, build, kiểm thử | [DEVELOPMENT.md](DEVELOPMENT.md) | Windows, Python, npm, CI, kiểm tra docs |
 | Quyết định phát triển | [ROADMAP.md](ROADMAP.md) | Mốc, tiêu chí nghiệm thu, blocker |
-| Cấu trúc source **đang chạy** | [REPOSITORY_STRUCTURE.md](architecture/REPOSITORY_STRUCTURE.md) | `src/agentforge/`, `ui/dashboard/` hiện tại |
-| **Cấu trúc đã chốt (chưa migrate)** | [TARGET_STRUCTURE.md](architecture/TARGET_STRUCTURE.md) | `agentforge/` + `dashboard/` tại root, Feature-First Modular Monolith |
+| Cấu trúc source **đang chạy** | [REPOSITORY_STRUCTURE.md](architecture/REPOSITORY_STRUCTURE.md) | `src/agentforge/` + `dashboard/` đang chạy |
+| **Cấu trúc đã chốt (M1 Dashboard đã chuyển; M2 Python chưa chuyển)** | [TARGET_STRUCTURE.md](architecture/TARGET_STRUCTURE.md) | `agentforge/` + `dashboard/` tại root, Feature-First Modular Monolith |
 | Giải thích **từng file** | [FILE_CATALOG.md](architecture/FILE_CATALOG.md) | Catalog 137 file Python, các file React và scripts |
 | Lộ trình đổi cấu trúc | [MIGRATION_PLAN.md](architecture/MIGRATION_PLAN.md) | Migration theo phase, kiểm chứng import/CLI/SQLite |
 | Tạo phim dài | [LONG_FORM_AI_FILM_STUDIO.md](architecture/LONG_FORM_AI_FILM_STUDIO.md) | Chapter/shot planner, không phải video thành phẩm |

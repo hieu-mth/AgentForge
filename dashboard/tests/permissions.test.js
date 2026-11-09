@@ -43,7 +43,7 @@ test('unknown permissions are fail closed, never treated as explained',()=>{
 });
 
 test('every registered skill has a human-readable Vietnamese label',()=>{
-  const root=resolve(dirname(fileURLToPath(import.meta.url)),'../../../skills');
+  const root=resolve(dirname(fileURLToPath(import.meta.url)),'../../skills');
   const ids=readdirSync(root,{withFileTypes:true})
     .filter(entry=>entry.isDirectory())
     .map(entry=>{

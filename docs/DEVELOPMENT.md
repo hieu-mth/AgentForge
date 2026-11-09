@@ -1,6 +1,6 @@
 # Phát triển và vận hành trên Windows
 
-> **Đường dẫn hiện tại vẫn là `src/agentforge/` và `ui/dashboard/`.** [Target structure](architecture/TARGET_STRUCTURE.md) đã được chốt nhưng chưa migrate; đừng chạy lệnh theo folder tương lai cho tới khi các phase hoàn tất.
+> **Đường dẫn hiện tại: `src/agentforge/` (Python) và `dashboard/` (React ở root).** [Cấu trúc mục tiêu](architecture/TARGET_STRUCTURE.md) đã chốt; **M1 frontend đã chuyển, M2 Python chưa chuyển**. Đừng chạy lệnh cho `agentforge/` ở root trước khi migration Python hoàn tất.
 
 **Đối tượng:** Owner/developer làm việc trực tiếp tại `D:\AgentForge`. Có thể dùng folder khác; các lệnh bên dưới giả định repo đã clone.
 
@@ -16,11 +16,13 @@ cd D:\AgentForge
 git status --short
 py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[media]"
-npm.cmd ci --prefix ui/dashboard --ignore-scripts --no-audit --no-fund
-npm.cmd run build --prefix ui/dashboard
+npm.cmd ci --prefix dashboard --ignore-scripts --no-audit --no-fund
+npm.cmd run build --prefix dashboard
 ~~~
 
 Nếu venv đã tồn tại, bỏ qua bước tạo lại. Nếu `py -3.13` không có, kiểm tra `py -0p` rồi dùng Python 3.13+ thật sự được cài. Không giả định file `.venv\Scripts\python.exe` luôn có sẵn.
+
+Nếu vừa cập nhật từ phiên bản cũ, Git sẽ chuyển source `ui/dashboard/` sang `dashboard/`. Thư mục `ui/dashboard/node_modules` hoặc `ui/dashboard/dist` cũ, nếu còn trên máy, chỉ là **cache local cũ** và vẫn được gitignore; không cần xóa để chạy app mới. Cài npm lại tại `dashboard/`.
 
 ## 2. Chạy Dashboard
 
@@ -43,8 +45,8 @@ Cờ này không cho phép tùy tiện public hệ thống hay chạy generated 
 ~~~powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 .\.venv\Scripts\python.exe scripts/check_docs.py
-npm.cmd run test:navigation --prefix ui/dashboard
-npm.cmd run build --prefix ui/dashboard
+npm.cmd run test:navigation --prefix dashboard
+npm.cmd run build --prefix dashboard
 npm.cmd ci --prefix examples/novamart --ignore-scripts --no-audit --no-fund
 npm.cmd test --prefix examples/novamart
 npm.cmd run build --prefix examples/novamart
@@ -84,7 +86,7 @@ Nếu `git status` có thay đổi local chưa commit, cần đối chiếu trư
 | Triệu chứng | Hướng kiểm tra |
 | --- | --- |
 | Không có `.venv\Scripts\python.exe` | `py -0p`; tạo lại venv bằng Python 3.13 |
-| Dashboard 404 / asset thiếu | `npm.cmd ci` và `npm.cmd run build --prefix ui/dashboard` |
+| Dashboard 404 / asset thiếu | `npm.cmd ci` và `npm.cmd run build --prefix dashboard` |
 | Không thấy ComfyUI | Kiểm tra service local `127.0.0.1:8188`, không mở cổng ra Internet |
 | Motion job báo `UNVERIFIED` | Đây là trạng thái đúng khi chưa có clip QA, không phải tự động PASS |
 | CLI model/worker lỗi | Kiểm tra `config/`, `workers/`, quyền Owner và model được enable |

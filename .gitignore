@@ -15,6 +15,11 @@ dist/
 models/voices/
 
 # React Dashboard dependencies/build outputs (source is committed)
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.vite/
+
+# Ignore caches from older local installations; never auto-delete user files.
 ui/dashboard/node_modules/
 ui/dashboard/dist/
 ui/dashboard/.vite/

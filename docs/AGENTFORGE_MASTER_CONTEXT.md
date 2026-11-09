@@ -11,7 +11,7 @@ Bối cảnh vận hành: Windows PowerShell, Python >=3.13, Node.js 22, React D
 ## 2. Những gì đã triển khai
 
 - Python backend `src/agentforge/`, domain/core/storage/ai; task/goal, SQLite, skill permissions, owner approvals.
-- Dashboard chính: `ui/dashboard/` (React). `python -m agentforge --port 8780` chạy server; `/` redirect tới `/dashboard/`.
+- Dashboard chính: `dashboard/` (React). `python -m agentforge --port 8780` chạy server; `/` redirect tới `/dashboard/`.
 - Website Builder dạng structured design + signed `site.json`, feedback chỉnh thiết kế; Marketplace NovaMart demo (không có checkout thật).
 - Experimental AI React Developer tạo đề xuất JSX/CSS; syntax validation và acceptance SHA, **chưa source revision**.
 - Phase 1: tách execution status / artifact acceptance; verify source SHA, static syntax, CI build trusted reference. Chưa có browser QA/source isolation thực cho React AI.
@@ -20,7 +20,7 @@ Bối cảnh vận hành: Windows PowerShell, Python >=3.13, Node.js 22, React D
 
 ## 3. Quyết định kiến trúc
 
-**Quyết định mới (09/11/2026):** Owner đã chốt structure đích `agentforge/` và `dashboard/` ngang cấp root, bên trong dùng `api/`, `core/`, `ai/`, `features/`, `integrations/`, `ops/`, `storage/`. Đây vẫn là **planned migration, không phải code đã chuyển**. Xem [ADR](architecture/TARGET_STRUCTURE.md), [catalog từng file](architecture/FILE_CATALOG.md) và [migration plan](architecture/MIGRATION_PLAN.md).
+**Quyết định mới (09/11/2026):** Owner đã chốt structure đích `agentforge/` và `dashboard/` ngang cấp root, bên trong dùng `api/`, `core/`, `ai/`, `features/`, `integrations/`, `ops/`, `storage/`. **M1 frontend đã chuyển sang `dashboard/`; M2 Python và các module feature/API chưa migrate.** Xem [ADR](architecture/TARGET_STRUCTURE.md), [catalog từng file](architecture/FILE_CATALOG.md) và [migration plan](architecture/MIGRATION_PLAN.md).
 
 - Một frontend, một Python backend modular monolith. SQLite và workspace local.
 - Legacy dashboard static và `dashboard_v0.py` đã bị loại bỏ. `src/agentforge/` **không phải code cũ**.

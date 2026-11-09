@@ -35,19 +35,19 @@ jobs:
           node-version: '22'
 
       - name: Install React Dashboard dependencies
-        working-directory: ui/dashboard
+        working-directory: dashboard
         run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Validate compact React navigation
-        working-directory: ui/dashboard
+        working-directory: dashboard
         run: npm run test:navigation
 
       - name: Build React Dashboard (Ant Design)
-        working-directory: ui/dashboard
+        working-directory: dashboard
         run: npm run build
 
       - name: Smoke-test React production boot in Microsoft Edge
-        working-directory: ui/dashboard
+        working-directory: dashboard
         run: npm run test:browser
 
       - name: Validate built dashboard routing and assets
