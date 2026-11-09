@@ -268,6 +268,51 @@ def catalog(*, db_path=None):
     }
 
 
+def check_local_profile(profile_id, *, db_path=None, opener=None):
+    """Owner-invoked, bounded GET to a loopback Ollama tags endpoint ONLY.
+
+    Cloud providers and ComfyUI video checkpoints are not probed by this
+    endpoint. No generation, model download, GPU run or billing is triggered.
+    """
+    import urllib.error
+    import urllib.request
+
+    _required_text(profile_id, ID_RE, "model ID")
+    profile = _profiles(state=_read_state(db_path=db_path)[1]).get(profile_id)
+    if not profile:
+        raise ModelConfigError("Unknown model ID")
+    if not profile["enabled"]:
+        return {"profile_id": profile_id, "status": "DISABLED",
+                "inference_invoked": False}
+    if profile["provider"] != "ollama":
+        return {"profile_id": profile_id, "status": "NOT_CHECKED",
+                "reason": "Only local Ollama metadata preflight is supported",
+                "inference_invoked": False}
+    url = _local_url(profile["base_url"]) + "/api/tags"
+    request = urllib.request.Request(
+        url, headers={"Accept": "application/json"}, method="GET")
+    try:
+        with (opener or urllib.request.urlopen)(request, timeout=3) as response:
+            if response.status != 200:
+                return {"profile_id": profile_id, "status": "HTTP_ERROR",
+                        "inference_invoked": False}
+            raw = response.read(262145)
+        if len(raw) > 262144:
+            raise ValueError("Too many model metadata bytes")
+        models = json.loads(raw).get("models")
+        if not isinstance(models, list):
+            raise ValueError("Invalid Ollama tags metadata")
+        found = any(isinstance(item, dict) and
+                    item.get("name") == profile["model"] for item in models)
+        status = "LOCAL_MODEL_FOUND" if found else "MODEL_NOT_INSTALLED"
+    except (TimeoutError, urllib.error.URLError, OSError):
+        status = "UNAVAILABLE"
+    except (ValueError, UnicodeError, TypeError, AttributeError):
+        status = "INVALID_RESPONSE"
+    return {"profile_id": profile_id, "status": status,
+            "inference_invoked": False}
+
+
 def _tables(conn):
     conn.execute("""CREATE TABLE IF NOT EXISTS hub_state(
         id INTEGER PRIMARY KEY CHECK(id = 1),

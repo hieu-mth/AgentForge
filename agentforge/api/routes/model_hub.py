@@ -28,6 +28,11 @@ def handle(server, path, request, session=None):
             "RESET_MODEL_ROUTE",
             expected_revision=request["expected_revision"],
             task_id=request["task_id"])
+    if path == "/api/model-hub/check":
+        if (set(request) != {"ack", "profile_id"} or
+                request["ack"] != "CHECK_LOCAL_MODEL"):
+            raise PermissionError("Explicit read-only local preflight required")
+        return model_hub.check_local_profile(request["profile_id"])
     if path == "/api/model-hub/rollback":
         if (set(request) != {"ack", "expected_revision", "target_revision"} or
                 request["ack"] != "ROLLBACK_MODEL_HUB"):
