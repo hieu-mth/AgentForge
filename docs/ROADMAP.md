@@ -45,11 +45,15 @@ Không mở rộng thêm agent/worker hoặc microservice khi hai vòng lặp n�
 3. Dựng 60–90 giây nhiều shot có chung nhân vật, voiceover/subtitles và continuity audit.
 4. Mở rộng lên tập 15–30 phút trước khi thử một phim dài hàng giờ.
 
+## Đợt 6 — AI React revision
+
+Đã thêm kế hoạch webapp.source_revision, API revision cho AI JSX/CSS, partial-file edits được gắn source SHA, immutable version và diff; rollback tạo proposal riêng chỉ từ verified ancestor. Bản nguồn AI vẫn chưa được chạy/kiểm thử trên browser cách ly, model thực chưa được benchmark. Xem [Wave 6 acceptance](verification/wave6/README.md).
+
 ## AI Product Builder — roadmap song song
 
 | Ưu tiên | Việc | Definition of done |
 | --- | --- | --- |
-| P0 | Source-aware revision cho AI React | Đọc nguyên project cũ, sửa file cụ thể, khác source SHA thật, diff, rollback và Owner approval |
+| P0 | Source-aware revision cho AI React | **Code/CI Wave 6**: file edits, SHA, diff/version, rollback proposal, Owner approval; real-model/browser QA chưa xác minh |
 | P0 | Build/browser QA riêng biệt | Chạy ở sandbox kiểm chứng, ảnh/chức năng/console errors, evidence gắn SHA |
 | P1 | Adaptive planning & multi-file | AI chọn plan theo capabilities, không keyword-landing bias; filename linh hoạt trong policy |
 | P1 | Benchmark mẫu | Brief chuẩn, tính tỷ lệ tạo/sửa/QA thành công, latency và chi phí model thật |

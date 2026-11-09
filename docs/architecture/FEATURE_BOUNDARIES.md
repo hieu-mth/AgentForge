@@ -10,7 +10,7 @@
 | `core/` | Workflow, quyền, acceptance, durable task | Prompt/feature-specific code |
 | `ai/` | Model profiles, task text routing | Approval, GPU/YouTube billing |
 | `features/websites/` | Site design, revision, asset preview, QA | HTTP auth, model credentials |
-| `features/webapps/` | React proposals, static QA, bounded sandbox control | Tùy ý execute AI source trên Windows host |
+| `features/webapps/` | React proposals, source revision/diff/rollback, static QA, bounded sandbox control | Tùy ý execute AI source trên Windows host |
 | `features/media/` | Asset/media/SRT/voice/video rendering và quality | Film long-form scheduling |
 | `features/film_studio/` | Film plan/shot ledger, validated workflow, one-shot submission | Tùy tiện download GPU model hoặc video accepted |
 | `features/growth/` | Campaign, owner-written records, manual handoff, reports | Real YouTube publishing/payment |

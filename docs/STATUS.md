@@ -28,7 +28,7 @@ Các nhãn được dùng thống nhất:
 | Static Website Builder | PARTIAL | `agentforge/features/websites/` | Thiết kế và section bị giới hạn bởi schema; không có backend chung |
 | Marketplace React demo | PARTIAL | `agentforge/features/webapps/builder.py`, `templates/novamart/` | Cart/search demo, không có checkout thanh toán |
 | AI React Developer | PARTIAL | `agentforge/features/webapps/developer.py` | Danh sách file giới hạn; source là đề xuất, không tự chạy |
-| Source revision cho AI React | NOT IMPLEMENTED | `agentforge/api/routes/products.py` hiện trả về `PermissionError` | Website/marketplace **có** revision riêng theo data/schema, không phải sửa source AI |
+| Source revision cho AI React | IMPLEMENTED (code / tests) — real-model UNVERIFIED | `agentforge/features/webapps/revisions.py`, `tests/test_wave6_source_revision.py` | Partial file edits, diff/SHA/version/rollback; generated React browser QA vẫn UNVERIFIED |
 | Build + browser QA source AI | UNVERIFIED | `agentforge/features/webapps/sandbox.py` | Docker bị thiếu ở máy Owner; CI không chạy generated source |
 | Media ảnh tĩnh → MP4 | IMPLEMENTED (bounded) | `agentforge/features/media/assets.py`, `render.py` | Không đồng nghĩa phim AI chuyển động |
 | AI Film planner nhiều giờ | IMPLEMENTED (planning) | `agentforge/features/film_studio/long_form.py` | 900 shot được **lập kế hoạch**, chưa render 900 clip |
@@ -50,7 +50,7 @@ Code/CI có thêm báo cáo Base V1 **read-only** và bộ contract tests chủ 
 
 ## Các vấn đề ưu tiên
 
-1. AI React Source Revision: sửa code cũ theo feedback, diff, version, rollback và no-op guard.
+1. AI React Source Revision đã có code; cần thực nghiệm 3 lần chỉnh bằng model và browser QA ở Đợt 7.
 2. Film Studio: một clip motion 4 giây thực sự decode được trên GPU Owner; lưu thời gian, VRAM, model/workflow, SHA.
 3. Dựng phim: character bible → storyboard có action/camera → shot ledger → clip QA → assembly.
 4. Nghiệm thu: automated tests chỉ được ghi PASS với đúng bằng chứng; không tạo status ảo.
