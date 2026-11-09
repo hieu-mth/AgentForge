@@ -616,3 +616,79 @@ class _Handler(BaseHTTPRequestHandler):
             return None
         if item is None:
             return None
+        with self.server.auth_lock:
+            session = self.server.sessions.get(item.value)
+            if session and session["expires"] > time.monotonic():
+                return session
+        return None
+
+    def _blocked(self, code=403, error="forbidden"):
+        self._reply(code, {"error": error})
+
+    def do_GET(self):
+        if not self._host_ok():
+            return self._blocked(error="invalid_host")
+        route = urlsplit(self.path).path
+        if route in ("/dashboard", "/dashboard/") or route.startswith("/dashboard/assets/"):
+            try:
+                body, mime = _react_asset(route)
+                return self._reply(200, body, mime=mime)
+            except (ValueError, FileNotFoundError, OSError):
+                return self._blocked(404, "react_dashboard_not_built_or_invalid_asset")
+        if route in ("/", "/app.css", "/app.js"):
+            filename, mime = {
+                "/": ("app.html", "text/html; charset=utf-8"),
+                "/app.css": ("app.css", "text/css; charset=utf-8"),
+                "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+            }[route]
+            return self._reply(200, _read_static(filename), mime=mime)
+        if self._session() is None:
+            return self._blocked(401, "authentication_required")
+        try:
+            if route == "/api/session":
+                session = self._session()
+                return self._reply(200, {
+                    "status": "AUTHENTICATED", "csrf": session["csrf"]})
+            if route == "/api/bootstrap":
+                return self._reply(200, _summary(self.server))
+            if route.startswith("/api/image/") and route.endswith("/preview"):
+                from agentforge.asset_preview import image_for_job
+                job_id = route[len("/api/image/"):-len("/preview")]
+                content, image_type = image_for_job(job_id)
+                return self._reply(200, content, mime=image_type)
+            if route == "/api/image/health":
+                from agentforge.image_studio_v24 import health
+                return self._reply(200, health())
+            if route == "/api/image/jobs":
+                from agentforge.image_studio_v24 import report
+                return self._reply(200, report())
+            if route == "/api/model/health":
+                from agentforge.model_health import check
+                return self._reply(200, check())
+            if route == "/api/retention/inventory":
+                from agentforge.storage import retention
+                return self._reply(200, retention.inventory())
+            if route == "/api/retention/backups":
+                from agentforge.storage import retention
+                return self._reply(200, retention.list_backups())
+            if route.startswith("/api/retention/inspect/"):
+                from agentforge.storage import retention
+                pieces = route.split("/")
+                if len(pieces) != 6 or pieces[1:4] != ["api", "retention", "inspect"]:
+                    raise ValueError("Invalid artifact inspection route")
+                inspected = retention.inspect(pieces[4], pieces[5])
+                session = self._session()
+                session.setdefault("inspected_artifacts", {})[(pieces[4], pieces[5])] = inspected["tree_sha256"]
+                return self._reply(200, inspected)
+            if route.startswith("/api/retention/verify/"):
+                from agentforge.storage import retention
+                pieces = route.split("/")
+                if len(pieces) != 5 or pieces[1:4] != ["api", "retention", "verify"]:
+                    raise ValueError("Invalid backup verification route")
+                verified = retention.verify(pieces[4])
+                session = self._session()
+                session.setdefault("verified_artifact_backups", {})[pieces[4]] = verified["tree_sha256"]
+                return self._reply(200, verified)
+            if route == "/api/artifacts":
+                from agentforge.artifact_catalog import report
+                return self._reply(200, report())
