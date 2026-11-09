@@ -738,3 +738,47 @@ test_no_external_execution_on_plain_inspection
 test_one_baseline_browser_run_and_checkpoint 
 (test_product_cycle.TestProductCycle.test_one_baseline_browser_run_and_checkpoint) ... ok
 test_pass_propose_never_calls_model_even_when_approved 
+(test_product_cycle.TestProductCycle.test_pass_propose_never_calls_model_even_when_approved) ... ok
+test_source_changed_after_cycle_start_refused 
+(test_product_cycle.TestProductCycle.test_source_changed_after_cycle_start_refused) ... ok
+test_stale_reused_report_rejected (test_product_cycle.TestProductCycle.test_stale_reused_report_rejected) ... ok
+test_start_from_pass_report_without_side_effects 
+(test_product_cycle.TestProductCycle.test_start_from_pass_report_without_side_effects) ... ok
+test_unknown_failure_never_calls_ai (test_product_cycle.TestProductCycle.test_unknown_failure_never_calls_ai) ... ok
+test_unsafe_cycle_id_rejected (test_product_cycle.TestProductCycle.test_unsafe_cycle_id_rejected) ... ok
+test_wrong_project_report_rejected (test_product_cycle.TestProductCycle.test_wrong_project_report_rejected) ... ok
+test_applied_revision_blocks_preview (test_product_quality.TestProductQuality.test_applied_revision_blocks_preview) 
+... ok
+test_broken_fragment_warning (test_product_quality.TestProductQuality.test_broken_fragment_warning) ... ok
+test_check_project_is_read_only (test_product_quality.TestProductQuality.test_check_project_is_read_only) ... ok
+test_check_revision_is_read_only (test_product_quality.TestProductQuality.test_check_revision_is_read_only) ... ok
+test_duplicate_ids_warning (test_product_quality.TestProductQuality.test_duplicate_ids_warning) ... ok
+test_heading_skip_warning (test_product_quality.TestProductQuality.test_heading_skip_warning) ... ok
+test_inline_event_handler_is_fail (test_product_quality.TestProductQuality.test_inline_event_handler_is_fail) ... ok
+test_invalid_project_slug_rejected (test_product_quality.TestProductQuality.test_invalid_project_slug_rejected) ... ok
+test_invalid_revision_id_rejected (test_product_quality.TestProductQuality.test_invalid_revision_id_rejected) ... ok
+test_javascript_uri_is_fail (test_product_quality.TestProductQuality.test_javascript_uri_is_fail) ... ok
+test_malformed_html_report_is_fail_not_execution 
+(test_product_quality.TestProductQuality.test_malformed_html_report_is_fail_not_execution) ... ok
+test_missing_alt_warning (test_product_quality.TestProductQuality.test_missing_alt_warning) ... ok
+test_missing_charset_is_warning (test_product_quality.TestProductQuality.test_missing_charset_is_warning) ... ok
+test_missing_doctype_is_warning (test_product_quality.TestProductQuality.test_missing_doctype_is_warning) ... ok
+test_missing_lang_is_warning (test_product_quality.TestProductQuality.test_missing_lang_is_warning) ... ok
+test_missing_project_rejected (test_product_quality.TestProductQuality.test_missing_project_rejected) ... ok
+test_missing_title_is_warning (test_product_quality.TestProductQuality.test_missing_title_is_warning) ... ok
+test_missing_viewport_is_warning (test_product_quality.TestProductQuality.test_missing_viewport_is_warning) ... ok
+test_network_js_is_fail (test_product_quality.TestProductQuality.test_network_js_is_fail) ... ok
+test_no_shell_network_or_model_in_preview 
+(test_product_quality.TestProductQuality.test_no_shell_network_or_model_in_preview) ... ok
+test_placeholder_link_warning (test_product_quality.TestProductQuality.test_placeholder_link_warning) ... ok
+test_preview_directory_symlink_rejected 
+(test_product_quality.TestProductQuality.test_preview_directory_symlink_rejected) ... ok
+test_preview_is_idempotent_if_exact_bytes_match 
+(test_product_quality.TestProductQuality.test_preview_is_idempotent_if_exact_bytes_match) ... ok
+test_preview_rejects_event_attributes_even_if_c8b_allows_them 
+(test_product_quality.TestProductQuality.test_preview_rejects_event_attributes_even_if_c8b_allows_them) ... ok
+test_preview_writes_only_ignored_data_copy 
+(test_product_quality.TestProductQuality.test_preview_writes_only_ignored_data_copy) ... ok
+test_quality_passes_well_formed_static_html 
+(test_product_quality.TestProductQuality.test_quality_passes_well_formed_static_html) ... ok
+test_remote_url_is_fail (test_product_quality.TestProductQuality.test_remote_url_is_fail) ... ok
