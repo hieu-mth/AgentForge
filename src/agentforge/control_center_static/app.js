@@ -1038,3 +1038,53 @@ async function handleSubmit(event){
     {ack:"CREATE_CAMPAIGN",data},"Đã tạo campaign");
   }else if(id==="event-form"){
    const data=formJson("event-json");
+   if(!confirm("Xác nhận đã có quyền/consent và dữ liệu là do owner nhập?"))return;
+   await mutate("/api/campaigns/event",
+    {ack:"RECORD_EVENT",kind:data.kind,data:data.data},"Đã ghi sự kiện local");
+  }else{
+   await mutate("/api/memory/set",{ack:"SAVE_NOTE",key:$("memory-key").value,
+    note:$("memory-note").value,evidence_ref:$("memory-evidence").value},
+    "Đã lưu evidence note");
+   state.memory=await api("/api/memory");render();
+  }
+ }catch(e){notice(e.message,true);}
+ finally{if(submit)submit.disabled=false;}
+}
+document.addEventListener("DOMContentLoaded",()=>{
+ const taskDialog=$("task-dialog");
+ $("task-dialog-close").addEventListener("click",()=>taskDialog.close());
+ $("task-dialog-done").addEventListener("click",()=>taskDialog.close());
+ taskDialog.addEventListener("click",event=>{
+  // Native <dialog> handles Esc and restores focus. Backdrop click closes.
+  if(event.target===taskDialog)taskDialog.close();
+ });
+ taskDialog.addEventListener("close",()=>{
+  state.task=null;
+  state.inspectedDraft=null;
+  state.inspectedVideo=null;
+  $("task-dialog-body").textContent="";
+ });
+ $("login-form").addEventListener("submit",async e=>{
+  e.preventDefault();
+  try{
+   const response=await api("/api/login","POST",{code:$("owner-code").value});
+   state.csrf=response.csrf;$("owner-code").value="";
+   state.data=await api("/api/bootstrap");showShell();
+  }catch(err){$("login-feedback").textContent=err.message;}
+ });
+ $("refresh").addEventListener("click",refresh);
+ $("logout").addEventListener("click",async()=>{
+  try{await api("/api/logout","POST",{});}catch{}
+  showLogin();
+ });
+ $("menu-toggle").addEventListener("click",()=>{
+  $("sidebar").classList.toggle("open");
+  $("mobile-overlay").hidden=!$("sidebar").classList.contains("open");
+ });
+ $("mobile-overlay").addEventListener("click",()=>{
+  $("sidebar").classList.remove("open");$("mobile-overlay").hidden=true;
+ });
+ document.addEventListener("click",handleClick);
+ document.addEventListener("submit",handleSubmit);
+ start();
+});
