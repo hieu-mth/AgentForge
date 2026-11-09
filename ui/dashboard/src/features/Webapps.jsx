@@ -9,7 +9,7 @@ const LABELS = {
 };
 const COLOR = /^#[0-9a-fA-F]{6}$/;
 
-export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,onVerify,onDecide,busy}) {
+export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,onVerify,onDecide,onValidate,busy}) {
   const [feedback,setFeedback]=useState('');
   const isCode=proposal?.ai_code_experimental===true;
   useEffect(()=>setFeedback(''),[proposal?.proposal_id]);
@@ -75,6 +75,7 @@ export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,onVerify
           onChange={e=>setFeedback(e.target.value)}
           placeholder="Ví dụ: Đổi màu sang xanh navy, đổi tên gian hàng, bổ sung sản phẩm nhà cửa và giữ nguyên danh mục điện tử..."/>}
         <Space wrap style={{display:'flex',justifyContent:'flex-end',marginTop:22}}>
+          <Button loading={busy} onClick={()=>onValidate?.(proposal)}>Kiểm tra cú pháp</Button>
           {!isCode&&<Button disabled={feedback.trim().length<10} loading={busy}
             onClick={()=>onRevise(proposal,feedback)}>Tạo kế hoạch chỉnh sửa</Button>}
           <Button loading={busy} onClick={()=>onVerify(proposal)}>
