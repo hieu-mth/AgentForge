@@ -1416,3 +1416,62 @@ test_reject_disabled_model (test_worker_registry.TestWorkerRegistry.test_reject_
 test_reject_empty_instructions (test_worker_registry.TestWorkerRegistry.test_reject_empty_instructions) ... ok
 test_reject_path_traversal (test_worker_registry.TestWorkerRegistry.test_reject_path_traversal) ... ok
 test_reject_secret_field (test_worker_registry.TestWorkerRegistry.test_reject_secret_field) ... ok
+test_reject_unknown_model (test_worker_registry.TestWorkerRegistry.test_reject_unknown_model) ... ok
+test_source_reviewer (test_worker_registry.TestWorkerRegistry.test_source_reviewer) ... ok
+test_research_analysis_uses_worker (test_worker_wiring.TestWorkerWiring.test_research_analysis_uses_worker) ... ok
+test_research_plan_uses_worker (test_worker_wiring.TestWorkerWiring.test_research_plan_uses_worker) ... ok
+test_source_review_uses_worker (test_worker_wiring.TestWorkerWiring.test_source_review_uses_worker) ... ok
+test_default_does_not_create_db (test_workspace_policy_v23.WorkspacePolicyTests.test_default_does_not_create_db) ... ok
+test_owner_confirmation_strict_types_and_audit 
+(test_workspace_policy_v23.WorkspacePolicyTests.test_owner_confirmation_strict_types_and_audit) ... ok
+test_policy_is_enforced_before_goal_creation 
+(test_workspace_policy_v23.WorkspacePolicyTests.test_policy_is_enforced_before_goal_creation) ... ok
+test_workspace_policy_api_is_allowlisted 
+(test_workspace_policy_v23.WorkspacePolicyTests.test_workspace_policy_api_is_allowlisted) ... ok
+test_inventory_does_not_delete_or_read_file_contents 
+(test_workspace_v22.ArtifactCatalogTests.test_inventory_does_not_delete_or_read_file_contents) ... ok
+test_inventory_empty_directories (test_workspace_v22.ArtifactCatalogTests.test_inventory_empty_directories) ... ok
+test_missing_model_and_remote_urls (test_workspace_v22.LocalModelHealthTests.test_missing_model_and_remote_urls) ... ok
+test_probe_only_requests_tags (test_workspace_v22.LocalModelHealthTests.test_probe_only_requests_tags) ... ok
+test_unavailable_is_sanitized (test_workspace_v22.LocalModelHealthTests.test_unavailable_is_sanitized) ... ok
+
+======================================================================
+ERROR: test_csrf_origin_host_and_body_guards 
+(test_control_center_v1.TestControlCenterV1.test_csrf_origin_host_and_body_guards)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\AgentForge\tests\test_control_center_v1.py", line 177, in test_csrf_origin_host_and_body_guards
+    code, _, _ = self.req(
+                 ~~~~~~~~^
+        "POST", "/api/goals/propose", {"ack": "PROPOSE",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          "title": "Review something",
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          "template": "growth.review",
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          "inputs": {"campaign": "nem-pilot"}}, **params)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\AgentForge\tests\test_control_center_v1.py", line 65, in req
+    response = conn.getresponse()
+  File "C:\Users\hieu-mth\AppData\Local\Programs\Python\Python313\Lib\http\client.py", line 1478, in getresponse
+    response.begin()
+    ~~~~~~~~~~~~~~^^
+  File "C:\Users\hieu-mth\AppData\Local\Programs\Python\Python313\Lib\http\client.py", line 343, in begin
+    version, status, reason = self._read_status()
+                              ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\hieu-mth\AppData\Local\Programs\Python\Python313\Lib\http\client.py", line 304, in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+               ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "C:\Users\hieu-mth\AppData\Local\Programs\Python\Python313\Lib\socket.py", line 723, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+ConnectionAbortedError: [WinError 10053] An established connection was aborted by the software in your host machine
+
+======================================================================
+FAIL: test_resume_only_unexecuted_after_explicit_grants 
+(test_s1_runtime.TestS1SkillRunner.test_resume_only_unexecuted_after_explicit_grants)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\AgentForge\tests\test_s1_runtime.py", line 47, in test_resume_only_unexecuted_after_explicit_grants
+    self.assertEqual(approved["status"], "SUCCEEDED")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
