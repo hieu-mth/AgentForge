@@ -124,3 +124,40 @@ function renderChannels(){
   '<div class="channel-status"><div><strong>'+esc(x.name)+'</strong>'+
   '<small>'+(x.authenticated?'Đã có xác thực':'Chưa kết nối OAuth/API chính thức')+'</small></div>'+badge(x.status)+'</div>').join("");
  return header("EXTERNAL ACCOUNTS","Channels","Tình trạng kênh thật. Không hiển thị CONNECTED nếu thiếu chứng cứ xác thực.")+
+  '<div class="callout warning">YouTube/TikTok hiện chỉ hỗ trợ chuẩn bị nội dung và owner upload thủ công. Không có nút kết nối giả và không lưu mật khẩu trong SQLite.</div>'+
+  card("Các kênh",rows||empty("Chưa có kênh được cấu hình."));
+}
+function renderFinance(){
+ const c=state.data.company_v2||{},b=c.business||{},ap=c.autopilot||{};
+ return header("OWNER FINANCE","Finance","Tách số liệu ghi nhận thủ công khỏi doanh thu/chi phí đã được bên cung cấp xác minh.")+
+ '<div class="finance-cards">'+
+  card("Giới hạn model theo lượt",'<div class="finance-value">'+fmt(ap.daily_call_cap??0)+'</div><p class="small muted">Lượt ước tính mỗi ngày UTC, không phải ngân sách VND.</p>')+
+  card("Lượt model đã dùng hôm nay",'<div class="finance-value">'+fmt(ap.estimated_calls_used_today??0)+'</div><p class="small muted">Chưa đối soát với hóa đơn provider.</p>')+
+  card("Lợi nhuận đã xác minh",'<div class="finance-value">Chưa xác minh</div><p class="small muted">Không có kết nối ngân hàng hay đối soát hoa hồng.</p>')+
+  card("Chiến dịch thật",'<div class="finance-value">'+fmt(b.real_campaigns??0)+'</div><p class="small muted">Các số liệu owner nhập không được tự coi là doanh thu thật.</p>')+
+ '</div><div class="section">'+card("Quy tắc tài chính",'<p>Không tự chi tiền, mua quảng cáo hoặc thực hiện thanh toán. Hạn mức provider thực tế chưa thể xác minh bằng AgentForge hiện tại.</p>'+
+ '<button class="btn btn-outline" type="button" data-view="growth">Xem sổ chiến dịch owner →</button>')+'</div>';
+}
+function renderSettings(){
+ const ap=state.data.autopilot_policy||{enabled:false,daily_cap:0};
+ const wp=state.data.workspace_policy||{max_estimated_model_calls:1,website_enabled:true,storyboard_enabled:true};
+ return header("OWNER GOVERNANCE","Settings","Cấu hình delegation và kiểm soát chi phí ước tính; quyền bên ngoài vẫn cần phê duyệt theo tác vụ.")+
+ '<div class="settings-panel">'+card("Autopilot · hạn mức lượt model",
+ '<p class="muted">Tắt bật delegation cho hàng đợi V1.3. Không tự gọi model, không kiểm soát chi phí hóa đơn.</p>'+
+ '<div class="form-field"><label for="ap-policy-cap">Lượt dự kiến mỗi ngày UTC (0–10)</label>'+
+ '<input id="ap-policy-cap" type="number" min="0" max="10" step="1" value="'+esc(ap.daily_cap)+'"></div>'+
+ '<div class="form-field"><label for="ap-policy-enabled">Delegation</label>'+
+ '<select id="ap-policy-enabled"><option value="false" '+(!ap.enabled?'selected':'')+'>Tắt</option>'+
+ '<option value="true" '+(ap.enabled?'selected':'')+'>Bật</option></select></div>'+
+ '<div class="form-actions"><button class="btn btn-primary" type="button" data-autopilot-configure="1">Lưu chính sách</button></div>')+
+ card("Prompt Workspace · Role & lượt model",
+ '<p class="muted">Giới hạn tạo kế hoạch mới từ ô prompt; không thay thế quota Autopilot, quyền S1 hoặc hóa đơn provider.</p>'+
+ '<div class="form-field"><label for="wp-model-cap">Số lượt model ước tính tối đa mỗi Goal (0–3)</label>'+
+ '<input id="wp-model-cap" type="number" min="0" max="3" step="1" value="'+esc(wp.max_estimated_model_calls)+'"></div>'+
+ '<label class="check-row"><input id="wp-website" type="checkbox" '+(wp.website_enabled?"checked":"")+
+ '>Cho phép role Website Builder nhận yêu cầu mới</label>'+
+ '<label class="check-row"><input id="wp-storyboard" type="checkbox" '+(wp.storyboard_enabled?"checked":"")+
+ '>Cho phép role Storyboard nhận yêu cầu mới</label>'+
+ '<p class="small muted">Role bật/tắt ở đây chỉ áp dụng cho luồng prompt. Không nâng quyền model/process/network.</p>'+
+ '<div class="form-actions"><button class="btn btn-outline" type="button" data-workspace-policy-save="1">Lưu hạn mức & role</button></div>')+
+ card("Local-first & Data Safety",
