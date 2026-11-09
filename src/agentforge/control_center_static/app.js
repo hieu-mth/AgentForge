@@ -606,3 +606,47 @@ function renderOperations(){
   ' · Đang chạy: '+fmt(d.running_goals)+' goals / '+fmt(d.running_tasks)+' tasks</p>'+
   table(["DB","Integrity","Bytes"],db)+
   (findings||'<p class="muted">Không có cảnh báo nào.</p>')+
+  '<p class="muted">Lệnh backup an toàn: <code>python -m agentforge.ops_backup create --confirm-backup</code>.'+
+  ' Kiểm tra bằng <code>python -m agentforge.ops_backup verify &lt;archive&gt;</code>. Không tự restore dữ liệu đang hoạt động.</p>');
+}
+function renderIntegrations(){
+ const cards=state.data.connectors.map(c=>
+ '<div class="channel-card"><div class="channel-mark">⎔</div><div class="channel-name">'+
+ esc(c.name)+'</div>'+badge(c.status)+
+ '<p>Chưa có OAuth/API token và quyền từ nền tảng. AgentForge không báo cáo đã upload hoặc nhận tiền.</p>'+
+ '<span class="channel-foot">Handoff: owner thực hiện · Verified: No</span></div>').join("");
+ return header("CHANNEL READINESS","Integrations",
+  "Các kết nối cần tài khoản chính chủ và quyền API chính thức trước khi tự động vận hành.")+
+ '<div class="callout warning">Công cụ đã có thể chuẩn bị video/upload kit và quản lý chiến dịch. Chưa có connector trực tiếp tới YouTube, TikTok, ngân hàng hay cổng affiliate. Trạng thái CONNECTED không được suy đoán.</div>'+
+ '<div class="grid-3 section">'+cards+'</div>'+
+ '<div class="section">'+renderOperations()+'</div>'+
+ '<div class="section">'+card("Điều kiện cho tích hợp thực tế",
+ '<div class="stack"><div class="goal-tile"><span class="goal-mark">1</span><div class="goal-main"><strong>Owner sở hữu tài khoản</strong><small>Tự xác thực theo điều khoản nền tảng; không đưa mật khẩu vào chat hoặc SQLite.</small></div></div>'+
+ '<div class="goal-tile"><span class="goal-mark">2</span><div class="goal-main"><strong>OAuth / Scope tối thiểu</strong><small>Chỉ các API và quyền đã được nhà cung cấp cấp phép.</small></div></div>'+
+ '<div class="goal-tile"><span class="goal-mark">3</span><div class="goal-main"><strong>Publish gate + tài chính thực</strong><small>Review content, chống đăng trùng, nhận receipt, kiểm soát chi phí provider và đối soát.</small></div></div></div>')+'</div>';
+}
+function renderMemory(){
+ const rows=(state.memory||[]).map(m=>
+ '<tr><td>'+esc(m.key)+'</td><td>'+esc(m.note)+'</td><td>'+
+ esc(m.evidence_ref)+'</td><td>'+fmt(m.revision)+'</td></tr>');
+ const form='<form id="memory-form"><div class="form-field"><label for="memory-key">Memory key</label>'+
+ '<input id="memory-key" placeholder="marketing.goal" required></div>'+
+ '<div class="form-field"><label for="memory-note">Ghi chú</label>'+
+ '<textarea id="memory-note" maxlength="600" required></textarea></div>'+
+ '<div class="form-field"><label for="memory-evidence">Evidence reference</label>'+
+ '<input id="memory-evidence" placeholder="owner:decision-1" required></div>'+
+ '<div class="form-actions"><button class="btn btn-primary" type="submit">Lưu ghi chú owner</button></div></form>';
+ return header("OWNER KNOWLEDGE","Owner Memory",
+  "Ghi chú do owner quản lý và có evidence reference. Không phải bộ nhớ tự học hoặc kho mật khẩu.")+
+ '<div class="callout warning">Chỉ lưu thông tin không nhạy cảm. SQLite local chưa được mã hóa. Không nhập token, số điện thoại khách, tài khoản hay mật khẩu.</div>'+
+ '<div class="split section">'+card("Lưu quyết định",form)+
+ card("Ghi chú đã lưu",table(["KEY","NỘI DUNG","EVIDENCE","REV"],rows))+'</div>';
+}
+function render(){
+ if(!state.data)return;
+ $("page-crumb").textContent=viewNames[state.view]||"Tổng quan";
+ $("nav-wait").textContent=String(state.data.goals.filter(g=>g.status==="WAITING_APPROVAL").length);
+ document.querySelectorAll(".nav-link").forEach(x=>x.classList.toggle(
+  "active",x.dataset.view===state.view));
+ const output={artifacts:renderArtifacts,workspace:renderWorkspace,team:renderTeam,channels:renderChannels,finance:renderFinance,settings:renderSettings,overview:renderOverview,goals:renderGoals,tasks:renderTasks,
+  skills:renderSkills,websites:renderWebsites,analytics:renderAnalytics,growth:renderGrowth,
