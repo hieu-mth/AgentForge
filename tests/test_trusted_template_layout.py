@@ -11,7 +11,10 @@ class TrustedTemplateLayoutTests(unittest.TestCase):
         self.assertEqual(expected, builder.REFERENCE)
         self.assertEqual(expected, toolchain.REFERENCE)
         self.assertEqual(builder, developer.base)
-        self.assertFalse((REPOSITORY_ROOT / "examples" / "novamart").exists())
+        # Old ignored node_modules or dist caches may still leave this folder on
+        # the Owner Windows machine after git pull. Require only that its tracked
+        # scaffold source is gone; never delete the old local caches.
+        self.assertFalse((REPOSITORY_ROOT / "examples" / "novamart" / "package.json").exists())
         self.assertTrue((expected / "README.md").is_file())
         self.assertTrue((expected / "package-lock.json").is_file())
         for filename in builder.TEMPLATES:
