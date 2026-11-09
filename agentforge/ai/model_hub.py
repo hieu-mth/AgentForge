@@ -292,8 +292,16 @@ def check_local_profile(profile_id, *, db_path=None, opener=None):
     url = _local_url(profile["base_url"]) + "/api/tags"
     request = urllib.request.Request(
         url, headers={"Accept": "application/json"}, method="GET")
+    # A local server could redirect requests to the Internet, or environment
+    # proxies could intercept even loopback URLs. Never follow redirects and
+    # never route this Owner metadata probe through OS/environment proxies.
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+    safe_open = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}), NoRedirect()).open
     try:
-        with (opener or urllib.request.urlopen)(request, timeout=3) as response:
+        with (opener or safe_open)(request, timeout=3) as response:
             if response.status != 200:
                 return {"profile_id": profile_id, "status": "HTTP_ERROR",
                         "inference_invoked": False}

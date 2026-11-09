@@ -159,6 +159,23 @@ class ModelHubTests(unittest.TestCase):
         self.assertEqual("anthropic", resolved["provider"])
         self.assertNotIn("never-store-this", self.db.read_bytes().decode(errors="ignore"))
 
+    def test_local_metadata_preflight_disables_proxy_and_http_redirects(self):
+        import urllib.error
+        import urllib.request
+        with patch("urllib.request.build_opener") as build:
+            build.return_value.open.side_effect = urllib.error.HTTPError(
+                "http://127.0.0.1:11434/api/tags", 302,
+                "Redirect refused", {}, None)
+            result = model_hub.check_local_profile("local_primary")
+        self.assertEqual("UNAVAILABLE", result["status"])
+        handlers = build.call_args.args
+        self.assertTrue(any(isinstance(h, urllib.request.ProxyHandler)
+                            and h.proxies == {} for h in handlers))
+        no_redirect = next(h for h in handlers
+                           if isinstance(h, urllib.request.HTTPRedirectHandler))
+        self.assertIsNone(no_redirect.redirect_request(
+            None, None, 302, "Found", {}, "https://external.example/steal"))
+
     def test_metadata_check_only_uses_loopback_tags_and_never_generates(self):
         class Tags(io.BytesIO):
             status = 200
