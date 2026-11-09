@@ -89,6 +89,18 @@ def _mount_source(path):
     return "type=bind,source=" + source + ",target=/input,readonly"
 
 
+def _container_readable(stage):
+    """Permit non-root Docker UID to read a temporary signed source mount.
+
+    The exact allowlisted proposal is copied, never Owner data or .env.
+    TemporaryDirectory removes staging after execution.
+    """
+    for item in stage.rglob("*"):
+        builder._path_guard(item)
+        item.chmod(0o755 if item.is_dir() else 0o644)
+    stage.chmod(0o755)
+
+
 def verify(proposal_id, sha256, *, confirm_external_run=False):
     """Bounded local container build after separate explicit Owner approval."""
     if confirm_external_run is not True:
@@ -122,6 +134,7 @@ def verify(proposal_id, sha256, *, confirm_external_run=False):
             dest.parent.mkdir(parents=True, exist_ok=True)
             with dest.open("x", encoding="utf-8") as stream:
                 stream.write(item["content"])
+        _container_readable(stage)
         args = [
             docker, "-H", host, "run", "--rm", "--pull", "never",
             "--name", name, "--network", "none", "--read-only",

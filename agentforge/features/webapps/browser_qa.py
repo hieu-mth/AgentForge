@@ -172,6 +172,7 @@ def verify(proposal_id, sha256, *, confirm_external_run=False):
             dest.parent.mkdir(parents=True, exist_ok=True)
             with dest.open("x", encoding="utf-8") as f:
                 f.write(item["content"])
+        sandbox._container_readable(stage)
         name = "af-browser-" + uuid4().hex[:16]
         args = [docker, "-H", host, "run", "--rm", "--pull", "never",
                 "--name", name, "--network", "none", "--read-only",
