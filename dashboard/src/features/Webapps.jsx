@@ -9,7 +9,7 @@ const LABELS = {
 };
 const COLOR = /^#[0-9a-fA-F]{6}$/;
 
-export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,onVerify,onDecide,onValidate,busy}) {
+export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,onVerify,onDecide,onValidate,onRollback,busy}) {
   const [feedback,setFeedback]=useState('');
   const isCode=proposal?.ai_code_experimental===true;
   useEffect(()=>setFeedback(''),[proposal?.proposal_id]);
@@ -24,6 +24,8 @@ export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,onVerify
   const hasVersion=Boolean(comparison.revision);
   const fields=(comparison.changed_fields||[]).map(f=>LABELS[f]||f);
   const changed=(comparison.changed_files||[]);
+  const versions=comparison.versions||[];
+  const diffs=comparison.diffs||[];
   const fileItems=(proposal.files||[]).map(file=>({
     key:file.path,label:file.path+(changed.includes(file.path)?' · đã thay đổi':''),
     children:<pre className="source-text">{file.content}</pre>,
@@ -38,7 +40,7 @@ export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,onVerify
         <Alert type="warning" showIcon
           message="Đây là mã nguồn nháp, không phải ứng dụng đang chạy"
           description={isCode
-            ? 'Chế độ thử nghiệm: AI tự viết JSX/CSS. Kiểm tra tĩnh không chứng minh mã an toàn hoặc chạy đúng. Không mở preview hay thực thi trên host; cần QA Docker được duyệt riêng.'
+            ? 'AI tự viết JSX/CSS và có thể sửa từng file bằng feedback/phiên bản mới. Diff/cú pháp không chứng minh ứng dụng chạy đúng. Không chạy source trên host; cần QA cách ly riêng.'
             : 'AI chỉ tạo dữ liệu demo và cấu hình đã kiểm tra; React/Vite dùng mã nguồn được review. Không tự chạy npm, không thanh toán hoặc xuất bản.'}/>
         <Descriptions size="small" column={1} style={{marginTop:15}} items={[
           {key:'id',label:'Proposal',children:<Text code>{proposal.proposal_id}</Text>},
@@ -64,20 +66,36 @@ export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,onVerify
           <Space wrap style={{margin:'8px 0'}}>{fields.map(f=><Tag key={f}>{f}</Tag>)}</Space></>:
           <Alert type="error" message="Không có thay đổi hiển thị được xác minh"/>}
         <Paragraph type="secondary">File thay đổi: {changed.join(', ')||'Không có'}</Paragraph>
+        {diffs.length>0&&<Collapse size="small" items={diffs.map(d=>({
+          key:d.path,label:'Diff: '+d.path+(d.truncated?' (rút gọn)':''),
+          children:<pre className="source-text">{d.diff}</pre>,
+        }))}/>}
         <Text type="secondary">Phiên bản cũ được giữ nguyên; bản mới sử dụng thư mục riêng, không ghi đè.</Text>
+      </Card>}
+      {isCode&&versions.length>1&&<Card size="small" title="Lịch sử phiên bản & khôi phục">
+        <Alert type="info" showIcon style={{marginBottom:12}}
+          message="Khôi phục source thành proposal mới"
+          description="Chỉ được chọn tổ tiên đã xác minh SHA. Trước khi duyệt bạn sẽ xem mã nguồn phiên bản đích. Không gọi model, không ghi đè project cũ, không tự chạy hoặc deploy."/>
+        <Space orientation="vertical" style={{width:'100%'}}>
+          {versions.slice(1).map(version=><Space key={version.proposal_id} wrap>
+            <Text code>{version.project_slug} · {version.sha256.slice(0,12)}</Text>
+            <Button size="small" disabled={busy} onClick={()=>onRollback?.(proposal,version)}>
+              Xem source & tạo bản khôi phục</Button>
+          </Space>)}
+        </Space>
       </Card>}
       <Collapse items={fileItems} style={{width:'100%'}}/>
       <Card size="small" title={isCode?'Duyệt mã nguồn AI thử nghiệm':'Yêu cầu AI chỉnh sửa ứng dụng'}>
         <Paragraph type="secondary">{isCode
-          ? 'AI đã viết mã React tùy biến. Chưa hỗ trợ AI sửa mã JSX theo phiên bản trong chế độ này; không nên áp dụng mã khi chưa review từng file và kiểm thử cách ly.'
+          ? 'AI sẽ đọc source từ đúng proposal và SHA, chỉ đề xuất những file cần sửa. File cũ giữ nguyên; kết quả có diff và cần Owner phê duyệt Goal riêng. Chưa build/browser QA tự động.'
           : 'AI sẽ nhận dữ liệu phiên bản này và góp ý của bạn. Kết quả là proposal mới cần phê duyệt Goal và SHA. Phần logic React vẫn cố định trong mốc V4.1.'}</Paragraph>
-        {!isCode&&<Input.TextArea rows={4} maxLength={3000} showCount value={feedback}
+        <Input.TextArea rows={4} maxLength={3000} showCount value={feedback}
           onChange={e=>setFeedback(e.target.value)}
-          placeholder="Ví dụ: Đổi màu sang xanh navy, đổi tên gian hàng, bổ sung sản phẩm nhà cửa và giữ nguyên danh mục điện tử..."/>}
+          placeholder="Ví dụ: Đổi màu sang xanh navy, sửa giao diện giỏ hàng, giữ nguyên sản phẩm và các tương tác khác..."/>
         <Space wrap style={{display:'flex',justifyContent:'flex-end',marginTop:22}}>
           <Button loading={busy} onClick={()=>onValidate?.(proposal)}>Kiểm tra cú pháp</Button>
-          {!isCode&&<Button disabled={feedback.trim().length<10} loading={busy}
-            onClick={()=>onRevise(proposal,feedback)}>Tạo kế hoạch chỉnh sửa</Button>}
+          <Button disabled={feedback.trim().length<10} loading={busy}
+            onClick={()=>onRevise(proposal,feedback)}>Tạo kế hoạch chỉnh sửa</Button>
           <Button loading={busy} onClick={()=>onVerify(proposal)}>
             Lập Goal QA sandbox
           </Button>

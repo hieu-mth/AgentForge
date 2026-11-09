@@ -15,6 +15,8 @@ TEMPLATES = {
     "webapp.company": ("slug", "brief"),
     "webapp.revision": ("slug", "brief", "source_proposal_id",
                         "source_sha256", "revision_feedback"),
+    "webapp.source_revision": ("slug", "brief", "source_proposal_id",
+                               "source_sha256", "revision_feedback"),
     "webapp.qa": ("proposal_id", "sha256", "confirm_external_run"),
     "website.browser": ("slug",),
     "media.produce": ("slug", "title", "scenes"),
@@ -99,6 +101,18 @@ def _steps(template, inputs):
             if len(feedback) < 10:
                 raise brain_store.BrainError("Feedback must have 10+ characters")
         steps = [("webapp.create", dict(inputs))]
+    elif template == "webapp.source_revision":
+        from agentforge.webapp_builder import SLUG, PROPOSAL, SHA, _name, _text
+        _name(inputs["slug"], SLUG, "revision slug")
+        _text(inputs["brief"], "brief", 6000)
+        _name(inputs["source_proposal_id"], PROPOSAL, "source proposal id")
+        if (not isinstance(inputs["source_sha256"], str) or
+                not SHA.fullmatch(inputs["source_sha256"])):
+            raise brain_store.BrainError("Invalid AI React source SHA")
+        feedback = _text(inputs["revision_feedback"], "revision feedback", 3000)
+        if len(feedback) < 10:
+            raise brain_store.BrainError("Feedback must have 10+ characters")
+        steps = [("webapp.develop", dict(inputs))]
     elif template in {"webapp.develop", "webapp.company"}:
         from agentforge.webapp_builder import SLUG, _name, _text
         _name(inputs["slug"], SLUG, "slug")

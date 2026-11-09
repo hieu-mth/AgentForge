@@ -80,7 +80,8 @@ def audit(proposal_id, sha256):
     if not isinstance(lineage,dict):
         raise ValueError("QA_INVALID: V5 requires Architect lineage")
     arch = architect.read(lineage["architecture_id"],lineage["architecture_sha"])
-    if arch["project_slug"] != app["project_slug"]:
+    from agentforge.features.webapps.revisions import _chain
+    if arch["project_slug"] != _chain(app)[-1]["project_slug"]:
         raise PermissionError("QA_SOURCE_MISMATCH")
     ident = uuid4().hex
     from agentforge.features.webapps.syntax import check_files

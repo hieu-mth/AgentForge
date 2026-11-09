@@ -52,6 +52,12 @@ def dispatch(skill_id, payload):
         return propose(payload["slug"], payload["brief"])
     if skill_id == "webapp.develop":
         from agentforge.webapp_developer import propose
+        if "source_proposal_id" in payload:
+            return propose(
+                payload["slug"], payload["brief"],
+                source_proposal_id=payload["source_proposal_id"],
+                source_sha256=payload["source_sha256"],
+                revision_feedback=payload["revision_feedback"])
         if "architecture_id" in payload:
             return propose(payload["slug"], payload["brief"],
                            architecture_id=payload["architecture_id"],

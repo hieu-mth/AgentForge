@@ -173,7 +173,7 @@ def validate_code(raw, *, check_syntax=True):
     }
 
 
-CONTRACT_TEST = """import test from 'node:test';
+CONTRACT_TEST = r"""import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 test('React source contract',()=>{
@@ -219,11 +219,16 @@ def _compile(spec, slug, *, legacy=False):
     return [{"path": path, "content": files[path]} for path in sorted(files)]
 
 
-def _digest(slug, brief, title, summary, files, *, architecture=None):
+def _digest(slug, brief, title, summary, files, *, architecture=None,
+            revision=None, rollback_target=None):
     record = {"slug":slug,"brief":brief,"title":title,
               "summary":summary,"files":files}
     if architecture is not None:
         record["architecture"] = architecture
+    if revision is not None:
+        record["revision"] = revision
+    if rollback_target is not None:
+        record["rollback_target"] = rollback_target
     body = json.dumps(record, ensure_ascii=False,
                       sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
@@ -248,7 +253,18 @@ def provider(pid):
     raise ValueError("Unknown application proposal")
 
 
-def propose(slug, brief, *, architecture_id=None, architecture_sha=None):
+def propose(slug, brief, *, architecture_id=None, architecture_sha=None,
+            source_proposal_id=None, source_sha256=None, revision_feedback=None):
+    if any(v is not None for v in (
+            source_proposal_id, source_sha256, revision_feedback)):
+        if (architecture_id is not None or architecture_sha is not None
+                or not all(v is not None for v in (
+                    source_proposal_id, source_sha256, revision_feedback))):
+            raise ValueError("APP_REVISION_INVALID: source and feedback required")
+        from agentforge.features.webapps.revisions import propose_revision
+        return propose_revision(
+            slug, brief, source_proposal_id, source_sha256, revision_feedback)
+
     slug = base._name(slug, base.SLUG, "slug")
     brief = _text(brief, 6000, "brief")
     lineage = None
@@ -335,7 +351,10 @@ def propose(slug, brief, *, architecture_id=None, architecture_sha=None):
     }
 
 
-def _read_proposal(pid):
+def _read_proposal(pid, *, _seen=frozenset()):
+    if pid in _seen or len(_seen) >= 10:
+        raise ValueError("APP_REVISION_INVALID: circular/overlong lineage")
+    _seen = _seen | {pid}
     path = _proposal_path(pid)
     if not path.is_file() or path.stat().st_size > MAX_DOC_BYTES:
         raise ValueError("Invalid AI Developer proposal")
@@ -344,7 +363,9 @@ def _read_proposal(pid):
               "title", "summary", "format", "status", "files", "sha256",
               "execution_authorized", "spending_authorized",
               "deployment_authorized"}
-    if (not isinstance(doc, dict) or set(doc) not in (fields, fields | {"architecture"})
+    if (not isinstance(doc, dict) or
+            set(doc) - fields - {"architecture", "revision", "rollback_target"}
+            or fields - set(doc)
             or type(doc["schema_version"]) is not int
             or doc["schema_version"] != 1 or doc["proposal_id"] != pid
             or doc["status"] != "PROPOSED_NOT_APPLIED"
@@ -375,16 +396,20 @@ def _read_proposal(pid):
     if not isinstance(doc["sha256"], str) or not base.SHA.fullmatch(doc["sha256"]):
         raise ValueError("Invalid AI Developer digest")
     lineage = doc.get("architecture")
+    from agentforge.features.webapps import revisions
+    root_slug = revisions.validate_provenance(
+        doc, _seen=_seen, model_files=model_files)
     if lineage is not None:
         if not isinstance(lineage, dict) or set(lineage) != {
                 "architecture_id", "architecture_sha"}:
             raise ValueError("APP_ARCHITECTURE_INVALID")
         from agentforge.features.webapps.architect import read
         architecture = read(lineage["architecture_id"], lineage["architecture_sha"])
-        if architecture["project_slug"] != slug or architecture["brief"] != brief:
+        if architecture["project_slug"] != root_slug or architecture["brief"] != brief:
             raise PermissionError("APP_ARCHITECTURE_MISMATCH")
     if _digest(slug, brief, title, summary, files,
-               architecture=lineage) != doc["sha256"]:
+               architecture=lineage, revision=doc.get("revision"),
+               rollback_target=doc.get("rollback_target")) != doc["sha256"]:
         raise ValueError("AI Developer proposal SHA mismatch")
     # A hash alone is not an authentication signature; recompute the fixed
     # trusted scaffold to prevent a locally edited proposal from replacing
@@ -392,6 +417,17 @@ def _read_proposal(pid):
     if _compile(spec, slug, legacy="package-lock.json" not in paths) != files:
         raise ValueError("APP_CODE_INVALID: trusted project files were altered")
     return doc, path
+
+
+def compare(pid):
+    from agentforge.features.webapps.revisions import compare
+    return compare(pid)
+
+
+def rollback(pid, sha256, target_id, target_sha, *, confirm_restore=False):
+    from agentforge.features.webapps.revisions import propose_rollback
+    return propose_rollback(pid, sha256, target_id, target_sha,
+                            confirm_restore=confirm_restore)
 
 
 def inspect(pid):
