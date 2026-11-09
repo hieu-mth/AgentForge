@@ -22,7 +22,7 @@ export function Websites({data, showProposal}) {
   </Card>;
 }
 
-export function ProposalDrawer({proposal, onClose, onRevise, onApply, onDecide, busy}) {
+export function ProposalDrawer({proposal, onClose, onRevise, onApply, onDecide, onValidate, busy}) {
   const [device,setDevice]=useState('desktop');
   const [feedback,setFeedback]=useState('');
   useEffect(()=>{setFeedback('');setDevice('desktop');},[proposal?.proposal_id]);
@@ -76,6 +76,7 @@ export function ProposalDrawer({proposal, onClose, onRevise, onApply, onDecide, 
           onChange={e=>setFeedback(e.target.value)}
           placeholder="Ví dụ: Thay hero sang phong cách tạp chí, đổi bảng màu sang kem và nâu, thêm mục câu hỏi thường gặp, giữ nút tư vấn rõ trên điện thoại..."/>
         <Space wrap style={{marginTop:20,justifyContent:'flex-end',width:'100%'}}>
+          <Button loading={busy} onClick={()=>onValidate?.(proposal)}>Kiểm tra bản nháp</Button>
           <Button loading={busy} disabled={feedback.trim().length<10}
             onClick={()=>onRevise(proposal,feedback)}>Yêu cầu chỉnh sửa</Button>
           <Button type="primary" loading={busy} onClick={()=>onApply(proposal)}>
