@@ -1,4 +1,4 @@
-"""Legacy alias for agentforge.domains.websites.image_studio."""
+"""Legacy alias for agentforge.features.websites.image_studio."""
 import sys
-from agentforge.domains.websites import image_studio as _implementation
+from agentforge.features.websites import image_studio as _implementation
 sys.modules[__name__] = _implementation

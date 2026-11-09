@@ -1,6 +1,6 @@
 # Kế hoạch chuyển AgentForge về flat-root architecture
 
-**Trạng thái: M1 + M2 + M3 ĐÃ TRIỂN KHAI; M4a Growth + M4b Websites + M4c Webapps + M4d1 Media/Film feature-first ĐÃ CHUYỂN, M4d2 ComfyUI integration ĐÃ TRIỂN KHAI; M4 research/ops và M5 CHƯA THỰC THI.** Cấu trúc đã chốt tại [ADR-001](TARGET_STRUCTURE.md). Các dòng 'trước' ở bảng rủi ro là baseline trước migration, không phải đường dẫn hiện đang chạy.
+**Trạng thái: M1 + M2 + M3 ĐÃ TRIỂN KHAI; M4a Growth + M4b Websites + M4c Webapps + M4d1 Media/Film feature-first ĐÃ CHUYỂN, M4d2 ComfyUI integration ĐÃ TRIỂN KHAI; M4 research/ops còn review, M5 phase 1 đã chuyển 22 root aliases sang feature targets và thêm audit; xóa aliases M5 phase 2 chưa làm.** Cấu trúc đã chốt tại [ADR-001](TARGET_STRUCTURE.md). Các dòng 'trước' ở bảng rủi ro là baseline trước migration, không phải đường dẫn hiện đang chạy.
 
 ## Các rủi ro đã thấy trong source
 
@@ -70,7 +70,7 @@ src/agentforge/  ->  agentforge/
 
 **Exit gate:** một feature/một PR, không khác artifact SHA hoặc business behavior do việc đổi path.
 
-### M5 — Gỡ compatibility & dọn tài liệu
+### M5 — Chuyển root aliases trực tiếp vào features (phase 1 DONE); gỡ alias (phase 2 PENDING)
 
 - Xóa từng alias chỉ nếu grep/import graph + unit/CLI tests khẳng định không còn callers; với `sys.modules` alias phải kiểm tra monkeypatch và module identity.
 - Tài liệu [FILE_CATALOG.md](FILE_CATALOG.md) được tạo theo current baseline cần cập nhật trạng thái/đường dẫn sau các migration.
@@ -86,4 +86,4 @@ Owner yêu cầu kết quả đã kiểm thử được merge vào `main`. Dùng
 
 ## Việc cần làm khi chốt docs
 
-**Đã hoàn thành M1 + M2:** frontend ở `dashboard/`, Python package ở `agentforge/`. Lệnh chạy hiện hành tại [DEVELOPMENT.md](../DEVELOPMENT.md), đặc biệt cài lại `pip install -e ".[media]"` sau khi pull. M3 và M4a–M4d2 đã triển khai. Việc còn lại là review research/ops theo use case, M5 compatibility cleanup có bằng chứng và setup/operations M9.
+**Đã hoàn thành M1 + M2:** frontend ở `dashboard/`, Python package ở `agentforge/`. Lệnh chạy hiện hành tại [DEVELOPMENT.md](../DEVELOPMENT.md), đặc biệt cài lại `pip install -e ".[media]"` sau khi pull. M3 và M4a–M4d2 đã triển khai. Việc còn lại là review research/ops theo use case, M5 phase 2 cleanup chỉ sau caller audit/deprecation và setup/operations M9.

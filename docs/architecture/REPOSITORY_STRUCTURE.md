@@ -1,6 +1,6 @@
 # Kiến trúc repository AgentForge
 
-> **CURRENT IMPLEMENTATION** — M1/M2 đặt Python `agentforge/` và React `dashboard/` tại root; **M3 đã tách API thành `agentforge/api/`**. M8 đã chia code-level skill policies/handlers theo domain; M4a–M4d1 đã chuyển Growth, Websites, Webapps, shared Media và Film Studio sang `features/` với compatibility aliases; M4d2 đã tách ComfyUI HTTP transport; M4 research/ops và M5 alias cleanup **chưa thực hiện**. Xem [catalog từng file](FILE_CATALOG.md) và [kế hoạch migration](MIGRATION_PLAN.md).
+> **CURRENT IMPLEMENTATION** — M1/M2 đặt Python `agentforge/` và React `dashboard/` tại root; **M3 đã tách API thành `agentforge/api/`**. M8 đã chia code-level skill policies/handlers theo domain; M4a–M4d1 đã chuyển Growth, Websites, Webapps, shared Media và Film Studio sang `features/` với compatibility aliases; M4d2 đã tách ComfyUI HTTP transport; M4 research/ops và M5 phase 1 đã cập nhật 22 root aliases trỏ thẳng `features/` và có audit CI; chưa xóa aliases. Xem [catalog từng file](FILE_CATALOG.md) và [kế hoạch migration](MIGRATION_PLAN.md).
 
 **Current source of truth:** Python modular monolith, một React dashboard, local SQLite + workspace. Đã loại bỏ frontend HTML/CSS/JS V0 và Python dashboard V0.
 
@@ -46,7 +46,7 @@ AgentForge/
 └── workspace/                     # Owner products/films/proposals (gitignored)
 ~~~
 
-`agentforge/` là **backend Python đang chạy** ở root, còn `dashboard/` là frontend React; URL vẫn `/dashboard/`. Namespace Python `agentforge.*`, các CLI và SQLite paths không đổi về ý nghĩa. M3 đã hoàn thành cho API; M4a–M4d2 đã chuyển canonical business code, còn research/ops review và M5 aliases chưa làm. Những Python compatibility aliases root-level được giữ nếu còn CLI, imports hoặc tests phụ thuộc. Không tự tái tổ chức tất cả folder chỉ để đẹp cây thư mục.
+`agentforge/` là **backend Python đang chạy** ở root, còn `dashboard/` là frontend React; URL vẫn `/dashboard/`. Namespace Python `agentforge.*`, các CLI và SQLite paths không đổi về ý nghĩa. M3 đã hoàn thành cho API; M4a–M4d2 đã chuyển canonical business code, còn research/ops review và M5 aliases chưa làm. Những Python compatibility aliases root-level được giữ; M5 phase 1 trỏ trực tiếp canonical features, nhưng caller ngoài repo chưa được xác minh để xóa. Không tự tái tổ chức tất cả folder chỉ để đẹp cây thư mục.
 
 ## Model Hub
 

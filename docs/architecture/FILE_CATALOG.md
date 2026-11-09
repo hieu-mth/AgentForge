@@ -1,6 +1,6 @@
 # File Catalog — danh mục file AgentForge hiện tại
 
-**Source baseline:** sau M8 + M4a–M4d2 (09/11/2026). **199 file Python** (M0–M3 + Model Hub + M8 + M4a + M4b + M4c + M4d1 + M4d2); Dashboard đã có Model Hub tại `#/models`. M4a Growth, M4b Websites, M4c Webapps, M4d1 Media/Film Studio đã chuyển sang `features/`, đều giữ compatibility aliases; các domain khác và M5 chưa thực hiện. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
+**Source baseline:** sau M8 + M4a–M4d2 (09/11/2026). **199 file Python** (M0–M3 + Model Hub + M8 + M4a + M4b + M4c + M4d1 + M4d2); Dashboard đã có Model Hub tại `#/models`. M4a Growth, M4b Websites, M4c Webapps, M4d1 Media/Film Studio đã chuyển sang `features/`. M5 phase 1 đã chuyển 22 root compatibility aliases trỏ thẳng `features/` nhưng chưa xóa alias. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
 
 - [Cấu trúc đã được chốt](TARGET_STRUCTURE.md) — `agentforge/` và `dashboard/` ngay root, feature-first.
 - [Kế hoạch chuyển](MIGRATION_PLAN.md) — không phá paths/import/SQLite.
@@ -36,7 +36,7 @@
 | `brain_scheduler.py` | LOGIC | Lịch thực thi theo tick có kiểm soát và slot chống lặp. |
 | `brain_store.py` | COMPAT | Alias sang core/brain_store.py; tương thích SQLite paths. |
 | `browser_fix.py` | LOGIC | Đề xuất sửa website từ browser QA report; không tự apply. |
-| `browser_validation.py` | COMPAT | Alias sang domains/websites/browser_validation.py. |
+| `browser_validation.py` | COMPAT | Alias sang features/websites/browser_validation.py. |
 | `company_brain.py` | CLI | CLI cho lập kế hoạch Goal, phê duyệt và chạy Company Brain. |
 | `company_flow.py` | CLI | Bàn giao research report thành task review thủ công. |
 | `company_v2.py` | CLI | Tổng hợp scorecard vận hành; không chứng minh lợi nhuận. |
@@ -52,16 +52,16 @@
 | `evidence_registry.py` | LOGIC | Kiểm tra references trong index evidence local. |
 | `gateway.py` | LOGIC | Gateway file path/write an toàn dưới workspace. |
 | `goal_preflight.py` | LOGIC | Kiểm tra entity tham chiếu trước khi duyệt Goal; read-only. |
-| `growth_bundle.py` | COMPAT | Alias sang domains/growth/bundle.py. |
+| `growth_bundle.py` | COMPAT | Alias sang features/growth/bundle.py. |
 | `growth_pipeline.py` | CLI | CLI growth offline, report/reconcile và handoff. |
-| `growth_reports.py` | COMPAT | Alias sang domains/growth/reports.py. |
-| `growth_store.py` | COMPAT | Alias sang domains/growth/store.py. |
-| `image_studio_v24.py` | COMPAT | Alias sang domains/websites/image_studio.py. |
-| `media_assets.py` | COMPAT | Alias sang domains/media/assets.py. |
+| `growth_reports.py` | COMPAT | Alias sang features/growth/reports.py. |
+| `growth_store.py` | COMPAT | Alias sang features/growth/store.py. |
+| `image_studio_v24.py` | COMPAT | Alias sang features/websites/image_studio.py. |
+| `media_assets.py` | COMPAT | Alias sang features/media/assets.py. |
 | `media_pipeline.py` | CLI | CLI orchestrate S2 media demo và skill adapters. |
-| `media_quality.py` | COMPAT | Alias sang domains/media/quality.py. |
-| `media_render.py` | COMPAT | Alias sang domains/media/render.py. |
-| `media_workflow_v15.py` | COMPAT | Alias sang domains/media/workflow.py. |
+| `media_quality.py` | COMPAT | Alias sang features/media/quality.py. |
+| `media_render.py` | COMPAT | Alias sang features/media/render.py. |
+| `media_workflow_v15.py` | COMPAT | Alias sang features/media/workflow.py. |
 | `model.py` | AI | Gọi model qua provider Ollama/Anthropic; guard token/budget. |
 | `model_health.py` | COMPAT | Wrapper sang ai/model_health.py. |
 | `model_registry.py` | COMPAT | Wrapper sang ai/model_registry.py. |
@@ -72,10 +72,10 @@
 | `owner_review.py` | LOGIC | Owner review các candidates evidence; không tự đăng ký evidence. |
 | `pain_discovery.py` | LOGIC | Khám phá pain points từ tìm kiếm community, lưu đầu mối. |
 | `paths.py` | CORE | Định nghĩa repository root, data/workspace/UI paths và path guards. |
-| `product_builder.py` | COMPAT | Alias sang domains/websites/builder.py, giữ CLI/import. |
+| `product_builder.py` | COMPAT | Alias sang features/websites/builder.py, giữ CLI/import. |
 | `product_cycle.py` | LOGIC | Build → browser check → fix-proposal loop có checkpoint. |
-| `product_quality.py` | COMPAT | Alias sang domains/websites/quality.py. |
-| `product_revision.py` | COMPAT | Alias sang domains/websites/revision.py. |
+| `product_quality.py` | COMPAT | Alias sang features/websites/quality.py. |
+| `product_revision.py` | COMPAT | Alias sang features/websites/revision.py. |
 | `prompt_intake.py` | COMPAT | Wrapper sang ai/prompt_intake.py. |
 | `quality_v14.py` | LOGIC | Business profile, conservative QA và Owner review inbox. |
 | `research.py` | CLI | Research LangGraph, checkpoints và local reports. |
@@ -89,19 +89,19 @@
 | `task_history.py` | COMPAT | Alias sang core/task_history.py. |
 | `task_inbox.py` | LOGIC | Task inbox cho review thủ công, chỉ quản lý metadata. |
 | `tool_flow.py` | CLI | LangGraph flow demo write/read tool qua gateway. |
-| `web_assets.py` | COMPAT | Alias sang domains/websites/assets.py. |
-| `web_design_kit.py` | COMPAT | Alias sang domains/websites/design_kit.py. |
+| `web_assets.py` | COMPAT | Alias sang features/websites/assets.py. |
+| `web_design_kit.py` | COMPAT | Alias sang features/websites/design_kit.py. |
 | `web_design_v2.py` | CLI | Điều phối revision website theo design kit và QA. |
 | `web_tools.py` | LOGIC | Web search adapter DDGS, lọc response có giới hạn. |
-| `webapp_architect.py` | COMPAT | Facade sang domains/webapps/architect.py. |
-| `webapp_builder.py` | COMPAT | Alias sang domains/webapps/builder.py. |
-| `webapp_developer.py` | COMPAT | Alias CLI sang domains/webapps/developer.py. |
+| `webapp_architect.py` | COMPAT | Facade sang features/webapps/architect.py. |
+| `webapp_builder.py` | COMPAT | Alias sang features/webapps/builder.py. |
+| `webapp_developer.py` | COMPAT | Alias CLI sang features/webapps/developer.py. |
 | `webapp_feedback.py` | LOGIC | Mở Goal revision cho app template theo Owner feedback. |
-| `webapp_reviewer.py` | COMPAT | Facade sang domains/webapps/reviewer.py. |
-| `webapp_sandbox.py` | COMPAT | Alias CLI sang domains/webapps/sandbox.py. |
-| `webapp_static_qa.py` | COMPAT | Facade sang domains/webapps/static_qa.py. |
-| `website_feedback.py` | COMPAT | Facade sang domains/websites/feedback.py. |
-| `website_preview.py` | COMPAT | Facade sang domains/websites/preview.py. |
+| `webapp_reviewer.py` | COMPAT | Facade sang features/webapps/reviewer.py. |
+| `webapp_sandbox.py` | COMPAT | Alias CLI sang features/webapps/sandbox.py. |
+| `webapp_static_qa.py` | COMPAT | Facade sang features/webapps/static_qa.py. |
+| `website_feedback.py` | COMPAT | Facade sang features/websites/feedback.py. |
+| `website_preview.py` | COMPAT | Facade sang features/websites/preview.py. |
 | `worker_registry.py` | COMPAT | Wrapper sang ai/worker_registry.py. |
 | `workflow.py` | CLI | LangGraph workflow sample/checkpoint cũ, không phải dashboard entrypoint. |
 | `workflow_runner.py` | LOGIC | S1 bounded website quality/browser workflow với checkpoint. |

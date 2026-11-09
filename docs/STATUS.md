@@ -16,6 +16,7 @@ Các nhãn được dùng thống nhất:
 | Dashboard React + Owner session | IMPLEMENTED | `dashboard/`, `agentforge/api/server.py` | Không có multi-tenant/public hosting |
 | Model Hub & Task Routing | IMPLEMENTED (text), PARTIAL (media) | `agentforge/ai/model_hub.py`, `dashboard/src/features/Models.jsx` | Text routes đã nối; video/image config-only, không chứng minh GPU hay billing |
 | Task orchestration và approvals | IMPLEMENTED | `agentforge/core/`, `skills/` | Không tự động trao quyền tool cho AI |
+| M5 phase 1 compatibility audit | IMPLEMENTED (không xóa alias) | `scripts/compat_audit.py`, `tests/test_m5_compatibility.py` | 22 root aliases trỏ thẳng features; external callers chưa thể xác minh |
 | M9 Setup & Operations preflight | IMPLEMENTED (read-only) | `agentforge/ops/preflight.py`, `scripts/setup_windows.ps1`, Dashboard Vận hành | Không chứng minh model/GPU hoạt động, không cài dependency tự động |
 | M8 skill domain adapters | IMPLEMENTED (refactor) | `agentforge/core/skill_adapters/`, `tests/test_skill_adapters_m8.py` | Không phải runtime plugin động hay quyền mở rộng từ TOML |
 | M4a Growth feature-first | IMPLEMENTED (code migration) | `agentforge/features/growth/`, `tests/test_m4_growth_features.py` | Chưa tích hợp YouTube thực |

@@ -22,7 +22,8 @@ class ArchitectureFileCatalogTests(unittest.TestCase):
     def test_current_docs_explicitly_distinguish_approved_target_from_runtime(self):
         target = (ROOT / "docs" / "architecture" / "TARGET_STRUCTURE.md").read_text(encoding="utf-8")
         runtime = (ROOT / "docs" / "architecture" / "REPOSITORY_STRUCTURE.md").read_text(encoding="utf-8")
-        self.assertIn("CHƯA MIGRATE", target)
+        self.assertIn("M4 research/ops PENDING", target)
+        self.assertIn("M5 phase 2 PENDING", target)
         self.assertIn("CURRENT IMPLEMENTATION", runtime)
         self.assertIn("agentforge/", runtime)
         self.assertIn("dashboard/", target)

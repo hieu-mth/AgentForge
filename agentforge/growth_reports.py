@@ -1,4 +1,4 @@
-"""Legacy alias to agentforge.domains.growth.reports."""
+"""Legacy alias to agentforge.features.growth.reports."""
 import sys
-from agentforge.domains.growth import reports as _implementation
+from agentforge.features.growth import reports as _implementation
 sys.modules[__name__] = _implementation

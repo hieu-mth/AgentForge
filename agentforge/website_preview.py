@@ -1,5 +1,5 @@
-"""Compatibility shim. Canonical preview: agentforge.domains.websites.preview."""
-from agentforge.domains.websites.preview import (
+"""Compatibility shim. Canonical preview: agentforge.features.websites.preview."""
+from agentforge.features.websites.preview import (
     MAX_PREVIEW_BYTES, STYLESHEET, HEAD_END, STYLE_END, from_proposal,
 )
 

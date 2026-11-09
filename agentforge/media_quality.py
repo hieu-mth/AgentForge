@@ -1,4 +1,4 @@
-"""Legacy alias to agentforge.domains.media.quality."""
+"""Legacy alias to agentforge.features.media.quality."""
 import sys
-from agentforge.domains.media import quality as _implementation
+from agentforge.features.media import quality as _implementation
 sys.modules[__name__] = _implementation
