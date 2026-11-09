@@ -1,6 +1,6 @@
 # File Catalog — danh mục file AgentForge hiện tại
 
-**Source baseline:** sau M6 + M7 (09/11/2026). **195 file Python** (M0–M3 + Model Hub + M8 + M4a + M4b + M4c + M4d1); Dashboard đã có Model Hub tại `#/models`. M4a Growth, M4b Websites, M4c Webapps, M4d1 Media/Film Studio đã chuyển sang `features/`, đều giữ compatibility aliases; các domain khác và M5 chưa thực hiện. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
+**Source baseline:** sau M8 + M4a–M4d2 (09/11/2026). **197 file Python** (M0–M3 + Model Hub + M8 + M4a + M4b + M4c + M4d1 + M4d2); Dashboard đã có Model Hub tại `#/models`. M4a Growth, M4b Websites, M4c Webapps, M4d1 Media/Film Studio đã chuyển sang `features/`, đều giữ compatibility aliases; các domain khác và M5 chưa thực hiện. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
 
 - [Cấu trúc đã được chốt](TARGET_STRUCTURE.md) — `agentforge/` và `dashboard/` ngay root, feature-first.
 - [Kế hoạch chuyển](MIGRATION_PLAN.md) — không phá paths/import/SQLite.
@@ -16,7 +16,7 @@
 | **CLI** | Công cụ vận hành/demo theo lệnh, cần xem callers trước khi bỏ. |
 | **CONTRACT** | Module mô tả/kiểm tra hợp đồng cấu trúc, không tự chạy workflow. |
 
-**Tổng cộng: 195 file `.py`** (137 baseline + 15 M3 + 2 M6 + 6 M8 adapters + 5 M4a + 13 M4b + 9 M4c + 8 M4d1 feature modules). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
+**Tổng cộng: 197 file `.py`** (137 baseline + 15 M3 + 2 M6 + 6 M8 adapters + 5 M4a + 13 M4b + 9 M4c + 8 M4d1 + 2 M4d2 integration modules). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
 
 ## **Entrypoints và modules tại package root**
 
@@ -198,12 +198,12 @@
 | File hiện tại dưới `agentforge/` | Vai trò |
 | --- | --- |
 | `domains/media/__init__.py` | Package media hiện tại. |
-| `domains/media/assets.py` | Media asset manifest/paths và scene content. |
-| `domains/media/long_form.py` | Lập kế hoạch chapters/cast/shot, SHA; chưa render phim. |
-| `domains/media/motion_comfy.py` | Adapter ComfyUI motion shot theo quyền Owner, giới hạn GPU 12 GB. |
-| `domains/media/quality.py` | Đánh giá quality media artifacts theo rules. |
-| `domains/media/render.py` | TTS/FFmpeg render từ assets/captions; bounded local. |
-| `domains/media/workflow.py` | Orchestration cho pipeline media. |
+| `domains/media/assets.py` | COMPAT alias tới `features/media/assets.py`. |
+| `domains/media/long_form.py` | COMPAT alias tới `features/film_studio/long_form.py`. |
+| `domains/media/motion_comfy.py` | COMPAT alias tới `features/film_studio/motion_comfy.py`. |
+| `domains/media/quality.py` | COMPAT alias tới `features/media/quality.py`. |
+| `domains/media/render.py` | COMPAT alias tới `features/media/render.py`. |
+| `domains/media/workflow.py` | COMPAT alias tới `features/media/workflow.py`. |
 
 ## **Feature-first: `features/webapps/` (M4c)**
 
@@ -224,14 +224,14 @@
 | File hiện tại dưới `agentforge/` | Vai trò |
 | --- | --- |
 | `domains/webapps/__init__.py` | Package React WebApp. |
-| `domains/webapps/architect.py` | AI architect tạo brief có ID/SHA. |
-| `domains/webapps/builder.py` | Marketplace NovaMart proposal từ catalog data. |
-| `domains/webapps/developer.py` | AI React source proposal, chưa tự execute code. |
-| `domains/webapps/reviewer.py` | Reviewer advisory sau static QA, không auto-accept. |
-| `domains/webapps/sandbox.py` | Isolated Docker QA adapter (chưa xác minh trên máy Owner). |
-| `domains/webapps/static_qa.py` | Static checks source và SHA, không chạy browser. |
-| `domains/webapps/syntax.py` | Tree-sitter parse JSX/JS như dữ liệu, không execute. |
-| `domains/webapps/toolchain.py` | Reviewed/pinned React scaffold từ NovaMart. |
+| `domains/webapps/architect.py` | COMPAT alias tới `features/webapps/architect.py`. |
+| `domains/webapps/builder.py` | COMPAT alias tới `features/webapps/builder.py`. |
+| `domains/webapps/developer.py` | COMPAT alias tới `features/webapps/developer.py`. |
+| `domains/webapps/reviewer.py` | COMPAT alias tới `features/webapps/reviewer.py`. |
+| `domains/webapps/sandbox.py` | COMPAT alias tới `features/webapps/sandbox.py`. |
+| `domains/webapps/static_qa.py` | COMPAT alias tới `features/webapps/static_qa.py`. |
+| `domains/webapps/syntax.py` | COMPAT alias tới `features/webapps/syntax.py`. |
+| `domains/webapps/toolchain.py` | COMPAT alias tới `features/webapps/toolchain.py`. |
 
 ## **Feature-first: `features/websites/` (M4b)**
 
@@ -268,6 +268,13 @@
 | `domains/websites/revision.py` | COMPAT alias tới `features/websites/revision.py`. |
 | `domains/websites/revision_context.py` | COMPAT alias tới `features/websites/revision_context.py`. |
 | `domains/websites/structured_builder.py` | COMPAT alias tới `features/websites/structured_builder.py`. |
+
+## **Integrations: `integrations/` (M4d2)**
+
+| File hiện tại dưới `agentforge/` | Vai trò |
+| --- | --- |
+| `integrations/__init__.py` | Package HTTP/local provider adapters; không quyết định Owner approval. |
+| `integrations/comfyui.py` | Bounded localhost ComfyUI JSON transport; no proxy, no redirects, no retry. |
 
 ## **Storage: `storage/` và package marker**
 

@@ -17,6 +17,7 @@ LAYOUT = {
     "webapp_feature": "agentforge/features/webapps",
     "media_feature": "agentforge/features/media",
     "film_studio_feature": "agentforge/features/film_studio",
+    "comfyui_integration": "agentforge/integrations/comfyui.py",
     "storage": "agentforge/storage",
     "ui": "dashboard",
     "contracts": "skills",

@@ -10,7 +10,7 @@ Bối cảnh vận hành: Windows PowerShell, Python >=3.13, Node.js 22, React D
 
 ## 2. Những gì đã triển khai
 
-- Python backend `agentforge/`, domain/core/storage/ai; task/goal, SQLite, skill permissions, owner approvals.
+- Python backend `agentforge/`, `api/core/ai/features/integrations/storage`; task/goal, SQLite, skill permissions, Owner approvals. Canonical business code ở `features/` (M4a–M4d2).
 - Dashboard chính: `dashboard/` (React). `python -m agentforge --port 8780` chạy server; `/` redirect tới `/dashboard/`.
 - Website Builder dạng structured design + signed `site.json`, feedback chỉnh thiết kế; Marketplace NovaMart demo (không có checkout thật).
 - Experimental AI React Developer tạo đề xuất JSX/CSS; syntax validation và acceptance SHA, **chưa source revision**.
@@ -20,7 +20,7 @@ Bối cảnh vận hành: Windows PowerShell, Python >=3.13, Node.js 22, React D
 
 ## 3. Quyết định kiến trúc
 
-**Quyết định mới (09/11/2026):** Owner đã chốt structure đích `agentforge/` và `dashboard/` ngang cấp root, bên trong dùng `api/`, `core/`, `ai/`, `features/`, `integrations/`, `ops/`, `storage/`. **M1 chuyển frontend sang `dashboard/`, M2 chuyển Python sang `agentforge/`, M3 tách HTTP vào `agentforge/api/`.** Refactor features/integrations (M4) và alias cleanup (M5) chưa làm. [API contract](architecture/API_CONTRACT_V1.md) bảo vệ quyền Owner/CSRF/response. Xem [ADR](architecture/TARGET_STRUCTURE.md), [catalog từng file](architecture/FILE_CATALOG.md) và [migration plan](architecture/MIGRATION_PLAN.md).
+**Quyết định mới (09/11/2026):** Owner đã chốt structure đích `agentforge/` và `dashboard/` ngang cấp root, bên trong dùng `api/`, `core/`, `ai/`, `features/`, `integrations/`, `ops/`, `storage/`. **M1 chuyển frontend sang `dashboard/`, M2 chuyển Python sang `agentforge/`, M3 tách HTTP vào `agentforge/api/`.** M8 đã tách skill handlers theo domain; M4a–M4d2 đã chuyển Growth, Websites, Webapps, Media, Film Studio và ComfyUI HTTP transport vào `features/` + `integrations/`, còn research/ops review và M5 aliases chưa làm. [API contract](architecture/API_CONTRACT_V1.md) bảo vệ quyền Owner/CSRF/response. Xem [ADR](architecture/TARGET_STRUCTURE.md), [catalog từng file](architecture/FILE_CATALOG.md) và [migration plan](architecture/MIGRATION_PLAN.md).
 
 - Một frontend, một Python backend modular monolith. SQLite và workspace local.
 - Legacy dashboard static và `dashboard_v0.py` đã bị loại bỏ. `agentforge/` **không phải code cũ**.
