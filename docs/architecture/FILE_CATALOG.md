@@ -212,6 +212,7 @@
 | `features/webapps/__init__.py` | Canonical Webapp feature package. |
 | `features/webapps/architect.py` | Canonical implementation `architect`. |
 | `features/webapps/builder.py` | Canonical implementation `builder`. |
+| `features/webapps/revisions.py` | Wave 6 source-aware React edit, immutable lineage, bounded diff and ancestor rollback. |
 | `features/webapps/developer.py` | Canonical implementation `developer`. |
 | `features/webapps/reviewer.py` | Canonical implementation `reviewer`. |
 | `features/webapps/sandbox.py` | Canonical implementation `sandbox`. |
