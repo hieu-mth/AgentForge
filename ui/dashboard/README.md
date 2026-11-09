@@ -1,105 +1,35 @@
-# AgentForge React Dashboard
+# React Dashboard — only AgentForge frontend
 
-React 19 + Ant Design 6 + Vite 7. This is a **separate frontend application**,
-not a replacement for the Python runtime or SQLite databases. No CDN, public
-dashboard hosting or separate user authentication is introduced.
+The Vite-built React/Ant Design Dashboard at `/dashboard/` is the canonical
+Owner UI. The root `/` redirects to it; the old HTML/CSS/JS frontend was
+removed. The Python backend still owns the localhost session, CSRF, API
+permissions and SQLite/artifact state.
 
-## One-time build on Windows PowerShell
+## Windows
 
-Install Node.js 22 (or a version supported by this Vite release), then:
+```powershell
+cd D:\AgentForge
+npm.cmd ci --prefix ui/dashboard --ignore-scripts --no-audit --no-fund
+npm.cmd run build --prefix ui/dashboard
+.\.venv\Scripts\python.exe -m agentforge --port 8780
+```
 
-    cd D:\AgentForge
-    git pull --ff-only origin main
-    cd ui\dashboard
-    npm install
-    npm run build
-    cd ..\..
-    .\.venv\Scripts\python.exe -m agentforge.control_center_v1 --port 8780 --allow-external-tools
+Open **http://127.0.0.1:8780/dashboard/**, then log in with the Owner code
+printed by the server. For gated external tools, add
+`--allow-external-tools`; each sensitive action still needs approval.
 
-Browse:
+The optional development command is `npm.cmd run dev --prefix ui/dashboard`
+with the Python backend running. Never bind Vite or the Python server to the
+public network.
 
-- **New React UI**: http://127.0.0.1:8780/dashboard/
-- **Legacy fallback**: http://127.0.0.1:8780/
+- `src/App.jsx`: app shell, login, navigation and owner controls
+- `src/api.js`: same-origin cookie/CSRF API client
+- `src/features/`: workspace, projects, websites, review, operations
+- `src/components/`: shared UI and acceptance states
+- `src/navigation.js`: canonical route mapping
+- `tests/`: navigation, quota, permissions and acceptance tests
+- `dist/`: disposable gitignored trusted build output
 
-Both use the same Python session, Owner code, CSRF, Goal/Task records, and SHA
-approval gates. The built files live in \`ui/dashboard/dist/\` and are gitignored.
-A Python code update does not automatically install npm packages or rebuild
-React assets; run \`npm run build\` after pulling UI changes.
-
-## Development mode (optional)
-
-Keep the Python backend running at 127.0.0.1:8780 and run, in a second terminal:
-
-    cd D:\AgentForge\ui\dashboard
-    npm run dev
-
-Open http://127.0.0.1:5173/dashboard/. The Vite local proxy routes \`/api\`
-calls to the Python backend. **Do not bind Vite to 0.0.0.0** or expose the
-local Owner session to LAN/Public Internet.
-
-## Structure
-
-\`\`\`
-ui/dashboard/
-├── index.html
-├── package.json
-├── vite.config.js
-├── src/
-│   ├── App.jsx          Shell, authentication, API mutations, navigation
-│   ├── api.js           Cookie/CSRF same-origin client, no tokens in storage
-│   ├── components/
-│   │   └── shared.jsx  Status badges and presentation helpers
-│   ├── features/
-│   │   ├── Workspace.jsx  Prompt, plan and owner permission review
-│   │   ├── Websites.jsx   Website preview, feedback and SHA approval
-│   │   └── Operations.jsx  Overview, finance and read-only views
-│   ├── main.jsx        Ant Design theme + React root
-│   └── styles.css      Light responsive design system
-└── dist/               Generated only, gitignored
-\`\`\`
-
-The frontend is not allowed to authorize unrestricted skills. Approval,
-workflow permissions and financial restrictions remain server-side.
-
-## Current screens
-
-- **Giao việc**: natural-language intake; create and inspect a supervised plan
-- **Goals**: SHA approval, run/resume with explicit permission grants
-- **Tasks**: inspect task status and audit logs
-- **Websites**: desktop/mobile sandbox preview, SHA source, feedback revision
-  request, and explicit local apply
-- **Tổng quan**: status from existing V2 pilot
-- **Team / Channels / Finance / Settings**: read-only, sourced from existing
-  API records, do not fabricate OAuth or provider costs
-- **Projects & Files**: route back to original owner console for now
-
-Advanced workflow screens still live at the legacy \`/\` URL; migrating them
-will be separate focused PRs. It is intentional that this first React slice
-does not claim parity with all 24 legacy skills.
-
-## Security
-
-- HTTP server binds **127.0.0.1** and serves Vite-built static files only.
-- \`/api/*\` requires the same HttpOnly owner cookie/CSRF as the legacy UI.
-- Untrusted AI-produced website preview is rendered in an iframe with
-  \`sandbox=""\`, no script/same-origin access; it is not a deployed website.
-- React app cannot read Owner code from any saved browser storage.
-- \`ui/dashboard/dist/\` is safe to regenerate; \`data/\` and \`workspace/\`
-  are not build caches and must never be deleted as part of an upgrade.
-
-## Acceptance
-
-Windows CI builds the React app and runs Python static route tests.
-End-user validation is still required on the local Windows machine for modal
-interaction, responsive layout, actual preview output and real model calls.
-
-## V3.3 Backups & Cleanup
-
-The React **Backups & Cleanup** navigation page now shows an authenticated
-bounded inventory and verified backup receipts. Select one artifact, inspect
-its tree SHA, confirm a local backup and separately verify the returned ZIP.
-Quarantine/restore buttons are locked unless Operations is PAUSED and the
-exact backup was verified in the current owner session. No permanent deletion
-and no automatic cleanup. See
-[Windows acceptance](../../docs/milestones/V33_OWNER_ACCEPTANCE.md).
-
+Do not execute generated React source in the Owner browser origin. Interactive
+generated-source preview remains disabled until independently verified
+isolation and QA are available.

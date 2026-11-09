@@ -90,15 +90,14 @@ class TestControlCenterV1(unittest.TestCase):
                 "synthetic": False,
             }})
 
-    def test_ui_assets_without_credentials_but_api_requires_session(self):
-        for route, expected in (
-            ("/", "AgentForge"), ("/app.js", "strict"),
-            ("/app.css", "--nav")):
-            code, body, headers = self.req("GET", route)
-            self.assertEqual(code, 200)
-            self.assertIn(expected, body)
-            self.assertIn("default-src 'none'", headers["Content-Security-Policy"])
-            self.assertEqual(headers["Cache-Control"], "no-store")
+    def test_react_dashboard_is_canonical_and_api_requires_session(self):
+        code, _, headers = self.req("GET", "/")
+        self.assertEqual(code, 302)
+        self.assertEqual(headers["Location"], "/dashboard/")
+        self.assertEqual(headers["Cache-Control"], "no-store")
+        for path in ("/app.js", "/app.css", "/app.html"):
+            code, _, _ = self.req("GET", path)
+            self.assertEqual(code, 404)
         code, _, _ = self.req("GET", "/api/bootstrap")
         self.assertEqual(code, 401)
         code, _, _ = self.req("GET", "/api/goals/" + "a" * 32)
