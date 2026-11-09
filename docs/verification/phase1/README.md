@@ -1,3 +1,5 @@
+> **HISTORICAL VERIFICATION SNAPSHOT — 09/11/2026.** Những test/commit dưới đây chỉ thuộc Phase 1. Không suy diễn thành GPU/video runtime, Docker isolation hay production acceptance ở hiện tại. Xem [STATUS.md](../../STATUS.md) để biết tiến độ mới.
+
 # Phase 1 — Reliability & Acceptance
 
 Ngày: 09/11/2026 (Asia/Bangkok). Base: `6fbaa47026ba2788ea8127bef8abe17a5f2a9bb3`, branch `main`. Không push; không inference trả phí, deploy, destructive migration, đổi secrets hoặc chỉnh runtime data của Owner. Thư mục audit chưa commit từ lượt trước được giữ nguyên, chỉ roadmap được bổ sung trạng thái triển khai.
@@ -57,7 +59,7 @@ Phase 1 chưa triển khai browser runner cho React AI: BROWSER_VALID vẫn thi�
 
 Edge smoke dashboard kiểm tra production boot và render 4 acceptance states với **API fixtures**, không giả là authenticated end-to-end acceptance. Python HTTP tests kiểm tra session/CSRF/source inspection/decisions trên server local thật. NovaMart Edge kiểm tra search/detail/cart/filter/mobile/offline. Ảnh: [acceptance workspace](acceptance-workspace.png).
 
-Lần full suite đầu có hai regression thật (sidecar inventory và coupling execution với missing artifact) đã sửa code, giữ test cũ. Một request HTTP guard từng bị WinError 10053; focused test và full suite cuối đều PASS, không sửa test để bỏ guard. Log lần đầu giữ tại python-full.log. Build logs có PowerShell NativeCommandError wrappers cho npm/pip stderr notices; exit codes cuối đều được thu riêng và output build hoàn tất, không coi notice là lỗi hoặc giấu failure.
+Lần full suite đầu có hai regression thật (sidecar inventory và coupling execution với missing artifact) đã sửa code, giữ test cũ. Một request HTTP guard từng bị WinError 10053; focused test và full suite cuối đều PASS, không sửa test để bỏ guard. Log lần đầu có lỗi được giữ trong Git history (xem [archive index](../../archive/README.md)); bản cuối PASS vẫn ở python-final.log. Build logs có PowerShell NativeCommandError wrappers cho npm/pip stderr notices; exit codes cuối đều được thu riêng và output build hoàn tất, không coi notice là lỗi hoặc giấu failure.
 
 ## Tái lập
 
