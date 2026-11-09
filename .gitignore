@@ -18,3 +18,11 @@ models/voices/
 ui/dashboard/node_modules/
 ui/dashboard/dist/
 ui/dashboard/.vite/
+
+# Additional local front-end dependencies and generated tooling
+examples/novamart/node_modules/
+examples/novamart/.vite/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
