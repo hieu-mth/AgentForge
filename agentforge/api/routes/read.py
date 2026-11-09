@@ -59,6 +59,9 @@ def dispatch(self, route):
     if route == "/api/ops/preflight":
         from agentforge.ops.preflight import inspect
         return self._reply(200, inspect())
+    if route == "/api/ops/acceptance":
+        from agentforge.ops.base_acceptance import inspect
+        return self._reply(200, inspect())
     if route == "/api/ops/health":
         from agentforge import ops_doctor
         source_paths = {

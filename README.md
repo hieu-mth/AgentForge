@@ -37,7 +37,7 @@ Nếu báo không tìm thấy `.venv\Scripts\python.exe`, chạy `py -0p` để 
 | **AI Film Studio** | Lập kế hoạch phim dài và adapter gửi shot ComfyUI theo quyền Owner | **Chưa kiểm chứng render video động thật trên GPU 12 GB**, chưa tự dựng phim dài |
 | **Media / Growth** | Ảnh tĩnh, SRT, TTS tùy chọn, FFmpeg MP4, gói bàn giao | YouTube upload vẫn thủ công; không có doanh thu tự xác minh |
 
-Chi tiết và định nghĩa trạng thái: **[Current Status](docs/STATUS.md)**.
+Chi tiết và định nghĩa trạng thái: **[Current Status](docs/STATUS.md)**. Base V1 technical readiness: [Wave 5 Owner acceptance](docs/verification/base_v1/README.md); CI PASS không có nghĩa máy/model thật đã nghiệm thu.
 
 ## Điều hướng tài liệu
 
@@ -51,7 +51,7 @@ Chi tiết và định nghĩa trạng thái: **[Current Status](docs/STATUS.md)*
 - **[Compatibility M5](docs/architecture/COMPATIBILITY_POLICY.md)** — root aliases tới features và quy tắc cleanup an toàn.
 - **[API contract M0/M3](docs/architecture/API_CONTRACT_V1.md)** — Owner login, CSRF, routes và compatibility.
 - **[Cấu trúc đã chốt (M1–M4)](docs/architecture/TARGET_STRUCTURE.md)** — Python/React ở root, các feature canonical đã chuyển.
-- **[Giải thích từng file Python/React](docs/architecture/FILE_CATALOG.md)** — inventory 197 module Python và Dashboard.
+- **[Giải thích từng file Python/React](docs/architecture/FILE_CATALOG.md)** — inventory 200 module Python và Dashboard.
 - **[Templates](templates/README.md)** và **[Examples](examples/README.md)** — phân biệt template runtime với file JSON mẫu.
 - **[AI Film Studio 12 GB](docs/architecture/FILM_MOTION_12GB_PILOT.md)** — điều kiện cần trước khi tạo clip thật.
 - **[Bằng chứng Phase 1](docs/verification/phase1/README.md)** — snapshot kiểm thử, không phải trạng thái live.

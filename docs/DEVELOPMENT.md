@@ -21,6 +21,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1 
 
 Dashboard `Cài đặt → Vận hành` có bảng kiểm tra local từ `/api/ops/preflight` và `/api/ops/health`. Đây là kết quả đọc-only và cần Owner login; nó không tự sửa lỗi.
 
+## 0b. Nghiệm thu Base V1 (Đợt 5)
+
+```powershell
+.\.venv\Scripts\python.exe -B -m agentforge.ops.base_acceptance
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\agentforge_acceptance_windows.ps1 -RunContractTests
+```
+
+Các lệnh này kiểm tra local readiness và chạy **trusted fixture tests**; không chứng minh model/GPU thật. Sau khi Owner đồng ý và có database cần backup, tùy chọn `-CreateBackup -StageRestore` (ZIP và staging **không mã hóa**, giữ lại để Owner đối chiếu, không tự ghi đè dữ liệu). Xem [checklist nghiệm thu thực tế](verification/base_v1/README.md).
+
 ## 1. Chuẩn bị
 
 - Python **3.13+**: chạy `py -0p` để xác minh.
