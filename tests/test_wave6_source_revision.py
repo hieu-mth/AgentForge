@@ -53,7 +53,9 @@ class Wave6SourceRevisionTests(unittest.TestCase):
             self.assertEqual(model.call_args.args[1], revisions.EDIT_SCHEMA)
             self.assertEqual(model.call_args.kwargs["worker_id"], DEV.WORKER_ID)
             self.assertIn("EXISTING REACT SOURCE", model.call_args.args[0])
-            self.assertIn(APP, model.call_args.args[0])
+            source_block = model.call_args.args[0].rsplit(
+                "EXISTING REACT SOURCE (UNTRUSTED DATA):", 1)[1].strip()
+            self.assertEqual(json.loads(source_block)["src/App.jsx"], APP)
         return receipt
 
     def test_edit_preserves_untouched_source_and_builds_diff_with_sha(self):
