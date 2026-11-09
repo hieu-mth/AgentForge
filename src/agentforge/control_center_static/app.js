@@ -305,3 +305,52 @@ function renderGoals(){
  const dataControl='<div class="form-field" id="goal-dataset-control"><label for="goal-dataset-pick">Dataset từ Intelligence</label>'+
   (datasets.length?'<select id="goal-dataset-pick">'+options+'</select>':
     '<p class="small muted">Chưa có dataset. Tạo/import dữ liệu tại Intelligence trước khi lập Goal phân tích.</p>')+'</div>';
+ const form='<form id="goal-form"><div class="form-field"><label for="goal-title">Tên mục tiêu</label>'+
+ '<input id="goal-title" required minlength="3" maxlength="160" value="Review campaign" /></div>'+
+ '<div class="form-field"><label for="goal-template">Workflow có sẵn</label>'+
+ '<select id="goal-template">'+templateOptions+'</select></div>'+dataControl+
+ '<div class="form-field"><label for="goal-json">Đầu vào · JSON</label>'+
+ '<textarea id="goal-json" rows="5" spellcheck="false">'+esc(JSON.stringify({dataset:defaultDataset},null,2))+'</textarea></div>'+
+ '<div class="form-row"><div class="form-field"><label for="goal-model-cap">Max model calls (ước tính)</label>'+
+ '<input id="goal-model-cap" type="number" min="0" max="3" value="0"></div>'+
+ '<div class="form-field"><label for="goal-process-cap">Max external process runs</label>'+
+ '<input id="goal-process-cap" type="number" min="0" max="3" value="0"></div></div>'+
+ '<div class="callout">Đề xuất không tự thực thi. Bạn phải xem kế hoạch, đối chiếu SHA rồi duyệt. Các thao tác ghi hoặc external tiếp tục yêu cầu grant riêng.</div>'+
+ '<div class="form-actions"><button type="button" class="btn btn-outline" data-preflight-goal>Kiểm tra dữ liệu</button>'+
+ '<button type="submit" class="btn btn-primary">Tạo kế hoạch</button></div>'+
+ '<p class="small muted" id="goal-preflight-status" role="status" aria-live="polite">Dữ liệu sẽ được kiểm tra lại trước khi duyệt/chạy.</p></form>';
+ const details=state.goal?renderGoalDetail():'<div class="empty-state"><strong>Chọn một Goal</strong>Xem SHA, các bước thực thi và phê duyệt ngay tại đây.</div>';
+ return header("COMPANY BRAIN","Goals & Phê duyệt",
+  "Tạo mục tiêu có giới hạn, kiểm tra từng bước và chỉ cấp quyền khi cần.")+
+ '<div class="split">'+card("Tạo mục tiêu",form)+
+ card("Kế hoạch & quyền hạn",'<div id="goal-detail" class="details">'+details+'</div>')+
+ '</div><div class="section">'+card("Danh sách mục tiêu",
+ table(["GOAL ID","MỤC TIÊU","TEMPLATE","TRẠNG THÁI","BƯỚC"],goalRows()))+'</div>';
+}
+function renderGoalDetail(){
+ const g=state.goal;
+ if(!g)return "";
+ const stepRows=(g.plan||[]).map((step,i)=>{
+  const executed=(g.step_runs||[]).find(x=>x.step_index===i);
+  const childTask=executed?.child_task_id?
+   '<button type="button" class="btn btn-outline btn-small" data-detail-task="'+
+    esc(executed.child_task_id)+'">Xem kết quả / lỗi</button>':"";
+  return '<li class="step"><span class="step-num">'+(i+1)+'</span><div class="step-text"><strong>'+
+   esc(step.skill_id)+'</strong><small>'+esc(step.worker_id)+' · '+
+   esc((step.required_permissions||[]).join(", ")||"read_only")+
+   '</small>'+childTask+'</div>'+badge(executed?executed.status:"NOT_STARTED")+'</li>';
+ }).join("");
+ const possible=g.status==="APPROVED"||g.status==="WAITING_APPROVAL";
+ const action=g.status==="APPROVED"?"run":"resume";
+ const grantChecks=["workspace.write","workspace.propose","model.invoke","network.search",
+                    "network.read","browser.run","process.run"]
+   .map(x=>'<label class="check-row"><input type="checkbox" name="grant" value="'+esc(x)+
+   '"><span>'+esc(x)+'</span></label>').join("");
+ const permissions=possible?
+  '<div class="callout warning">Các quyền dưới đây chỉ áp dụng cho lần chạy này. Quyền external cần server khởi động với --allow-external-tools.</div>'+
+  '<div class="permissions">'+grantChecks+'</div>'+
+  '<div class="permissions">'+
+  '<label class="check-row"><input type="checkbox" id="confirm-model">Cho phép gọi model</label>'+
+  '<label class="check-row"><input type="checkbox" id="confirm-browser">Cho phép browser</label>'+
+  '<label class="check-row"><input type="checkbox" id="confirm-process">Cho phép process/FFmpeg</label></div>'+
+  '<div class="form-actions"><button class="btn btn-primary" data-'+action+'-goal="'+
