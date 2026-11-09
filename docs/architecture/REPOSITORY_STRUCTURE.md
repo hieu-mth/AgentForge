@@ -1,6 +1,6 @@
 # Kiến trúc repository AgentForge
 
-> **CURRENT IMPLEMENTATION** — M1/M2 đặt Python `agentforge/` và React `dashboard/` tại root; **M3 đã tách API thành `agentforge/api/`**. M8 đã chia code-level skill policies/handlers theo domain; M4a đã chuyển Growth sang `features/growth/` và giữ aliases ở `domains/growth/`; M4d và M5 **chưa thực hiện**. Xem [catalog từng file](FILE_CATALOG.md) và [kế hoạch migration](MIGRATION_PLAN.md).
+> **CURRENT IMPLEMENTATION** — M1/M2 đặt Python `agentforge/` và React `dashboard/` tại root; **M3 đã tách API thành `agentforge/api/`**. M8 đã chia code-level skill policies/handlers theo domain; M4a đã chuyển Growth sang `features/growth/` và giữ aliases ở `domains/growth/`; M4d1 đã chuyển Media/Film sang `features/` (ComfyUI transport còn trong feature); M4d2 integration và M5 **chưa thực hiện**. Xem [catalog từng file](FILE_CATALOG.md) và [kế hoạch migration](MIGRATION_PLAN.md).
 
 **Current source of truth:** Python modular monolith, một React dashboard, local SQLite + workspace. Đã loại bỏ frontend HTML/CSS/JS V0 và Python dashboard V0.
 
@@ -22,11 +22,13 @@ AgentForge/
 │   ├── features/growth/           # M4a canonical campaign, reports, manual handoff
 │   ├── features/websites/         # M4b canonical website design/proposals/revisions/QA
 │   ├── features/webapps/          # M4c canonical React proposals, syntax, sandbox adapter
+│   ├── features/media/            # M4d1 canonical assets/render/QA/workflow
+│   ├── features/film_studio/      # M4d1 canonical film plan and Owner motion pilot
 │   ├── domains/
 │   │   ├── growth/                # COMPAT aliases sang features/growth
 │   │   ├── websites/              # COMPAT aliases sang features/websites
 │   │   ├── webapps/               # COMPAT aliases sang features/webapps
-│   │   ├── media/                 # image/SRT/FFmpeg + film planner/motion ComfyUI
+│   │   ├── media/                 # COMPAT aliases sang features/media và film_studio
 │   │   └── growth/                # demo campaigns, offline handoff
 │   ├── storage/                   # storage and retention logic
 │   └── paths.py                   # local root and path guards

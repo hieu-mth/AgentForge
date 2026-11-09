@@ -1,6 +1,6 @@
 # File Catalog — danh mục file AgentForge hiện tại
 
-**Source baseline:** sau M6 + M7 (09/11/2026). **187 file Python** (M0–M3 + Model Hub + M8 + M4a + M4b + M4c); Dashboard đã có Model Hub tại `#/models`. M4a Growth, M4b Websites và M4c Webapps đã chuyển sang `features/`, đều giữ compatibility aliases; các domain khác và M5 chưa thực hiện. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
+**Source baseline:** sau M6 + M7 (09/11/2026). **195 file Python** (M0–M3 + Model Hub + M8 + M4a + M4b + M4c + M4d1); Dashboard đã có Model Hub tại `#/models`. M4a Growth, M4b Websites, M4c Webapps, M4d1 Media/Film Studio đã chuyển sang `features/`, đều giữ compatibility aliases; các domain khác và M5 chưa thực hiện. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
 
 - [Cấu trúc đã được chốt](TARGET_STRUCTURE.md) — `agentforge/` và `dashboard/` ngay root, feature-first.
 - [Kế hoạch chuyển](MIGRATION_PLAN.md) — không phá paths/import/SQLite.
@@ -16,7 +16,7 @@
 | **CLI** | Công cụ vận hành/demo theo lệnh, cần xem callers trước khi bỏ. |
 | **CONTRACT** | Module mô tả/kiểm tra hợp đồng cấu trúc, không tự chạy workflow. |
 
-**Tổng cộng: 187 file `.py`** (137 baseline + 15 M3 + 2 M6 + 6 M8 adapters + 5 M4a + 13 M4b + 9 M4c feature modules). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
+**Tổng cộng: 195 file `.py`** (137 baseline + 15 M3 + 2 M6 + 6 M8 adapters + 5 M4a + 13 M4b + 9 M4c + 8 M4d1 feature modules). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
 
 ## **Entrypoints và modules tại package root**
 
@@ -180,7 +180,20 @@
 | `domains/growth/reports.py` | COMPAT alias tới `features/growth/reports.py`. |
 | `domains/growth/store.py` | COMPAT alias tới `features/growth/store.py`. |
 
-## **Domains: `domains/media/`**
+## **Feature-first: `features/media/` + `features/film_studio/` (M4d1)**
+
+| File hiện tại dưới `agentforge/` | Vai trò |
+| --- | --- |
+| `features/media/__init__.py` | Package shared media feature. |
+| `features/film_studio/__init__.py` | Package phim AI planning, Owner-gated motion. |
+| `features/media/assets.py` | Canonical `media` implementation cho `assets`. |
+| `features/media/quality.py` | Canonical `media` implementation cho `quality`. |
+| `features/media/render.py` | Canonical `media` implementation cho `render`. |
+| `features/media/workflow.py` | Canonical `media` implementation cho `workflow`. |
+| `features/film_studio/long_form.py` | Canonical `film_studio` implementation cho `long_form`. |
+| `features/film_studio/motion_comfy.py` | Canonical `film_studio` implementation cho `motion_comfy`. |
+
+## **Domains: `domains/media/` (COMPAT)**
 
 | File hiện tại dưới `agentforge/` | Vai trò |
 | --- | --- |
