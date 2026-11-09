@@ -480,6 +480,8 @@ def _execute(task_id, skill_id, payload, *, grants, confirm_model_call,
     try:
         result = _dispatch(skill_id, payload)
         registry.validate_payload(registry.load_skill(skill_id), result, direction="output")
+        from agentforge.core import artifact_acceptance
+        artifact_acceptance.observe(skill_id, result, db_path=db_path)
         history.transition(task_id, "SUCCEEDED", result=result, db_path=db_path)
         return {"task_id": task_id, "skill_id": skill_id,
                 "status": "SUCCEEDED", "executed": True, "result": result}
