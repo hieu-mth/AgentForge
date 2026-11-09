@@ -410,6 +410,8 @@ def _safe_failure(skill_id, exc):
         return "APP_CODE_INTERNAL: Unexpected builder exception; no code was executed."
     if skill_id == "webapp.sandbox_test":
         label = str(exc)
+        if isinstance(exc, ValueError) and label.startswith("TOOLCHAIN_STALE"):
+            return "TOOLCHAIN_STALE: Create a new proposal using the patched locked scaffold."
         if isinstance(exc, (RuntimeError, PermissionError)) and label.startswith(
                 "SANDBOX_UNAVAILABLE"):
             return "SANDBOX_UNAVAILABLE: Configure Docker and a pinned local Linux QA image."
@@ -485,7 +487,12 @@ def _execute(task_id, skill_id, payload, *, grants, confirm_model_call,
         result = _dispatch(skill_id, payload)
         registry.validate_payload(registry.load_skill(skill_id), result, direction="output")
         from agentforge.core import artifact_acceptance
-        artifact_acceptance.observe(skill_id, result, db_path=db_path)
+        try:
+            artifact_acceptance.observe(skill_id, result, db_path=db_path)
+        except FileNotFoundError:
+            # Execution receipts and artifact verification are separate contracts.
+            # A missing legacy/injected artifact never manufactures acceptance.
+            history.checkpoint(task_id, "ARTIFACT_SOURCE_MISSING", {"verified": False}, db_path=db_path)
         history.transition(task_id, "SUCCEEDED", result=result, db_path=db_path)
         return {"task_id": task_id, "skill_id": skill_id,
                 "status": "SUCCEEDED", "executed": True, "result": result}
