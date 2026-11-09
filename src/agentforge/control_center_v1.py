@@ -822,3 +822,83 @@ class _Handler(BaseHTTPRequestHandler):
                     route.removeprefix("/api/growth/"),
                     db_path=self.server.growth_db_path))
             return self._blocked(404, "not_found")
+        except (ValueError, KeyError, PermissionError, TypeError, FileNotFoundError):
+            return self._blocked(404, "not_found")
+
+    def _read_json(self):
+        if self.headers.get("Content-Type", "").lower() != "application/json":
+            raise ValueError("Content-Type must be application/json")
+        length_text = self.headers.get("Content-Length", "")
+        if not length_text.isdecimal():
+            raise ValueError("Content-Length required")
+        length = int(length_text)
+        if not 2 <= length <= MAX_BODY:
+            raise ValueError("Request must be 2–8192 bytes")
+        raw = self.rfile.read(length)
+        if len(raw) != length:
+            raise ValueError("Incomplete request")
+        data = json.loads(raw.decode("utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("JSON object required")
+        return data
+
+    def do_POST(self):
+        if not self._host_ok():
+            return self._blocked(error="invalid_host")
+        origin = self.headers.get("Origin")
+        if origin != self._origin():
+            return self._blocked(error="invalid_origin")
+        if self.headers.get("Sec-Fetch-Site", "same-origin") not in {
+                "same-origin", "none"}:
+            return self._blocked(error="invalid_fetch_site")
+        path = urlsplit(self.path).path
+        try:
+            data = self._read_json()
+        except (UnicodeError, json.JSONDecodeError, ValueError):
+            return self._blocked(400, "bad_json")
+        if path == "/api/login":
+            code = data.get("code")
+            if not isinstance(code, str) or len(code) > 128:
+                return self._blocked(401, "invalid_credentials")
+            with self.server.auth_lock:
+                now = time.monotonic()
+                self.server.failed_logins = [
+                    at for at in self.server.failed_logins if now - at < 60]
+                if len(self.server.failed_logins) >= 5:
+                    return self._blocked(429, "login_rate_limited")
+                if not hmac.compare_digest(code, self.server.owner_code):
+                    self.server.failed_logins.append(now)
+                    return self._blocked(401, "invalid_credentials")
+                session_id = secrets.token_urlsafe(32)
+                csrf = secrets.token_urlsafe(32)
+                self.server.sessions[session_id] = {
+                    "csrf": csrf, "expires": now + SESSION_SECONDS}
+            return self._reply(200, {"status": "AUTHENTICATED", "csrf": csrf},
+                               headers=(("Set-Cookie", f"{COOKIE}={session_id}; "
+                                         "HttpOnly; SameSite=Strict; Path=/; "
+                                         f"Max-Age={SESSION_SECONDS}"),))
+        session = self._session()
+        if session is None:
+            return self._blocked(401, "authentication_required")
+        header = self.headers.get("X-CSRF-Token", "")
+        if not hmac.compare_digest(header, session["csrf"]):
+            return self._blocked(403, "invalid_csrf")
+        if path == "/api/logout":
+            with self.server.auth_lock:
+                jar = cookies.SimpleCookie()
+                jar.load(self.headers.get("Cookie", ""))
+                item = jar.get(COOKIE)
+                if item:
+                    self.server.sessions.pop(item.value, None)
+            return self._reply(200, {"status": "LOGGED_OUT"},
+                               headers=(("Set-Cookie", f"{COOKIE}=; "
+                                         "HttpOnly; SameSite=Strict; Path=/; Max-Age=0"),))
+        try:
+            output = _owner_action(self.server, path, data, session)
+            return self._reply(200, output)
+        except (ValueError, KeyError, TypeError, PermissionError, FileExistsError) as exc:
+            # Do not echo arbitrary input or secrets into an error response.
+            msg = str(exc)[:180]
+            return self._reply(400, {"error": type(exc).__name__,
+                                     "message": msg})
+        except Exception:
