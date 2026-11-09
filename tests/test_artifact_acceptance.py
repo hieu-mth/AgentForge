@@ -86,3 +86,53 @@ class ArtifactAcceptanceTests(unittest.TestCase):
     def test_new_failure_invalidates_prior_acceptance(self):
         self.complete()
         self.decide(self.view())
+        self.report("BUILD_VALID", "FAIL", "later-failed-build")
+        self.assertEqual(self.view()["status"], "NEEDS_REVISION")
+        self.assertFalse(self.view()["owner_accepted"])
+
+    def test_failed_build_task_blocks_old_pass_report(self):
+        self.complete()
+        task_id = task_history.create_task("skill", "webapp.sandbox_test",
+            {"proposal_id": self.pid, "sha256": self.sha}, db_path=self.db)
+        task_history.transition(task_id, "RUNNING", db_path=self.db)
+        task_history.transition(task_id, "FAILED", error="SANDBOX_BUILD_FAILED", db_path=self.db)
+        self.assertEqual(self.view()["status"], "NEEDS_REVISION")
+        with self.assertRaises(PermissionError):
+            self.decide(self.view())
+
+    def test_concurrent_accept_and_reject_cannot_overwrite_decision(self):
+        self.complete()
+        current = self.view()
+        def attempt(decision):
+            try:
+                return self.decide(current, decision)["status"]
+            except PermissionError:
+                return "STALE"
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            outcomes = list(pool.map(attempt, ("ACCEPTED", "REJECTED")))
+        self.assertEqual(outcomes.count("STALE"), 1, outcomes)
+        self.assertEqual(self.view()["revision"], current["revision"] + 1)
+
+    def test_legacy_goal_read_does_not_create_acceptance_tables_or_mutate_history(self):
+        brain = self.folder / "brain.db"
+        goal = brain_store.create_goal("Legacy goal", "legacy", {}, [{"skill_id": "legacy"}], db_path=brain)
+        old = brain_store.get_goal(goal["goal_id"], db_path=brain)
+        detail = brain_runner.inspect(goal["goal_id"], brain_db_path=brain, task_db_path=self.db)
+        self.assertIsNone(detail["artifact_acceptance"])
+        self.assertEqual(brain_store.get_goal(goal["goal_id"], db_path=brain), old)
+        self.assertFalse(self.db.exists())
+
+    def test_execution_success_and_revise_remain_separate(self):
+        fixture = v5.V5CompanyTests("test_fixed_four_role_plan_three_calls_and_zero_external_processes")
+        fixture.setUp()
+        try:
+            goal = fixture.plan()
+            brain_store.approve_goal(goal["goal_id"], goal["plan_sha256"], db_path=fixture.brain)
+            with patch("agentforge.model.generate_json", side_effect=[v5.ARCH, MODEL, {**v5.REVIEW, "recommendation": "REVISE"}]):
+                for _ in range(3):
+                    result = brain_runner.execute(goal["goal_id"], brain_db_path=fixture.brain,
+                        task_db_path=fixture.tasks, grants=("model.invoke", "workspace.propose"), confirm_model_call=True)
+            self.assertEqual(result["status"], "SUCCEEDED")
+            self.assertEqual(result["artifact_acceptance"]["status"], "NEEDS_REVISION")
+        finally:
+            fixture.doCleanups()
