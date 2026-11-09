@@ -6,14 +6,14 @@ walk or delete user data or alter import paths at runtime.
 from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
-REPOSITORY_ROOT = PACKAGE_ROOT.parents[1]
+REPOSITORY_ROOT = PACKAGE_ROOT.parent
 
 LAYOUT = {
-    "api": "src/agentforge/control_center_v1.py",
-    "ai": "src/agentforge/ai",
-    "core": "src/agentforge/core",
-    "website_domain": "src/agentforge/domains/websites",
-    "storage": "src/agentforge/storage",
+    "api": "agentforge/control_center_v1.py",
+    "ai": "agentforge/ai",
+    "core": "agentforge/core",
+    "website_domain": "agentforge/domains/websites",
+    "storage": "agentforge/storage",
     "ui": "dashboard",
     "contracts": "skills",
     "runtime_data": "data",

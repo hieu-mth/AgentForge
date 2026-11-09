@@ -6,7 +6,9 @@ from pathlib import Path
 
 from agentforge.model import generate_json
 
-ROOT = Path(__file__).resolve().parents[2]
+from agentforge.paths import REPOSITORY_ROOT
+
+ROOT = REPOSITORY_ROOT
 REPORTS = ROOT / "data" / "research"
 
 

@@ -5,7 +5,9 @@ from agentforge.source_reader import REPORTS
 from agentforge.evidence_registry import valid_references_for_opportunity
 
 
-ROOT = Path(__file__).resolve().parents[2]
+from agentforge.paths import REPOSITORY_ROOT
+
+ROOT = REPOSITORY_ROOT
 OPPORTUNITIES = ROOT / "data" / "opportunities"
 EVIDENCE_DIR = OPPORTUNITIES / "evidence"
 

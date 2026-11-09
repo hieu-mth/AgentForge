@@ -1,6 +1,8 @@
 ﻿from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+from agentforge.paths import REPOSITORY_ROOT
+
+ROOT = REPOSITORY_ROOT
 WORKSPACE = (ROOT / "workspace").resolve()
 MAX_BYTES = 16_384
 
