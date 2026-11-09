@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { AcceptanceStatus } from '../components/AcceptanceStatus.jsx';
 import { Alert, Button, Card, Collapse, Descriptions, Drawer, Input, Space, Tag, Typography } from 'antd';
 
 const { Text, Title, Paragraph } = Typography;
@@ -8,7 +9,7 @@ const LABELS = {
 };
 const COLOR = /^#[0-9a-fA-F]{6}$/;
 
-export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,onVerify,busy}) {
+export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,onVerify,onDecide,busy}) {
   const [feedback,setFeedback]=useState('');
   const isCode=proposal?.ai_code_experimental===true;
   useEffect(()=>setFeedback(''),[proposal?.proposal_id]);
@@ -32,6 +33,8 @@ export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,onVerify
     <Space orientation="vertical" size={18} style={{width:'100%'}}>
       <Card size="small">
         <Title level={4} style={{margin:'0 0 8px'}}>{proposal.project_slug}</Title>
+        <AcceptanceStatus acceptance={proposal.artifact_acceptance} busy={busy}
+          onDecide={onDecide?decision=>onDecide(proposal,decision):null}/>
         <Alert type="warning" showIcon
           message="Đây là mã nguồn nháp, không phải ứng dụng đang chạy"
           description={isCode
