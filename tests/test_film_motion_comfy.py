@@ -100,9 +100,10 @@ class MotionAdapterTests(unittest.TestCase):
                     seed=5, film_root=self.films, db_path=self.db)
         with self.assertRaises(PermissionError):
             motion.submit_shot(**args)
+        args["plan_sha"] = "0" * 64
         with patch.object(motion.ops_control, "require_active"):
             with self.assertRaises(PermissionError):
-                motion.submit_shot(**args, confirmed=True, plan_sha="0" * 64)
+                motion.submit_shot(**args, confirmed=True)
 
     def test_submit_dispatches_exactly_once_without_upload_or_verified_claim(self):
         result, mocked = self.submit()
@@ -119,8 +120,6 @@ class MotionAdapterTests(unittest.TestCase):
         self.assertTrue(graph["10"]["inputs"]["filename_prefix"].startswith("af_motion_"))
         with self.assertRaises(PermissionError):
             self.submit()
-        self.assertEqual(motion.job_status(result["job_id"], db_path=self.db)["status"],
-                         "PROVIDER_QUEUED_OR_UNKNOWN") if False else None
 
     def test_uncertain_http_failure_keeps_submitting_checkpoint_and_no_retry(self):
         with patch.object(motion.ops_control, "require_active"), \
@@ -143,7 +142,11 @@ class MotionAdapterTests(unittest.TestCase):
             self.submit()
 
     def test_rejects_eight_second_shot_for_four_second_pilot(self):
-        plan = sample_plan(8)
+        plan = long_form.build_plan(
+            title="Original test", genre="fantasy", style="cinematic",
+            chapters=[{"id": "a", "title": "One", "synopsis": "A hero travels",
+                       "duration_seconds": 8, "character_ids": []}],
+            shot_seconds=8)
         long_form.save_plan(self.films, "eight", plan)
         with patch.object(motion.ops_control, "require_active"):
             with self.assertRaises(motion.MotionError):
