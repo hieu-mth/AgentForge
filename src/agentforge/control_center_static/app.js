@@ -738,3 +738,82 @@ async function handleClick(event){
        "\nStoryboard: "+(storyboard_enabled?"Bật":"Tắt")+
        "\nKhông làm thay đổi quyền cho task cũ hoặc billing provider."))return;
     await mutate("/api/workspace/policy",{
+      ack:"UPDATE_WORKSPACE_POLICY",max_estimated_model_calls:cap,
+      website_enabled,storyboard_enabled
+    },"Đã lưu policy prompt-first");
+    return;
+  }
+  if(button.dataset.imageHealth!==undefined){
+    state.imageHealth=await api("/api/image/health");
+    render();
+    notice(state.imageHealth.status==="READY"?"ComfyUI và checkpoint sẵn sàng":
+      "ComfyUI: "+state.imageHealth.status,
+      state.imageHealth.status!=="READY");
+    return;
+  }
+  if(button.dataset.imageSubmit!==undefined){
+    const slug=$("image-project").value,checkpoint=$("image-checkpoint").value;
+    const prompt=$("image-prompt").value.trim();
+    if(prompt.length<20||prompt.length>450)throw Error("Mô tả ảnh phải dài 20–450 ký tự");
+    if(!confirm("Cho phép ComfyUI LOCAL chạy model ảnh trên GPU để tạo đúng 1 ảnh?\n"+
+      "Checkpoint: "+checkpoint+"\nWebsite: "+slug+"\n"+
+      "Không tự tải model, không chi API cloud, không tự đăng bài."))return;
+    const output=await mutate("/api/image/submit",{
+      ack:"GENERATE_LOCAL_IMAGE",slug,prompt,checkpoint
+    },"Đã gửi job tới ComfyUI local");
+    state.imageJobs=await api("/api/image/jobs");
+    render();notice("Image job: "+output.job_id);
+    return;
+  }
+  if(button.dataset.imageCollect!==undefined){
+    if(!confirm("Kiểm tra ComfyUI và nhập một ảnh hoàn thành vào website local?"))return;
+    const out=await mutate("/api/image/"+button.dataset.imageCollect+"/collect",{
+      ack:"IMPORT_AI_IMAGE"
+    },"Đã kiểm tra kết quả ảnh");
+    state.imageJobs=await api("/api/image/jobs");
+    render();notice("Image status: "+out.status);
+    return;
+  }
+  if(button.dataset.imageAttach!==undefined){
+    const job=(state.imageJobs?.jobs||[]).find(x=>x.job_id===button.dataset.imageAttach);
+    if(!job||!job.asset_sha||!job.current_html_sha)throw Error("Không tìm thấy SHA ảnh hoặc website");
+    if(!confirm("Xác nhận ĐÃ MỞ VÀ XEM FILE ẢNH local?\n"+
+      "Website: "+job.slug+"\nẢnh SHA: "+job.asset_sha+
+      "\nHTML SHA: "+job.current_html_sha+
+      "\nTạo backup HTML và gắn ảnh vào website local; KHÔNG deploy."))return;
+    await mutate("/api/image/"+job.job_id+"/attach",{
+      ack:"ATTACH_AI_IMAGE",image_sha:job.asset_sha,html_sha:job.current_html_sha
+    },"Đã gắn ảnh và sao lưu HTML gốc");
+    state.imageJobs=await api("/api/image/jobs");
+    render();return;
+  }
+  if(button.dataset.checkModelHealth!==undefined){
+    const status=await api("/api/model/health");
+    state.modelHealth=status;
+    render();
+    notice(status.status==="READY"?"Ollama phản hồi và tìm thấy model":"Model preflight: "+status.status,
+           status.status!=="READY");
+    return;
+  }
+  if(button.dataset.autopilotConfigure!==undefined){
+    const dailyCap=Number($("ap-policy-cap").value);
+    const enabled=$("ap-policy-enabled").value==="true";
+    if(!Number.isInteger(dailyCap)||dailyCap<0||dailyCap>10)throw Error("Quota phải là số nguyên 0–10");
+    if(!confirm("Xác nhận standing delegation: "+(enabled?"BẬT":"TẮT")+
+      "\\nQuota dự kiến mỗi ngày UTC: "+dailyCap+
+      "\\nGiới hạn lượt model KHÔNG phải giới hạn tiền provider."))return;
+    await mutate("/api/autopilot/configure",{
+      ack:"SET_DAILY_MODEL_POLICY",enabled,daily_cap:dailyCap
+    },"Đã cập nhật chính sách Autopilot");
+    return;
+  }
+  if(button.dataset.videoInspect){
+    const id=button.dataset.videoInspect;
+    const meta=await api("/api/videos/"+encodeURIComponent(id));
+    state.inspectedVideo=meta;
+    const dialog=$("task-dialog");
+    $("task-dialog-body").innerHTML=
+      '<h3>Xem video local trước khi duyệt</h3>'+
+      '<p class="small muted">Mở video từ thư mục dự án trên Windows, xem hình ảnh, đọc chữ và nghe âm thanh.</p>'+
+      '<div class="callout mono">'+esc(meta.relative_path)+'</div>'+
+      '<p class="small muted">SHA-256: '+esc(meta.video_sha)+' · QA: '+esc(meta.quality)+
