@@ -1,6 +1,6 @@
 import { Empty } from 'antd';
 
-const GOOD = ['SUCCEEDED', 'ACTIVE', 'APPROVED', 'ATTACHED', 'PASS_HEURISTIC', 'READY', 'ASSET_READY'];
+const GOOD = ['ACCEPTED', 'ACTIVE', 'APPROVED', 'ATTACHED', 'PASS_HEURISTIC', 'READY', 'ASSET_READY'];
 const BAD = ['FAILED', 'INTERRUPTED', 'REJECTED', 'PAUSED'];
 const WARN = ['PLANNED', 'WAITING_APPROVAL', 'PENDING', 'PROPOSED_NOT_APPLIED', 'SUBMITTING', 'COLLECTING', 'ATTACHING'];
 
@@ -11,7 +11,7 @@ export function stateTone(status) {
   return 'info';
 }
 export const badge = value =>
-  <span className={'status-pill tone-' + stateTone(value)}><i/>{value || 'UNKNOWN'}</span>;
+  <span className={'status-pill tone-' + stateTone(value)}><i/>{value === 'SUCCEEDED' ? 'Đã thực thi xong' : value || 'UNKNOWN'}</span>;
 export const clip = id => String(id || '').slice(0, 12);
 export const needPreviewId = id => /^[a-f0-9]{32}$/.test(String(id || ''));
 export const fallback = text => <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={text}/>;
