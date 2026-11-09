@@ -1475,3 +1475,32 @@ Traceback (most recent call last):
   File "D:\AgentForge\tests\test_s1_runtime.py", line 47, in test_resume_only_unexecuted_after_explicit_grants
     self.assertEqual(approved["status"], "SUCCEEDED")
     ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'FAILED' != 'SUCCEEDED'
+- FAILED
++ SUCCEEDED
+
+
+======================================================================
+FAIL: test_unchanged_and_metadata_only_model_output_rejected 
+(test_webapp_revision_v41.WebappRevisionV41Tests.test_unchanged_and_metadata_only_model_output_rejected)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\AgentForge\tests\test_webapp_revision_v41.py", line 96, in 
+test_unchanged_and_metadata_only_model_output_rejected
+    self.assertEqual(len(list(webapp_builder.PROPOSALS.glob("*.json"))), 1)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 2 != 1
+
+----------------------------------------------------------------------
+Ran 761 tests in 69.463s
+
+FAILED (failures=2, errors=1)
+SOURCE REVIEW COMPLETED
+PAGES FETCHED: 1 / 2
+MATCHED QUOTES: 1
+STATUS: QUOTE_REVIEW_ONLY
+AUTONOMOUS EXECUTION AUTHORIZED: False
+SAVED: C:\Users\hieu-mth\AppData\Local\Temp\tmp5gbi1vnt\company\reviews\bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-excel-automation-service-review.json
+SEARCH QUERIES:
+ - platform fees
+ - market demand
