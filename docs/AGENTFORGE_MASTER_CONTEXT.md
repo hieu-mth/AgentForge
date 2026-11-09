@@ -20,6 +20,8 @@ Bối cảnh vận hành: Windows PowerShell, Python >=3.13, Node.js 22, React D
 
 ## 3. Quyết định kiến trúc
 
+**Quyết định mới (09/11/2026):** Owner đã chốt structure đích `agentforge/` và `dashboard/` ngang cấp root, bên trong dùng `api/`, `core/`, `ai/`, `features/`, `integrations/`, `ops/`, `storage/`. Đây vẫn là **planned migration, không phải code đã chuyển**. Xem [ADR](architecture/TARGET_STRUCTURE.md), [catalog từng file](architecture/FILE_CATALOG.md) và [migration plan](architecture/MIGRATION_PLAN.md).
+
 - Một frontend, một Python backend modular monolith. SQLite và workspace local.
 - Legacy dashboard static và `dashboard_v0.py` đã bị loại bỏ. `src/agentforge/` **không phải code cũ**.
 - Các compatibility Python alias chỉ xóa sau khi chứng minh không còn dependency.

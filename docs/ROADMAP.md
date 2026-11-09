@@ -2,6 +2,10 @@
 
 **Cập nhật:** 09/11/2026. Đây là roadmap **hiện hành**, thay cho các bản V4/C8 trong tài liệu lịch sử. Chỉ đánh dấu DONE khi đạt tiêu chí kiểm chứng; mocked tests không thay thế real-model testing.
 
+## Quyết định kiến trúc repository
+
+Đã chốt [flat-root architecture](architecture/TARGET_STRUCTURE.md): sau này `agentforge/` (backend) và `dashboard/` (React) ngang cấp tại root, bên trong Python dùng Feature-First Modular Monolith. **Đây là quyết định tài liệu, chưa triển khai migration.** Việc chuyển source/package theo từng phase được mô tả tại [migration plan](architecture/MIGRATION_PLAN.md). Không đổi hướng dẫn chạy cho đến khi CI xác minh đường dẫn mới.
+
 ## Hai hướng sản phẩm cần hoàn thiện
 
 | Track | Mục tiêu kinh doanh | Tình trạng |

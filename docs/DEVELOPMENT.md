@@ -1,5 +1,7 @@
 # Phát triển và vận hành trên Windows
 
+> **Đường dẫn hiện tại vẫn là `src/agentforge/` và `ui/dashboard/`.** [Target structure](architecture/TARGET_STRUCTURE.md) đã được chốt nhưng chưa migrate; đừng chạy lệnh theo folder tương lai cho tới khi các phase hoàn tất.
+
 **Đối tượng:** Owner/developer làm việc trực tiếp tại `D:\AgentForge`. Có thể dùng folder khác; các lệnh bên dưới giả định repo đã clone.
 
 ## 1. Chuẩn bị
