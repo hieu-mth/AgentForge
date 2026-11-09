@@ -505,3 +505,53 @@ function renderWebsites(){
   esc(p.proposal_id)+'">Yêu cầu AI chỉnh sửa</button>'+
   '<button type="button" class="btn btn-primary" data-apply-proposal="'+
   esc(p.proposal_id)+'">Duyệt & lưu website local</button></div></div>':
+  empty("Chọn một proposal rồi bấm Xem website để thấy giao diện desktop/mobile, không cần đọc mã HTML.");
+ return header("PRODUCT BUILDER","Websites",
+  "Xem trực quan landing page AI đã tạo, kiểm tra phiên bản mobile và duyệt trước khi lưu file.",
+  '<button class="btn btn-primary" data-new-website>+ Tạo website draft</button>')+
+ '<div class="callout">Bản xem trước không chạy code AI. Chỉ khi owner bấm duyệt, hệ thống mới ghi website vào máy; không tự triển khai online.</div>'+
+ '<div class="section">'+card("Landing page đang chờ duyệt",
+   table(["PROJECT","PROPOSAL ID","SHA-256","THAO TÁC"],rows))+'</div>'+
+ '<div class="section">'+card("Preview & Approval",preview)+'</div>';
+}
+function renderAnalytics(){
+ const rows=state.data.datasets.map(d=>
+ '<tr><td>'+esc(d.dataset)+'</td><td>'+badge(d.synthetic?"SYNTHETIC DEMO":"OWNER SUPPLIED")+
+ '</td><td>'+fmt(d.performance_rows)+'</td><td>'+fmt(d.ledger_rows)+'</td></tr>');
+ return header("INTELLIGENCE","Intelligence & Analytics",
+  "Báo cáo dựa trên dữ liệu đã nhập; source không đồng nghĩa xác minh độc lập.")+
+ '<div class="callout warning">Các bộ dữ liệu SYNTHETIC DEMO chỉ dùng thử nghiệm; không được xem là nhu cầu thị trường hay doanh thu thật.</div>'+
+ '<div class="section">'+card("S3 Datasets",
+ table(["DATASET","PROVENANCE","PERFORMANCE ROWS","LEDGER ROWS"],rows))+'</div>';
+}
+function renderGrowth(){
+ const entries=state.data.growth.map(g=>'<tr><td><button class="link-button" data-detail-growth="'+
+ esc(g.campaign)+'">'+esc(g.campaign)+'</button></td><td>'+esc(g.title)+
+ '</td><td>'+badge(g.synthetic?"SYNTHETIC DEMO":"OWNER RECORDED")+
+ '</td><td>'+fmt(g.lead_total)+'</td><td>'+fmt(g.package_count)+
+ '</td><td>'+fmt(g.owner_reported_posts)+'</td><td>'+fmt(g.owner_recorded_net_cash_vnd)+'</td></tr>');
+ const create='<form id="campaign-form"><div class="form-field"><label for="campaign-json">Thông tin chiến dịch · JSON</label>'+
+ '<textarea id="campaign-json" rows="7" spellcheck="false">'+esc(JSON.stringify({
+  campaign:"nem-pilot",title:"Tư vấn nệm",analytics_dataset:"",
+  budget_vnd:0,synthetic:false
+ },null,2))+'</textarea></div>'+
+ '<div class="callout warning">budget_vnd chỉ giới hạn chi phí ghi sổ. Không có quyền chi tiền hoặc tạo tài khoản quảng cáo.</div>'+
+ '<div class="form-actions"><button type="submit" class="btn btn-primary">Tạo campaign</button></div></form>';
+ const event='<form id="event-form"><div class="form-field"><label for="event-json">Sự kiện business · JSON</label>'+
+ '<textarea id="event-json" rows="7" spellcheck="false">'+esc(JSON.stringify({
+  kind:"lead_new",data:{campaign:"nem-pilot",channel:"website",consent_confirmed:true}
+ },null,2))+'</textarea></div>'+
+ '<div class="callout">Chỉ xác nhận consent nếu khách thật sự đồng ý. Không nhập tên, điện thoại, email hoặc thông tin cá nhân vào JSON.</div>'+
+ '<div class="form-actions"><button type="submit" class="btn btn-primary">Ghi sự kiện</button></div></form>';
+ return header("BUSINESS OPERATIONS","Growth & Revenue",
+  "Theo dõi chiến dịch, lead ẩn danh, gói nội dung và các khoản tiền do owner ghi nhận.")+
+ '<div class="callout warning">Không có tài khoản mạng xã hội/ngân hàng đã kết nối. Gói ZIP không phải bài đăng; tiền ghi sổ không phải lợi nhuận đã xác minh.</div>'+
+ '<div class="section">'+card("Danh sách chiến dịch",
+ table(["CAMPAIGN","TÊN","PHÂN LOẠI","LEADS","PACKAGES","OWNER POSTS","NET CASH VND"],entries))+
+ '</div><div class="grid-2 grid-even section">'+card("Tạo chiến dịch",create)+
+ card("Ghi nhận lead / commission / trạng thái",event)+'</div>';
+}
+function renderSchedules(){
+ const rows=state.data.schedules.map(s=>'<tr><td>'+esc(s.title)+
+ '</td><td>'+esc(s.template)+'</td><td>'+badge(s.status)+
+ '</td><td>'+esc(s.next_due_utc)+
