@@ -8,6 +8,7 @@ or model credentials.
 """
 import argparse
 import json
+import sqlite3
 
 from agentforge.ai import model_hub
 from agentforge.ops import preflight
@@ -24,7 +25,8 @@ def inspect(*, environment=None, health=None, models=None):
     if environment is None:
         try:
             environment = preflight.inspect()
-        except (OSError, ValueError, PermissionError, TypeError, KeyError):
+        except (OSError, ValueError, PermissionError, TypeError, KeyError,
+                sqlite3.DatabaseError):
             environment = {"status": "BLOCKED"}
     status = environment.get("status") if isinstance(environment, dict) else None
     if status not in {"BLOCKED", "REVIEW_REQUIRED", "READY_LOCAL_UNVERIFIED"}:
@@ -39,7 +41,8 @@ def inspect(*, environment=None, health=None, models=None):
     if health is None:
         try:
             health = ops_doctor.inspect()
-        except (OSError, ValueError, PermissionError, TypeError, KeyError):
+        except (OSError, ValueError, PermissionError, TypeError, KeyError,
+                sqlite3.DatabaseError):
             health = {"status": "FAIL", "registry_valid": False, "backup_count": 0,
                       "running_tasks": 0, "running_goals": 0}
     hstatus = health.get("status") if isinstance(health, dict) else None
@@ -55,7 +58,8 @@ def inspect(*, environment=None, health=None, models=None):
     if models is None:
         try:
             models = model_hub.catalog()
-        except (OSError, ValueError, PermissionError, TypeError, KeyError):
+        except (OSError, ValueError, PermissionError, TypeError, KeyError,
+                sqlite3.DatabaseError):
             models = {}
     routes = models.get("routes") if isinstance(models, dict) else None
     if not isinstance(routes, list):

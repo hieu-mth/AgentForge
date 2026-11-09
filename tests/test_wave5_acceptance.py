@@ -79,6 +79,18 @@ class Wave5BaseAcceptanceTests(unittest.TestCase):
         for sensitive in ("owner private data", "local password", "secret"):
             self.assertNotIn(sensitive, serialized)
 
+    def test_corrupt_sqlite_state_degrades_to_fail_closed_report(self):
+        import sqlite3
+        with patch.object(base_acceptance.preflight, "inspect",
+                          return_value=environment()), \
+             patch.object(base_acceptance.ops_doctor, "inspect",
+                          side_effect=sqlite3.DatabaseError("private sqlite contents")), \
+             patch.object(base_acceptance.model_hub, "catalog",
+                          side_effect=sqlite3.DatabaseError("private model path")):
+            result = base_acceptance.inspect()
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertNotIn("private", json.dumps(result))
+
     def test_readonly_cli_works_with_cp1252_stdout(self):
         record = base_acceptance.inspect(
             environment=environment(), health=health(), models=models())
