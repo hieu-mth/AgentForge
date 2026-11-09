@@ -555,3 +555,54 @@ function renderSchedules(){
  const rows=state.data.schedules.map(s=>'<tr><td>'+esc(s.title)+
  '</td><td>'+esc(s.template)+'</td><td>'+badge(s.status)+
  '</td><td>'+esc(s.next_due_utc)+
+ '</td><td><button class="btn btn-small btn-outline" data-schedule-status="'+
+ esc(s.schedule_id)+'" data-next-status="'+
+ (s.status==="PAUSED"?"ACTIVE":"PAUSED")+'">'+
+ (s.status==="PAUSED"?"Bật lại":"Tạm dừng")+'</button></td></tr>');
+ const readOnly=["campaign.review","growth.review","media.review","website.campaign"];
+ const options=readOnly.filter(k=>state.data.templates[k]).map(
+  k=>'<option value="'+esc(k)+'">'+esc(k)+'</option>').join("");
+ const form='<form id="schedule-form"><div class="form-field"><label for="schedule-title">Tên lịch chạy</label>'+
+ '<input id="schedule-title" value="Đánh giá chiến dịch định kỳ" required minlength="3"></div>'+
+ '<div class="form-field"><label for="schedule-template">Read-only workflow</label>'+
+ '<select id="schedule-template">'+options+'</select></div>'+
+ '<div class="form-field"><label for="schedule-input">Inputs · JSON</label>'+
+ '<textarea id="schedule-input" rows="4" spellcheck="false">'+
+ esc(JSON.stringify({dataset:state.data.datasets?.[0]?.dataset||""}))+'</textarea></div>'+
+ '<div class="form-row"><div class="form-field"><label for="schedule-due">Chạy lần đầu (giờ máy)</label>'+
+ '<input id="schedule-due" type="datetime-local" required></div>'+
+ '<div class="form-field"><label for="schedule-frequency">Lặp lại mỗi (phút)</label>'+
+ '<input id="schedule-frequency" type="number" min="60" max="10080" value="1440"></div></div>'+
+ '<div class="form-actions"><button class="btn btn-primary" type="submit">Tạo lịch đã duyệt</button>'+
+ '<button class="btn btn-outline" data-tick-schedules type="button">Chạy tick thủ công</button></div></form>';
+ const h=state.data.daemon;
+ return header("SCHEDULER","Local Schedules",
+  "Lịch chỉ chạy read-only workflow và lưu slot trước khi bắt đầu. Không tự bật daemon.")+
+ '<div class="callout '+(h.fresh?"":"warning")+'">Scheduler: '+
+ esc(h.fresh?"Daemon heartbeat mới nhất được ghi nhận":"Không có daemon hoạt động được xác minh")+
+ '. Có thể dùng tiến trình ops_daemon riêng khi máy luôn bật.</div>'+
+ '<div class="grid-2 grid-even section">'+card("Tạo lịch",form)+card("Cơ chế an toàn",
+ '<div class="stack"><div class="goal-tile"><span class="goal-mark">✓</span>'+
+ '<div class="goal-main"><strong>Read-only & owner approved</strong>'+
+ '<small>Không cấp quyền model, browser hay chi tiền</small></div></div>'+
+ '<div class="goal-tile"><span class="goal-mark">◷</span><div class="goal-main">'+
+ '<strong>Once-only due slot</strong><small>Không tự replay sau mất điện</small></div></div>'+
+ '<div class="goal-tile"><span class="goal-mark">⎔</span><div class="goal-main">'+
+ '<strong>Local Windows / desktop</strong><small>Máy tắt thì lịch không thể chạy</small>'+
+ '</div></div></div>')+'</div>'+
+ '<div class="section">'+card("Lịch đã tạo",table(["TÊN","TEMPLATE","STATUS","NEXT DUE UTC","THAO TÁC"],rows))+'</div>';
+}
+function renderOperations(){
+ const d=state.ops;
+ if(!d)return card("System Health","<p class=\"muted\">Chọn Integrations để đọc tình trạng SQLite, backup và scheduler. Không thực thi công việc.</p>");
+ const db=Object.entries(d.databases||{}).map(([name,v])=>
+ '<tr><td>'+esc(name)+'</td><td>'+badge(v.status)+'</td><td>'+fmt(v.size_bytes)+'</td></tr>');
+ const findings=(d.findings||[]).map(f=>
+ '<div class="goal-tile"><div class="goal-main"><strong>'+esc(f.rule)+'</strong>'+
+ '<small>'+esc(f.severity)+' · '+esc(f.name||"Vận hành local")+'</small></div></div>').join("");
+ return card("Local System Health",
+  '<div class="callout warning">Backup có dữ liệu nhạy cảm và chưa mã hóa. Chỉ lưu local, không upload công khai. Restore chỉ vào thư mục staging mới.</div>'+
+  '<p>Kiểm tra: '+badge(d.status)+' · Backup: '+fmt(d.backup_count)+
+  ' · Đang chạy: '+fmt(d.running_goals)+' goals / '+fmt(d.running_tasks)+' tasks</p>'+
+  table(["DB","Integrity","Bytes"],db)+
+  (findings||'<p class="muted">Không có cảnh báo nào.</p>')+
