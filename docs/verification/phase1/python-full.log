@@ -155,3 +155,56 @@ test_browser_channel_does_not_bypass_owner_consent
 test_browser_import_is_lazy (test_browser_validation.TestBrowserValidation.test_browser_import_is_lazy) ... ok
 test_bundled_remains_default_with_no_channel 
 (test_browser_validation.TestBrowserValidation.test_bundled_remains_default_with_no_channel) ... ok
+test_each_run_generates_immutable_distinct_report 
+(test_browser_validation.TestBrowserValidation.test_each_run_generates_immutable_distinct_report) ... ok
+test_explicit_owner_approval_is_required 
+(test_browser_validation.TestBrowserValidation.test_explicit_owner_approval_is_required) ... ok
+test_horizontal_overflow_detected (test_browser_validation.TestBrowserValidation.test_horizontal_overflow_detected) 
+... ok
+test_installed_google_chrome_channel 
+(test_browser_validation.TestBrowserValidation.test_installed_google_chrome_channel) ... ok
+test_installed_microsoft_edge_channel 
+(test_browser_validation.TestBrowserValidation.test_installed_microsoft_edge_channel) ... ok
+test_invalid_slug_is_rejected (test_browser_validation.TestBrowserValidation.test_invalid_slug_is_rejected) ... ok
+test_missing_project_is_rejected_before_browser 
+(test_browser_validation.TestBrowserValidation.test_missing_project_is_rejected_before_browser) ... ok
+test_off_document_requests_are_blocked_and_counted 
+(test_browser_validation.TestBrowserValidation.test_off_document_requests_are_blocked_and_counted) ... ok
+test_page_too_tall_skips_screenshots 
+(test_browser_validation.TestBrowserValidation.test_page_too_tall_skips_screenshots) ... ok
+test_pending_revision_browser_validates_without_apply 
+(test_browser_validation.TestBrowserValidation.test_pending_revision_browser_validates_without_apply) ... ok
+test_project_checks_three_viewports_and_screenshots 
+(test_browser_validation.TestBrowserValidation.test_project_checks_three_viewports_and_screenshots) ... ok
+test_revision_with_static_fail_refuses_execution 
+(test_browser_validation.TestBrowserValidation.test_revision_with_static_fail_refuses_execution) ... ok
+test_stale_revision_refuses_to_launch 
+(test_browser_validation.TestBrowserValidation.test_stale_revision_refuses_to_launch) ... ok
+test_static_fail_refuses_to_execute_browser 
+(test_browser_validation.TestBrowserValidation.test_static_fail_refuses_to_execute_browser) ... ok
+test_uncaught_javascript_error_detected 
+(test_browser_validation.TestBrowserValidation.test_uncaught_javascript_error_detected) ... ok
+test_unknown_target_is_rejected (test_browser_validation.TestBrowserValidation.test_unknown_target_is_rejected) ... ok
+test_unsupported_browser_channel_rejected_before_browser 
+(test_browser_validation.TestBrowserValidation.test_unsupported_browser_channel_rejected_before_browser) ... ok
+test_business_domain_source_does_not_move_storage_roots 
+(test_business_domains_v31.BusinessDomainTests.test_business_domain_source_does_not_move_storage_roots) ... ok
+test_old_module_patch_changes_canonical_module 
+(test_business_domains_v31.BusinessDomainTests.test_old_module_patch_changes_canonical_module) ... ok
+test_persistent_roots_unmodified (test_business_domains_v31.BusinessDomainTests.test_persistent_roots_unmodified) ... 
+ok
+test_same_module_identity_for_business_domains 
+(test_business_domains_v31.BusinessDomainTests.test_same_module_identity_for_business_domains) ... ok
+test_creates_review_task_without_network (test_company_flow.TestCompanyFlow.test_creates_review_task_without_network) 
+... ok
+test_duplicate_source_ids_rejected (test_company_flow.TestCompanyFlow.test_duplicate_source_ids_rejected) ... ok
+test_existing_task_cannot_be_overwritten (test_company_flow.TestCompanyFlow.test_existing_task_cannot_be_overwritten) 
+... ok
+test_invalid_research_id_rejected (test_company_flow.TestCompanyFlow.test_invalid_research_id_rejected) ... ok
+test_mismatched_report_id_rejected (test_company_flow.TestCompanyFlow.test_mismatched_report_id_rejected) ... ok
+test_non_lead_report_rejected (test_company_flow.TestCompanyFlow.test_non_lead_report_rejected) ... ok
+test_unknown_source_rejected (test_company_flow.TestCompanyFlow.test_unknown_source_rejected) ... ok
+test_unsafe_url_rejected (test_company_flow.TestCompanyFlow.test_unsafe_url_rejected) ... ok
+READING: example.org https://example.org/market-report
+test_evidence_cannot_cross_opportunities 
+(test_company_lifecycle.TestCompanyLifecycle.test_evidence_cannot_cross_opportunities) ... ok
