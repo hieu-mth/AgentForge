@@ -71,7 +71,7 @@ class Wave7ExportTests(unittest.TestCase):
         edited[-20] ^= 0x01
         with self.assertRaises(PermissionError):
             exporter.verify_zip(bytes(edited), pid, sha)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(PermissionError):
             exporter.verify_zip(b"not a zip", pid, sha)
         self.assertFalse(dev.PROJECTS.exists())
 
