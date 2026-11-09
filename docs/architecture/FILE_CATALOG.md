@@ -1,6 +1,6 @@
 # File Catalog — danh mục file AgentForge hiện tại
 
-**Source baseline:** sau M0 + M3 (09/11/2026). **152 file Python**: 137 file cũ giữ nguyên chức năng, thêm 15 module API. Dashboard vẫn ở `dashboard/`. M3 tách HTTP và route handlers; **M4/M5 chưa triển khai**. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
+**Source baseline:** sau M6 backend (09/11/2026). **154 file Python**: 152 module sau M3, thêm `ai/model_hub.py` và `api/routes/model_hub.py`. Dashboard vẫn ở `dashboard/`; M7 UI và M4/M5 feature refactor là các mốc riêng. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
 
 - [Cấu trúc đã được chốt](TARGET_STRUCTURE.md) — `agentforge/` và `dashboard/` ngay root, feature-first.
 - [Kế hoạch chuyển](MIGRATION_PLAN.md) — không phá paths/import/SQLite.
@@ -16,7 +16,7 @@
 | **CLI** | Công cụ vận hành/demo theo lệnh, cần xem callers trước khi bỏ. |
 | **CONTRACT** | Module mô tả/kiểm tra hợp đồng cấu trúc, không tự chạy workflow. |
 
-**Tổng cộng: 152 file `.py`** (137 baseline + 15 module API M3). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
+**Tổng cộng: 154 file `.py`** (137 baseline + 15 M3 + 2 M6). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
 
 ## **Entrypoints và modules tại package root**
 
@@ -126,6 +126,7 @@
 | `api/routes/operations.py` | Explicit Owner pause/resume operations. |
 | `api/routes/products.py` | Signed Website/WebApp inspect/revise/apply action guards. |
 | `api/routes/goals.py` | Goal approval/execution, schedules, campaigns and Owner memory actions. |
+| `api/routes/model_hub.py` | GET/POST Owner Model Hub, CAS revision, local model metadata probe có xác nhận. |
 
 ## **AI: `ai/`**
 
@@ -133,6 +134,7 @@
 | --- | --- |
 | `ai/__init__.py` | Package AI. |
 | `ai/model_health.py` | Đọc read-only trạng thái Ollama; không gọi generation. |
+| `ai/model_hub.py` | Model profiles, task route capabilities, SQLite Owner overrides, rollback và cloud consent boundaries. |
 | `ai/model_registry.py` | Load model profiles từ models.toml, không chứa credentials. |
 | `ai/prompt_intake.py` | Định tuyến natural language request vào template allowlisted. |
 | `ai/role_routing.py` | Định tuyến worker-to-model có cấu hình được duyệt. |

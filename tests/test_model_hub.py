@@ -1,5 +1,6 @@
 """M6 Model Hub: real SQLite CAS, Owner API auth and zero inference side effects."""
 import http.client
+from contextlib import closing
 import io
 import json
 import os
@@ -87,7 +88,7 @@ class ModelHubTests(unittest.TestCase):
         self.assertEqual(2, runtime["routing_revision"])
         self.assertEqual("owner", runtime["route_source"])
         self.assertTrue(self.db.is_file())
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn:
             row = conn.execute("SELECT revision FROM hub_state").fetchone()
             self.assertEqual((2,), row)
 
