@@ -52,6 +52,8 @@ def review(architecture_id,architecture_sha,proposal_id,sha256,
             "architecture_id":architecture_id,"architecture_sha":architecture_sha}:
         raise PermissionError("REVIEW_SOURCE_STALE")
     qa = static_qa.read(qa_report_id,qa_report_sha)
+    if qa["status"] != "PASS_STATIC_ONLY":
+        raise PermissionError("REVIEW_QA_FAILED: source syntax must pass before advisory review")
     if qa["proposal_id"] != proposal_id or qa["sha256"] != sha256:
         raise PermissionError("REVIEW_QA_MISMATCH")
     require_worker_model("webapp_reviewer")
