@@ -12,6 +12,7 @@ LAYOUT = {
     "api": "agentforge/control_center_v1.py",
     "ai": "agentforge/ai",
     "core": "agentforge/core",
+    "ops": "agentforge/ops",
     "website_domain": "agentforge/features/websites",
     "growth_feature": "agentforge/features/growth",
     "webapp_feature": "agentforge/features/webapps",

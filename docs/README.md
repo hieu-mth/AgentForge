@@ -10,7 +10,7 @@ Không sử dụng các tài liệu milestone phiên bản cũ để suy luận 
 | --- | --- | --- |
 | Khởi chạy | [README tại root](../README.md) | Giới thiệu, lệnh chạy nhanh |
 | Xem hệ thống làm được gì | [STATUS.md](STATUS.md) | Matrix VERIFIED / PARTIAL / NOT IMPLEMENTED / UNVERIFIED |
-| Cài, build, kiểm thử | [DEVELOPMENT.md](DEVELOPMENT.md) | Windows, Python, npm, CI, kiểm tra docs |
+| Cài, build, kiểm thử | [DEVELOPMENT.md](DEVELOPMENT.md) | M9 Windows preflight/setup an toàn, Python, npm, CI, kiểm tra docs |
 | Quyết định phát triển | [ROADMAP.md](ROADMAP.md) | Mốc, tiêu chí nghiệm thu, blocker |
 | Models & Routing Dashboard | [MODEL_HUB.md](architecture/MODEL_HUB.md) | M6/M7: providers, text runtime routing, video config-only, rollback |
 | Mở rộng skill engine | [SKILL_ENGINE.md](architecture/SKILL_ENGINE.md) | M8: code policy + adapter theo domain, không cấp quyền từ manifest |

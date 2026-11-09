@@ -16,6 +16,7 @@
 | `features/growth/` | Campaign, owner-written records, manual handoff, reports | Real YouTube publishing/payment |
 | `integrations/comfyui.py` | Fixed localhost /system_stats, /prompt, /history JSON transport | Approval, retry policy, video QA |
 | `storage/` | Shared artifact persistence/path guards | Business SQL của riêng một feature |
+| `ops/preflight.py` | M9 kiểm tra read-only setup/versions/local paths | Tự sửa file, chạy provider hoặc cài package |
 | `domains/` | Compatibility imports cho code cũ | Logic nghiệp vụ mới |
 
 ## 2. Luồng dependency

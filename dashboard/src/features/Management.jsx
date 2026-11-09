@@ -3,6 +3,7 @@ import { App as AntApp, Alert, Button, Card, Checkbox, Descriptions,
   Form, Input, InputNumber, Select, Space, Switch, Table, Tag, Typography } from 'antd';
 import { api } from '../api.js';
 import { badge, clip } from '../components/shared.jsx';
+import { preflightTone, preflightLabel } from '../ops_preflight_ui.js';
 const { Paragraph, Text } = Typography;
 const { TextArea } = Input;
 
@@ -87,6 +88,24 @@ export function Schedules({data,mutate,onReload}) {
 export function OperationsControl({data,mutate,onReload}) {
   const {modal,message}=AntApp.useApp();
   const mode=data?.operations?.mode||'UNKNOWN';
+  const [preflight,setPreflight]=useState(null);
+  const [doctor,setDoctor]=useState(null);
+  const [checking,setChecking]=useState(false);
+  const [checkError,setCheckError]=useState('');
+  const refreshChecks=useCallback(async()=>{
+    setChecking(true);
+    try {
+      const [env,health]=await Promise.all([
+        api('/api/ops/preflight'),api('/api/ops/health'),
+      ]);
+      setPreflight(env);
+      setDoctor(health);
+      setCheckError('');
+    } catch (error) {
+      setCheckError(error.message||'Không thể tải kiểm tra local');
+    } finally { setChecking(false); }
+  },[]);
+  useEffect(()=>{refreshChecks();},[refreshChecks]);
   const change=next=>confirmOwner(modal,next==='PAUSED'?'Dừng các thao tác mới?':'Cho phép vận hành trở lại?',
     'Quyết định ghi vào state local và được các skill gates kiểm tra. Không tự chạy bất kỳ task nào.',
     async()=>{
@@ -108,6 +127,33 @@ export function OperationsControl({data,mutate,onReload}) {
         <Button danger disabled={mode==='PAUSED'} onClick={()=>change('PAUSED')}>Pause Operations</Button>
         <Button type="primary" disabled={mode==='ACTIVE'} onClick={()=>change('ACTIVE')}>Resume Operations</Button>
       </Space>
+    </Card>
+    <Card title="Sức khỏe & setup local"
+      extra={<Button onClick={refreshChecks} loading={checking}>Kiểm tra lại (chỉ đọc)</Button>}>
+      <Alert type="info" showIcon style={{marginBottom:16}}
+        message="Chỉ kiểm tra máy này"
+        description="Không tự cài model, tải package, gọi ComfyUI hoặc chạy AI. Node/npm có trong PATH chưa đồng nghĩa đã kiểm tra đúng phiên bản."/>
+      {checkError&&<Alert type="error" showIcon style={{marginBottom:12}} message={checkError}/>}
+      <Descriptions column={1} size="small" style={{marginBottom:16}} items={[
+        {key:'env',label:'Môi trường',children:badge(preflightLabel(preflight?.status))},
+        {key:'doctor',label:'Dữ liệu & backup',children:badge(doctor?.status||'CHƯA KIỂM TRA')},
+        {key:'backup',label:'Backup local',children:doctor?doctor.backup_count+' bản':'Chưa kiểm tra'},
+        {key:'tasks',label:'Task đang RUNNING',children:doctor?.running_tasks??'Chưa kiểm tra'},
+      ]}/>
+      <Table size="small" rowKey="id" pagination={false}
+        dataSource={preflight?.checks||[]} loading={checking} scroll={{x:520}}
+        columns={[
+          {title:'Thành phần',dataIndex:'label',width:180},
+          {title:'Trạng thái',dataIndex:'status',width:170,
+            render:s=><Tag color={preflightTone(s)}>{preflightLabel(s)}</Tag>},
+          {title:'Kiểm tra',dataIndex:'detail',render:detail=><Text>{detail}</Text>},
+        ]}/>
+      <Paragraph type="secondary" style={{marginTop:16,marginBottom:0}}>
+        Setup Windows (mặc định chỉ đọc):
+        <Text code>powershell -File scripts/setup_windows.ps1</Text>.
+        Muốn cài dependency, chạy thủ công với <Text code>-Install -AllowNetwork</Text>.
+        Không tự chạy lệnh trong trình duyệt.
+      </Paragraph>
     </Card>
   </Space>;
 }
