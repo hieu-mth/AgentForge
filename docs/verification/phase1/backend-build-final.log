@@ -1,0 +1,22 @@
+Processing .\.
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: agentforge
+  Building wheel for agentforge (pyproject.toml): started
+  Building wheel for agentforge (pyproject.toml): finished with status 'done'
+  Created wheel for agentforge: filename=agentforge-0.1.0-py3-none-any.whl size=329042 sha256=ea204946776574877453daa14599b74ba91c67b501653378e1c7fc3fa6f53d6d
+  Stored in directory: C:\Users\hieu-mth\AppData\Local\Temp\pip-ephem-wheel-cache-70iy9mwr\wheels\22\e9\75\089c3d51fd9dd076a01426c84b79307eaecb385d605c64680b
+Successfully built agentforge
+.\.audit-venv\Scripts\python.exe : 
+At line:2 char:361
++ ... -final.log; .\.audit-venv\Scripts\python.exe -m pip wheel . --no-deps ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[notice] A new release of pip is available: 26.2.2 -> 26.3
+[notice] To update, run: D:\AgentForge\.audit-venv\Scripts\python.exe -m pip install --upgrade pip
