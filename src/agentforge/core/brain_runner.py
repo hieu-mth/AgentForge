@@ -48,7 +48,9 @@ def _finish(goal_id, parent_id, status, *, brain_db_path, task_db_path, error=No
     store.change_state(goal_id, status, expected="RUNNING", error=error,
                        db_path=brain_db_path)
     goal = store.get_goal(goal_id, db_path=brain_db_path)
+    from agentforge.core import artifact_acceptance
     return {"goal_id": goal_id, "task_id": parent_id, "status": status,
+            "artifact_acceptance": artifact_acceptance.for_goal(goal, task_db_path=task_db_path),
             "executed_steps": len(goal["steps"]), "step_count": len(goal["plan"]),
             "error": error, "spending_authorized": False,
             "published": False}
@@ -208,10 +210,12 @@ def recover(*, brain_db_path=None, task_db_path=None):
     return {"interrupted_goals": count, "automatic_replay": False}
 
 
-def inspect(goal_id, *, brain_db_path=None):
+def inspect(goal_id, *, brain_db_path=None, task_db_path=None):
     goal = store.get_goal(goal_id, db_path=brain_db_path)
+    from agentforge.core import artifact_acceptance
     return {
         "goal_id": goal_id, "status": goal["status"],
+        "artifact_acceptance": artifact_acceptance.for_goal(goal, task_db_path=task_db_path),
         "title": goal["title"], "template": goal["template"],
         "plan_sha256": goal["plan_sha256"],
         "error": goal.get("error"),
