@@ -1,6 +1,6 @@
 # File Catalog — danh mục file AgentForge hiện tại
 
-**Source baseline:** sau M6 + M7 (09/11/2026). **165 file Python** (M0–M3 + Model Hub + M8 + M4a); Dashboard đã có Model Hub tại `#/models`. M4a đã chuyển Growth sang `features/growth/` với compatibility aliases; các domain khác và M5 chưa thực hiện. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
+**Source baseline:** sau M6 + M7 (09/11/2026). **178 file Python** (M0–M3 + Model Hub + M8 + M4a + M4b); Dashboard đã có Model Hub tại `#/models`. M4a Growth → `features/growth/` và M4b Websites → `features/websites/`, đều giữ compatibility aliases; các domain khác và M5 chưa thực hiện. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
 
 - [Cấu trúc đã được chốt](TARGET_STRUCTURE.md) — `agentforge/` và `dashboard/` ngay root, feature-first.
 - [Kế hoạch chuyển](MIGRATION_PLAN.md) — không phá paths/import/SQLite.
@@ -16,7 +16,7 @@
 | **CLI** | Công cụ vận hành/demo theo lệnh, cần xem callers trước khi bỏ. |
 | **CONTRACT** | Module mô tả/kiểm tra hợp đồng cấu trúc, không tự chạy workflow. |
 
-**Tổng cộng: 165 file `.py`** (137 baseline + 15 M3 + 2 M6 + 6 M8 adapters + 5 M4a feature modules). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
+**Tổng cộng: 178 file `.py`** (137 baseline + 15 M3 + 2 M6 + 6 M8 adapters + 5 M4a + 13 M4b feature modules). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
 
 ## **Entrypoints và modules tại package root**
 
@@ -206,29 +206,47 @@
 | `domains/webapps/syntax.py` | Tree-sitter parse JSX/JS như dữ liệu, không execute. |
 | `domains/webapps/toolchain.py` | Reviewed/pinned React scaffold từ NovaMart. |
 
-## **Domains: `domains/websites/`**
+## **Feature-first: `features/websites/` (M4b)**
+
+| File hiện tại dưới `agentforge/` | Vai trò |
+| --- | --- |
+| `features/websites/__init__.py` | Package Canonical Website. |
+| `features/websites/ai_designer.py` | Canonical implementation cho `ai_designer`. |
+| `features/websites/assets.py` | Canonical implementation cho `assets`. |
+| `features/websites/browser_validation.py` | Canonical implementation cho `browser_validation`. |
+| `features/websites/builder.py` | Canonical implementation cho `builder`. |
+| `features/websites/design_kit.py` | Canonical implementation cho `design_kit`. |
+| `features/websites/feedback.py` | Canonical implementation cho `feedback`. |
+| `features/websites/image_studio.py` | Canonical implementation cho `image_studio`. |
+| `features/websites/preview.py` | Canonical implementation cho `preview`. |
+| `features/websites/quality.py` | Canonical implementation cho `quality`. |
+| `features/websites/revision.py` | Canonical implementation cho `revision`. |
+| `features/websites/revision_context.py` | Canonical implementation cho `revision_context`. |
+| `features/websites/structured_builder.py` | Canonical implementation cho `structured_builder`. |
+
+## **Domains: `domains/websites/` (COMPAT)**
 
 | File hiện tại dưới `agentforge/` | Vai trò |
 | --- | --- |
 | `domains/websites/__init__.py` | Package Website. |
-| `domains/websites/ai_designer.py` | Đọc bounded AI design JSON, compile HTML/CSS an toàn. |
-| `domains/websites/assets.py` | Quản lý website image files và asset paths. |
-| `domains/websites/browser_validation.py` | Browser QA cho website có giới hạn và Owner review. |
-| `domains/websites/builder.py` | Proposal website, hash/artifact & apply workflow. |
-| `domains/websites/design_kit.py` | Giao diện/visual primitives đã review. |
-| `domains/websites/feedback.py` | Yêu cầu revision qua Owner feedback. |
-| `domains/websites/image_studio.py` | Optional local ComfyUI image adapter, có approval. |
-| `domains/websites/preview.py` | Tạo preview website từ proposal đã ký SHA. |
-| `domains/websites/quality.py` | Kiểm tra chất lượng website output. |
-| `domains/websites/revision.py` | Sinh các version proposal website theo feedback. |
-| `domains/websites/revision_context.py` | Đọc bản trước được SHA-verify làm ngữ cảnh untrusted. |
-| `domains/websites/structured_builder.py` | Compile copy text thành HTML/CSS tĩnh có giới hạn. |
+| `domains/websites/ai_designer.py` | COMPAT alias tới `features/websites/ai_designer.py`. |
+| `domains/websites/assets.py` | COMPAT alias tới `features/websites/assets.py`. |
+| `domains/websites/browser_validation.py` | COMPAT alias tới `features/websites/browser_validation.py`. |
+| `domains/websites/builder.py` | COMPAT alias tới `features/websites/builder.py`. |
+| `domains/websites/design_kit.py` | COMPAT alias tới `features/websites/design_kit.py`. |
+| `domains/websites/feedback.py` | COMPAT alias tới `features/websites/feedback.py`. |
+| `domains/websites/image_studio.py` | COMPAT alias tới `features/websites/image_studio.py`. |
+| `domains/websites/preview.py` | COMPAT alias tới `features/websites/preview.py`. |
+| `domains/websites/quality.py` | COMPAT alias tới `features/websites/quality.py`. |
+| `domains/websites/revision.py` | COMPAT alias tới `features/websites/revision.py`. |
+| `domains/websites/revision_context.py` | COMPAT alias tới `features/websites/revision_context.py`. |
+| `domains/websites/structured_builder.py` | COMPAT alias tới `features/websites/structured_builder.py`. |
 
 ## **Storage: `storage/` và package marker**
 
 | File hiện tại dưới `agentforge/` | Vai trò |
 | --- | --- |
-| `domains/__init__.py` | Container các domain implementations hiện tại. |
+| `domains/__init__.py` | Package compatibility cho các domain đã migrate và implementation còn lại. |
 | `storage/__init__.py` | Package storage. |
 | `storage/artifact_catalog.py` | Read-only artifact inventory, không xóa/chạy source. |
 | `storage/retention.py` | Backup/retention, reversible quarantine và restore không ghi đè. |

@@ -1,6 +1,6 @@
 # Kiến trúc repository AgentForge
 
-> **CURRENT IMPLEMENTATION** — M1/M2 đặt Python `agentforge/` và React `dashboard/` tại root; **M3 đã tách API thành `agentforge/api/`**. M8 đã chia code-level skill policies/handlers theo domain; M4a đã chuyển Growth sang `features/growth/` và giữ aliases ở `domains/growth/`; M4b–M4d và M5 **chưa thực hiện**. Xem [catalog từng file](FILE_CATALOG.md) và [kế hoạch migration](MIGRATION_PLAN.md).
+> **CURRENT IMPLEMENTATION** — M1/M2 đặt Python `agentforge/` và React `dashboard/` tại root; **M3 đã tách API thành `agentforge/api/`**. M8 đã chia code-level skill policies/handlers theo domain; M4a đã chuyển Growth sang `features/growth/` và giữ aliases ở `domains/growth/`; M4c–M4d và M5 **chưa thực hiện**. Xem [catalog từng file](FILE_CATALOG.md) và [kế hoạch migration](MIGRATION_PLAN.md).
 
 **Current source of truth:** Python modular monolith, một React dashboard, local SQLite + workspace. Đã loại bỏ frontend HTML/CSS/JS V0 và Python dashboard V0.
 
@@ -20,9 +20,10 @@ AgentForge/
 │   ├── ai/                        # AI intake, routing, provider profiles
 │   ├── core/                      # workflow, tasks, permissions, artifact acceptance
 │   ├── features/growth/           # M4a canonical campaign, reports, manual handoff
+│   ├── features/websites/         # M4b canonical website design/proposals/revisions/QA
 │   ├── domains/
 │   │   ├── growth/                # COMPAT aliases sang features/growth
-│   │   ├── websites/              # website proposals, design JSON, revision
+│   │   ├── websites/              # COMPAT aliases sang features/websites
 │   │   ├── webapps/               # NovaMart, React Developer, static QA, sandbox adapter
 │   │   ├── media/                 # image/SRT/FFmpeg + film planner/motion ComfyUI
 │   │   └── growth/                # demo campaigns, offline handoff
