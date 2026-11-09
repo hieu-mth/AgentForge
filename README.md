@@ -1,77 +1,54 @@
-# AgentForge — Local-first AI product prototyping
+# AgentForge
 
-AgentForge is a **single-owner, supervised** Python/React application for
-AI-assisted planning, task execution, artifact proposals and review.
-It is not yet a production SaaS or a validated full-stack generator.
+**Local-first AI Product Studio** — hệ thống Python + React để Owner giao việc cho AI, tạo bản nháp sản phẩm, quản lý workflow và xét duyệt artifact theo bằng chứng.
 
-## Canonical architecture
+> **Trạng thái: bản thử nghiệm dùng nội bộ.** CI xác minh code đáng tin cậy; không có bằng chứng rằng mọi ứng dụng/phim do AI sinh ra đều chạy đúng, sẵn sàng thương mại hoặc đã tạo doanh thu.
 
-- **Frontend:** `ui/dashboard/` (React 19, Ant Design, Vite). The old static
-  Control Center frontend is removed; `/` redirects to `/dashboard/`.
-- **Backend/API:** `src/agentforge/control_center_v1.py` (localhost,
-  authenticated owner session, CSRF, permission gates).
-- **Core:** `src/agentforge/core/` (tasks, workflow, acceptance, policy).
-- **AI:** `src/agentforge/ai/`, `src/agentforge/model.py`.
-- **Domains:** `src/agentforge/domains/` (websites, webapps, media, growth).
-- **Contracts:** `skills/`, `workers/`, `config/`.
-- **Owner data:** `data/` and `workspace/` are gitignored and **must not**
-  be deleted as part of repository cleanup.
+## Bắt đầu nhanh trên Windows
 
-The `src/agentforge/` directory is the **current backend**, not an obsolete
-source directory. Compatibility imports used by historical callers remain, but the old Python
-read-only dashboard and static Owner frontend have both been removed.
+Yêu cầu: **Python 3.13+**, Node.js 22 và npm. Mở PowerShell tại repository:
 
-## Run on Windows (PowerShell)
-
-Requires Python 3.13+, Node/npm compatible with Vite 7:
-
-```powershell
+~~~powershell
 cd D:\AgentForge
 py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[media]"
 npm.cmd ci --prefix ui/dashboard --ignore-scripts --no-audit --no-fund
 npm.cmd run build --prefix ui/dashboard
 .\.venv\Scripts\python.exe -m agentforge --port 8780
-```
+~~~
 
-Open http://127.0.0.1:8780/dashboard/ and enter the temporary Owner code
-printed in PowerShell. Use Ctrl+C to stop. Start with
-`--allow-external-tools` only if you need separately approved model/network/
-process capabilities. Do **not** expose the loopback server on the Internet.
+Mở **http://127.0.0.1:8780/** (chuyển đến `/dashboard/`), sau đó sử dụng mã Owner in ra trong PowerShell. Giữ cửa sổ chạy server, nhấn `Ctrl+C` để dừng.
 
-If `.venv\Scripts\python.exe` is missing, run `py -0p` and recreate
-the venv using the installed Python 3.13 interpreter. After setup,
-rebuild the dashboard only when frontend source changes.
+Nếu báo không tìm thấy `.venv\Scripts\python.exe`, chạy `py -0p` để kiểm tra phiên bản Python trước khi tạo lại môi trường. Không bắt buộc Docker cho việc phát triển thông thường.
 
-## Test trusted code
+## Hiện có những gì?
 
-```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests -v
-npm.cmd run test:navigation --prefix ui/dashboard
-npm.cmd run build --prefix ui/dashboard
-npm.cmd run test:browser --prefix ui/dashboard
-npm.cmd ci --prefix examples/novamart --ignore-scripts
-npm.cmd test --prefix examples/novamart
-npm.cmd run build --prefix examples/novamart
-```
+| Mảng | Khả năng đang có | Giới hạn quan trọng |
+| --- | --- | --- |
+| **Dashboard & workflow** | React Dashboard, task/goal, Owner approval, SQLite, lịch sử và SHA | Chỉ vận hành local cho một Owner; không phải SaaS |
+| **Website Builder** | Thiết kế website theo schema có giới hạn; feedback sinh phiên bản đề xuất | Không phải công cụ tạo full-stack tùy ý |
+| **Marketplace** | NovaMart demo, lọc/tìm kiếm/giỏ hàng, catalog do AI đề xuất | Không có thanh toán, backend bán hàng thật |
+| **AI React Developer** | Đề xuất source JSX/CSS và kiểm tra cú pháp | Chưa sửa source AI qua feedback; build/browser QA AI chưa xác minh |
+| **AI Film Studio** | Lập kế hoạch phim dài và adapter gửi shot ComfyUI theo quyền Owner | **Chưa kiểm chứng render video động thật trên GPU 12 GB**, chưa tự dựng phim dài |
+| **Media / Growth** | Ảnh tĩnh, SRT, TTS tùy chọn, FFmpeg MP4, gói bàn giao | YouTube upload vẫn thủ công; không có doanh thu tự xác minh |
 
-**Do not run AI-generated JavaScript on the Windows host.** Docker is not
-required for ordinary development, but generated React still requires an
-independently verified sandbox/browser QA boundary before acceptance.
-A JSX syntax PASS is not a runtime or security PASS.
+Chi tiết và định nghĩa trạng thái: **[Current Status](docs/STATUS.md)**.
 
-## Current product limits
+## Điều hướng tài liệu
 
-Static website generation uses bounded design JSON and trusted HTML.
-Marketplace generation uses a fixed NovaMart reference template with an AI
-catalog (demo cart, no real checkout). AI Developer can propose React source
-but source revision, real-model quality and browser QA remain unverified or
-unimplemented. The system separates task execution from artifact acceptance.
+- **[Trung tâm tài liệu](docs/README.md)** — bắt đầu từ đây, phân biệt docs hiện hành và lịch sử.
+- **[Hướng dẫn Windows & kiểm thử](docs/DEVELOPMENT.md)** — setup, build, chạy Dashboard và các giới hạn an toàn.
+- **[Roadmap hiện hành](docs/ROADMAP.md)** — ưu tiên AI Source Revision và AI Film Studio.
+- **[Kiến trúc repository](docs/architecture/REPOSITORY_STRUCTURE.md)** — module nào thực sự đang chạy.
+- **[AI Film Studio 12 GB](docs/architecture/FILM_MOTION_12GB_PILOT.md)** — điều kiện cần trước khi tạo clip thật.
+- **[Bằng chứng Phase 1](docs/verification/phase1/README.md)** — snapshot kiểm thử, không phải trạng thái live.
 
-See [Feature Matrix](docs/audits/FEATURE_MATRIX.md),
-[Full System Audit](docs/audits/FULL_SYSTEM_AUDIT.md),
-[Development Roadmap](docs/audits/DEVELOPMENT_ROADMAP.md), and
-[Phase 1 verification](docs/verification/phase1/README.md).
+## Nguyên tắc vận hành
 
-Documents under `docs/milestones/` are historical reference material,
-not current startup instructions.
+- Chỉ phục vụ Dashboard ở localhost; `/` redirect tới `/dashboard/`. Giao diện HTML/JS V0 đã xóa.
+- **Không thực thi source do AI sinh ra trên Windows host** khi chưa có sandbox được kiểm chứng.
+- Không tự sử dụng API trả phí, đăng YouTube hay public sản phẩm khi chưa có quyền và bằng chứng.
+- `data/`, `workspace/`, `.env`, các model và backup là dữ liệu của Owner: **không dọn/xóa tự động**.
+- Chỉ xem một lần test PASS là xác minh đúng phạm vi của test, không phải nghiệm thu phim/app ngoài thực tế.
+
+Mã nguồn: `src/agentforge/` (backend), `ui/dashboard/` (frontend), `skills/`, `workers/`, `tests/`. Repository đã loại bỏ frontend V0; những compatibility module còn được sử dụng vẫn phải được giữ.

@@ -1,3 +1,5 @@
+> **HISTORICAL AUDIT (09/11/2026, pre-Film Studio).** Đây là bảng công việc từ bản audit Phase 1, không phải roadmap hiện hành. Xem [ROADMAP.md](../ROADMAP.md) để biết ưu tiên hôm nay. Các kết luận và số test dưới đây chỉ đúng tại baseline ghi trong tài liệu.
+
 # Development Roadmap
 
 ## Cập nhật triển khai Phase 1 — 09/11/2026
