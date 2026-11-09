@@ -2,7 +2,7 @@
 
 **Quyết định: ĐÃ CHỐT (approved target)** · **Triển khai: M1 + M2 + M3 DONE, M4a–M4c + M4d1 Media/Film + M4d2 ComfyUI DONE; M4 research/ops PENDING + M5 phase 1 DONE (aliases giữ nguyên)** · 09/11/2026
 
-Chủ dự án đã chọn **flat-root Python package + dashboard riêng**, thay cho `src/agentforge/` và `ui/dashboard/` ban đầu. **M1 đã chuyển React sang `dashboard/`, M2 đã chuyển Python sang `agentforge/`.** `api/` đã triển khai ở M3; các business feature chính và `integrations/comfyui.py` đã triển khai M4a–M4d2. `ops/preflight.py` đã triển khai M9 read-only; các ops modules còn ở root và research cần review riêng; M5 compat cleanup chưa triển khai.
+Chủ dự án đã chọn **flat-root Python package + dashboard riêng**, thay cho `src/agentforge/` và `ui/dashboard/` ban đầu. **M1 đã chuyển React sang `dashboard/`, M2 đã chuyển Python sang `agentforge/`.** `api/` đã triển khai ở M3; các business feature chính và `integrations/comfyui.py` đã triển khai M4a–M4d2. `ops/preflight.py` đã triển khai M9 read-only; các ops modules còn ở root và research cần review riêng; M5 phase 1 direct-root aliases đã triển khai; chỉ phase 2 (xóa alias) còn chờ.
 
 - **Code thực tế hôm nay:** [REPOSITORY_STRUCTURE.md](REPOSITORY_STRUCTURE.md).
 - **Từng file Python và frontend hiện có:** [FILE_CATALOG.md](FILE_CATALOG.md).

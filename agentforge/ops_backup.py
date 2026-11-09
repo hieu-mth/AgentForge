@@ -276,7 +276,7 @@ def main():
     else:
         result = stage_restore(args.archive, args.destination,
                                confirm_restore=args.confirm_restore)
-    print(json.dumps(result, indent=2, ensure_ascii=False))
+    print(json.dumps(result, indent=2, ensure_ascii=True))
 
 
 if __name__ == "__main__":

@@ -90,16 +90,18 @@ export function OperationsControl({data,mutate,onReload}) {
   const mode=data?.operations?.mode||'UNKNOWN';
   const [preflight,setPreflight]=useState(null);
   const [doctor,setDoctor]=useState(null);
+  const [acceptance,setAcceptance]=useState(null);
   const [checking,setChecking]=useState(false);
   const [checkError,setCheckError]=useState('');
   const refreshChecks=useCallback(async()=>{
     setChecking(true);
     try {
-      const [env,health]=await Promise.all([
-        api('/api/ops/preflight'),api('/api/ops/health'),
+      const [env,health,base]=await Promise.all([
+        api('/api/ops/preflight'),api('/api/ops/health'),api('/api/ops/acceptance'),
       ]);
       setPreflight(env);
       setDoctor(health);
+      setAcceptance(base);
       setCheckError('');
     } catch (error) {
       setCheckError(error.message||'Không thể tải kiểm tra local');
@@ -137,9 +139,13 @@ export function OperationsControl({data,mutate,onReload}) {
       <Descriptions column={1} size="small" style={{marginBottom:16}} items={[
         {key:'env',label:'Môi trường',children:badge(preflightLabel(preflight?.status))},
         {key:'doctor',label:'Dữ liệu & backup',children:badge(doctor?.status||'CHƯA KIỂM TRA')},
+        {key:'owner',label:'Base V1 acceptance',children:badge(preflightLabel(acceptance?.status))},
         {key:'backup',label:'Backup local',children:doctor?doctor.backup_count+' bản':'Chưa kiểm tra'},
         {key:'tasks',label:'Task đang RUNNING',children:doctor?.running_tasks??'Chưa kiểm tra'},
       ]}/>
+      <Alert type="warning" showIcon style={{marginBottom:16}}
+        message="Nghiệm thu trên máy Owner vẫn chưa xác minh"
+        description="Đọc-only diagnostics và Windows CI không thay thế kiểm tra login, inference, artifact QA và backup/restore staging thực tế. Xem docs/verification/base_v1/README.md; không tự đánh dấu GO production."/>
       <Table size="small" rowKey="id" pagination={false}
         dataSource={preflight?.checks||[]} loading={checking} scroll={{x:520}}
         columns={[

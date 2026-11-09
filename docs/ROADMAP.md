@@ -12,6 +12,10 @@
 
 [Model Hub](architecture/MODEL_HUB.md) phân biệt routing đã nối ở text và video/image mới config-only, không tự chạy GPU/cloud.
 
+## Đợt 5 — Base V1 Acceptance
+
+Đã bổ sung báo cáo read-only (`python -B -m agentforge.ops.base_acceptance`), Windows acceptance script có bộ trusted contract tests và tùy chọn backup → verify → staged restore có xác nhận. **CI chỉ xác minh code/fixture; trạng thái nghiệm thu PC/model/artifact của Owner là PENDING** tới khi checklist B1–B7 được chạy có evidence. Xem [Base V1 Acceptance](verification/base_v1/README.md).
+
 ## Hai hướng sản phẩm cần hoàn thiện
 
 | Track | Mục tiêu kinh doanh | Tình trạng |

@@ -17,6 +17,7 @@ Các nhãn được dùng thống nhất:
 | Model Hub & Task Routing | IMPLEMENTED (text), PARTIAL (media) | `agentforge/ai/model_hub.py`, `dashboard/src/features/Models.jsx` | Text routes đã nối; video/image config-only, không chứng minh GPU hay billing |
 | Task orchestration và approvals | IMPLEMENTED | `agentforge/core/`, `skills/` | Không tự động trao quyền tool cho AI |
 | M5 phase 1 compatibility audit | IMPLEMENTED (không xóa alias) | `scripts/compat_audit.py`, `tests/test_m5_compatibility.py` | 22 root aliases trỏ thẳng features; external callers chưa thể xác minh |
+| Wave 5 Base V1 acceptance | IMPLEMENTED (CI contract + Owner checklist) | `agentforge/ops/base_acceptance.py`, `tests/test_wave5_acceptance.py`, [acceptance guide](verification/base_v1/README.md) | Owner PC/model/artifact chưa được nghiệm thu: OWNER_PENDING |
 | M9 Setup & Operations preflight | IMPLEMENTED (read-only) | `agentforge/ops/preflight.py`, `scripts/setup_windows.ps1`, Dashboard Vận hành | Không chứng minh model/GPU hoạt động, không cài dependency tự động |
 | M8 skill domain adapters | IMPLEMENTED (refactor) | `agentforge/core/skill_adapters/`, `tests/test_skill_adapters_m8.py` | Không phải runtime plugin động hay quyền mở rộng từ TOML |
 | M4a Growth feature-first | IMPLEMENTED (code migration) | `agentforge/features/growth/`, `tests/test_m4_growth_features.py` | Chưa tích hợp YouTube thực |
@@ -42,6 +43,10 @@ Các nhãn được dùng thống nhất:
 Windows CI đã có bài Python unittest, JS tests, production builds React Dashboard và NovaMart, Microsoft Edge smoke trên **trusted reference code**, và read-only acceptance. Kiểm tra trạng thái GitHub Actions tại commit đang dùng; bảng này không tự cập nhật CI về sau.
 
 **Chưa xác minh:** chất lượng từ model thật, AI React browser QA/isolated execution, video chuyển động Wan 2.2 trên máy 12 GB, tính nhất quán nhân vật trong phim, hiệu suất dựng hàng trăm shot, YouTube OAuth và khả năng kiếm tiền.
+
+## Đợt 5 — ranh giới nghiệm thu
+
+Code/CI có thêm báo cáo Base V1 **read-only** và bộ contract tests chủ đích; chỉ Owner mới có thể xác nhận login/browser/model/artifact/backup staging trên Windows thật. Không suy ra Base V1 Owner PASS chỉ từ CI; xem [checklist nghiệm thu](verification/base_v1/README.md).
 
 ## Các vấn đề ưu tiên
 

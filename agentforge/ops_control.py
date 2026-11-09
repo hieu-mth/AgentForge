@@ -89,7 +89,7 @@ def main():
         result = set_mode("PAUSED", confirm=args.confirm_pause)
     else:
         result = set_mode("ACTIVE", confirm=args.confirm_resume)
-    print(json.dumps(result, indent=2, ensure_ascii=False))
+    print(json.dumps(result, indent=2, ensure_ascii=True))
 
 
 if __name__ == "__main__":

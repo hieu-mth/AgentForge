@@ -112,7 +112,7 @@ def main():
                         help="Exit nonzero for warnings as well as failures")
     args = parser.parse_args()
     result = inspect()
-    print(json.dumps(result, indent=2, ensure_ascii=False))
+    print(json.dumps(result, indent=2, ensure_ascii=True))
     if result["status"] == "FAIL" or (
             args.strict and result["status"] != "PASS"):
         parser.exit(2)

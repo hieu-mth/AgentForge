@@ -8,6 +8,7 @@ export function preflightTone(status) {
 export function preflightLabel(status) {
   return ({
     BLOCKED:'Cần khắc phục',REVIEW_REQUIRED:'Cần kiểm tra',
+    OWNER_REVIEW_REQUIRED:'Chờ nghiệm thu máy thật',
     NEEDS_SETUP:'Chưa sẵn sàng',READY:'Đạt',
     READY_LOCAL_UNVERIFIED:'Sẵn sàng local (chưa thử model)',
     AVAILABLE_UNVERIFIED:'Đã tìm thấy · chưa xác minh phiên bản',
