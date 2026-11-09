@@ -29,6 +29,8 @@ Bối cảnh vận hành: Windows PowerShell, Python >=3.13, Node.js 22, React D
 - Không Docker vẫn được viết/test logic, nhưng không chạy source AI chưa tin cậy trên host.
 - Không tự suy ra chất lượng video/model từ model docs hay mock unit tests.
 
+**Đợt 2 M6/M7:** Model Hub sử dụng Git defaults (`models.toml`, `worker.toml`, `task_routes.toml`) và SQLite Owner overrides có revision/rollback. Dashboard có tab `#/models`. Text routes wired, image/video config-only; cloud không tự phát sinh phí. Xem [Model Hub](architecture/MODEL_HUB.md).
+
 ## 4. Ưu tiên hiện tại
 
 1. AI Film Studio: thực nghiệm motion 4 giây trên GPU 12 GB, sau đó clip QA → continuity → dựng phim nhiều cảnh → phim dài 1–3 giờ → đăng YouTube được Owner duyệt.

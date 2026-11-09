@@ -1,6 +1,6 @@
 # AgentForge — Trạng thái thực tế
 
-**Baseline tính năng:** sau PR #61 (09/11/2026); **đường dẫn code hiện tại:** M1 `dashboard/`, M2 `agentforge/` ở root; M3 canonical HTTP ở `agentforge/api/`. Đây là refactor/contract hardening, không mở rộng khả năng AI.
+**Baseline tính năng:** sau PR #61 (09/11/2026); **đường dẫn code hiện tại:** M1 `dashboard/`, M2 `agentforge/` ở root; M3 canonical HTTP ở `agentforge/api/`. M6/M7 thêm Model Hub quản lý profile và text task routing; ComfyUI video/image chưa kết nối qua route mới.
 
 Các nhãn được dùng thống nhất:
 
@@ -14,6 +14,7 @@ Các nhãn được dùng thống nhất:
 | Tính năng | Trạng thái | Bằng chứng trong source | Không được hiểu nhầm |
 | --- | --- | --- | --- |
 | Dashboard React + Owner session | IMPLEMENTED | `dashboard/`, `agentforge/api/server.py` | Không có multi-tenant/public hosting |
+| Model Hub & Task Routing | IMPLEMENTED (text), PARTIAL (media) | `agentforge/ai/model_hub.py`, `dashboard/src/features/Models.jsx` | Text routes đã nối; video/image config-only, không chứng minh GPU hay billing |
 | Task orchestration và approvals | IMPLEMENTED | `agentforge/core/`, `skills/` | Không tự động trao quyền tool cho AI |
 | Artifact acceptance gắn SHA | IMPLEMENTED | `agentforge/core/artifact_acceptance.py` | Workflow `SUCCEEDED` chưa chắc artifact `ACCEPTED` |
 | Static Website Builder | PARTIAL | `agentforge/domains/websites/` | Thiết kế và section bị giới hạn bởi schema; không có backend chung |

@@ -47,7 +47,24 @@ try {
   acceptancePage.on('pageerror',error=>errors.push(error.message));
   await acceptancePage.route('**/api/**',route=>{
     const path=new URL(route.request().url()).pathname;
-    const body=path==='/api/session'?{csrf:'fixture-only-csrf'}:{
+    const body=path==='/api/session'?{csrf:'fixture-only-csrf'}
+      :path==='/api/model-hub'?{
+        revision:0,cloud_fallback:false,gpu_auto_start:false,
+        profiles:[
+          {id:'local_primary',provider:'ollama',model:'qwen3:8b',enabled:true,
+           source:'git',health:'UNVERIFIED'},
+          {id:'cloud_primary',provider:'anthropic',model:'claude-demo',enabled:true,
+           source:'git',health:'UNVERIFIED'},
+        ],
+        routes:[
+          {id:'web.create',label:'Tạo Website',kind:'text',model_ref:'local_primary',
+           source:'default',runtime_wired:true,status:'ROUTED'},
+          {id:'film.motion',label:'Tạo video chuyển động',kind:'video',model_ref:null,
+           source:'default',runtime_wired:false,status:'UNCONFIGURED'},
+          {id:'ops.monitor',label:'Theo dõi hệ thống',kind:'rules',model_ref:null,
+           source:'default',runtime_wired:false,status:'DETERMINISTIC'},
+        ],
+      }:{
       goals:states.map((status,index)=>({goal_id:String(index+1).repeat(32),
         title:'Acceptance fixture '+status,template:'webapp.company',status:'SUCCEEDED',
         artifact_acceptance:{status}})),tasks:[],stats:{},
@@ -72,6 +89,14 @@ try {
   if(errors.length)throw new Error('React runtime errors: '+errors.join(' | '));
   await acceptancePage.screenshot({path:'../docs/verification/phase1/acceptance-workspace.png',fullPage:true});
   console.log('React acceptance states: PASS (API fixtures; execution separate from Owner acceptance)');
+  // Read-only Model Hub browser contract, with explicit mock data. Do not test
+  // paid inference or pretend that a model is installed/online.
+  await acceptancePage.goto(origin+'/dashboard/#/models',{waitUntil:'networkidle'});
+  await acceptancePage.getByText('Model Registry',{exact:true}).waitFor();
+  await acceptancePage.getByText('Task Routing',{exact:true}).waitFor();
+  await acceptancePage.getByText('Python rules · không cần AI',{exact:true}).first().waitFor();
+  if(errors.length)throw new Error('Model Hub runtime errors: '+errors.join(' | '));
+  console.log('Model Hub settings render: PASS (fixture, no provider calls)');
 } finally {
   if (browser) await browser.close();
   vite.kill();

@@ -1,6 +1,6 @@
 # File Catalog — danh mục file AgentForge hiện tại
 
-**Source baseline:** sau M6 backend (09/11/2026). **154 file Python**: 152 module sau M3, thêm `ai/model_hub.py` và `api/routes/model_hub.py`. Dashboard vẫn ở `dashboard/`; M7 UI và M4/M5 feature refactor là các mốc riêng. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
+**Source baseline:** sau M6 + M7 (09/11/2026). **154 file Python** (M0–M3 + Model Hub); Dashboard đã có Model Hub tại `#/models`. Feature-first M4 và alias cleanup M5 chưa thực hiện. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
 
 - [Cấu trúc đã được chốt](TARGET_STRUCTURE.md) — `agentforge/` và `dashboard/` ngay root, feature-first.
 - [Kế hoạch chuyển](MIGRATION_PLAN.md) — không phá paths/import/SQLite.
@@ -225,6 +225,7 @@
 | `src/App.jsx` | App shell, login/Owner controls và navigation layout. |
 | `src/api.js` | HTTP/session/CSRF frontend client. |
 | `src/navigation.js` | Định nghĩa tabs/route mapping. |
+| `src/model_hub_ui.js` | Helpers capability filtering và presentation; quyền được backend kiểm soát. |
 | `src/permissions.js` | Presentation/permission checks trong UI; backend vẫn là authority. |
 | `src/acceptance.js` | Projection/labels cho artifact acceptance states. |
 | `src/workspace_quota.js` | Ước lượng/presentation quota workspace. |
@@ -233,6 +234,7 @@
 | `src/components/AcceptanceStatus.jsx` | Hiển thị trạng thái nghiệm thu. |
 | `src/components/shared.jsx` | UI primitives dùng lại. |
 | `src/features/Management.jsx` | Màn hình quản lý hệ thống. |
+| `src/features/Models.jsx` | AI Models & Routing: chỉnh profile, gán route, health metadata, rollback. |
 | `src/features/Operations.jsx` | Màn hình Operations. |
 | `src/features/Projects.jsx` | Màn hình Projects. |
 | `src/features/Retention.jsx` | Màn hình backup/retention. |
@@ -242,6 +244,7 @@
 | `src/features/Workspace.jsx` | Màn hình giao việc/workspace. |
 | `tests/acceptance.test.js` | Regression UI acceptance. |
 | `tests/navigation.test.js` | Regression navigation. |
+| `tests/models.test.js` | Regression route compatibility, cloud/media warnings, payload validation UI. |
 | `tests/permissions.test.js` | Regression visibility/permission UI. |
 | `tests/workspace-quota.test.js` | Regression quota UX. |
 | `tests/browser-smoke.mjs` | Smoke browser trên trusted dashboard build. |

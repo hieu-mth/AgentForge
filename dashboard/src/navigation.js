@@ -1,4 +1,4 @@
-// A single declarative route map: six sidebar destinations, all 17 features preserved.
+// A single declarative route map: six sidebar destinations; 17 original screens + Model Hub.
 // No API permissions are changed by client-side navigation.
 export const NAV_GROUPS = Object.freeze([
   {key:'overview',label:'Tổng quan',tabs:[['overview','Tổng quan']]},
@@ -12,7 +12,7 @@ export const NAV_GROUPS = Object.freeze([
   {key:'team',label:'Đội ngũ AI',tabs:[
     ['team','Team & Roles'],['goals','Kế hoạch & Duyệt'],['tasks','Task History']]},
   {key:'settings',label:'Cài đặt',tabs:[
-    ['settings','Cấu hình'],['schedules','Lịch chạy'],
+    ['settings','Cấu hình'],['models','AI Models & Routing'],['schedules','Lịch chạy'],
     ['operations','Vận hành'],['memory','Owner Memory']]},
 ]);
 export const DEFAULT_TAB = Object.freeze({

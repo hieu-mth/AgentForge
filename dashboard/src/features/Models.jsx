@@ -1,0 +1,243 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { App as AntApp, Alert, Button, Card, Col, Empty, Form, Input,
+  Modal, Row, Select, Space, Switch, Table, Tag, Tooltip, Typography } from 'antd';
+import { api } from '../api.js';
+import { compatibleProfiles, exposureFor, KIND_LABELS, profilePayload,
+  PROVIDERS, STATUS_LABELS } from '../model_hub_ui.js';
+
+const { Text, Paragraph } = Typography;
+const PROVIDER_LABELS = Object.fromEntries(PROVIDERS.map(p=>[p.value,p.label]));
+
+function stateTag(status) {
+  const tone = status==='ROUTED'||status==='DETERMINISTIC'?'green'
+    :status==='INCOMPATIBLE'||status==='INVALID_CONFIG'?'red'
+      :status==='UNCONFIGURED'?'default':'blue';
+  return <Tag color={tone}>{STATUS_LABELS[status]||status}</Tag>;
+}
+
+export function ModelHub({mutate}) {
+  const {message,modal}=AntApp.useApp();
+  const [hub,setHub]=useState(null);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState(null);
+  const [drafts,setDrafts]=useState({});
+  const [checked,setChecked]=useState({});
+  const [editorOpen,setEditorOpen]=useState(false);
+  const [editing,setEditing]=useState(null);
+  const [form]=Form.useForm();
+  const provider=Form.useWatch('provider',form);
+
+  const reload=useCallback(async()=>{
+    setLoading(true);
+    try {
+      const next=await api('/api/model-hub');
+      setHub(next);setDrafts({});setError(null);
+    }catch(err){setError(err.message||'Không đọc được Model Hub');}
+    finally{setLoading(false);}
+  },[]);
+  useEffect(()=>{reload();},[reload]);
+
+  const profiles=hub?.profiles||[];
+  const profileById=useMemo(()=>Object.fromEntries(profiles.map(p=>[p.id,p])),[profiles]);
+  const routes=hub?.routes||[];
+  const configured=routes.filter(r=>r.status==='ROUTED'||r.status==='CONFIG_ONLY').length;
+  const localProfiles=profiles.filter(p=>p.provider!=='anthropic').length;
+
+  const update=(path,body,title,description,onSuccess)=>{
+    modal.confirm({
+      title,content:<Space direction="vertical" style={{width:'100%'}}>
+        <Paragraph>{description}</Paragraph>
+        <Alert type="info" showIcon message={'Revision đang lưu: '+(hub?.revision??'?')}
+          description="Nếu Dashboard khác đã đổi cấu hình, backend sẽ từ chối revision cũ. Không tự retry."/>
+      </Space>,
+      okText:'Xác nhận',cancelText:'Hủy',
+      onOk:async()=>{
+        const result=await mutate(path,body);
+        if(result){
+          if(path==='/api/model-hub/check') {
+            setChecked(old=>({...old,[body.profile_id]:result.status}));
+          }else {
+            setHub(result);setDrafts({});setChecked({});setError(null);
+          }
+          message.success(path==='/api/model-hub/check'?'Đã kiểm tra metadata local':'Đã lưu cấu hình local');
+          onSuccess?.();
+        } else {
+          await reload();
+        }
+      },
+    });
+  };
+
+  const editProfile=(item)=>{
+    setEditing(item||null);
+    form.resetFields();
+    form.setFieldsValue(item?{
+      id:item.id,provider:item.provider,model:item.model,enabled:item.enabled,
+      base_url:item.base_url||'',
+      base_url_env:item.base_url_env||'ANTHROPIC_BASE_URL',
+      api_key_env:item.api_key_env||'ANTHROPIC_AUTH_TOKEN',
+    }:{
+      provider:'ollama',enabled:true,base_url:'http://127.0.0.1:11434',
+      base_url_env:'ANTHROPIC_BASE_URL',api_key_env:'ANTHROPIC_AUTH_TOKEN',
+    });
+    setEditorOpen(true);
+  };
+
+  const saveProfile=(values)=>{
+    const payload=profilePayload(values);
+    update('/api/model-hub/profile',{
+      ack:'SAVE_MODEL_PROFILE',expected_revision:hub.revision,profile:payload,
+    },editing?'Cập nhật model profile?':'Đăng ký model profile?',
+    exposureFor(payload)+' Không lưu token/API key, không tự chạy tác vụ hoặc download model.',
+    ()=>setEditorOpen(false));
+  };
+
+  const saveRoute=(route)=>{
+    const model_ref=drafts[route.id]??route.model_ref;
+    const selected=profileById[model_ref];
+    update('/api/model-hub/route',{
+      ack:'SET_MODEL_ROUTE',expected_revision:hub.revision,
+      task_id:route.id,model_ref,
+    },'Gán model cho '+route.label+'?',
+    exposureFor(selected)+(route.runtime_wired
+      ? ' Route này được LLM runtime sử dụng ở lần thực thi kế tiếp; công việc đã chạy không bị thay đổi.'
+      : ' Route hiện CHỈ là cấu hình, chưa nối vào engine render.'),
+    null);
+  };
+
+  const resetRoute=(route)=>update('/api/model-hub/reset',{
+    ack:'RESET_MODEL_ROUTE',expected_revision:hub.revision,task_id:route.id,
+  },'Khôi phục route mặc định?','Chỉ xóa override của một tác vụ; mặc định Git/worker.toml được áp dụng trở lại.');
+
+  const rollback=()=>update('/api/model-hub/rollback',{
+    ack:'ROLLBACK_MODEL_HUB',expected_revision:hub.revision,target_revision:hub.revision-1,
+  },'Khôi phục snapshot cấu hình trước?',
+  'Toàn bộ profile và task route sẽ được khôi phục về revision '+(hub.revision-1)+
+  '. Đây là một revision mới, không xóa lịch sử.');
+
+  return <Space direction="vertical" size={18} style={{width:'100%'}}>
+    <Alert showIcon type="info" message="Model Hub · cấu hình local, không tự gọi AI"
+      description="models.toml + worker.toml là defaults; thay đổi trên Dashboard lưu trong SQLite local có version/rollback. Cloud không có auto-fallback; Video/Image hiện là cấu hình, chưa chứng minh GPU/ComfyUI chạy thật."/>
+    {error&&<Alert type="error" showIcon message="Không đọc được Model Hub" description={error}
+      action={<Button onClick={reload}>Thử lại</Button>}/>}
+    <Row gutter={[12,12]}>
+      <Col xs={12} md={6}><Card size="small"><Text type="secondary">Profiles</Text>
+        <div className="hub-stat">{profiles.length}</div><Text type="secondary">Đăng ký</Text></Card></Col>
+      <Col xs={12} md={6}><Card size="small"><Text type="secondary">Local</Text>
+        <div className="hub-stat">{localProfiles}</div><Text type="secondary">Ollama / ComfyUI</Text></Card></Col>
+      <Col xs={12} md={6}><Card size="small"><Text type="secondary">Configured routes</Text>
+        <div className="hub-stat">{configured}/{routes.length}</div><Text type="secondary">Không phải online</Text></Card></Col>
+      <Col xs={12} md={6}><Card size="small"><Text type="secondary">Config revision</Text>
+        <div className="hub-stat">{hub?.revision??'—'}</div><Text type="secondary">SQLite local</Text></Card></Col>
+    </Row>
+    <Card title="Model Registry" loading={loading}
+      extra={<Space>
+        <Button onClick={reload}>Làm mới</Button>
+        <Button type="primary" onClick={()=>editProfile(null)}>+ Đăng ký model</Button>
+      </Space>}>
+      <Table size="middle" rowKey="id" dataSource={profiles} scroll={{x:820}}
+        pagination={{pageSize:8,hideOnSinglePage:true}} locale={{emptyText:<Empty description="Chưa có model"/>}}
+        columns={[
+          {title:'Profile',dataIndex:'id',width:200,render:(id,row)=><Space direction="vertical" size={2}>
+            <Text strong code>{id}</Text>
+            <Text type="secondary" style={{fontSize:12}}>{row.source==='git'?'Git default':'Owner local'}</Text>
+          </Space>},
+          {title:'Provider',dataIndex:'provider',width:205,
+            render:p=><Tag>{PROVIDER_LABELS[p]||p}</Tag>},
+          {title:'Model / Checkpoint',dataIndex:'model',width:220,render:m=><Text>{m}</Text>},
+          {title:'Trạng thái',width:145,render:(_,row)=><Space direction="vertical" size={2}>
+            <Tag color={row.enabled?'blue':'default'}>{row.enabled?'Enabled':'Disabled'}</Tag>
+            <Text type="secondary" style={{fontSize:11}}>{checked[row.id]||'Chưa kiểm chứng'}</Text>
+          </Space>},
+          {title:'Thao tác',width:205,render:(_,row)=><Space>
+            <Tooltip title={row.provider==='ollama'?'Chỉ GET /api/tags trên localhost':'Không kiểm tra cloud hoặc GPU tự động'}>
+              <Button size="small" disabled={row.provider!=='ollama'}
+                onClick={()=>update('/api/model-hub/check',{
+                  ack:'CHECK_LOCAL_MODEL',profile_id:row.id,
+                },'Kiểm tra Ollama local?','Chỉ đọc danh sách model từ localhost trong 3 giây; không inference, không tải model.')}>
+                Kiểm tra</Button>
+            </Tooltip>
+            <Button size="small" onClick={()=>editProfile(row)}>Sửa</Button>
+          </Space>},
+        ]}/>
+    </Card>
+    <Card title="Task Routing" loading={loading}
+      extra={<Space>
+        <Text type="secondary">Revision {hub?.revision??'—'}</Text>
+        <Button disabled={!hub?.revision} onClick={rollback}>Hoàn tác lần sửa gần nhất</Button>
+      </Space>}>
+      <Alert showIcon type="warning" style={{marginBottom:16}}
+        message="Gán model không phải cấp quyền chạy"
+        description="Chọn model theo loại công việc. Cloud cần Owner duyệt từng lượt và môi trường đã cấp consent; Video/Image chỉ lưu mapping, chưa kích hoạt GPU."/>
+      <Table size="middle" rowKey="id" dataSource={routes} scroll={{x:960}}
+        pagination={false}
+        columns={[
+          {title:'Công việc',dataIndex:'label',width:225,render:(v,r)=><Space direction="vertical" size={2}>
+            <Text strong>{v}</Text><Text code type="secondary" style={{fontSize:11}}>{r.id}</Text>
+          </Space>},
+          {title:'Loại',dataIndex:'kind',width:115,render:v=>KIND_LABELS[v]||v},
+          {title:'Trạng thái',dataIndex:'status',width:200,render:stateTag},
+          {title:'Model được gán',width:295,render:(_,r)=>{
+            if(r.kind==='rules')return <Text type="secondary">Python rules · Không dùng AI</Text>;
+            const options=compatibleProfiles(r,profiles).map(p=>({
+              label:p.id+' · '+p.provider,value:p.id,
+            }));
+            return <Space direction="vertical" style={{width:'100%'}} size={2}>
+              <Select style={{width:'100%'}} size="middle" allowClear={false}
+                placeholder="Chọn model..." options={options}
+                value={drafts[r.id]??r.model_ref??undefined}
+                onChange={v=>setDrafts(x=>({...x,[r.id]:v}))}/>
+              <Text type="secondary" style={{fontSize:11}}>
+                {r.source==='owner'?'Owner override':'Default'} · {r.runtime_wired?'Runtime đã nối':'Config-only'}
+              </Text>
+            </Space>;
+          }},
+          {title:'Thao tác',width:145,render:(_,r)=>r.kind==='rules'?null:<Space direction="vertical">
+            <Button size="small" type="primary"
+              disabled={!((drafts[r.id]??r.model_ref) && drafts[r.id]!==undefined &&
+                drafts[r.id]!==r.model_ref)}
+              onClick={()=>saveRoute(r)}>Lưu route</Button>
+            {r.source==='owner'&&<Button size="small" onClick={()=>resetRoute(r)}>Reset</Button>}
+          </Space>},
+        ]}/>
+    </Card>
+    <Alert showIcon type="info" message="Ranh giới vận hành"
+      description="Trạng thái 'Đã gán' không xác nhận model đã cài, API key hoạt động, đủ VRAM, hiệu năng hay phí provider. Route Video Motion/Ảnh vẫn đòi hỏi adapter và QA riêng ở Film Studio."/>
+    <Modal open={editorOpen} title={editing?'Chỉnh sửa model profile':'Đăng ký model mới'}
+      onCancel={()=>setEditorOpen(false)} footer={null} destroyOnHidden>
+      <Form form={form} layout="vertical" onFinish={saveProfile} requiredMark={false}>
+        <Form.Item name="id" label="Profile ID" rules={[{required:true,pattern:/^[a-z][a-z0-9_]{2,39}$/}]}>
+          <Input disabled={!!editing} placeholder="coding_local"/>
+        </Form.Item>
+        <Form.Item name="provider" label="Provider" rules={[{required:true}]}>
+          <Select disabled={!!editing} options={PROVIDERS}/>
+        </Form.Item>
+        <Form.Item name="model" label="Model name / checkpoint ID"
+          rules={[{required:true,max:160,pattern:/^[A-Za-z0-9][A-Za-z0-9._:/+-]*$/}]}>
+          <Input placeholder={provider==='comfyui'?'wan2.2_5b':'qwen3-coder:7b'}/>
+        </Form.Item>
+        {provider==='anthropic'?<>
+          <Alert style={{marginBottom:12}} showIcon type="warning"
+            message="Cloud credentials chỉ tham chiếu tên biến môi trường. Không nhập API key tại đây."/>
+          <Form.Item name="base_url_env" label="Endpoint env" rules={[{required:true,pattern:/^[A-Z_][A-Z0-9_]*$/}]}>
+            <Input placeholder="ANTHROPIC_BASE_URL"/>
+          </Form.Item>
+          <Form.Item name="api_key_env" label="API key env" rules={[{required:true,pattern:/^[A-Z_][A-Z0-9_]*$/}]}>
+            <Input placeholder="ANTHROPIC_AUTH_TOKEN"/>
+          </Form.Item>
+        </>:<Form.Item name="base_url" label="Local endpoint"
+          rules={[{required:true,pattern:/^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):[0-9]{1,5}\/?$/}]}>
+          <Input placeholder={provider==='comfyui'?'http://127.0.0.1:8188':'http://127.0.0.1:11434'}/>
+        </Form.Item>}
+        <Form.Item name="enabled" label="Cho phép lựa chọn profile" valuePropName="checked">
+          <Switch/>
+        </Form.Item>
+        <Alert type="info" showIcon style={{marginBottom:16}} message={exposureFor({provider})}/>
+        <Space style={{justifyContent:'flex-end',width:'100%'}}>
+          <Button onClick={()=>setEditorOpen(false)}>Hủy</Button>
+          <Button type="primary" htmlType="submit">Xem xác nhận & Lưu</Button>
+        </Space>
+      </Form>
+    </Modal>
+  </Space>;
+}
