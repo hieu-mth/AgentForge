@@ -41,6 +41,37 @@ try {
     'Missing JS/CSS bundle: '+JSON.stringify(responses.filter(r=>r.status!==200)));
   if(!responses.some(r=>r.url.endsWith('.js'))) throw new Error('No JS bundle requested');
   console.log('React production boot: PASS; '+responses.length+' assets fetched');
+  // Real rendering with explicit API fixtures; this is not a real login test.
+  const states=['NEEDS_REVISION','NEEDS_VALIDATION','READY_FOR_REVIEW','ACCEPTED'];
+  const acceptancePage=await browser.newPage({viewport:{width:1440,height:1000}});
+  acceptancePage.on('pageerror',error=>errors.push(error.message));
+  await acceptancePage.route('**/api/**',route=>{
+    const path=new URL(route.request().url()).pathname;
+    const body=path==='/api/session'?{csrf:'fixture-only-csrf'}:{
+      goals:states.map((status,index)=>({goal_id:String(index+1).repeat(32),
+        title:'Acceptance fixture '+status,template:'webapp.company',status:'SUCCEEDED',
+        artifact_acceptance:{status}})),tasks:[],stats:{},
+      external_actions_enabled:false,
+    };
+    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
+  });
+  await acceptancePage.goto(origin+'/dashboard/#/workspace',{waitUntil:'networkidle'});
+  for(const label of ['Sản phẩm cần chỉnh sửa','Sản phẩm cần kiểm tra',
+    'Đủ điều kiện Owner nghiệm thu','Owner đã chấp nhận']){
+    await acceptancePage.getByText(label,{exact:true}).waitFor();
+  }
+  const completed=acceptancePage.locator('.status-pill').filter({hasText:'Đã thực thi xong'});
+  if(await completed.count()!==4)throw new Error('Execution status labels missing');
+  if(await completed.evaluateAll(nodes=>nodes.some(node=>node.classList.contains('tone-good')))){
+    throw new Error('Execution success incorrectly styled as product acceptance');
+  }
+  const acceptedTile=acceptancePage.locator('.stat-tile').filter({hasText:'Đã nghiệm thu'});
+  if((await acceptedTile.locator('.stat-value').innerText())!=='1'){
+    throw new Error('Workflow success counted as accepted product');
+  }
+  if(errors.length)throw new Error('React runtime errors: '+errors.join(' | '));
+  await acceptancePage.screenshot({path:'../../docs/verification/phase1/acceptance-workspace.png',fullPage:true});
+  console.log('React acceptance states: PASS (API fixtures; execution separate from Owner acceptance)');
 } finally {
   if (browser) await browser.close();
   vite.kill();
