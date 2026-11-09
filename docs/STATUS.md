@@ -19,6 +19,7 @@ Các nhãn được dùng thống nhất:
 | M8 skill domain adapters | IMPLEMENTED (refactor) | `agentforge/core/skill_adapters/`, `tests/test_skill_adapters_m8.py` | Không phải runtime plugin động hay quyền mở rộng từ TOML |
 | M4a Growth feature-first | IMPLEMENTED (code migration) | `agentforge/features/growth/`, `tests/test_m4_growth_features.py` | Chưa tích hợp YouTube thực |
 | M4b Website feature-first | IMPLEMENTED (code migration) | `agentforge/features/websites/`, `tests/test_m4_websites_features.py` | Không đồng nghĩa AI Builder đã tạo và QA website tùy ý thành công |
+| M4c Webapp feature-first | IMPLEMENTED (code migration) | `agentforge/features/webapps/`, `tests/test_m4_webapps_features.py` | Generated React sandbox/browser execution vẫn chưa được kiểm chứng trên Owner PC |
 | Artifact acceptance gắn SHA | IMPLEMENTED | `agentforge/core/artifact_acceptance.py` | Workflow `SUCCEEDED` chưa chắc artifact `ACCEPTED` |
 | Static Website Builder | PARTIAL | `agentforge/domains/websites/` | Thiết kế và section bị giới hạn bởi schema; không có backend chung |
 | Marketplace React demo | PARTIAL | `agentforge/domains/webapps/builder.py`, `templates/novamart/` | Cart/search demo, không có checkout thanh toán |

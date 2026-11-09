@@ -1,6 +1,6 @@
 # File Catalog — danh mục file AgentForge hiện tại
 
-**Source baseline:** sau M6 + M7 (09/11/2026). **178 file Python** (M0–M3 + Model Hub + M8 + M4a + M4b); Dashboard đã có Model Hub tại `#/models`. M4a Growth → `features/growth/` và M4b Websites → `features/websites/`, đều giữ compatibility aliases; các domain khác và M5 chưa thực hiện. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
+**Source baseline:** sau M6 + M7 (09/11/2026). **187 file Python** (M0–M3 + Model Hub + M8 + M4a + M4b + M4c); Dashboard đã có Model Hub tại `#/models`. M4a Growth, M4b Websites và M4c Webapps đã chuyển sang `features/`, đều giữ compatibility aliases; các domain khác và M5 chưa thực hiện. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
 
 - [Cấu trúc đã được chốt](TARGET_STRUCTURE.md) — `agentforge/` và `dashboard/` ngay root, feature-first.
 - [Kế hoạch chuyển](MIGRATION_PLAN.md) — không phá paths/import/SQLite.
@@ -16,7 +16,7 @@
 | **CLI** | Công cụ vận hành/demo theo lệnh, cần xem callers trước khi bỏ. |
 | **CONTRACT** | Module mô tả/kiểm tra hợp đồng cấu trúc, không tự chạy workflow. |
 
-**Tổng cộng: 178 file `.py`** (137 baseline + 15 M3 + 2 M6 + 6 M8 adapters + 5 M4a + 13 M4b feature modules). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
+**Tổng cộng: 187 file `.py`** (137 baseline + 15 M3 + 2 M6 + 6 M8 adapters + 5 M4a + 13 M4b + 9 M4c feature modules). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
 
 ## **Entrypoints và modules tại package root**
 
@@ -192,7 +192,21 @@
 | `domains/media/render.py` | TTS/FFmpeg render từ assets/captions; bounded local. |
 | `domains/media/workflow.py` | Orchestration cho pipeline media. |
 
-## **Domains: `domains/webapps/`**
+## **Feature-first: `features/webapps/` (M4c)**
+
+| File hiện tại dưới `agentforge/` | Vai trò |
+| --- | --- |
+| `features/webapps/__init__.py` | Canonical Webapp feature package. |
+| `features/webapps/architect.py` | Canonical implementation `architect`. |
+| `features/webapps/builder.py` | Canonical implementation `builder`. |
+| `features/webapps/developer.py` | Canonical implementation `developer`. |
+| `features/webapps/reviewer.py` | Canonical implementation `reviewer`. |
+| `features/webapps/sandbox.py` | Canonical implementation `sandbox`. |
+| `features/webapps/static_qa.py` | Canonical implementation `static_qa`. |
+| `features/webapps/syntax.py` | Canonical implementation `syntax`. |
+| `features/webapps/toolchain.py` | Canonical implementation `toolchain`. |
+
+## **Domains: `domains/webapps/` (COMPAT)**
 
 | File hiện tại dưới `agentforge/` | Vai trò |
 | --- | --- |
