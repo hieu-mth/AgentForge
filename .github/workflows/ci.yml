@@ -39,7 +39,7 @@ jobs:
 
       - name: Install React Dashboard dependencies
         working-directory: ui/dashboard
-        run: npm install --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Validate compact React navigation
         working-directory: ui/dashboard
@@ -58,7 +58,7 @@ jobs:
 
       - name: Install NovaMart reference dependencies
         working-directory: examples/novamart
-        run: npm install --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Test NovaMart interactive commerce logic
         working-directory: examples/novamart
