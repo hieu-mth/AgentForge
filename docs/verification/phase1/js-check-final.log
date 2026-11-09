@@ -1,0 +1,8 @@
+npm.cmd : npm notice run @agentforge/dashboard@0.1.0 check
+At line:2 char:636
++ ... STEXITCODE; npm.cmd run check --prefix ui/dashboard *> docs/verificat ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (npm notice run ...ard@0.1.0 check:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+npm notice run node --check src/api.js
