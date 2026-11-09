@@ -1,6 +1,6 @@
 # File Catalog — danh mục file AgentForge hiện tại
 
-**Source baseline:** sau M8 + M4a–M4d2 (09/11/2026). **201 file Python** (M0–M3 + Model Hub + M8 + M4a + M4b + M4c + M4d1 + M4d2); Dashboard đã có Model Hub tại `#/models`. M4a Growth, M4b Websites, M4c Webapps, M4d1 Media/Film Studio đã chuyển sang `features/`. M5 phase 1 đã chuyển 22 root compatibility aliases trỏ thẳng `features/` nhưng chưa xóa alias. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
+**Source baseline:** sau M8 + M4a–M4d2 (09/11/2026). **203 file Python** (M0–M3 + Model Hub + M8 + M4a + M4b + M4c + M4d1 + M4d2); Dashboard đã có Model Hub tại `#/models`. M4a Growth, M4b Websites, M4c Webapps, M4d1 Media/Film Studio đã chuyển sang `features/`. M5 phase 1 đã chuyển 22 root compatibility aliases trỏ thẳng `features/` nhưng chưa xóa alias. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
 
 - [Cấu trúc đã được chốt](TARGET_STRUCTURE.md) — `agentforge/` và `dashboard/` ngay root, feature-first.
 - [Kế hoạch chuyển](MIGRATION_PLAN.md) — không phá paths/import/SQLite.
@@ -16,7 +16,7 @@
 | **CLI** | Công cụ vận hành/demo theo lệnh, cần xem callers trước khi bỏ. |
 | **CONTRACT** | Module mô tả/kiểm tra hợp đồng cấu trúc, không tự chạy workflow. |
 
-**Tổng cộng: 201 file `.py`** (137 baseline + 15 M3 + 2 M6 + 6 M8 adapters + 5 M4a + 13 M4b + 9 M4c + 8 M4d1 + 2 M4d2 + 2 M9 ops modules + 1 Wave 5 acceptance module + 1 Wave 6 source revision module). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
+**Tổng cộng: 203 file `.py`** (137 baseline + 15 M3 + 2 M6 + 6 M8 adapters + 5 M4a + 13 M4b + 9 M4c + 8 M4d1 + 2 M4d2 + 2 M9 ops modules + 1 Wave 5 acceptance module + 1 Wave 6 source revision module + 2 Wave 7 QA/export modules). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
 
 ## **Entrypoints và modules tại package root**
 
@@ -212,6 +212,8 @@
 | `features/webapps/__init__.py` | Canonical Webapp feature package. |
 | `features/webapps/architect.py` | Canonical implementation `architect`. |
 | `features/webapps/builder.py` | Canonical implementation `builder`. |
+| `features/webapps/browser_qa.py` | Owner-gated local offline Chromium QA and screenshot SHA reports. |
+| `features/webapps/exporter.py` | Deterministic source ZIP, per-file integrity manifest and source SHA. |
 | `features/webapps/revisions.py` | Wave 6 source-aware React edit, immutable lineage, bounded diff and ancestor rollback. |
 | `features/webapps/developer.py` | Canonical implementation `developer`. |
 | `features/webapps/reviewer.py` | Canonical implementation `reviewer`. |

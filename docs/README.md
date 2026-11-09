@@ -10,6 +10,7 @@ Không sử dụng các tài liệu milestone phiên bản cũ để suy luận 
 | --- | --- | --- |
 | Khởi chạy | [README tại root](../README.md) | Giới thiệu, lệnh chạy nhanh |
 | Xem hệ thống làm được gì | [STATUS.md](STATUS.md) | Matrix VERIFIED / PARTIAL / NOT IMPLEMENTED / UNVERIFIED |
+| Product QA/ZIP export (Đợt 7) | [Wave 7 acceptance](verification/wave7/README.md) | Offline Chromium smoke + screenshot SHA; source ZIP manifest; Owner PC pending |
 | AI React source revision (Đợt 6) | [Wave 6 acceptance](verification/wave6/README.md) | Chỉnh JSX/CSS theo feedback, SHA/diff/rollback, chưa QA model/browser thật |
 | Nghiệm thu Base V1 (Đợt 5) | [Base V1 acceptance](verification/base_v1/README.md) | CI gates, workflow/backup staging, checklist Owner Windows B1–B7 |
 | Cài, build, kiểm thử | [DEVELOPMENT.md](DEVELOPMENT.md) | M9 Windows preflight/setup an toàn, Python, npm, CI, kiểm tra docs |

@@ -1,3 +1,7 @@
+## Đợt 7 — Product QA & Export
+
+Đã bổ sung Goal browser QA chạy trong image Docker offline riêng do Owner build/pin SHA, sinh report + screenshot theo proposal SHA, và export ZIP source deterministic có per-file manifest. Kiểm tra CI chỉ chứng minh hợp đồng code bằng mock; máy Owner chưa chạy Chromium thực và chưa xác nhận product flows. Xem [Wave 7 acceptance](verification/wave7/README.md).
+
 # AgentForge — Trạng thái thực tế
 
 **Baseline code:** M1–M3, M6–M8 và M4a–M4d2 (09/11/2026); canonical HTTP `agentforge/api/`, business `agentforge/features/`, ComfyUI transport `agentforge/integrations/`. M6/M7 Model Hub chỉ nối text task routing; ComfyUI video/image chưa nối qua route mới.

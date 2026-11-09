@@ -49,3 +49,20 @@ No preview server, external port, build output or package install survives.
 maintained and patched by the Owner. Docker Linux container limitations and
 Windows filesystem mount support must be accepted on real hardware.
 On systems without proper isolation, keep using the source-only workflow.
+
+
+## Wave 7 — QA Chromium offline (Owner tùy chọn)
+
+Browser QA dùng image Docker riêng; bản V4.2 build-only cũ vẫn giữ nguyên. Từ root repo, với Docker Desktop Linux và BuildKit/buildx, Owner build thủ công **chỉ với hai context code tin cậy**, không chuyển toàn bộ data, workspace, `.env` vào Docker daemon:
+
+```powershell
+docker buildx build --load --build-context reference=./templates/novamart -f ./sandbox/webapp/Dockerfile.browser -t agentforge-webapp-browser:local ./sandbox/webapp
+docker image inspect agentforge-webapp-browser:local --format '{{.Id}}'
+$env:AGENTFORGE_BROWSER_QA_IMAGE = 'sha256:<ID thật từ dòng trước>'
+```
+
+Dockerfile chỉ COPY package manifest/lock từ named context `reference` và trusted `browser_runner.mjs` từ sandbox context. Build image lần đầu có thể tải Node base/Chromium/npm từ Internet, **chỉ do Owner chủ động**. Image phải pin bằng exact SHA được in ở máy trước khi mở Dashboard. Nếu Docker chưa hỗ trợ named BuildKit context, **không** thay bằng root context chứa Owner data; nâng cấp Docker/buildx hoặc tiếp tục QA build-only.
+
+Start backend `python -m agentforge --port 8780 --allow-external-tools`, sau đó mở đúng signed React proposal, chọn **QA Chromium offline**, duyệt SHA Goal và riêng quyền `process.run` trước chạy. Runtime browser dùng `--pull never --network none`, readonly root và source, cap-drop ALL, UID 10001, bounded CPU/RAM/PIDs, timeout, không mount key/.env. Chromium dùng `--no-sandbox` bên trong container; Docker host/kernel và image supply-chain vẫn là ranh giới tin cậy, **không có bảo đảm tuyệt đối**.
+
+QA chỉ smoke React render, button, mobile overflow, page console error, outbound blocking và 2 ảnh desktop/mobile lưu dưới `workspace/webapp-browser-qa`. `PASS_SMOKE_ONLY` không có nghĩa search/cart/checkout thành công hoặc website đã deploy; Owner cần mở ảnh và kiểm tra nghiệp vụ thủ công. ZIP export từ proposal đã inspect chứa source files + manifest và sha256, không chạy npm hay deploy. Không gửi ZIP chứa tài liệu riêng tư ra Internet.

@@ -123,7 +123,7 @@ def _save(document, output):
         "screenshots": screenshot_sha,
         "build_verified": output["code"] in
             {"BROWSER_SMOKE_ONLY", "BROWSER_ASSERTION_FAILED",
-             "BROWSER_RUNTIME_FAILED", "SCREENSHOT_TOO_LARGE"},
+             "SCREENSHOT_TOO_LARGE"},
         "browser_smoke_verified": output["status"] == "PASS_SMOKE_ONLY",
         "functional_flows_verified": False, "security_verified": False,
         "deployment_authorized": False, "network": "none",

@@ -45,6 +45,10 @@ Không mở rộng thêm agent/worker hoặc microservice khi hai vòng lặp n�
 3. Dựng 60–90 giây nhiều shot có chung nhân vật, voiceover/subtitles và continuity audit.
 4. Mở rộng lên tập 15–30 phút trước khi thử một phim dài hàng giờ.
 
+## Đợt 7 — Product QA và Export
+
+Lập Goal `webapp.browser_qa` 0 model calls, 1 Owner-approved process run, Docker Chromium offline, source readonly, screenshot desktop/mobile + báo cáo SHA; export ZIP source signed manifest. CI chỉ kiểm tra code/fixture, **Owner browser runtime và chức năng thực tế vẫn UNVERIFIED**. Xem [Wave 7](verification/wave7/README.md).
+
 ## Đợt 6 — AI React revision
 
 Đã thêm kế hoạch webapp.source_revision, API revision cho AI JSX/CSS, partial-file edits được gắn source SHA, immutable version và diff; rollback tạo proposal riêng chỉ từ verified ancestor. Bản nguồn AI vẫn chưa được chạy/kiểm thử trên browser cách ly, model thực chưa được benchmark. Xem [Wave 6 acceptance](verification/wave6/README.md).

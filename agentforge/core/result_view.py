@@ -104,6 +104,8 @@ def present(skill_id, result):
         )
         if valid:
             return {"kind": "webapp_browser_qa", "status": result["status"],
+                    "proposal_id": result.get("proposal_id"),
+                    "source_sha256": result.get("sha256"),
                     "report_id": result["qa_report_id"],
                     "report_sha": result["qa_report_sha"],
                     "code": result.get("code"),
