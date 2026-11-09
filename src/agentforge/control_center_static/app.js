@@ -413,3 +413,51 @@ function renderTasks(){
  '</td></tr>');
  return header("AUDIT TRAIL","Task History",
   "Bấm Task ID để xem lỗi, artifacts và log sự kiện ngay trong cửa sổ chi tiết.")+
+ card("Các tác vụ gần đây",table(["TASK ID","LOẠI","SKILL","TRẠNG THÁI","UPDATED UTC"],rows));
+}
+function renderSkills(){
+ const cards=state.data.skills.map(s=>
+ '<div class="channel-card"><div class="channel-mark">◇</div><div class="channel-name mono">'+
+ esc(s.id)+'</div><p>Worker: '+esc(s.worker)+'</p>'+badge(s.mode)+
+ '</div>').join("");
+ return header("WORKFORCE","AI Workforce","Danh mục skills hiện có, chạy qua một policy và Task History thống nhất.")+
+ '<div class="callout section">Skill Registry có '+fmt(state.data.stats.skills)+
+ ' contracts. Không thể tự tạo executor hoặc bypass quyền qua giao diện.</div>'+
+ '<div class="flow-grid section">'+cards+'</div>';
+}
+function renderArtifacts(){
+ const source=state.artifacts;
+ if(!source)return header("LOCAL STORAGE","Projects & Files","Danh sách tài sản cục bộ, chỉ đọc.")+
+  card("Đang tải","<p class='muted'>Đang kiểm kê file an toàn...</p>");
+ const rows=(source.items||[]).map(a=>'<tr><td>'+esc(a.kind)+'</td><td class="mono">'+
+  esc(a.id)+'</td><td>'+badge(a.status)+'</td><td>'+fmt(a.bytes)+'</td>'+
+  '<td>Chưa xác minh triển khai</td></tr>');
+ return header("LOCAL STORAGE","Projects & Files",
+  "Chỉ kiểm kê những tài sản thuộc AgentForge. Không có nút xóa hàng loạt; không chạm dữ liệu nghiệp vụ.")+
+  '<div class="callout">Workspace và SQLite được giữ nguyên trên máy. Website local ≠ đã triển khai online. Proposal ≠ sản phẩm được duyệt. Muốn dọn cache dùng scripts/repo_hygiene.py sau khi xem báo cáo.</div>'+
+  '<div class="section">'+card("Kiểm kê tài sản · "+fmt(source.total_items),
+    table(["LOẠI","ID/SLUG","TRẠNG THÁI","BYTES","ĐĂNG ONLINE"],rows,"Chưa có tài sản hợp lệ."))+'</div>'+
+  (source.truncated?'<p class="small muted">Danh sách giới hạn 40 mục; tổng số hiển thị phía trên.</p>':'')+
+  '<div class="section">'+renderImageStudio()+'</div>';
+}
+function renderImageStudio(){
+ const health=state.imageHealth||{status:"NOT_CHECKED",checkpoints:[]};
+ const jobs=state.imageJobs?.jobs||[];
+ const sites=(state.artifacts?.items||[]).filter(x=>x.kind==="website");
+ const checkpoints=(health.checkpoints||[]).map(x=>'<option value="'+esc(x)+'">'+esc(x)+'</option>').join("");
+ const sitesList=sites.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.id)+'</option>').join("");
+ const rows=jobs.map(x=>'<tr><td>'+short(x.job_id)+'</td><td>'+esc(x.slug)+'</td>'+
+   '<td>'+badge(x.status)+'</td><td class="mono">'+short(x.asset_sha||"")+'</td>'+
+   '<td>'+(x.status==="SUBMITTED"?
+   '<button type="button" class="btn btn-small btn-outline" data-image-collect="'+esc(x.job_id)+'">Nhận ảnh khi xong</button>':
+   x.status==="ASSET_READY"?
+   '<button type="button" class="btn btn-small btn-primary" data-image-attach="'+esc(x.job_id)+'">Gắn ảnh vào web</button>':
+   '—')+'</td></tr>');
+ const form=health.status==="READY"&&sites.length?
+   '<div class="form-field"><label for="image-project">Website đã apply (local)</label><select id="image-project">'+sitesList+'</select></div>'+
+   '<div class="form-field"><label for="image-checkpoint">Checkpoint ComfyUI đã cài</label><select id="image-checkpoint">'+checkpoints+'</select></div>'+
+   '<div class="form-field"><label for="image-prompt">Mô tả ảnh (20–450 ký tự)</label>'+
+   '<textarea id="image-prompt" minlength="20" maxlength="450" rows="3" placeholder="Photorealistic cozy Vietnamese bedroom with elegant mattress, warm natural light, neutral palette, no text, no labels"></textarea></div>'+
+   '<button type="button" class="btn btn-primary" data-image-submit="1">Tạo ảnh AI local · Xác nhận GPU</button>':
+   '<p class="muted">Chưa có ComfyUI local + checkpoint hợp lệ hoặc chưa có website đã apply. Không tự tạo ảnh giả hay gọi dịch vụ cloud.</p>';
+ return card("AI Image Studio · ComfyUI local (tùy chọn)",
