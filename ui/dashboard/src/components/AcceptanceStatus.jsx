@@ -9,6 +9,11 @@ export function AcceptanceStatus({acceptance, onDecide, busy}) {
     <Alert showIcon type={status==='ACCEPTED'?'success':status==='NEEDS_REVISION'?'error':'info'}
       message={acceptanceLabel(status)}
       description="Trạng thái nghiệm thu sản phẩm tách biệt với việc task đã thực thi xong. Lưu mã nguồn không phải nghiệm thu hoặc xuất bản."/>
+    <details><summary>Bằng chứng kiểm tra</summary>
+      <ul>{(acceptance.required_checks||[]).map(check=><li key={check}>
+        {check}: {acceptance.checks?.[check]?.outcome||'CHƯA KIỂM CHỨNG'}
+      </li>)}</ul>
+    </details>
     {onDecide&&!final&&<Space>
       <Button disabled={!canAccept(acceptance)} loading={busy} onClick={()=>onDecide('ACCEPTED')}>
         Owner chấp nhận sản phẩm
