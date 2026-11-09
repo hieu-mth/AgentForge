@@ -47,7 +47,8 @@ AgentForge/
 ├── skills/                         # Skill contracts có allowlist và quyền
 ├── workers/                        # Role/worker declarations, model assignment
 ├── config/                         # models.toml và cấu hình Owner (không secrets)
-├── examples/                       # NovaMart và các reference/demo đáng tin cậy
+├── templates/                      # Reviewed source templates (NovaMart thực sự được builder đọc)
+├── examples/                       # Ví dụ dữ liệu minh họa (film/storyboard)
 ├── tests/                          # Python integration, security, regression
 ├── scripts/                        # Maintenance, acceptance, docs lint
 ├── docs/                           # Tài liệu hiện hành + audit lịch sử
@@ -78,7 +79,8 @@ AgentForge/
 | `skills/`, `workers/` | Hợp đồng task, capability, định danh role | Chứa credentials hoặc script tùy ý chạy tự động |
 | `config/` | Cấu hình đọc được/review được | API keys, private user files |
 | `tests/`, `scripts/` | Regression, maintenance, read-only checks | Chạy generated code trên Windows host |
-| `examples/` | Reference template đáng tin cậy | Được nhầm với sản phẩm AI đã nghiệm thu |
+| `templates/` | Reviewed, pinned source scaffolds mà runtime builder phụ thuộc | Dùng nội dung chưa kiểm duyệt hoặc xóa template khi còn dependency |
+| `examples/` | Dữ liệu mẫu film/storyboard phục vụ thử nghiệm | Nhầm file JSON mẫu với sản phẩm đã render/ACCEPTED |
 
 ## 3. Quy tắc tổ chức file
 

@@ -47,9 +47,9 @@ Cờ này không cho phép tùy tiện public hệ thống hay chạy generated 
 .\.venv\Scripts\python.exe scripts/check_docs.py
 npm.cmd run test:navigation --prefix dashboard
 npm.cmd run build --prefix dashboard
-npm.cmd ci --prefix examples/novamart --ignore-scripts --no-audit --no-fund
-npm.cmd test --prefix examples/novamart
-npm.cmd run build --prefix examples/novamart
+npm.cmd ci --prefix templates/novamart --ignore-scripts --no-audit --no-fund
+npm.cmd test --prefix templates/novamart
+npm.cmd run build --prefix templates/novamart
 ~~~
 
 Browser smoke của Dashboard/NovaMart chạy trên Microsoft Edge nếu máy đã có Edge và prerequisites. CI dùng Windows, Python 3.13 và Node 22.

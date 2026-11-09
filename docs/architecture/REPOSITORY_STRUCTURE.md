@@ -21,7 +21,8 @@ AgentForge/
 │   ├── storage/                   # storage and retention logic
 │   └── paths.py                   # local root and path guards
 ├── dashboard/                     # ONLY Owner frontend (React + Vite)
-├── examples/novamart/             # trusted marketplace demo/template
+├── templates/novamart/            # trusted React marketplace runtime template
+├── examples/                      # sample film/storyboard JSON only
 ├── skills/                        # skill contracts, tool permissions
 ├── workers/                       # worker manifests and instructions
 ├── config/                        # model configuration templates

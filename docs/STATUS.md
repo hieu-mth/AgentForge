@@ -17,7 +17,7 @@ Các nhãn được dùng thống nhất:
 | Task orchestration và approvals | IMPLEMENTED | `agentforge/core/`, `skills/` | Không tự động trao quyền tool cho AI |
 | Artifact acceptance gắn SHA | IMPLEMENTED | `agentforge/core/artifact_acceptance.py` | Workflow `SUCCEEDED` chưa chắc artifact `ACCEPTED` |
 | Static Website Builder | PARTIAL | `agentforge/domains/websites/` | Thiết kế và section bị giới hạn bởi schema; không có backend chung |
-| Marketplace React demo | PARTIAL | `agentforge/domains/webapps/builder.py`, `examples/novamart/` | Cart/search demo, không có checkout thanh toán |
+| Marketplace React demo | PARTIAL | `agentforge/domains/webapps/builder.py`, `templates/novamart/` | Cart/search demo, không có checkout thanh toán |
 | AI React Developer | PARTIAL | `agentforge/domains/webapps/developer.py` | Danh sách file giới hạn; source là đề xuất, không tự chạy |
 | Source revision cho AI React | NOT IMPLEMENTED | `agentforge/control_center_v1.py` hiện trả về `PermissionError` | Website/marketplace **có** revision riêng theo data/schema, không phải sửa source AI |
 | Build + browser QA source AI | UNVERIFIED | `agentforge/domains/webapps/sandbox.py` | Docker bị thiếu ở máy Owner; CI không chạy generated source |
