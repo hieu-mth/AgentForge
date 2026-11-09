@@ -30,7 +30,7 @@ AgentForge/
 ├── examples/                      # sample film/storyboard JSON only
 ├── skills/                        # skill contracts, tool permissions
 ├── workers/                       # worker manifests and instructions
-├── config/                        # model configuration templates
+├── config/                        # models.toml + task_routes.toml defaults
 ├── scripts/                       # maintenance and safety checks
 ├── tests/                         # Python and Node regression
 ├── docs/                          # current, evidence, historic docs
@@ -39,6 +39,10 @@ AgentForge/
 ~~~
 
 `agentforge/` là **backend Python đang chạy** ở root, còn `dashboard/` là frontend React; URL vẫn `/dashboard/`. Namespace Python `agentforge.*`, các CLI và SQLite paths không đổi về ý nghĩa. M3 đã hoàn thành trong scope API; M4/M5 là các đợt refactor domain và aliases còn lại. Những Python compatibility aliases root-level được giữ nếu còn CLI, imports hoặc tests phụ thuộc. Không tự tái tổ chức tất cả folder chỉ để đẹp cây thư mục.
+
+## Model Hub
+
+`agentforge/ai/model_hub.py` kết hợp default model/worker/route TOML với local SQLite Owner overrides. `agentforge/api/routes/model_hub.py` kiểm soát GET/POST và `dashboard/src/features/Models.jsx` trình bày tab `#/models`. Text LLM runtime đã nối; `film.motion` và image vẫn config-only. Xem [hướng dẫn Model Hub](MODEL_HUB.md).
 
 ## Vòng đời sản phẩm
 

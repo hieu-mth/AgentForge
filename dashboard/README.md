@@ -24,9 +24,10 @@ public network.
 
 - `src/App.jsx`: app shell, login, navigation and owner controls
 - `src/api.js`: same-origin cookie/CSRF API client
-- `src/features/`: workspace, projects, websites, review, operations
+- `src/features/`: workspace, projects, websites, review, operations, `Models.jsx` (AI Models & Routing)
 - `src/components/`: shared UI and acceptance states
 - `src/navigation.js`: canonical route mapping
+- `src/model_hub_ui.js`: UI helper filtering capability; Python backend vẫn giữ quyền
 - `tests/`: navigation, quota, permissions and acceptance tests
 - `dist/`: disposable gitignored trusted build output
 

@@ -6,6 +6,12 @@
 
 Đã chốt [flat-root architecture](architecture/TARGET_STRUCTURE.md): **M1 Dashboard và M2 Python package đã chuyển** thành `dashboard/` và `agentforge/` ngay root. Kiến trúc Feature-First Modular Monolith vẫn là đích; chia API **M3 đã xong**; features/integrations và xóa aliases (M4–M5) **chưa làm**. Xem [migration plan](architecture/MIGRATION_PLAN.md).
 
+## Base V1.0 — Model Hub
+
+**M0/M3:** API đã chia và có security contracts. **M6:** registry/text worker routing, SQLite Owner revision/rollback. **M7:** Dashboard AI Models & Routing, model profiles, local metadata probe và xác nhận Owner. **M8/M4:** skill engine & feature-first refactor tiếp theo; M9 setup/ops, M5 cleanup còn chờ.
+
+[Model Hub](architecture/MODEL_HUB.md) phân biệt routing đã nối ở text và video/image mới config-only, không tự chạy GPU/cloud.
+
 ## Hai hướng sản phẩm cần hoàn thiện
 
 | Track | Mục tiêu kinh doanh | Tình trạng |

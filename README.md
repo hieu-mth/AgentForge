@@ -26,6 +26,7 @@ Nếu báo không tìm thấy `.venv\Scripts\python.exe`, chạy `py -0p` để 
 | Mảng | Khả năng đang có | Giới hạn quan trọng |
 | --- | --- | --- |
 | **Dashboard & workflow** | React Dashboard, task/goal, Owner approval, SQLite, lịch sử và SHA | Chỉ vận hành local cho một Owner; không phải SaaS |
+| **Model Hub** | Chọn model text/code theo tác vụ, lưu SQLite revision/rollback; Dashboard quản lý profiles | Video/Image chỉ config-only, cloud cần quyền Owner |
 | **Website Builder** | Thiết kế website theo schema có giới hạn; feedback sinh phiên bản đề xuất | Không phải công cụ tạo full-stack tùy ý |
 | **Marketplace** | NovaMart demo, lọc/tìm kiếm/giỏ hàng, catalog do AI đề xuất | Không có thanh toán, backend bán hàng thật |
 | **AI React Developer** | Đề xuất source JSX/CSS và kiểm tra cú pháp | Chưa sửa source AI qua feedback; build/browser QA AI chưa xác minh |
@@ -40,9 +41,10 @@ Chi tiết và định nghĩa trạng thái: **[Current Status](docs/STATUS.md)*
 - **[Hướng dẫn Windows & kiểm thử](docs/DEVELOPMENT.md)** — setup, build, chạy Dashboard và các giới hạn an toàn.
 - **[Roadmap hiện hành](docs/ROADMAP.md)** — ưu tiên AI Source Revision và AI Film Studio.
 - **[Kiến trúc repository đang chạy](docs/architecture/REPOSITORY_STRUCTURE.md)** — module nào thực sự đang chạy.
+- **[Model Hub M6/M7](docs/architecture/MODEL_HUB.md)** — cấu hình provider/model/task routing trên Dashboard.
 - **[API contract M0/M3](docs/architecture/API_CONTRACT_V1.md)** — Owner login, CSRF, routes và compatibility.
 - **[Cấu trúc đã chốt (M1 Dashboard + M2 Python đã chuyển)](docs/architecture/TARGET_STRUCTURE.md)** — `agentforge/` + `dashboard/` ở root.
-- **[Giải thích từng file Python/React](docs/architecture/FILE_CATALOG.md)** — inventory 152 module Python và Dashboard.
+- **[Giải thích từng file Python/React](docs/architecture/FILE_CATALOG.md)** — inventory 154 module Python và Dashboard.
 - **[Templates](templates/README.md)** và **[Examples](examples/README.md)** — phân biệt template runtime với file JSON mẫu.
 - **[AI Film Studio 12 GB](docs/architecture/FILM_MOTION_12GB_PILOT.md)** — điều kiện cần trước khi tạo clip thật.
 - **[Bằng chứng Phase 1](docs/verification/phase1/README.md)** — snapshot kiểm thử, không phải trạng thái live.
