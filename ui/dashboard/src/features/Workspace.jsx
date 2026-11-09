@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { acceptedCount, acceptanceLabel } from '../acceptance.js';
+import { AcceptanceStatus } from '../components/AcceptanceStatus.jsx';
 import { Alert, Button, Card, Checkbox, Collapse, Divider, Drawer, Input, Space, Typography } from 'antd';
 import { BulbOutlined, CheckCircleOutlined, FolderOpenOutlined, SafetyCertificateOutlined,
   SendOutlined, ThunderboltOutlined } from '@ant-design/icons';
@@ -82,7 +84,8 @@ export function Workspace({data, onPlan, openGoal, onOpenSettings, prompt, setPr
     <div className="stat-grid compact">
       <StatTile label="Kế hoạch" value={goals.length} tone="info" hint="Tổng số mục tiêu"/>
       <StatTile label="Chờ duyệt" value={waiting} tone={waiting ? 'warn' : 'good'} hint={waiting ? 'Cần bạn xem xét' : 'Không có gì tồn đọng'}/>
-      <StatTile label="Hoàn thành" value={done} tone="good" hint="Đã chạy thành công"/>
+      <StatTile label="Đã thực thi" value={done} tone="info" hint="Workflow chạy xong; chưa phải nghiệm thu"/>
+      <StatTile label="Đã nghiệm thu" value={acceptedCount(goals)} tone="good" hint="Owner đã chấp nhận sản phẩm"/>
     </div>
 
     <div className="two-cols">
@@ -90,7 +93,7 @@ export function Workspace({data, onPlan, openGoal, onOpenSettings, prompt, setPr
         {goals.length ? goals.slice(0, 8).map(g =>
           <div className="list-line" key={g.goal_id}>
             <div className="list-main"><strong>{g.title}</strong><div className="subtle">{g.template} · {clip(g.goal_id)}</div></div>
-            <Space>{badge(g.status)}<Button size="small" onClick={() => openGoal(g.goal_id)}>Xem kế hoạch</Button></Space>
+            <Space wrap>{badge(g.status)}{g.artifact_acceptance&&<span>{acceptanceLabel(g.artifact_acceptance.status)}</span>}<Button size="small" onClick={() => openGoal(g.goal_id)}>Xem kế hoạch</Button></Space>
           </div>) : fallback('Chưa có kế hoạch nào — hãy bắt đầu bằng ô phía trên')}
       </Card>
       <Card title="Cách AgentForge làm việc" className="panel">
@@ -119,6 +122,7 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, b
   return <Drawer title="Kế hoạch & phê duyệt" open={!!goal} onClose={onClose}
     size="min(640px, 96vw)" destroyOnHidden extra={badge(goal.status)}>
     <Title level={4}>{goal.title}</Title>
+    <AcceptanceStatus acceptance={goal.artifact_acceptance}/>
     <Text type="secondary">{goal.template} · {goal.goal_id}</Text>
     <Divider/>
     {['FAILED','INTERRUPTED'].includes(goal.status) && <Alert type="error" showIcon
