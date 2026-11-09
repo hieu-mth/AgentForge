@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { AcceptanceStatus } from '../components/AcceptanceStatus.jsx';
 import { Alert, Button, Card, Collapse, Drawer, Input, Segmented, Space, Table, Typography } from 'antd';
 import { badge, clip, needPreviewId } from '../components/shared.jsx';
 const { Title, Text, Paragraph } = Typography;
@@ -21,7 +22,7 @@ export function Websites({data, showProposal}) {
   </Card>;
 }
 
-export function ProposalDrawer({proposal, onClose, onRevise, onApply, busy}) {
+export function ProposalDrawer({proposal, onClose, onRevise, onApply, onDecide, busy}) {
   const [device,setDevice]=useState('desktop');
   const [feedback,setFeedback]=useState('');
   useEffect(()=>{setFeedback('');setDevice('desktop');},[proposal?.proposal_id]);
@@ -64,6 +65,8 @@ export function ProposalDrawer({proposal, onClose, onRevise, onApply, busy}) {
             <pre className="source-text">{f.content}</pre></div>)}
         </>} ]}/>
       <Card size="small" className="feedback-card">
+        <AcceptanceStatus acceptance={proposal.artifact_acceptance} busy={busy}
+          onDecide={onDecide?decision=>onDecide(proposal,decision):null}/>
         <Title level={5}>Chưa ưng? Yêu cầu AI chỉnh sửa</Title>
         <Paragraph type="secondary">Góp ý sẽ dùng chính website đang xem làm bản gốc, tạo bản sửa mới để duyệt; không ghi đè bản cũ.</Paragraph>
         <Alert type="info" showIcon style={{marginBottom:12}}
