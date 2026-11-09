@@ -84,3 +84,43 @@ function short(id){return esc(String(id||"").slice(0,12));}
 function renderWorkspace(){
  const data=state.data;
  const recent=(data.goals||[]).slice(0,5).map(g=>
+   '<div class="workspace-job"><div><strong>'+esc(g.title)+'</strong><small>'+esc(g.template)+'</small></div>'+
+   badge(g.status)+(g.artifact_acceptance?' <span class="small muted">Sản phẩm: '+esc(g.artifact_acceptance.status)+'</span>':'')+' <button class="btn btn-small btn-outline" type="button" data-detail-goal="'+esc(g.goal_id)+'">Chi tiết</button></div>').join("");
+ return '<div class="workspace-hero"><div class="eyebrow">YOUR AI COMPANY · LOCAL FIRST</div>'+
+  '<h1>Hôm nay bạn muốn xây dựng điều gì?</h1>'+
+  '<p>Chỉ cần mô tả mục tiêu. AgentForge chuyển yêu cầu thành kế hoạch để bạn duyệt trước khi chạy AI.</p>'+
+  '<p class="small muted">Policy: '+esc(
+    (data.workspace_policy?.max_estimated_model_calls??1))+
+    ' lượt model/Goal tối đa · Website '+(data.workspace_policy?.website_enabled?"Bật":"Tắt")+
+    ' · Storyboard '+(data.workspace_policy?.storyboard_enabled?"Bật":"Tắt")+'</p>'+
+  '<form id="workspace-request-form" class="workspace-prompt">'+
+  '<label for="workspace-prompt">Yêu cầu công việc</label>'+
+  '<textarea id="workspace-prompt" rows="5" maxlength="600" required minlength="20" placeholder="Ví dụ: Tạo landing page nệm cao cấp cho ba tôi, có hình minh họa đẹp, mobile-first, hotline 0879547988..."></textarea>'+
+  '<div class="workspace-prompt-footer"><span>Không gọi AI khi lập kế hoạch · Mọi bước thực thi cần được duyệt</span>'+
+  '<button type="submit" class="btn btn-primary">Tạo kế hoạch →</button></div></form></div>'+
+  '<div class="workspace-health">'+
+  '<span class="small muted">Website Builder: '+esc(state.modelHealth?
+    (state.modelHealth.status==="READY"?"Ollama đã cài & phản hồi":state.modelHealth.status):
+    "Chưa kiểm tra khả năng kết nối model")+'</span>'+
+  '<button type="button" class="btn btn-outline btn-small" data-check-model-health="1">Kiểm tra Ollama (không sinh nội dung)</button>'+
+  '</div>'+ 
+  '<div class="workspace-columns"><section class="card"><div class="section-head"><h2>Việc gần đây</h2>'+
+  '<button class="section-link" data-view="goals">Xem tất cả</button></div>'+
+  (recent||'<p class="muted">Chưa có kế hoạch. Hãy mô tả việc cần làm ở trên.</p>')+'</section>'+
+  '<section class="card"><h2>Kiểm soát rõ ràng</h2>'+
+  '<p class="muted">Chỉ hỗ trợ yêu cầu website/landing page và storyboard trong luồng prompt đầu tiên. Các công việc khác vẫn có thể thao tác bằng module hiện có.</p>'+
+  '<div class="workspace-insight">Kế hoạch không tự chạy, không tự đăng, không cấp quyền ngân sách.</div>'+
+  '<button class="btn btn-outline" type="button" data-view="overview">Xem hệ thống & báo cáo</button></section></div>'+
+  (state.goal?'<div class="section">'+card("Kế hoạch đang xử lý",renderGoalDetail())+'</div>':'');
+}
+function renderTeam(){
+ const rows=(state.data.skills||[]).map(x=>'<tr><td>'+esc(x.worker)+'</td><td>'+esc(x.id)+'</td><td>'+badge(x.mode)+'</td></tr>');
+ return header("AI WORKFORCE","Team & Roles","Các AI role và skill đang được khai báo; không có quyền tự tạo role hoặc tự nâng quyền từ prompt.")+
+  '<div class="callout">Quyền thực thi được kiểm tra bằng S1 Skill Contract và phê duyệt owner. Role là worker profile, không phải nhân viên pháp lý hoặc tác nhân có ngân sách độc lập.</div>'+
+  '<div class="section">'+card("Danh mục role & skills",table(["WORKER","SKILL","EXECUTION"],rows))+'</div>';
+}
+function renderChannels(){
+ const rows=(state.data.connectors||[]).map(x=>
+  '<div class="channel-status"><div><strong>'+esc(x.name)+'</strong>'+
+  '<small>'+(x.authenticated?'Đã có xác thực':'Chưa kết nối OAuth/API chính thức')+'</small></div>'+badge(x.status)+'</div>').join("");
+ return header("EXTERNAL ACCOUNTS","Channels","Tình trạng kênh thật. Không hiển thị CONNECTED nếu thiếu chứng cứ xác thực.")+
