@@ -186,7 +186,7 @@ def validate_source(pid, sha, namespace="webapps", *, db_path=None):
         from agentforge import webapp_developer
         from agentforge.domains.webapps import syntax
         provider = webapp_developer.provider(pid)
-        report_file = provider.PROPOSALS / (pid + ".syntax.json")
+        report_file = provider.PROPOSALS / "syntax" / (pid + ".json")
         if not report_file.exists():
             syntax.save_report(provider.PROPOSALS, pid, sha, doc["files"])
         else:
