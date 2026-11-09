@@ -1,6 +1,6 @@
 # File Catalog — danh mục file AgentForge hiện tại
 
-**Source baseline:** sau M6 + M7 (09/11/2026). **160 file Python** (M0–M3 + Model Hub); Dashboard đã có Model Hub tại `#/models`. Feature-first M4 và alias cleanup M5 chưa thực hiện. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
+**Source baseline:** sau M6 + M7 (09/11/2026). **165 file Python** (M0–M3 + Model Hub + M8 + M4a); Dashboard đã có Model Hub tại `#/models`. M4a đã chuyển Growth sang `features/growth/` với compatibility aliases; các domain khác và M5 chưa thực hiện. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
 
 - [Cấu trúc đã được chốt](TARGET_STRUCTURE.md) — `agentforge/` và `dashboard/` ngay root, feature-first.
 - [Kế hoạch chuyển](MIGRATION_PLAN.md) — không phá paths/import/SQLite.
@@ -16,7 +16,7 @@
 | **CLI** | Công cụ vận hành/demo theo lệnh, cần xem callers trước khi bỏ. |
 | **CONTRACT** | Module mô tả/kiểm tra hợp đồng cấu trúc, không tự chạy workflow. |
 
-**Tổng cộng: 160 file `.py`** (137 baseline + 15 M3 + 2 M6 + 6 M8 skill adapters). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
+**Tổng cộng: 165 file `.py`** (137 baseline + 15 M3 + 2 M6 + 6 M8 adapters + 5 M4a feature modules). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
 
 ## **Entrypoints và modules tại package root**
 
@@ -161,14 +161,24 @@
 | `core/skill_adapters/growth.py` | Policy + handlers cho campaign/growth handoff. |
 | `core/task_history.py` | Lịch sử task/events SQLite và recovery. |
 
-## **Domains: `domains/growth/`**
+## **Feature-first: `features/growth/` (M4a)**
+
+| File hiện tại dưới `agentforge/` | Vai trò |
+| --- | --- |
+| `features/__init__.py` | Package cho business features. |
+| `features/growth/__init__.py` | Package business Growth. |
+| `features/growth/store.py` | Canonical SQLite campaign/lead/finance, giữ data path cũ. |
+| `features/growth/reports.py` | Canonical read-only growth reports. |
+| `features/growth/bundle.py` | Canonical manual-owner publishing handoffs. |
+
+## **Domains: `domains/growth/` (COMPAT)**
 
 | File hiện tại dưới `agentforge/` | Vai trò |
 | --- | --- |
 | `domains/growth/__init__.py` | Package nghiệp vụ growth. |
-| `domains/growth/bundle.py` | Tổng hợp handoff bundle/growth artifacts. |
-| `domains/growth/reports.py` | Tính báo cáo growth, synthetic vs verified. |
-| `domains/growth/store.py` | SQLite lưu campaign/growth records. |
+| `domains/growth/bundle.py` | COMPAT alias tới `features/growth/bundle.py`. |
+| `domains/growth/reports.py` | COMPAT alias tới `features/growth/reports.py`. |
+| `domains/growth/store.py` | COMPAT alias tới `features/growth/store.py`. |
 
 ## **Domains: `domains/media/`**
 

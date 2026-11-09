@@ -13,6 +13,7 @@ LAYOUT = {
     "ai": "agentforge/ai",
     "core": "agentforge/core",
     "website_domain": "agentforge/domains/websites",
+    "growth_feature": "agentforge/features/growth",
     "storage": "agentforge/storage",
     "ui": "dashboard",
     "contracts": "skills",
@@ -45,9 +46,9 @@ BUSINESS_DOMAIN_IMPORTS = {
     "agentforge.media_quality": "agentforge.domains.media.quality",
     "agentforge.media_render": "agentforge.domains.media.render",
     "agentforge.media_workflow_v15": "agentforge.domains.media.workflow",
-    "agentforge.growth_store": "agentforge.domains.growth.store",
-    "agentforge.growth_reports": "agentforge.domains.growth.reports",
-    "agentforge.growth_bundle": "agentforge.domains.growth.bundle",
+    "agentforge.growth_store": "agentforge.features.growth.store",
+    "agentforge.growth_reports": "agentforge.features.growth.reports",
+    "agentforge.growth_bundle": "agentforge.features.growth.bundle",
 }
 
 
