@@ -99,7 +99,7 @@ def main():
                         help="Nonzero exit if any requirement or optional check is missing")
     args = parser.parse_args()
     result = inspect()
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    print(json.dumps(result, ensure_ascii=True, indent=2))
     if result["status"] == "BLOCKED" or (
             args.strict and result["status"] != "READY_LOCAL_UNVERIFIED"):
         parser.exit(2)

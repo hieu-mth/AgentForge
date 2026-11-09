@@ -1,5 +1,7 @@
 """M9 preflight: no network, process execution, owner data or credentials."""
+import io
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -83,6 +85,17 @@ class M9PreflightTests(unittest.TestCase):
                                            which=lambda _: None)
             self.assertNotIn("secret-not-to-inspect", json.dumps(result))
             self.assertEqual(secret.read_text(encoding="utf-8"), "secret-not-to-inspect")
+
+    def test_cp1252_windows_cli_never_crashes_on_vietnamese_labels(self):
+        payload = {"status": "READY_LOCAL_UNVERIFIED",
+                   "checks": [{"detail": "Đã tìm thấy"}]}
+        stream = io.BytesIO()
+        writer = io.TextIOWrapper(stream, encoding="cp1252", write_through=True)
+        with patch.object(preflight, "inspect", return_value=payload), \
+             patch.object(sys, "stdout", writer), \
+             patch.object(sys, "argv", ["preflight"]):
+            preflight.main()
+        self.assertEqual(json.loads(stream.getvalue().decode("ascii")), payload)
 
     def test_authenticated_get_route_still_needs_owner_session(self):
         import tests.test_webapp_revision_http_v41 as fixture
