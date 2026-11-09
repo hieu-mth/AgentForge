@@ -161,3 +161,56 @@ function renderSettings(){
  '<p class="small muted">Role bật/tắt ở đây chỉ áp dụng cho luồng prompt. Không nâng quyền model/process/network.</p>'+
  '<div class="form-actions"><button class="btn btn-outline" type="button" data-workspace-policy-save="1">Lưu hạn mức & role</button></div>')+
  card("Local-first & Data Safety",
+ '<p>SQLite và workspace vẫn ở máy bạn. Dùng quy trình backup được kiểm chứng trước khi cleanup dữ liệu.</p>'+
+ '<p class="small muted">Không nhập mật khẩu, số tài khoản hoặc dữ liệu khách vào Prompt hay Task History.</p>'+
+ '<button class="btn btn-outline" type="button" data-view="integrations">Xem System Health →</button>')+'</div>';
+}
+function renderOverview(){
+ const d=state.data,s=d.stats;
+ const metrics=[
+ ["Tổng nhiệm vụ",s.tasks,"S1 · Task History","≡"],
+ ["Đã thực thi xong",s.succeeded,"Chưa phải nghiệm thu sản phẩm","✓"],
+ ["Cần phê duyệt",s.waiting_approval,"Chờ owner quyết định","◎"],
+ ["AI Skills",s.skills,"Registry đã đăng ký","◇"]
+ ];
+ const tiles=metrics.map(([label,value,foot,symbol])=>
+ '<div class="metric"><div class="metric-label">'+esc(label)+
+ '<span class="metric-symbol">'+symbol+'</span></div><div class="metric-value">'+fmt(value)+
+ '</div><div class="metric-foot">'+esc(foot)+'</div></div>').join("");
+ const goals=d.goals.slice(0,5).map(g=>
+ '<div class="goal-tile"><span class="goal-mark">◎</span><div class="goal-main"><strong>'+
+ esc(g.title)+'</strong><small>'+esc(g.template)+' · '+short(g.goal_id)+
+ '</small></div>'+badge(g.status)+(g.artifact_acceptance?' <span class="small muted">Sản phẩm: '+esc(g.artifact_acceptance.status)+'</span>':'')+'<button type="button" class="btn btn-small btn-outline" data-detail-goal="'+
+ esc(g.goal_id)+'">Xem</button></div>').join("");
+ const recent=d.tasks.slice(0,6).map(t=>
+ '<tr><td><button class="link-button" data-detail-task="'+esc(t.task_id)+'">'+
+ short(t.task_id)+'</button></td><td>'+esc(t.skill_id)+'</td><td>'+badge(t.status)+
+ '</td><td>'+esc(String(t.updated_at||"").replace("T"," ").slice(0,19))+'</td></tr>');
+ const operations=d.operations||{mode:"ACTIVE"};
+ const paused=operations.mode!=="ACTIVE";
+ const h=d.daemon;
+ const engine=h.fresh?'DAEMON ACTIVE':'MANUAL / OFFLINE';
+ const attention=(d.attention||[]).map(x=>{
+  const where=x.kind==="goal"?"data-detail-goal":x.kind==="task"?"data-detail-task":"data-view";
+  const target=x.kind==="schedules"?"schedules":x.id;
+  return '<div class="goal-tile"><div class="goal-main"><strong>'+esc(x.title)+
+  '</strong><small>'+esc(x.priority)+' · '+esc(x.status)+'</small></div>'+
+  '<button type="button" class="btn btn-small btn-outline" '+where+'="'+esc(target)+
+  '">Xem</button></div>';
+ }).join("");
+ const reviewData=d.autopilot_reviews||{pending_count:0,items:[],business_context:null};
+ const reviewRows=(reviewData.items||[]).filter(r=>r.decision==="PENDING").slice(0,8).map(r=>
+  '<tr><td>'+short(r.job_id)+'</td><td>'+esc(r.skill_id)+'</td>'+
+  '<td>'+badge(r.quality)+'</td><td>'+esc((r.reasons||[]).join(", "))+'</td>'+
+  '<td><button class="link-button" data-detail-task="'+esc(r.task_id)+'">Xem task</button> '+
+  '<button class="btn btn-small btn-outline" data-draft-inspect="'+esc(r.job_id)+'">Kiểm tra & duyệt</button></td></tr>');
+ const reviewCard=card("AI Draft Review Queue · "+fmt(reviewData.pending_count)+" chờ duyệt",
+  '<p class="small muted">Business: '+esc(reviewData.business_context?reviewData.business_context.business:"Chưa cấu hình")+
+  '. PASS_HEURISTIC vẫn cần duyệt thủ công. Dùng CLI quality_v14 để quyết định theo output SHA; không tự đăng hay apply.</p>'+
+  table(["JOB","SKILL","QUALITY","LÝ DO","NỘI DUNG"],reviewRows,"Chưa có bản nháp cần duyệt"));
+ const ap=d.autopilot_policy||{enabled:false,daily_cap:0};
+ const company=d.company_v2||{};
+ const apCard=card("V2 · Autopilot Owner Control",
+  '<p class="small muted">Điều chỉnh hạn mức ước tính lượt model/UTC ngày. Bật delegation không tự tạo job và không chứng minh chi phí provider.</p>'+
+  '<div class="form-field"><label for="ap-policy-cap">Giới hạn lượt model/ngày (0–10)</label>'+
+  '<input id="ap-policy-cap" type="number" min="0" max="10" step="1" value="'+esc(ap.daily_cap)+'"></div>'+
