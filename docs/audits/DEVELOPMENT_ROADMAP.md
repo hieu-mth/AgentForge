@@ -29,3 +29,22 @@ P0 ở đây là **điều kiện chặn phát hành**, không phải tuyên b�
 
 ## M1 — Một sản phẩm React offline được nghiệm thu thật
 
+| Việc / ưu tiên | Evidence và nguyên nhân | Giải pháp / modules | Phụ thuộc; độ phức tạp; rủi ro | Acceptance và test |
+|---|---|---|---|---|
+| R04 Syntax/build reports, P1 | B01/B06; static_qa.py:65 không parser | Extend sandbox parser + build, typed report tied source SHA, persist report artifacts | R01–R03; M; Docker image/toolchain không sẵn | Malformed JSX/import/dependency fixtures fail có diagnostic; hợp lệ build PASS trong network-none; timeout cleanup; stale report không dùng được |
+| R05 Browser flow QA, P1 | B06; template smoke không chứng minh source AI | Separate approved browser run trên artifact built trong runtime isolation; assert required user flows; show preview + results | R03/R04; L; untrusted JS, resource usage | Search/form/local CRUD/modal theo brief có assertions, responsive checks 3 viewports; runtime error/blank page/network attempt => fail; report cùng SHA, build success không thay browser pass |
+| R06 Context review đầy đủ, P1 | B07, reviewer.py:59–73 bỏ file phụ | Manifest/dependency-linked context + omitted/truncated metadata; combine deterministic tests, AI advisory remains bounded | R04; M; token tăng và prompt injection | Tests prompt include helpers/components cần thiết; omission hiển thị; reviewer không cấp deployment; usage/cap respected |
+
+## M2 — Feedback trở thành thay đổi source
+
+| Việc / ưu tiên | Evidence và nguyên nhân | Giải pháp / modules | Phụ thuộc; độ phức tạp; rủi ro | Acceptance và test |
+|---|---|---|---|---|
+| R07 Immutable version + patch, P1 | B04; developer.propose không có base source, API revision bị chặn | version_id/base_sha/files manifest/feedback; source-aware patch proposal; read-only diff, apply atomic, rollback backup; developer.py, webapp_feedback, control_center, UI | R02/R04; L; regression và overwrite | Một app -> đổi layout -> thêm view -> sửa chức năng -> sửa lỗi; hashes/diffs đúng; unaffected files giữ nguyên; no-op/stale base/concurrent edit fail closed; original vẫn nguyên; R05 chạy lại đúng version |
+| R08 Scope-aware intake, P1 | FEATURE_MATRIX; fixed catalogue schema không thể đáp ứng full-stack | Show capability contract trước run; route static/marketplace/custom local UI; unsupported backend requirement cần scope clarification, không silently landing-page | Không; M; keyword routing regression | Bộ brief landing/business/multi-page/ecommerce/dashboard/SaaS/full-stack có kỳ vọng rõ; không tuyên bố WORKING cho payment/auth/DB chưa có; test routing + UI scope |
+
+## M3 — Reliability, chi phí và phát hành MVP
+
+| Việc / ưu tiên | Evidence và nguyên nhân | Giải pháp / modules | Phụ thuộc; độ phức tạp; rủi ro | Acceptance và test |
+|---|---|---|---|---|
+| R09 Deadline/cancel/resource journal, P1 | B08/B09; socket timeout, pause chỉ chặn bước kế; model.py/core runner | Monotonic deadline, cooperative cancel, adapter usage return, reservations/actuals/reconcile journal; model.py, task_history, brain_runner, workspace_policy, UI | R02; L; task side effects và billing ambiguity | Fake-clock continuous chunks vẫn timeout; cancel active call không retry; no double-spend concurrent claims; record usage/latency/provider, giá unknown hiển thị unknown; monetary cap chỉ dùng khi pricing verified |
+| R10 Reproducibility/docs/tooling, P2 | B10; README freeze cũ, lock thiếu, check chỉ api.js | Lock transitive deps/toolchain; CI lint/type policy; README generation modes; audit coverage; consolidate ownership of entrypoints sans removing aliases; wheel distribution contract | R01; M; lock/platform differences và aliases regression | Clean install + npm ci/Python locked install + build/test; documented source-tree vs wheel support; no stray ROOT relocation; alias tests PASS; no silent production data migration |
