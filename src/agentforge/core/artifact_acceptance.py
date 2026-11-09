@@ -154,3 +154,74 @@ def source(pid, sha, namespace):
         doc, _ = provider._read_proposal(pid)
         artifact_type = "react_template" if provider is dev.base else "react_ai"
     elif namespace == "proposals":
+        from agentforge import product_builder
+        doc, _ = product_builder._read_proposal(pid)
+        artifact_type = "interactive_website" if any(
+            f["path"].endswith(".js") or (f["path"].endswith(".html") and "<script" in f["content"].lower())
+            for f in doc["files"]) else "static_website"
+        product_builder._require_static_quality(next(f["content"] for f in doc["files"] if f["path"] == "index.html"))
+    else:
+        raise ValueError("ACCEPTANCE_UNKNOWN_NAMESPACE")
+    if doc["sha256"] != sha:
+        raise PermissionError("ACCEPTANCE_SOURCE_STALE")
+    return doc, artifact_type
+
+
+def inspect(pid, sha, namespace="webapps", *, db_path=None):
+    _, artifact_type = source(pid, sha, namespace)
+    db = _connect(db_path)
+    try:
+        return _view(db, pid, sha, artifact_type)
+    finally:
+        if db is not None:
+            db.close()
+
+
+def decide(pid, sha, namespace, decision, *, expected_revision, evidence_sha, confirm=False, db_path=None):
+    if confirm is not True or decision not in {"ACCEPTED", "REJECTED"}:
+        raise PermissionError("ACCEPTANCE_OWNER_CONFIRMATION_REQUIRED")
+    _, artifact_type = source(pid, sha, namespace)
+    if type(expected_revision) is not int or expected_revision < 0:
+        raise ValueError("ACCEPTANCE_INVALID_REVISION")
+    with closing(_connect(db_path, write=True)) as db, db:
+        db.execute("BEGIN IMMEDIATE")
+        _register(db, pid, sha, artifact_type)
+        current = _view(db, pid, sha, artifact_type)
+        if current["revision"] != expected_revision or current["evidence_sha"] != evidence_sha:
+            raise PermissionError("ACCEPTANCE_REVIEW_STALE")
+        if current["status"] in {"ACCEPTED", "REJECTED"}:
+            raise PermissionError("ACCEPTANCE_DECISION_FINAL")
+        if decision == "ACCEPTED" and current["status"] != "READY_FOR_REVIEW":
+            raise PermissionError("ACCEPTANCE_VALIDATION_REQUIRED")
+        db.execute("UPDATE artifact_acceptance SET decision=?,decision_evidence=?,revision=revision+1 "
+                   "WHERE proposal_id=? AND source_sha=? AND revision=?",
+                   (decision, evidence_sha, pid, sha, expected_revision))
+        db.execute("INSERT INTO artifact_decisions(proposal_id,source_sha,decision,evidence_sha,revision,at) "
+                   "VALUES(?,?,?,?,?,?)", (pid, sha, decision, evidence_sha, expected_revision + 1,
+                                          datetime.now(timezone.utc).isoformat()))
+        return _view(db, pid, sha, artifact_type)
+
+
+def observe(skill_id, result, *, db_path=None):
+    """Record a result only after the existing trusted skill output contract passes."""
+    if not isinstance(result, dict) or not result.get("proposal_id") or not result.get("sha256"):
+        return
+    pid, sha = result["proposal_id"], result["sha256"]
+    if skill_id in {"web.create", "webapp.create", "webapp.develop"}:
+        namespace = "proposals" if skill_id == "web.create" else "webapps"
+        _, kind = source(pid, sha, namespace)
+        record_validation(pid, sha, kind, "CONTRACT_VALID", "PASS", "proposal:" + sha, db_path=db_path)
+        if namespace == "webapps":
+            record_validation(pid, sha, kind, "TOOLCHAIN_CURRENT", "PASS", "toolchain:" + sha, db_path=db_path)
+    elif skill_id in {"webapp.audit", "webapp.review", "webapp.sandbox_test"}:
+        _, kind = source(pid, sha, "webapps")
+        if skill_id == "webapp.review":
+            from agentforge.domains.webapps import reviewer
+            report = reviewer.read(result["review_id"], result["review_sha"])
+            record_validation(pid, sha, kind, "REVIEW", report["assessment"]["recommendation"],
+                              result["review_sha"], db_path=db_path)
+        elif skill_id == "webapp.audit":
+            from agentforge.domains.webapps import static_qa
+            report = static_qa.read(result["qa_report_id"], result["qa_report_sha"])
+            if "syntax" in report:
+                record_validation(pid, sha, kind, "SYNTAX_VALID", report["syntax"]["status"],
