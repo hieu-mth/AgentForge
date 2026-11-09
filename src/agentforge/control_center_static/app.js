@@ -963,3 +963,78 @@ async function handleClick(event){
       await mutate("/api/goals/"+goalId+"/approve",{ack:"APPROVE",
         plan_sha256:g.plan_sha256},"Đã duyệt plan");await showGoal(goalId,state.view==="workspace");return;
     }
+    const action=button.dataset.runGoal?"run":"resume";
+    const grants=[...document.querySelectorAll('input[name="grant"]:checked')].map(i=>i.value);
+    const sensitive=grants.some(g=>["model.invoke","network.search","network.read",
+     "process.run","browser.run"].includes(g))||g.plan?.some(x=>
+     x.required_permissions?.some(p=>["model.invoke","network.search","network.read",
+      "process.run","browser.run"].includes(p)));
+    if(sensitive&&!state.data.external_actions_enabled)throw Error(
+     "External tools đang bị khóa. Khởi động server với --allow-external-tools nếu bạn quyết định cấp quyền.");
+    if(!confirm("Thực thi Goal "+goalId.slice(0,12)+"?\nGrants: "+
+     (grants.join(", ")||"read-only")+"\nLệnh chạy sẽ được lưu vào Task History."))return;
+    if(sensitive&&!confirm("XÁC NHẬN LẦN HAI: Có thể dùng model, mạng, browser hoặc FFmpeg với quyền đã chọn?"))return;
+    const request={ack:action.toUpperCase(),plan_sha256:g.plan_sha256,grants,
+     confirm_model_call:$("confirm-model").checked,
+     confirm_browser_run:$("confirm-browser").checked,
+     confirm_external_run:$("confirm-process").checked,
+     ack_external:sensitive?"AUTHORIZE_EXTERNAL_TOOLS":""};
+    const out=await mutate("/api/goals/"+goalId+"/"+action,request,
+      "Goal: "+action+" → "+(action==="run"?"đã xử lý":"đã tiếp tục"));
+    notice("Trạng thái: "+out.status);await showGoal(goalId,state.view==="workspace");return;
+  }
+  if(button.dataset.tickSchedules!==undefined){
+   if(!confirm("Chạy thủ công những lịch read-only đã tới hạn?"))return;
+   const x=await mutate("/api/schedules/tick",{ack:"TICK"},"Scheduler tick hoàn thành");
+   notice("Đã claim "+x.claimed.length+" lịch.");return;
+  }
+  if(button.dataset.scheduleStatus){
+   const next=button.dataset.nextStatus;
+   if(!confirm(next+" lịch này?"))return;
+   await mutate("/api/schedules/"+button.dataset.scheduleStatus+"/status",
+    {status:next,ack:next},"Đã đổi trạng thái lịch");return;
+  }
+ }catch(e){notice(e.message,true);}
+}
+async function handleSubmit(event){
+ const id=event.target.id;
+ if(!["workspace-request-form","goal-form","schedule-form","campaign-form","event-form","memory-form"].includes(id))return;
+ event.preventDefault();
+ const submit=event.target.querySelector('button[type="submit"]');
+ if(submit)submit.disabled=true;
+ try{
+  if(id==="workspace-request-form"){
+   const prompt=$("workspace-prompt").value.trim();
+   const outcome=await mutate("/api/workspace/request",{
+    ack:"PLAN_ONLY",prompt,max_model_calls:1
+   },"Đã phân tích yêu cầu");
+   if(outcome.status==="NEEDS_CLARIFICATION"){
+    notice(outcome.message,true);return;
+   }
+   await showGoal(outcome.goal_id,true);
+   return;
+  }
+  if(id==="goal-form"){
+   const out=await mutate("/api/goals/propose",{
+    ack:"PROPOSE",title:$("goal-title").value,
+    template:$("goal-template").value,inputs:formJson("goal-json"),
+    max_model_calls:Number($("goal-model-cap").value),
+    max_external_runs:Number($("goal-process-cap").value)
+   },"Đã tạo kế hoạch; hãy kiểm tra SHA trước khi duyệt");
+   await showGoal(out.goal_id);
+  }else if(id==="schedule-form"){
+   const due=new Date($("schedule-due").value);
+   if(Number.isNaN(due.getTime()))throw Error("Chọn thời điểm hợp lệ");
+   await mutate("/api/schedules/create",{
+    ack:"SCHEDULE",title:$("schedule-title").value,
+    template:$("schedule-template").value,inputs:formJson("schedule-input"),
+    next_due:due.toISOString(),
+    frequency_minutes:Number($("schedule-frequency").value)
+   },"Đã tạo lịch read-only");
+  }else if(id==="campaign-form"){
+   const data=formJson("campaign-json");
+   if(!confirm("Tạo campaign local, không chi tiền và không đăng bài?"))return;
+   await mutate("/api/campaigns/create",
+    {ack:"CREATE_CAMPAIGN",data},"Đã tạo campaign");
+  }else if(id==="event-form"){
+   const data=formJson("event-json");
