@@ -301,6 +301,8 @@ def propose(slug, brief, *, source_proposal_id=None, source_sha256=None,
     _path_guard(path)
     with path.open("x", encoding="utf-8") as output:
         json.dump(document, output, ensure_ascii=False, indent=2)
+    from agentforge.domains.webapps.syntax import save_report
+    save_report(PROPOSALS, pid, document["sha256"], files)
     return {
         "proposal_id": pid, "project_slug": slug,
         "sha256": document["sha256"], "proposal_path": str(path),
