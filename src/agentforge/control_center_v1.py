@@ -253,3 +253,67 @@ def _owner_action(server, path, request, session=None):
                 request.get("ack") != "QUARANTINE_ARTIFACT"):
             raise PermissionError("Explicit reversible quarantine required")
         if (session is None or session.get("verified_artifact_backups", {}).get(
+                request["backup_id"]) != request["tree_sha"]):
+            raise PermissionError("Verify exact backup SHA in this session")
+        return retention.quarantine(request["backup_id"], request["tree_sha"],
+                                    confirm=True)
+    if path == "/api/retention/restore":
+        from agentforge.storage import retention
+        if (set(request) != {"ack", "backup_id", "tree_sha"} or
+                request.get("ack") != "RESTORE_ARTIFACT"):
+            raise PermissionError("Explicit owner restore required")
+        if (session is None or session.get("verified_artifact_backups", {}).get(
+                request["backup_id"]) != request["tree_sha"]):
+            raise PermissionError("Verify exact backup SHA in this session")
+        return retention.restore(request["backup_id"], request["tree_sha"],
+                                 confirm=True)
+    if path == "/api/image/submit":
+        from agentforge.image_studio_v24 import submit
+        if not server.allow_external_actions:
+            raise PermissionError("ComfyUI image generation requires external-capable owner mode")
+        if set(request) != {"ack", "slug", "prompt", "checkpoint"} or request.get("ack") != "GENERATE_LOCAL_IMAGE":
+            raise PermissionError("Explicit owner image generation request required")
+        return submit(request["slug"], request["prompt"], request["checkpoint"],
+                      confirm_generation=True)
+    if path.startswith("/api/image/") and path.endswith("/collect"):
+        from agentforge.image_studio_v24 import collect
+        if not server.allow_external_actions:
+            raise PermissionError("Image import requires external-capable owner mode")
+        parts = path.split("/")
+        if len(parts) != 5 or set(request) != {"ack"} or request["ack"] != "IMPORT_AI_IMAGE":
+            raise PermissionError("Explicit owner image import required")
+        return collect(parts[3], confirm_import=True)
+    if path.startswith("/api/image/") and path.endswith("/attach"):
+        from agentforge.image_studio_v24 import attach
+        if set(request) != {"ack", "image_sha", "html_sha"} or request["ack"] != "ATTACH_AI_IMAGE":
+            raise PermissionError("Explicit SHA-bound owner image attachment required")
+        parts = path.split("/")
+        if len(parts) != 5:
+            raise ValueError("Invalid image job route")
+        return attach(parts[3], request["image_sha"], request["html_sha"],
+                      confirm_attach=True)
+    if path == "/api/workspace/policy":
+        from agentforge import workspace_policy
+        if (set(request) != {"ack", "max_estimated_model_calls",
+                             "website_enabled", "storyboard_enabled"} or
+                request.get("ack") != "UPDATE_WORKSPACE_POLICY"):
+            raise PermissionError("Only explicit bounded owner workspace policy is allowed")
+        return workspace_policy.configure(
+            max_estimated_model_calls=request["max_estimated_model_calls"],
+            website_enabled=request["website_enabled"],
+            storyboard_enabled=request["storyboard_enabled"], confirm=True)
+    if path == "/api/workspace/request":
+        if set(request) != {"ack", "prompt", "max_model_calls"} or request.get("ack") != "PLAN_ONLY":
+            raise PermissionError("Chỉ được tạo kế hoạch sau xác nhận owner.")
+        from agentforge.prompt_intake import plan_request
+        return plan_request(
+            request["prompt"], max_model_calls=request["max_model_calls"],
+            max_external_runs=0, brain_db_path=server.brain_db_path,
+            analytics_db_path=server.analytics_db_path,
+            growth_db_path=server.growth_db_path)
+    if path == "/api/autopilot/configure":
+        from agentforge import autopilot_v13
+        if request.get("ack") != "SET_DAILY_MODEL_POLICY":
+            raise PermissionError("Owner must explicitly approve standing delegation")
+        if set(request) != {"ack", "enabled", "daily_cap"}:
+            raise ValueError("Only bounded policy fields accepted")
