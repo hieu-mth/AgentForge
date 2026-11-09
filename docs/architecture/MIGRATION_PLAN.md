@@ -1,6 +1,6 @@
 # Kế hoạch chuyển AgentForge về flat-root architecture
 
-**Trạng thái: M1 FRONTEND + M2 PYTHON ĐÃ CHUYỂN; M3–M5 CHƯA THỰC THI.** Cấu trúc đã chốt tại [ADR-001](TARGET_STRUCTURE.md). Các dòng 'trước' ở bảng rủi ro là baseline trước migration, không phải đường dẫn hiện đang chạy.
+**Trạng thái: M1 + M2 + M3 ĐÃ TRIỂN KHAI; M4–M5 CHƯA THỰC THI.** Cấu trúc đã chốt tại [ADR-001](TARGET_STRUCTURE.md). Các dòng 'trước' ở bảng rủi ro là baseline trước migration, không phải đường dẫn hiện đang chạy.
 
 ## Các rủi ro đã thấy trong source
 
@@ -51,11 +51,13 @@ src/agentforge/  ->  agentforge/
 
 **Exit gate:** import/CLI, task recovery, data ownership, no-duplicate-write và Windows CI PASS. Source đã chuyển nguyên khối, `pyproject.toml` include chỉ `agentforge` và `agentforge.*`; đường dẫn dữ liệu vẫn ở repository root. Không mất `data/` hoặc `workspace/`. Xem PR/CI của M2 cho bằng chứng.
 
-### M3 — Chia API thực tế, không đổi transport
+### M3 — Chia API thực tế, không đổi transport (DONE, M0/M3 PR)
 
 - Tách `control_center_v1.py` thành `api/server.py`, `api/auth.py`, `api/routes/*.py` theo nhóm endpoints.
 - Giữ entrypoint cũ là shim nếu còn tests/CLI; giữ nguyên cookies, CSRF, Host/Origin, error codes và response schema.
 - Không tạo FastAPI/microservice nếu `http.server` vẫn đủ cho một Owner.
+- **Đã hoàn thành:** `api/server.py` (HTTP), `api/auth.py` (session), `api/static.py` (assets), `api/routes/read.py` (GET), `api/routes/bootstrap.py` và `api/routes/{artifacts,media,workspace,operations,products,goals}.py` (POST). `control_center_v1.py` là facade tương thích.
+- **Bằng chứng bảo vệ:** [M0 API contracts](API_CONTRACT_V1.md), real HTTP security regression, no-reverse-import tests và Windows CI.
 
 **Exit gate:** so sánh HTTP contract tests trước/sau và quyền mutation không suy giảm.
 
@@ -84,4 +86,4 @@ Owner yêu cầu kết quả đã kiểm thử được merge vào `main`. Dùng
 
 ## Việc cần làm khi chốt docs
 
-**Đã hoàn thành M1 + M2:** frontend ở `dashboard/`, Python package ở `agentforge/`. Lệnh chạy hiện hành tại [DEVELOPMENT.md](../DEVELOPMENT.md), đặc biệt cài lại `pip install -e ".[media]"` sau khi pull. M3 chia API và M4 feature-first là các bước tiếp theo.
+**Đã hoàn thành M1 + M2:** frontend ở `dashboard/`, Python package ở `agentforge/`. Lệnh chạy hiện hành tại [DEVELOPMENT.md](../DEVELOPMENT.md), đặc biệt cài lại `pip install -e ".[media]"` sau khi pull. M4 feature-first và M5 compatibility cleanup là các bước tiếp theo; M3 đã làm.

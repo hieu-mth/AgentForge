@@ -1,8 +1,8 @@
 # ADR-001 — Cấu trúc AgentForge được chốt
 
-**Quyết định: ĐÃ CHỐT (approved target)** · **Triển khai: M1 + M2 DONE, M3–M5 CHƯA MIGRATE** · 09/11/2026
+**Quyết định: ĐÃ CHỐT (approved target)** · **Triển khai: M1 + M2 + M3 DONE, M4–M5 CHƯA MIGRATE** · 09/11/2026
 
-Chủ dự án đã chọn **flat-root Python package + dashboard riêng**, thay cho `src/agentforge/` và `ui/dashboard/` ban đầu. **M1 đã chuyển React sang `dashboard/`, M2 đã chuyển Python sang `agentforge/`.** Các thư mục `api/`, `features/`, `integrations/`, `ops/` trong cây dưới là đích M3–M5, **chưa được tạo đầy đủ**.
+Chủ dự án đã chọn **flat-root Python package + dashboard riêng**, thay cho `src/agentforge/` và `ui/dashboard/` ban đầu. **M1 đã chuyển React sang `dashboard/`, M2 đã chuyển Python sang `agentforge/`.** `api/` đã được triển khai ở M3; `features/`, `integrations/`, `ops/` trong cây vẫn là đích M4–M5, **chưa được tạo đầy đủ**.
 
 - **Code thực tế hôm nay:** [REPOSITORY_STRUCTURE.md](REPOSITORY_STRUCTURE.md).
 - **Từng file Python và frontend hiện có:** [FILE_CATALOG.md](FILE_CATALOG.md).
@@ -125,7 +125,7 @@ Ví dụ Film Studio: script & character bible ở `features/film_studio/`; Comf
 | Cây đích `agentforge/` + `dashboard/` | **APPROVED, đang migrate từng bước** |
 | Đổi `src/agentforge/` thành `agentforge/` | **M2 DONE** — package discovery, data/workspace paths, imports/CLI regression |
 | Đổi `ui/dashboard/` thành `dashboard/` | **M1 DONE** — code/frontend, Python path, npm/CI, URL regression |
-| Refactor `control_center_v1.py` thành API routes | **NOT STARTED** |
+| Refactor `control_center_v1.py` thành API routes | **M3 DONE** — canonical `api/server.py` + owner security contract tests; facade giữ import/CLI cũ |
 | Đổi `domains/` thành `features/` | **NOT STARTED** |
 | Tách integrations, ops, research, Film Studio | **NOT STARTED** |
 

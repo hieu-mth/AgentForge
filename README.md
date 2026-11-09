@@ -40,8 +40,9 @@ Chi tiết và định nghĩa trạng thái: **[Current Status](docs/STATUS.md)*
 - **[Hướng dẫn Windows & kiểm thử](docs/DEVELOPMENT.md)** — setup, build, chạy Dashboard và các giới hạn an toàn.
 - **[Roadmap hiện hành](docs/ROADMAP.md)** — ưu tiên AI Source Revision và AI Film Studio.
 - **[Kiến trúc repository đang chạy](docs/architecture/REPOSITORY_STRUCTURE.md)** — module nào thực sự đang chạy.
+- **[API contract M0/M3](docs/architecture/API_CONTRACT_V1.md)** — Owner login, CSRF, routes và compatibility.
 - **[Cấu trúc đã chốt (M1 Dashboard + M2 Python đã chuyển)](docs/architecture/TARGET_STRUCTURE.md)** — `agentforge/` + `dashboard/` ở root.
-- **[Giải thích từng file Python/React](docs/architecture/FILE_CATALOG.md)** — inventory 137 module Python và Dashboard.
+- **[Giải thích từng file Python/React](docs/architecture/FILE_CATALOG.md)** — inventory 152 module Python và Dashboard.
 - **[Templates](templates/README.md)** và **[Examples](examples/README.md)** — phân biệt template runtime với file JSON mẫu.
 - **[AI Film Studio 12 GB](docs/architecture/FILM_MOTION_12GB_PILOT.md)** — điều kiện cần trước khi tạo clip thật.
 - **[Bằng chứng Phase 1](docs/verification/phase1/README.md)** — snapshot kiểm thử, không phải trạng thái live.

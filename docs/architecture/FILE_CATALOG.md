@@ -1,6 +1,6 @@
 # File Catalog — danh mục file AgentForge hiện tại
 
-**Baseline nội dung:** commit `216c9d3` (09/11/2026). Sau M1 và M2, **137 file Python đã được chuyển nguyên vẹn** sang `agentforge/` và frontend ở `dashboard/`. Catalog liệt kê vai trò file thực, chưa khẳng định M3–M5 tách modules xong.
+**Source baseline:** sau M0 + M3 (09/11/2026). **152 file Python**: 137 file cũ giữ nguyên chức năng, thêm 15 module API. Dashboard vẫn ở `dashboard/`. M3 tách HTTP và route handlers; **M4/M5 chưa triển khai**. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
 
 - [Cấu trúc đã được chốt](TARGET_STRUCTURE.md) — `agentforge/` và `dashboard/` ngay root, feature-first.
 - [Kế hoạch chuyển](MIGRATION_PLAN.md) — không phá paths/import/SQLite.
@@ -16,7 +16,7 @@
 | **CLI** | Công cụ vận hành/demo theo lệnh, cần xem callers trước khi bỏ. |
 | **CONTRACT** | Module mô tả/kiểm tra hợp đồng cấu trúc, không tự chạy workflow. |
 
-**Tổng cộng: 137 file `.py`**. Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
+**Tổng cộng: 152 file `.py`** (137 baseline + 15 module API M3). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
 
 ## **Entrypoints và modules tại package root**
 
@@ -42,7 +42,7 @@
 | `company_v2.py` | CLI | Tổng hợp scorecard vận hành; không chứng minh lợi nhuận. |
 | `competitor_facts.py` | LOGIC | Trích xuất trường thông tin đối thủ từ nguồn báo cáo. |
 | `competitors.py` | LOGIC | Danh sách nguồn đối thủ và thu thập thông tin đối chiếu. |
-| `control_center_v1.py` | API | HTTP server localhost, session, CSRF, API và React dist; tên V1 là tên lịch sử. |
+| `control_center_v1.py` | COMPAT | Facade giữ `create_server`, `_owner_action` và CLI cũ; API runtime thực ở `api/server.py`. |
 | `customer_evidence_review.py` | LOGIC | Owner review ghi chú phỏng vấn khách hàng (không xác minh danh tính). |
 | `customer_problem_evidence.py` | LOGIC | Đăng ký các bằng chứng vấn đề khách hàng đã được Owner xác nhận. |
 | `customer_validation.py` | LOGIC | Nhập dữ liệu phỏng vấn khách hàng local. |
@@ -106,6 +106,26 @@
 | `workflow.py` | CLI | LangGraph workflow sample/checkpoint cũ, không phải dashboard entrypoint. |
 | `workflow_runner.py` | LOGIC | S1 bounded website quality/browser workflow với checkpoint. |
 | `workspace_policy.py` | LOGIC | SQLite quota/limits cho prompt-first workspace. |
+
+## **API: `api/` (M3 hoàn thành)**
+
+| File dưới `agentforge/` | Vai trò |
+| --- | --- |
+| `api/__init__.py` | Package marker for modular HTTP API. |
+| `api/auth.py` | Owner one-time login, session, CSRF cookie lifecycle; no durable credentials. |
+| `api/server.py` | Canonical HTTP transport: localhost bind, Host/Origin/CSRF, JSON, CSP, read/write dispatch. |
+| `api/static.py` | Only serves allowlisted trusted React build assets from dashboard/dist. |
+| `api/routes/__init__.py` | Package marker for bounded route handlers. |
+| `api/routes/_shared.py` | Identity sentinel distinguishing an unhandled route from a valid None result. |
+| `api/routes/bootstrap.py` | Read-only aggregates, Owner attention, task/public artifact presentation. |
+| `api/routes/read.py` | Authenticated GET endpoints, preserving 404 and review session markers. |
+| `api/routes/mutations.py` | Small static allowlisted dispatcher; never executes arbitrary model-supplied paths. |
+| `api/routes/artifacts.py` | SHA-bound artifact acceptance and reversible retention actions. |
+| `api/routes/media.py` | Explicit image generation/import, storyboard/video and draft decisions. |
+| `api/routes/workspace.py` | Workspace prompt/policy and bounded Autopilot configuration. |
+| `api/routes/operations.py` | Explicit Owner pause/resume operations. |
+| `api/routes/products.py` | Signed Website/WebApp inspect/revise/apply action guards. |
+| `api/routes/goals.py` | Goal approval/execution, schedules, campaigns and Owner memory actions. |
 
 ## **AI: `ai/`**
 
