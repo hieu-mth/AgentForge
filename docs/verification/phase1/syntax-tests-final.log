@@ -1,0 +1,48 @@
+.\.audit-venv\Scripts\python.exe : test_audit_invalid_jsx_and_broken_javascript_are_detected 
+(tests.test_source_syntax.SourceSyntaxTests.test_audit_invalid_jsx_and_broken_javascript_are_detected) ... ok
+At line:2 char:1
++ .\.audit-venv\Scripts\python.exe -m unittest tests.test_source_syntax ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (test_audit_inva...etected) ... ok:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+test_generation_rejects_bad_source_with_redacted_diagnostics_and_no_retry 
+(tests.test_source_syntax.SourceSyntaxTests.test_generation_rejects_bad_source_with_redacted_diagnostics_and_no_retry) 
+... ok
+test_legacy_static_report_is_read_without_inventing_syntax_evidence 
+(tests.test_source_syntax.SourceSyntaxTests.test_legacy_static_report_is_read_without_inventing_syntax_evidence) ... ok
+test_old_malformed_proposal_remains_readable_but_static_qa_fails 
+(tests.test_source_syntax.SourceSyntaxTests.test_old_malformed_proposal_remains_readable_but_static_qa_fails) ... ok
+test_valid_jsx_report_is_bound_to_exact_proposal_sha 
+(tests.test_source_syntax.SourceSyntaxTests.test_valid_jsx_report_is_bound_to_exact_proposal_sha) ... ok
+test_auth_review_csrf_and_no_static_only_acceptance 
+(tests.test_acceptance_http.AcceptanceHttpTests.test_auth_review_csrf_and_no_static_only_acceptance) ... ok
+test_syntax_validation_is_source_bound_and_never_claims_runtime 
+(tests.test_acceptance_http.AcceptanceHttpTests.test_syntax_validation_is_source_bound_and_never_claims_runtime) ... ok
+test_all_eight_allowed_source_files_pass_review 
+(tests.test_webapp_developer_v42b.AIReactDeveloperTests.test_all_eight_allowed_source_files_pass_review) ... ok
+test_code_worker_has_independent_instructions_from_static_designer (tests.test_webapp_developer_v42b.AIReactDeveloperTe
+sts.test_code_worker_has_independent_instructions_from_static_designer) ... ok
+test_create_source_only_with_trusted_dependencies 
+(tests.test_webapp_developer_v42b.AIReactDeveloperTests.test_create_source_only_with_trusted_dependencies) ... ok
+test_explicit_prompt_goes_to_distinct_one_call_goal_without_process_run (tests.test_webapp_developer_v42b.AIReactDevelo
+perTests.test_explicit_prompt_goes_to_distinct_one_call_goal_without_process_run) ... ok
+test_forged_local_digest_cannot_replace_trusted_package_scripts (tests.test_webapp_developer_v42b.AIReactDeveloperTests
+.test_forged_local_digest_cannot_replace_trusted_package_scripts) ... ok
+test_manual_apply_only_writes_without_running_npm_or_overwriting (tests.test_webapp_developer_v42b.AIReactDeveloperTest
+s.test_manual_apply_only_writes_without_running_npm_or_overwriting) ... ok
+test_rejects_unsafe_paths_imports_browser_apis_and_invalid_code (tests.test_webapp_developer_v42b.AIReactDeveloperTests
+.test_rejects_unsafe_paths_imports_browser_apis_and_invalid_code) ... ok
+test_sandbox_may_read_signed_ai_source_only_with_explicit_approval (tests.test_webapp_developer_v42b.AIReactDeveloperTe
+sts.test_sandbox_may_read_signed_ai_source_only_with_explicit_approval) ... ok
+test_signed_integrity_prevents_changed_source_and_approval_required (tests.test_webapp_developer_v42b.AIReactDeveloperT
+ests.test_signed_integrity_prevents_changed_source_and_approval_required) ... ok
+test_ai_source_review_apply_and_revision_disabled 
+(tests.test_webapp_developer_v42b.AIReactHttpTests.test_ai_source_review_apply_and_revision_disabled) ... ok
+test_app_apply_requires_session_review_matching_sha_and_csrf (tests.test_webapp_revision_http_v41.WebappRevisionHttpTes
+ts.test_app_apply_requires_session_review_matching_sha_and_csrf) ... ok
+test_get_requires_login_and_allows_signed_source_review 
+(tests.test_webapp_revision_http_v41.WebappRevisionHttpTests.test_get_requires_login_and_allows_signed_source_review) 
+... ok
+test_revision_endpoint_creates_goal_but_does_not_dispatch_model (tests.test_webapp_revision_http_v41.WebappRevisionHttp
+Tests.test_revision_endpoint_creates_goal_but_does_not_dispatch_model) ... ok
