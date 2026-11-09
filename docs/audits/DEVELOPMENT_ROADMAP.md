@@ -48,3 +48,17 @@ P0 ở đây là **điều kiện chặn phát hành**, không phải tuyên b�
 |---|---|---|---|---|
 | R09 Deadline/cancel/resource journal, P1 | B08/B09; socket timeout, pause chỉ chặn bước kế; model.py/core runner | Monotonic deadline, cooperative cancel, adapter usage return, reservations/actuals/reconcile journal; model.py, task_history, brain_runner, workspace_policy, UI | R02; L; task side effects và billing ambiguity | Fake-clock continuous chunks vẫn timeout; cancel active call không retry; no double-spend concurrent claims; record usage/latency/provider, giá unknown hiển thị unknown; monetary cap chỉ dùng khi pricing verified |
 | R10 Reproducibility/docs/tooling, P2 | B10; README freeze cũ, lock thiếu, check chỉ api.js | Lock transitive deps/toolchain; CI lint/type policy; README generation modes; audit coverage; consolidate ownership of entrypoints sans removing aliases; wheel distribution contract | R01; M; lock/platform differences và aliases regression | Clean install + npm ci/Python locked install + build/test; documented source-tree vs wheel support; no stray ROOT relocation; alias tests PASS; no silent production data migration |
+| R11 Crash reconciliation, P1 trước unattended use | core/brain_runner.py:44: stores commit riêng, risk chưa tái hiện | Fault-inject parent/child/artifact commit windows; small reconciler using dispatch journal; retain no-replay by default | R02/R09; M; false recovery có thể replay tool | Kill/restart test trước/sau external result commit; consistent INTERRUPTED/needs review state, exactly-once claim, không tự gọi lại ambiguous side effect |
+| R12 Performance/admin UX, P2 | dashboard-build.log chunk JS ~1.238 MB, visual admin chưa audit đầy đủ | Route-based code split nếu số đo hỗ trợ; browser test logged-in admin, mobile/dark/error states | R02; M; routing/loading regression | Login -> submit -> progress -> result -> feedback -> version -> validation flows; keyboard/contrast/overflow checks; compare boot/asset bytes baseline; production build và source navigation tests PASS |
+
+## M4 — Khả năng nâng cao sau MVP
+
+- **P3 backend product contracts:** chỉ thêm khi nhu cầu xác nhận. Tạo allowlisted service/schema/migration/API contract trước, rồi auth/CRUD demo; threat model/secrets/tenant/backup tests riêng. Không nới regex/file allowlist rồi gọi đó là full-stack.
+- **P3 adaptive planning:** mở rộng template/typed subtasks dựa trên acceptance data; quota/tool policy vẫn thuộc trusted code. Không cần recursive multi-agent tự cấp quyền.
+- **Chưa cần:** microservices, Kubernetes, multi-region, automatic public deploy, revenue automation, provider framework lớn hoặc vector database mặc định.
+
+## Điều kiện GO cho MVP giới hạn
+
+MVP công bố rõ website tĩnh/React offline prototype. R01–R09 có bằng chứng nghiệm thu phù hợp phạm vi; không high/critical advisory áp dụng được bị bỏ qua; generated code chạy trong boundary đã kiểm tra; revision có đúng source hash và validation cùng version; restart/recovery không replay chi phí ngầm.
+
+Owner chọn một tập brief đại diện và duyệt model/provider/cost budget trước real inference. Ghi tỷ lệ generation/build/browser/user-flow pass và lỗi revision từ những lần chạy thực, không từ mock. Chỉ đưa phần trăm hoàn thiện khi có denominator/rubric này. Không đặt lịch hay chi phí giả định trong roadmap.
