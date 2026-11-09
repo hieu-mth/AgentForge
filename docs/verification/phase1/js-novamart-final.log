@@ -1,0 +1,21 @@
+npm.cmd : npm notice run @agentforge/novamart-reference@0.1.0 test
+At line:2 char:509
++ ... STEXITCODE; npm.cmd test --prefix examples/novamart *> docs/verificat ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (npm notice run ...ence@0.1.0 test:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+npm notice run node --test tests/*.test.js
+✔ search and category filters work together without mutating source (1.0681ms)
+✔ price sorting uses actual numeric price and stable IDs (11.8547ms)
+✔ cart increments, decrements, removes and never becomes negative (0.7425ms)
+✔ cart refuses unknown products, large increments and abuse (0.1733ms)
+✔ all reference products are bounded with unique IDs and demo copy (0.3245ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 119.6317
