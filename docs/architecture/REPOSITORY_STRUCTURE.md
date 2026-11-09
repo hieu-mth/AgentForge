@@ -1,6 +1,6 @@
 # Kiến trúc repository AgentForge
 
-> **CURRENT IMPLEMENTATION** — M1/M2 đặt Python `agentforge/` và React `dashboard/` tại root; **M3 đã tách API thành `agentforge/api/`**. M8 đã chia code-level skill policies/handlers theo domain; M4a đã chuyển Growth sang `features/growth/` và giữ aliases ở `domains/growth/`; M4d1 đã chuyển Media/Film sang `features/` (ComfyUI transport còn trong feature); M4d2 integration và M5 **chưa thực hiện**. Xem [catalog từng file](FILE_CATALOG.md) và [kế hoạch migration](MIGRATION_PLAN.md).
+> **CURRENT IMPLEMENTATION** — M1/M2 đặt Python `agentforge/` và React `dashboard/` tại root; **M3 đã tách API thành `agentforge/api/`**. M8 đã chia code-level skill policies/handlers theo domain; M4a đã chuyển Growth sang `features/growth/` và giữ aliases ở `domains/growth/`; M4d1 đã chuyển Media/Film sang `features/` (ComfyUI transport còn trong feature); M4d2 đã tách ComfyUI HTTP transport; M4 research/ops và M5 alias cleanup **chưa thực hiện**. Xem [catalog từng file](FILE_CATALOG.md) và [kế hoạch migration](MIGRATION_PLAN.md).
 
 **Current source of truth:** Python modular monolith, một React dashboard, local SQLite + workspace. Đã loại bỏ frontend HTML/CSS/JS V0 và Python dashboard V0.
 
@@ -24,6 +24,7 @@ AgentForge/
 │   ├── features/webapps/          # M4c canonical React proposals, syntax, sandbox adapter
 │   ├── features/media/            # M4d1 canonical assets/render/QA/workflow
 │   ├── features/film_studio/      # M4d1 canonical film plan and Owner motion pilot
+│   ├── integrations/comfyui.py    # M4d2 safe localhost ComfyUI JSON transport
 │   ├── domains/
 │   │   ├── growth/                # COMPAT aliases sang features/growth
 │   │   ├── websites/              # COMPAT aliases sang features/websites

@@ -19,6 +19,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from agentforge import ops_control
+from agentforge.integrations import comfyui as _comfyui
 from agentforge.features.film_studio import long_form
 from agentforge.paths import DATA_DIR, WORKSPACE_DIR
 
@@ -130,28 +131,17 @@ def inspect_workflow(path: Path):
 
 
 def _json_request(path: str, *, body=None, timeout=6):
-    """Direct HTTP connection to fixed loopback only; no proxy or redirects."""
-    if not isinstance(path, str) or not re.fullmatch(r"/(?:system_stats|prompt|history/[0-9a-f-]{36})", path):
-        raise MotionError("Unknown local ComfyUI route")
-    payload = (None if body is None else json.dumps(
-        body, ensure_ascii=False, allow_nan=False).encode("utf-8"))
-    conn = http.client.HTTPConnection("127.0.0.1", PORT, timeout=timeout)
+    """Compatibility patch point; HTTP transport belongs to integrations.comfyui.
+
+    Calls remain owner-gated by submit_shot; this helper does not authorize
+    GPU work and never retries an ambiguous request.
+    """
     try:
-        conn.request("POST" if payload is not None else "GET", path, body=payload,
-                     headers={"Content-Type": "application/json",
-                              "Accept": "application/json"})
-        response = conn.getresponse()
-        if response.status != 200:
-            raise RuntimeError("Local ComfyUI returned non-success status")
-        data = response.read(MAX_RESPONSE_BYTES + 1)
-    finally:
-        conn.close()
-    if len(data) > MAX_RESPONSE_BYTES:
-        raise MotionError("ComfyUI response exceeds safe limit")
-    try:
-        return json.loads(data)
-    except (ValueError, UnicodeError) as exc:
-        raise MotionError("ComfyUI returned invalid JSON") from exc
+        return _comfyui.request_json(
+            path, body=body, timeout=timeout, port=PORT,
+            max_response_bytes=MAX_RESPONSE_BYTES)
+    except _comfyui.ComfyUITransportError as exc:
+        raise MotionError(str(exc)) from exc
 
 
 def health():

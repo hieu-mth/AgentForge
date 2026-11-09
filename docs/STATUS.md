@@ -20,7 +20,7 @@ Các nhãn được dùng thống nhất:
 | M4a Growth feature-first | IMPLEMENTED (code migration) | `agentforge/features/growth/`, `tests/test_m4_growth_features.py` | Chưa tích hợp YouTube thực |
 | M4b Website feature-first | IMPLEMENTED (code migration) | `agentforge/features/websites/`, `tests/test_m4_websites_features.py` | Không đồng nghĩa AI Builder đã tạo và QA website tùy ý thành công |
 | M4c Webapp feature-first | IMPLEMENTED (code migration) | `agentforge/features/webapps/`, `tests/test_m4_webapps_features.py` | Generated React sandbox/browser execution vẫn chưa được kiểm chứng trên Owner PC |
-| M4d1 Media/Film feature-first | IMPLEMENTED (code migration) | `agentforge/features/media/`, `agentforge/features/film_studio/` | Motion GPU thật vẫn UNVERIFIED; HTTP transport ComfyUI chưa tách integration |
+| M4d1 Media/Film feature-first | IMPLEMENTED (code migration) | `agentforge/features/media/`, `agentforge/features/film_studio/` | Motion GPU thật vẫn UNVERIFIED; ComfyUI transport đã tách sang `integrations/comfyui.py` |
 | Artifact acceptance gắn SHA | IMPLEMENTED | `agentforge/core/artifact_acceptance.py` | Workflow `SUCCEEDED` chưa chắc artifact `ACCEPTED` |
 | Static Website Builder | PARTIAL | `agentforge/domains/websites/` | Thiết kế và section bị giới hạn bởi schema; không có backend chung |
 | Marketplace React demo | PARTIAL | `agentforge/domains/webapps/builder.py`, `templates/novamart/` | Cart/search demo, không có checkout thanh toán |

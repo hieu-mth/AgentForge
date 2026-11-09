@@ -1,6 +1,6 @@
 # Kế hoạch chuyển AgentForge về flat-root architecture
 
-**Trạng thái: M1 + M2 + M3 ĐÃ TRIỂN KHAI; M4a Growth + M4b Websites + M4c Webapps + M4d1 Media/Film feature-first ĐÃ CHUYỂN, M4d2 integration và M5 CHƯA THỰC THI.** Cấu trúc đã chốt tại [ADR-001](TARGET_STRUCTURE.md). Các dòng 'trước' ở bảng rủi ro là baseline trước migration, không phải đường dẫn hiện đang chạy.
+**Trạng thái: M1 + M2 + M3 ĐÃ TRIỂN KHAI; M4a Growth + M4b Websites + M4c Webapps + M4d1 Media/Film feature-first ĐÃ CHUYỂN, M4d2 ComfyUI integration ĐÃ TRIỂN KHAI; M4 research/ops và M5 CHƯA THỰC THI.** Cấu trúc đã chốt tại [ADR-001](TARGET_STRUCTURE.md). Các dòng 'trước' ở bảng rủi ro là baseline trước migration, không phải đường dẫn hiện đang chạy.
 
 ## Các rủi ro đã thấy trong source
 
