@@ -208,3 +208,62 @@ test_unsafe_url_rejected (test_company_flow.TestCompanyFlow.test_unsafe_url_reje
 READING: example.org https://example.org/market-report
 test_evidence_cannot_cross_opportunities 
 (test_company_lifecycle.TestCompanyLifecycle.test_evidence_cannot_cross_opportunities) ... ok
+SOURCE REVIEW COMPLETED
+PAGES FETCHED: 1 / 1
+MATCHED QUOTES: 1
+STATUS: QUOTE_REVIEW_ONLY
+AUTONOMOUS EXECUTION AUTHORIZED: False
+SAVED: C:\Users\hieu-mth\AppData\Local\Temp\tmpuccub2jn\company\reviews\aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-source-review.json
+READING: example.org https://example.org/market-report
+test_full_offline_lifecycle_still_requires_more_evidence 
+(test_company_lifecycle.TestCompanyLifecycle.test_full_offline_lifecycle_still_requires_more_evidence) ... ok
+SOURCE REVIEW COMPLETED
+PAGES FETCHED: 1 / 1
+MATCHED QUOTES: 1
+STATUS: QUOTE_REVIEW_ONLY
+AUTONOMOUS EXECUTION AUTHORIZED: False
+SAVED: C:\Users\hieu-mth\AppData\Local\Temp\tmpt6ng2na8\company\reviews\aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-source-review.json
+READING: example.org https://example.org/market-report
+test_missing_opportunity_id_cannot_use_evidence 
+(test_company_lifecycle.TestCompanyLifecycle.test_missing_opportunity_id_cannot_use_evidence) ... ok
+test_read_only_review_requires_explicit_approval 
+(test_company_lifecycle.TestCompanyLifecycle.test_read_only_review_requires_explicit_approval) ... ok
+SOURCE REVIEW COMPLETED
+PAGES FETCHED: 1 / 1
+MATCHED QUOTES: 1
+STATUS: QUOTE_REVIEW_ONLY
+AUTONOMOUS EXECUTION AUTHORIZED: False
+SAVED: C:\Users\hieu-mth\AppData\Local\Temp\tmpx_t6zueh\company\reviews\aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-source-review.json
+READING: example.org https://example.org/market-report
+test_registration_requires_owner_decision 
+(test_company_lifecycle.TestCompanyLifecycle.test_registration_requires_owner_decision) ... ok
+test_analytics_runner_error_is_actionable_without_raw_input_leak (test_company_operations_v11.TestCompanyOperationsV11.
+test_analytics_runner_error_is_actionable_without_raw_input_leak) ... ok
+test_dataset_lost_after_approval_cannot_launch_failed_child_tasks (test_company_operations_v11.TestCompanyOperationsV11
+.test_dataset_lost_after_approval_cannot_launch_failed_child_tasks) ... ok
+test_only_curated_analytics_result_reaches_task_api 
+(test_company_operations_v11.TestCompanyOperationsV11.test_only_curated_analytics_result_reaches_task_api) ... ok
+test_ops_pause_http_requires_owner_and_explicit_ack 
+(test_company_operations_v11.TestCompanyOperationsV11.test_ops_pause_http_requires_owner_and_explicit_ack) ... ok
+test_preflight_requires_session_csrf_and_does_not_create_database (test_company_operations_v11.TestCompanyOperationsV11
+.test_preflight_requires_session_csrf_and_does_not_create_database) ... ok
+test_report_projection_never_falls_back_to_arbitrary_model_output (test_company_operations_v11.TestCompanyOperationsV11
+.test_report_projection_never_falls_back_to_arbitrary_model_output) ... ok
+test_unknown_growth_campaign_blocked_without_mutation 
+(test_company_operations_v11.TestCompanyOperationsV11.test_unknown_growth_campaign_blocked_without_mutation) ... ok
+test_valid_dataset_can_be_planned_and_missing_dataset_blocks_approval (test_company_operations_v11.TestCompanyOperation
+sV11.test_valid_dataset_can_be_planned_and_missing_dataset_blocks_approval) ... ok
+test_ai_draft_approval_requires_reviewed_sha 
+(test_company_v2.V2CompanyTests.test_ai_draft_approval_requires_reviewed_sha) ... ok
+test_autopilot_configuration_requires_exact_ack 
+(test_company_v2.V2CompanyTests.test_autopilot_configuration_requires_exact_ack) ... ok
+test_company_report_never_invents_verified_revenue 
+(test_company_v2.V2CompanyTests.test_company_report_never_invents_verified_revenue) ... ok
+test_no_campaign_blocks_real_business_validation 
+(test_company_v2.V2CompanyTests.test_no_campaign_blocks_real_business_validation) ... ok
+test_no_unrestricted_publish_route (test_company_v2.V2CompanyTests.test_no_unrestricted_publish_route) ... ok
+test_video_approval_requires_prior_inspection_and_watched_ack 
+(test_company_v2.V2CompanyTests.test_video_approval_requires_prior_inspection_and_watched_ack) ... ok
+test_refuses_unapproved_rights_and_process_cap 
+(test_control_center_launch.TestLaunchLocalTemplate.test_refuses_unapproved_rights_and_process_cap) ... ok
+test_six_step_plan_review_pause_for_process_and_manual_handoff 
