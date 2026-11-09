@@ -12,7 +12,10 @@ Không sử dụng các tài liệu milestone phiên bản cũ để suy luận 
 | Xem hệ thống làm được gì | [STATUS.md](STATUS.md) | Matrix VERIFIED / PARTIAL / NOT IMPLEMENTED / UNVERIFIED |
 | Cài, build, kiểm thử | [DEVELOPMENT.md](DEVELOPMENT.md) | Windows, Python, npm, CI, kiểm tra docs |
 | Quyết định phát triển | [ROADMAP.md](ROADMAP.md) | Mốc, tiêu chí nghiệm thu, blocker |
-| Bố cục source | [REPOSITORY_STRUCTURE.md](architecture/REPOSITORY_STRUCTURE.md) | Entrypoints, module, dữ liệu cần bảo vệ |
+| Cấu trúc source **đang chạy** | [REPOSITORY_STRUCTURE.md](architecture/REPOSITORY_STRUCTURE.md) | `src/agentforge/`, `ui/dashboard/` hiện tại |
+| **Cấu trúc đã chốt (chưa migrate)** | [TARGET_STRUCTURE.md](architecture/TARGET_STRUCTURE.md) | `agentforge/` + `dashboard/` tại root, Feature-First Modular Monolith |
+| Giải thích **từng file** | [FILE_CATALOG.md](architecture/FILE_CATALOG.md) | Catalog 137 file Python, các file React và scripts |
+| Lộ trình đổi cấu trúc | [MIGRATION_PLAN.md](architecture/MIGRATION_PLAN.md) | Migration theo phase, kiểm chứng import/CLI/SQLite |
 | Tạo phim dài | [LONG_FORM_AI_FILM_STUDIO.md](architecture/LONG_FORM_AI_FILM_STUDIO.md) | Chapter/shot planner, không phải video thành phẩm |
 | Motion GPU 12 GB | [FILM_MOTION_12GB_PILOT.md](architecture/FILM_MOTION_12GB_PILOT.md) | ComfyUI adapter, giới hạn thực thi |
 | Khôi phục ngữ cảnh dự án | [AGENTFORGE_MASTER_CONTEXT.md](AGENTFORGE_MASTER_CONTEXT.md) | Các quyết định và trạng thái cô đọng |

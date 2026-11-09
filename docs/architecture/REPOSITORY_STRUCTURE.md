@@ -1,5 +1,7 @@
 # Kiến trúc repository AgentForge
 
+> **CURRENT IMPLEMENTATION** — cấu trúc dưới đây phản ánh code đang chạy, **chưa phải cấu trúc mục tiêu**. Phương án `agentforge/` và `dashboard/` tại root đã được [chốt](TARGET_STRUCTURE.md), nhưng **chưa di chuyển code**. Xem [catalog từng file](FILE_CATALOG.md) và [kế hoạch migration](MIGRATION_PLAN.md).
+
 **Current source of truth:** Python modular monolith, một React dashboard, local SQLite + workspace. Đã loại bỏ frontend HTML/CSS/JS V0 và Python dashboard V0.
 
 ## Cấu trúc đang sử dụng
