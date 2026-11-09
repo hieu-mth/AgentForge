@@ -461,3 +461,47 @@ function renderImageStudio(){
    '<button type="button" class="btn btn-primary" data-image-submit="1">Tạo ảnh AI local · Xác nhận GPU</button>':
    '<p class="muted">Chưa có ComfyUI local + checkpoint hợp lệ hoặc chưa có website đã apply. Không tự tạo ảnh giả hay gọi dịch vụ cloud.</p>';
  return card("AI Image Studio · ComfyUI local (tùy chọn)",
+  '<div class="callout">Dùng model ảnh riêng tại 127.0.0.1:8188, không phải Ollama qwen3:8b. Sinh ảnh có thể sử dụng GPU và điện. Ảnh phải được owner xem trước khi gắn vào website; không tự đăng online.</div>'+
+  '<div class="form-actions"><button type="button" class="btn btn-outline" data-image-health="1">Kiểm tra ComfyUI / checkpoints</button>'+
+  '<span class="small muted">Trạng thái: '+esc(health.status)+'</span></div>'+
+  '<div class="section">'+form+'</div>'+
+  '<div class="section"><h3>Các lượt tạo ảnh</h3>'+
+  table(["JOB","WEBSITE","TRẠNG THÁI","ẢNH SHA","THAO TÁC"],rows,
+        "Chưa có job AI image. Tác vụ đã gửi sẽ không tự chạy lại.")+'</div>'+
+  '<p class="small muted">Sau khi nhận ảnh, mở workspace/products/SLUG/assets/af-ai-JOB_ID.png và kiểm tra bằng trình xem ảnh trên máy. Gắn ảnh sẽ lưu bản backup HTML; không ghi đè âm thầm.</p>');
+}
+function renderWebsites(){
+ const proposals=state.data.tasks.filter(x=>x.web_proposal);
+ const rows=proposals.map(t=>
+  '<tr><td>'+esc(t.web_proposal.slug)+'</td><td>'+short(t.web_proposal.proposal_id)+
+  '</td><td><span class="mono">'+short(t.web_proposal.sha256)+'</span></td><td>'+
+  '<button class="btn btn-small btn-outline" data-view-proposal="'+
+  esc(t.web_proposal.proposal_id)+'">Xem website</button></td></tr>');
+ const p=state.proposal;
+ const frame=p?'/api/proposals/'+encodeURIComponent(p.proposal_id)+'/preview':'';
+ const preview=p?
+  '<div class="detail-header"><div><h2>'+esc(p.project_slug)+'</h2>'+
+  '<span class="small muted">Bản nháp · chỉ xem trước, chưa triển khai</span></div>'+badge(p.status)+'</div>'+
+  '<div class="web-preview-controls"><strong>Xem giao diện thật</strong>'+
+  '<div class="web-preview-toggle" role="group" aria-label="Kích thước màn hình">'+
+  '<button type="button" class="btn btn-small '+(state.previewDevice==="mobile"?"btn-outline":"btn-primary")+
+  '" data-preview-device="desktop">Desktop</button>'+
+  '<button type="button" class="btn btn-small '+(state.previewDevice==="mobile"?"btn-primary":"btn-outline")+
+  '" data-preview-device="mobile">Mobile</button></div></div>'+
+  '<div class="web-preview-stage"><div class="web-preview-frame '+(state.previewDevice==="mobile"?"is-mobile":"is-desktop")+'">'+
+  '<iframe title="Xem trước website AI: '+esc(p.project_slug)+'" sandbox="" referrerpolicy="no-referrer" loading="eager" src="'+esc(frame)+'"></iframe>'+
+  '</div></div>'+
+  '<p class="small muted">Bản xem trước bị cô lập: không chạy JavaScript, gửi biểu mẫu, tải tài nguyên Internet hoặc xuất bản website. Kiểm tra font, bố cục và nội dung trực quan trước khi duyệt.</p>'+
+  '<details class="section web-source-details"><summary>Xem mã nguồn & SHA (nâng cao)</summary>'+
+  '<p class="small muted">SHA-256: <span class="mono">'+esc(p.sha256)+'</span></p>'+
+  (p.files||[]).map(f=>'<details class="section"><summary>'+esc(f.path)+'</summary>'+
+   '<pre class="code-box">'+esc(f.content)+'</pre></details>').join("")+
+  '</details>'+
+  '<div class="review-feedback"><div class="review-feedback-heading"><div><h3>Chưa ưng? Góp ý để AI sửa</h3>'+
+  '<p class="small muted">Mô tả điểm cần thay đổi. AgentForge sẽ tạo kế hoạch phiên bản mới; không sửa hoặc xóa proposal gốc.</p></div></div>'+
+  '<label for="website-feedback">Yêu cầu chỉnh sửa</label>'+
+  '<textarea id="website-feedback" rows="4" minlength="10" maxlength="360" placeholder="Ví dụ: Làm hero sang trọng hơn, thay tông màu, tăng kích thước ảnh nệm, CTA gọi 0879547988 rõ hơn..."></textarea>'+
+  '<div class="review-actions"><button type="button" class="btn btn-outline" data-revise-proposal="'+
+  esc(p.proposal_id)+'">Yêu cầu AI chỉnh sửa</button>'+
+  '<button type="button" class="btn btn-primary" data-apply-proposal="'+
+  esc(p.proposal_id)+'">Duyệt & lưu website local</button></div></div>':
