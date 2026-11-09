@@ -1,0 +1,52 @@
+{
+  "title": "Ngọn lửa dưới mặt trăng",
+  "genre": "original cinematic fantasy adventure",
+  "style": "Cinematic fantasy, natural motion, consistent characters, expressive performances, original fictional world, widescreen 16:9",
+  "shot_seconds": 8,
+  "characters": [
+    {
+      "id": "linh",
+      "name": "Linh",
+      "visual_bible": "Original Vietnamese-inspired fantasy heroine with short dark hair, indigo cloak, scar above the left eyebrow; consistent face and clothing across all chapters",
+      "voice_notes": "Calm expressive Vietnamese adult voice, original licensed recording or consented synthetic voice"
+    },
+    {
+      "id": "an",
+      "name": "An",
+      "visual_bible": "Original fantasy cartographer with long braided silver hair, tan leather jacket, warm expression, consistent across shots",
+      "voice_notes": "Clear expressive Vietnamese adult voice, original licensed recording or consented synthetic voice"
+    }
+  ],
+  "chapters": [
+    {
+      "id": "act-one",
+      "title": "Mảnh bản đồ",
+      "synopsis": "Linh discovers a map of a forgotten moonlit kingdom; An decides to help despite an old rivalry. Original script beats must be developed before any shot generation.",
+      "duration_seconds": 2400,
+      "character_ids": [
+        "linh",
+        "an"
+      ]
+    },
+    {
+      "id": "act-two",
+      "title": "Cánh cổng lãng quên",
+      "synopsis": "The companions cross into the old kingdom and uncover its secret. Action, dialogue and continuity are not yet storyboarded.",
+      "duration_seconds": 2400,
+      "character_ids": [
+        "linh",
+        "an"
+      ]
+    },
+    {
+      "id": "act-three",
+      "title": "Ngọn lửa của tự do",
+      "synopsis": "The protagonists choose between saving the kingdom and returning home. Final scenes, dialogue and shot designs require human review.",
+      "duration_seconds": 2400,
+      "character_ids": [
+        "linh",
+        "an"
+      ]
+    }
+  ]
+}
