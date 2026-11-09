@@ -17,7 +17,7 @@ def save_report(directory, pid, sha, files):
     body = {"proposal_id": pid, "source_sha": sha, "syntax": check_files(files, sha)}
     raw = json.dumps(body, sort_keys=True, separators=(",", ":"))
     document = {**body, "report_sha": hashlib.sha256(raw.encode("utf-8")).hexdigest()}
-    path = directory / (pid + ".syntax.json")
+    path = directory / "syntax" / (pid + ".json")
     base._path_guard(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("x", encoding="utf-8") as output:
@@ -28,7 +28,7 @@ def save_report(directory, pid, sha, files):
 def read_report(directory, pid, sha, files):
     from agentforge import webapp_builder as base
     base._name(pid, base.PROPOSAL, "proposal id")
-    path = directory / (pid + ".syntax.json")
+    path = directory / "syntax" / (pid + ".json")
     base._path_guard(path)
     if not path.is_file() or path.stat().st_size > 24_000:
         raise ValueError("SYNTAX_REPORT_UNAVAILABLE")
