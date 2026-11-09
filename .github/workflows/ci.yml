@@ -26,6 +26,9 @@ jobs:
       - name: Install project
         run: python -m pip install -e ".[media]"
 
+      - name: Validate documentation links
+        run: python scripts/check_docs.py
+
       - name: Setup Node for standalone React Dashboard
         uses: actions/setup-node@v4
         with:
