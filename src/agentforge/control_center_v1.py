@@ -219,6 +219,18 @@ def _summary(server):
 
 def _owner_action(server, path, request, session=None):
     """Explicit allowlist; no arbitrary skill invocation or Python execution."""
+    if path.startswith("/api/artifacts/") and path.endswith("/syntax"):
+        parts = path.split("/")
+        if (len(parts) != 6 or parts[3] not in {"webapps", "proposals"}
+                or set(request) != {"ack", "sha256"} or request["ack"] != "VALIDATE_SYNTAX"):
+            raise ValueError("Invalid source validation request")
+        namespace, pid = parts[3:5]
+        reviewed = "reviewed_webapps" if namespace == "webapps" else "reviewed_proposals"
+        if session is None or session.get(reviewed, {}).get(pid) != request["sha256"]:
+            raise PermissionError("Inspect exact source before validation")
+        from agentforge.ops_control import require_active
+        require_active()
+        return artifact_acceptance.validate_source(pid, request["sha256"], namespace, db_path=server.task_db_path)
     if path.startswith("/api/artifacts/") and path.endswith("/decision"):
         parts = path.split("/")
         if (len(parts) != 6 or parts[3] not in {"webapps", "proposals"}
