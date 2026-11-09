@@ -76,7 +76,7 @@ Chọn cloud qua Dashboard **không cấp quyền chi tiền**: khi runtime dùn
 cd D:\AgentForge
 git pull --ff-only origin main
 .\.venv\Scripts\python.exe -m unittest tests.test_model_hub -v
-npm.cmd test --prefix dashboard
+npm.cmd run test:navigation --prefix dashboard
 npm.cmd run build --prefix dashboard
 .\.venv\Scripts\python.exe -m agentforge --port 8780
 ```
