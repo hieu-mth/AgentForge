@@ -46,3 +46,20 @@ test_get_requires_login_and_allows_signed_source_review
 ... ok
 test_revision_endpoint_creates_goal_but_does_not_dispatch_model (tests.test_webapp_revision_http_v41.WebappRevisionHttp
 Tests.test_revision_endpoint_creates_goal_but_does_not_dispatch_model) ... ok
+test_architect_source_is_immutable_and_sha_checked 
+(tests.test_v5_company.V5CompanyTests.test_architect_source_is_immutable_and_sha_checked) ... ok
+test_fixed_four_role_plan_three_calls_and_zero_external_processes 
+(tests.test_v5_company.V5CompanyTests.test_fixed_four_role_plan_three_calls_and_zero_external_processes) ... ok
+test_review_requires_static_qa_and_architect_lineage 
+(tests.test_v5_company.V5CompanyTests.test_review_requires_static_qa_and_architect_lineage) ... ok
+test_stale_architect_binding_aborts_before_model 
+(tests.test_v5_company.V5CompanyTests.test_stale_architect_binding_aborts_before_model) ... ok
+test_v5_intake_requires_explicit_3_call_budget_and_owner_policy 
+(tests.test_v5_company.V5CompanyTests.test_v5_intake_requires_explicit_3_call_budget_and_owner_policy) ... ok
+test_v5_pipeline_requires_three_separate_owner_actions 
+(tests.test_v5_company.V5CompanyTests.test_v5_pipeline_requires_three_separate_owner_actions) ... ok
+
+----------------------------------------------------------------------
+Ran 26 tests in 5.311s
+
+OK
