@@ -69,3 +69,39 @@ class SourceSyntaxTests(unittest.TestCase):
             dev._read_proposal(doc["proposal_id"])
             qa = static_qa.audit(doc["proposal_id"], doc["sha256"])
             self.assertEqual(qa["status"], "FAIL_SYNTAX")
+            self.assertEqual(qa["failures"], 1)
+            acceptance.observe("webapp.audit", qa, db_path=fixture.tasks)
+            self.assertEqual(acceptance.inspect(doc["proposal_id"], doc["sha256"], db_path=fixture.tasks)["status"], "NEEDS_REVISION")
+            with patch("agentforge.model.generate_json") as model:
+                with self.assertRaisesRegex(PermissionError, "REVIEW_QA_FAILED"):
+                    reviewer.review(arch["architecture_id"], arch["architecture_sha"],
+                        doc["proposal_id"], doc["sha256"], qa["qa_report_id"], qa["qa_report_sha"])
+                model.assert_not_called()
+            self.assertEqual(path.read_bytes(), before)
+        finally:
+            fixture.doCleanups()
+
+    def test_legacy_static_report_is_read_without_inventing_syntax_evidence(self):
+        fixture = v5.V5CompanyTests("test_fixed_four_role_plan_three_calls_and_zero_external_processes")
+        fixture.setUp()
+        try:
+            with patch("agentforge.model.generate_json", side_effect=[v5.ARCH, MODEL]):
+                arch = architect.propose("legacy-qa", v5.BRIEF)
+                proposal = dev.propose("legacy-qa", v5.BRIEF, **arch_fields(arch))
+            qa = static_qa.audit(proposal["proposal_id"], proposal["sha256"])
+            path = static_qa._path(qa["qa_report_id"])
+            report = json.loads(path.read_text(encoding="utf-8"))
+            report.pop("syntax")
+            report["format"] = "agentforge.webapp.qa-static.v1"
+            report["qa_report_sha"] = static_qa._hash({k: v for k, v in report.items() if k != "qa_report_sha"})
+            path.write_text(json.dumps(report), encoding="utf-8")
+            before = path.read_bytes()
+            read = static_qa.read(report["qa_report_id"], report["qa_report_sha"])
+            self.assertNotIn("syntax", read)
+            self.assertEqual(path.read_bytes(), before)
+        finally:
+            fixture.doCleanups()
+
+
+def arch_fields(arch):
+    return {"architecture_id": arch["architecture_id"], "architecture_sha": arch["architecture_sha"]}
