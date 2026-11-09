@@ -650,3 +650,91 @@ function render(){
   "active",x.dataset.view===state.view));
  const output={artifacts:renderArtifacts,workspace:renderWorkspace,team:renderTeam,channels:renderChannels,finance:renderFinance,settings:renderSettings,overview:renderOverview,goals:renderGoals,tasks:renderTasks,
   skills:renderSkills,websites:renderWebsites,analytics:renderAnalytics,growth:renderGrowth,
+  schedules:renderSchedules,integrations:renderIntegrations,memory:renderMemory};
+ $("content").innerHTML=(output[state.view]||renderOverview)();
+ if(state.view==="goals"){
+  const t=$("goal-template");
+  t.addEventListener("change",()=>{const required=state.data.templates[t.value]||[];
+   const values={};required.forEach(k=>{values[k]=({
+    dataset:state.data.datasets?.[0]?.dataset||"",campaign:state.data.growth?.[0]?.campaign||"",slug:"nem-tu-van",
+    title:"Tư vấn nệm",scenes:[],run_id:"0".repeat(32),
+    topic:"Nghiên cứu nhu cầu nệm",audience:"Khách hàng",goal:"Tư vấn",
+    description:"Lời khuyên cơ bản khi lựa chọn nệm.",rights_attested:true,
+    brief:"Tạo website tư vấn nệm tiếng Việt chuyên nghiệp, đẹp trên điện thoại, không bịa giá hay số điện thoại."}
+   )[k]||"";});
+   $("goal-json").value=JSON.stringify(values,null,2);
+   $("goal-dataset-control").hidden=!(["campaign.review","website.campaign"].includes(t.value));
+   if($("goal-dataset-pick")&&values.dataset)$("goal-dataset-pick").value=values.dataset;
+  });
+  $("goal-dataset-control").hidden=!(["campaign.review","website.campaign"].includes(t.value));
+  $("goal-dataset-pick")?.addEventListener("change",event=>{
+   let values={};try{values=JSON.parse($("goal-json").value);}catch{}
+   if(!values||typeof values!=="object"||Array.isArray(values))values={};
+   values.dataset=event.target.value;
+   $("goal-json").value=JSON.stringify(values,null,2);
+  });
+ }
+}
+function selectView(view){
+ if(!viewNames[view])return;
+ if($("task-dialog").open)$("task-dialog").close();
+ state.view=view;state.task=null;
+ $("sidebar")?.classList.remove("open");$("mobile-overlay").hidden=true;
+ if(view==="memory"){
+  api("/api/memory").then(m=>{state.memory=m;render();})
+   .catch(e=>notice(e.message,true));
+ }
+ if(view==="artifacts"){
+  Promise.all([api("/api/artifacts"),api("/api/image/jobs"),api("/api/image/health")])
+   .then(([a,j,h])=>{state.artifacts=a;state.imageJobs=j;state.imageHealth=h;render();})
+   .catch(e=>notice(e.message,true));
+ }
+ if(view==="integrations"){
+  api("/api/ops/health").then(m=>{state.ops=m;render();})
+   .catch(e=>notice(e.message,true));
+ }
+ render();window.scrollTo({top:0,behavior:"smooth"});
+}
+async function showGoal(id, stayWorkspace=false){
+ try{
+  state.goal=await api("/api/goals/"+encodeURIComponent(id));
+  selectView(stayWorkspace?"workspace":"goals");
+ }catch(e){notice(e.message,true);}
+}
+async function showTask(id){
+ try{
+  const task=await api("/api/tasks/"+encodeURIComponent(id));
+  state.task=task;
+  $("task-dialog-body").innerHTML=renderTaskDetail(task);
+  const dialog=$("task-dialog");
+  if(!dialog.open)dialog.showModal();
+ }catch(e){notice(e.message,true);}
+}
+async function showProposal(id){
+ try{
+  state.proposal=await api("/api/proposals/"+encodeURIComponent(id));
+  selectView("websites");
+ }catch(e){notice(e.message,true);}
+}
+function formJson(id){try{return JSON.parse($(id).value);}catch{throw Error("JSON không hợp lệ trong "+id);}}
+async function mutate(path,payload,success){
+ const result=await api(path,"POST",payload);
+ notice(success||"Đã thực hiện");
+ await refresh();return result;
+}
+async function handleClick(event){
+ const button=event.target.closest("button");
+ if(!button||button.disabled)return;
+ if(button.dataset.view){selectView(button.dataset.view);return;}
+ try{
+  if(button.dataset.workspacePolicySave!==undefined){
+    const cap=Number($("wp-model-cap").value);
+    const website_enabled=$("wp-website").checked;
+    const storyboard_enabled=$("wp-storyboard").checked;
+    if(!Number.isInteger(cap)||cap<0||cap>3)throw Error("Hạn mức phải là số nguyên từ 0 đến 3");
+    if(!confirm("Lưu chính sách cho prompt mới?\n"+
+       "Model calls/Goal tối đa: "+cap+
+       "\nWebsite: "+(website_enabled?"Bật":"Tắt")+
+       "\nStoryboard: "+(storyboard_enabled?"Bật":"Tắt")+
+       "\nKhông làm thay đổi quyền cho task cũ hoặc billing provider."))return;
+    await mutate("/api/workspace/policy",{
