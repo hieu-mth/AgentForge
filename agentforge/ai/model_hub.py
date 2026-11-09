@@ -9,6 +9,7 @@ contract. Any new cloud provider use still needs explicit run-time consent.
 from __future__ import annotations
 
 import copy
+from contextlib import closing
 import json
 import re
 import sqlite3
@@ -191,7 +192,7 @@ def _read_state(*, db_path=None):
     if not path.is_file():
         return 0, _empty()
     ensure_local_root(path)
-    with sqlite3.connect(path, timeout=5) as conn:
+    with closing(sqlite3.connect(path, timeout=5)) as conn:
         return _read_record(conn)
 
 
@@ -337,7 +338,7 @@ def change(action, *, expected_revision, db_path=None, profile=None,
     ensure_local_root(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     # sqlite transaction is one serialization boundary across owner sessions.
-    with sqlite3.connect(path, timeout=5) as conn:
+    with closing(sqlite3.connect(path, timeout=5)) as conn, conn:
         conn.execute("BEGIN IMMEDIATE")
         _tables(conn)
         revision, current = _read_record(conn)
