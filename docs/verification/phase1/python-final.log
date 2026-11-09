@@ -1,0 +1,54 @@
+.\.audit-venv\Scripts\python.exe : test_auth_review_csrf_and_no_static_only_acceptance 
+(test_acceptance_http.AcceptanceHttpTests.test_auth_review_csrf_and_no_static_only_acceptance) ... ok
+At line:2 char:1
++ .\.audit-venv\Scripts\python.exe -m unittest discover -s tests -v *>  ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (test_auth_revie...eptance) ... ok:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+test_syntax_validation_is_source_bound_and_never_claims_runtime 
+(test_acceptance_http.AcceptanceHttpTests.test_syntax_validation_is_source_bound_and_never_claims_runtime) ... ok
+test_cloud_react_json_budget_is_eight_k_not_four_and_no_retry (test_ai_developer_diagnostics_v51.AIModelFailureDiagnost
+icsTests.test_cloud_react_json_budget_is_eight_k_not_four_and_no_retry) ... ok
+test_model_output_errors_have_actionable_redacted_categories (test_ai_developer_diagnostics_v51.AIModelFailureDiagnosti
+csTests.test_model_output_errors_have_actionable_redacted_categories) ... ok
+test_older_json_worker_budget_stays_four_k 
+(test_ai_developer_diagnostics_v51.AIModelFailureDiagnosticsTests.test_older_json_worker_budget_stays_four_k) ... ok
+test_all_four_named_roles_route_to_v5_without_prefix 
+(test_ai_developer_diagnostics_v51.V5NaturalLanguageIntakeTests.test_all_four_named_roles_route_to_v5_without_prefix) 
+... ok
+test_full_v5_roles_need_explicit_three_call_cap 
+(test_ai_developer_diagnostics_v51.V5NaturalLanguageIntakeTests.test_full_v5_roles_need_explicit_three_call_cap) ... ok
+test_single_role_developer_remains_single_call 
+(test_ai_developer_diagnostics_v51.V5NaturalLanguageIntakeTests.test_single_role_developer_remains_single_call) ... ok
+test_dotenv_loads_machine_specific_model 
+(test_anthropic_gateway.TestAnthropicGateway.test_dotenv_loads_machine_specific_model) ... ok
+test_empty_gateway_content_is_an_error 
+(test_anthropic_gateway.TestAnthropicGateway.test_empty_gateway_content_is_an_error) ... ok
+test_http_url_is_rejected_before_network 
+(test_anthropic_gateway.TestAnthropicGateway.test_http_url_is_rejected_before_network) ... ok
+test_invalid_json_is_rejected (test_anthropic_gateway.TestAnthropicGateway.test_invalid_json_is_rejected) ... ok
+test_missing_token_blocks_before_network 
+(test_anthropic_gateway.TestAnthropicGateway.test_missing_token_blocks_before_network) ... ok
+test_missing_url_blocks_before_network 
+(test_anthropic_gateway.TestAnthropicGateway.test_missing_url_blocks_before_network) ... ok
+test_no_worker_uses_same_cloud_override 
+(test_anthropic_gateway.TestAnthropicGateway.test_no_worker_uses_same_cloud_override) ... ok
+test_process_environment_overrides_dotenv 
+(test_anthropic_gateway.TestAnthropicGateway.test_process_environment_overrides_dotenv) ... ok
+test_source_reviewer_structured_json_prompt 
+(test_anthropic_gateway.TestAnthropicGateway.test_source_reviewer_structured_json_prompt) ... ok
+test_worker_routes_to_gateway_messages_api 
+(test_anthropic_gateway.TestAnthropicGateway.test_worker_routes_to_gateway_messages_api) ... ok
+test_canonical_modules_are_not_filesystem_root_relative 
+(test_architecture_v28.ArchitectureBoundaryTests.test_canonical_modules_are_not_filesystem_root_relative) ... ok
+test_explicit_python_domain_layout 
+(test_architecture_v28.ArchitectureBoundaryTests.test_explicit_python_domain_layout) ... ok
+test_moved_implementations_preserve_legacy_callable_identity 
+(test_architecture_v28.ArchitectureBoundaryTests.test_moved_implementations_preserve_legacy_callable_identity) ... ok
+test_runtime_and_frontend_build_data_are_gitignored 
+(test_architecture_v28.ArchitectureBoundaryTests.test_runtime_and_frontend_build_data_are_gitignored) ... ok
+test_ui_does_not_embed_storage_operations 
+(test_architecture_v28.ArchitectureBoundaryTests.test_ui_does_not_embed_storage_operations) ... ok
+test_archive_full_runtime_then_restore_exact_original 
+(test_archive_local_state.LocalStateArchiveTests.test_archive_full_runtime_then_restore_exact_original) ... ok
