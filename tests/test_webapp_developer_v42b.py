@@ -82,7 +82,9 @@ class AIReactDeveloperTests(unittest.TestCase):
         self.assertEqual(files["src/App.jsx"], APP)
         self.assertEqual(files["src/styles.css"], CSS)
         self.assertNotIn("node_modules", files)
-        self.assertNotIn("package-lock.json", files)
+        self.assertIn("package-lock.json", files)
+        self.assertEqual(json.loads(files["package-lock.json"])["packages"][""]["devDependencies"],
+                         json.loads(files["package.json"])["devDependencies"])
         self.assertIn("react", files["package.json"])
         self.assertIn("vite", files["package.json"])
         self.assertIn("readFileSync", files["tests/contract.test.js"])
@@ -138,7 +140,7 @@ class AIReactDeveloperTests(unittest.TestCase):
                                        + "(){return <section>Demo</section>;} "})
         receipt = self.propose(expanded)
         doc, _ = DEV._read_proposal(receipt["proposal_id"])
-        self.assertEqual(len(doc["files"]), 14)
+        self.assertEqual(len(doc["files"]), 15)  # Includes the reviewed dependency lock.
 
     def test_signed_integrity_prevents_changed_source_and_approval_required(self):
         receipt = self.propose()
