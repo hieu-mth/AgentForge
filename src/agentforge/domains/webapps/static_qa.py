@@ -1,6 +1,7 @@
 """V5 deterministic static QA for a signed AI-generated React source proposal.
 
-No subprocess, browser, model or network. PASS_STATIC_ONLY never asserts build,
+No subprocess, browser, model or network. JavaScript/JSX is parsed as data.
+PASS_STATIC_ONLY never asserts build,
 security or user-flow correctness. Container QA requires a separate Goal.
 """
 import hashlib
@@ -35,11 +36,12 @@ def read(report_id, report_sha):
                 "architecture_id","architecture_sha","proposal_id","sha256",
                 "status","checks","build_verified","browser_verified",
                 "security_verified"}
-    if not isinstance(obj,dict) or set(obj) != required:
+    modern = isinstance(obj, dict) and obj.get("format") == "agentforge.webapp.qa-static.v2"
+    if not isinstance(obj,dict) or set(obj) != (required | {"syntax"} if modern else required):
         raise ValueError("QA_INVALID: report fields")
-    if (obj["format"] != "agentforge.webapp.qa-static.v1"
+    if (obj["format"] not in {"agentforge.webapp.qa-static.v1", "agentforge.webapp.qa-static.v2"}
             or obj["qa_report_id"] != report_id
-            or obj["status"] != "PASS_STATIC_ONLY"
+            or obj["status"] not in ({"PASS_STATIC_ONLY", "FAIL_SYNTAX"} if modern else {"PASS_STATIC_ONLY"})
             or obj["checks"] != ["SIGNED_ARCHITECTURE","SIGNED_REACT_SOURCE",
                                  "SOURCE_ALLOWLIST","TRUSTED_REACT_TOOLCHAIN"]
             or any(obj[x] is not False for x in (
@@ -60,6 +62,12 @@ def read(report_id, report_sha):
             "architecture_sha":arch["architecture_sha"]}
             or app["sha256"] != obj["sha256"]):
         raise PermissionError("QA_SOURCE_MISMATCH")
+    if modern:
+        from agentforge.domains.webapps.syntax import check_files
+        syntax = check_files(app["files"], app["sha256"])
+        if (obj["syntax"] != syntax or obj["status"] != (
+                "PASS_STATIC_ONLY" if syntax["status"] == "PASS" else "FAIL_SYNTAX")):
+            raise ValueError("QA_SYNTAX_MISMATCH")
     return obj
 
 def audit(proposal_id, sha256):
@@ -75,11 +83,14 @@ def audit(proposal_id, sha256):
     if arch["project_slug"] != app["project_slug"]:
         raise PermissionError("QA_SOURCE_MISMATCH")
     ident = uuid4().hex
-    body = {"format":"agentforge.webapp.qa-static.v1","qa_report_id":ident,
+    from agentforge.domains.webapps.syntax import check_files
+    syntax = check_files(app["files"], sha256)
+    status = "PASS_STATIC_ONLY" if syntax["status"] == "PASS" else "FAIL_SYNTAX"
+    body = {"format":"agentforge.webapp.qa-static.v2","qa_report_id":ident,
             "architecture_id":lineage["architecture_id"],
             "architecture_sha":lineage["architecture_sha"],
             "proposal_id":proposal_id,"sha256":sha256,
-            "status":"PASS_STATIC_ONLY",
+            "status":status, "syntax":syntax,
             "checks":["SIGNED_ARCHITECTURE","SIGNED_REACT_SOURCE",
                       "SOURCE_ALLOWLIST","TRUSTED_REACT_TOOLCHAIN"],
             "build_verified":False,"browser_verified":False,
@@ -92,5 +103,6 @@ def audit(proposal_id, sha256):
         json.dump(obj,output,ensure_ascii=False,indent=2)
     return {"qa_report_id":ident, "qa_report_sha":obj["qa_report_sha"],
             "proposal_id":proposal_id, "sha256":sha256,
-            "status":"PASS_STATIC_ONLY","build_verified":False,
+            "status":status,"build_verified":False,
+            "syntax_verified":syntax["status"] == "PASS", "failures":int(syntax["status"] != "PASS"),
             "browser_verified":False,"security_verified":False}
