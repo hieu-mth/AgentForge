@@ -61,7 +61,7 @@ src/agentforge/  ->  agentforge/
 
 **Exit gate:** so sánh HTTP contract tests trước/sau và quyền mutation không suy giảm.
 
-### M4 — Feature-first và integration adapters
+### M4 — Feature-first và integration adapters (Growth/Websites/Webapps/Media/Film/ComfyUI DONE; research/ops PENDING)
 
 - Chuyển `domains/websites`, `domains/webapps`, `domains/growth` thành `features/*` **theo từng module**.
 - Chia media dùng chung vs. Film Studio riêng. `long_form.py` và motion orchestration ở `features/film_studio`, ComfyUI transport sang `integrations/comfyui.py`; vẫn giữ owner-gated submission.
@@ -86,4 +86,4 @@ Owner yêu cầu kết quả đã kiểm thử được merge vào `main`. Dùng
 
 ## Việc cần làm khi chốt docs
 
-**Đã hoàn thành M1 + M2:** frontend ở `dashboard/`, Python package ở `agentforge/`. Lệnh chạy hiện hành tại [DEVELOPMENT.md](../DEVELOPMENT.md), đặc biệt cài lại `pip install -e ".[media]"` sau khi pull. M4 feature-first và M5 compatibility cleanup là các bước tiếp theo; M3 đã làm.
+**Đã hoàn thành M1 + M2:** frontend ở `dashboard/`, Python package ở `agentforge/`. Lệnh chạy hiện hành tại [DEVELOPMENT.md](../DEVELOPMENT.md), đặc biệt cài lại `pip install -e ".[media]"` sau khi pull. M3 và M4a–M4d2 đã triển khai. Việc còn lại là review research/ops theo use case, M5 compatibility cleanup có bằng chứng và setup/operations M9.

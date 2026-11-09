@@ -2,7 +2,7 @@
 
 **Quyết định: ĐÃ CHỐT (approved target)** · **Triển khai: M1 + M2 + M3 DONE, M4a–M4c + M4d1 Media/Film + M4d2 ComfyUI DONE; M4 research/ops + M5 CHƯA MIGRATE** · 09/11/2026
 
-Chủ dự án đã chọn **flat-root Python package + dashboard riêng**, thay cho `src/agentforge/` và `ui/dashboard/` ban đầu. **M1 đã chuyển React sang `dashboard/`, M2 đã chuyển Python sang `agentforge/`.** `api/` đã được triển khai ở M3; `features/`, `integrations/`, `ops/` trong cây vẫn là đích M4–M5, **chưa được tạo đầy đủ**.
+Chủ dự án đã chọn **flat-root Python package + dashboard riêng**, thay cho `src/agentforge/` và `ui/dashboard/` ban đầu. **M1 đã chuyển React sang `dashboard/`, M2 đã chuyển Python sang `agentforge/`.** `api/` đã triển khai ở M3; các business feature chính và `integrations/comfyui.py` đã triển khai M4a–M4d2. `ops/` và phần research cần review riêng; M5 compat cleanup chưa triển khai.
 
 - **Code thực tế hôm nay:** [REPOSITORY_STRUCTURE.md](REPOSITORY_STRUCTURE.md).
 - **Từng file Python và frontend hiện có:** [FILE_CATALOG.md](FILE_CATALOG.md).
@@ -84,7 +84,7 @@ AgentForge/
 
 ## 3. Quy tắc tổ chức file
 
-1. **Feature-first:** mỗi file có một trách nhiệm. `features/film_studio/` giữ kịch bản, shot, continuity và orchestration; HTTP ComfyUI sẽ nằm trong `integrations/comfyui.py` (khi được tách thật).
+1. **Feature-first:** mỗi file có một trách nhiệm. `features/film_studio/` giữ kịch bản, shot, continuity và orchestration; HTTP ComfyUI **đã nằm** trong `integrations/comfyui.py` (M4d2).
 2. **Không tạo folder trống để đủ sơ đồ.** Ví dụ `integrations/youtube.py` mới là **planned**, vì repo hiện chưa có OAuth/publish.
 3. **Python package không chứa npm app.** React độc lập ở `dashboard/`, nhưng backend có thể tiếp tục phục vụ bundle đã build qua cùng cổng localhost.
 4. **Tên file nói rõ mục đích:** ưu tiên `motion.py`, `shot_jobs.py`, `acceptance.py` thay cho tên có hậu tố `v15`, `v24`; chỉ đổi khi việc migrate thực sự được kiểm thử.
@@ -126,7 +126,9 @@ Ví dụ Film Studio: script & character bible ở `features/film_studio/`; Comf
 | Đổi `src/agentforge/` thành `agentforge/` | **M2 DONE** — package discovery, data/workspace paths, imports/CLI regression |
 | Đổi `ui/dashboard/` thành `dashboard/` | **M1 DONE** — code/frontend, Python path, npm/CI, URL regression |
 | Refactor `control_center_v1.py` thành API routes | **M3 DONE** — canonical `api/server.py` + owner security contract tests; facade giữ import/CLI cũ |
-| Đổi `domains/` thành `features/` | **NOT STARTED** |
-| Tách integrations, ops, research, Film Studio | **NOT STARTED** |
+| Chuyển 5 nhóm nghiệp vụ `domains/` → `features/` | **M4a–M4d1 DONE** — có compatibility aliases; Growth/Websites/Webapps/Media/Film Studio |
+| Tách Film Studio và ComfyUI integration | **M4d1–M4d2 DONE** — chưa có GPU benchmark thực |
+| Chuyển các use case research/ops còn hoạt động | **PENDING** — chỉ migrate khi xác minh callers và ownership |
+| Dọn các compatibility aliases | **M5 NOT STARTED** — không xóa theo cảm tính |
 
 Bắt đầu migration theo [MIGRATION_PLAN.md](MIGRATION_PLAN.md), không thực hiện một lần tất cả. Hướng dẫn cài đặt trong root README vẫn dùng cấu trúc **đang chạy** cho tới khi các bước chuyển thực sự được merge.

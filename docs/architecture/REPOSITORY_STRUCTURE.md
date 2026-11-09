@@ -1,6 +1,6 @@
 # Kiến trúc repository AgentForge
 
-> **CURRENT IMPLEMENTATION** — M1/M2 đặt Python `agentforge/` và React `dashboard/` tại root; **M3 đã tách API thành `agentforge/api/`**. M8 đã chia code-level skill policies/handlers theo domain; M4a đã chuyển Growth sang `features/growth/` và giữ aliases ở `domains/growth/`; M4d1 đã chuyển Media/Film sang `features/` (ComfyUI transport còn trong feature); M4d2 đã tách ComfyUI HTTP transport; M4 research/ops và M5 alias cleanup **chưa thực hiện**. Xem [catalog từng file](FILE_CATALOG.md) và [kế hoạch migration](MIGRATION_PLAN.md).
+> **CURRENT IMPLEMENTATION** — M1/M2 đặt Python `agentforge/` và React `dashboard/` tại root; **M3 đã tách API thành `agentforge/api/`**. M8 đã chia code-level skill policies/handlers theo domain; M4a–M4d1 đã chuyển Growth, Websites, Webapps, shared Media và Film Studio sang `features/` với compatibility aliases; M4d2 đã tách ComfyUI HTTP transport; M4 research/ops và M5 alias cleanup **chưa thực hiện**. Xem [catalog từng file](FILE_CATALOG.md) và [kế hoạch migration](MIGRATION_PLAN.md).
 
 **Current source of truth:** Python modular monolith, một React dashboard, local SQLite + workspace. Đã loại bỏ frontend HTML/CSS/JS V0 và Python dashboard V0.
 
@@ -46,7 +46,7 @@ AgentForge/
 └── workspace/                     # Owner products/films/proposals (gitignored)
 ~~~
 
-`agentforge/` là **backend Python đang chạy** ở root, còn `dashboard/` là frontend React; URL vẫn `/dashboard/`. Namespace Python `agentforge.*`, các CLI và SQLite paths không đổi về ý nghĩa. M3 đã hoàn thành trong scope API; M4/M5 là các đợt refactor domain và aliases còn lại. Những Python compatibility aliases root-level được giữ nếu còn CLI, imports hoặc tests phụ thuộc. Không tự tái tổ chức tất cả folder chỉ để đẹp cây thư mục.
+`agentforge/` là **backend Python đang chạy** ở root, còn `dashboard/` là frontend React; URL vẫn `/dashboard/`. Namespace Python `agentforge.*`, các CLI và SQLite paths không đổi về ý nghĩa. M3 đã hoàn thành cho API; M4a–M4d2 đã chuyển canonical business code, còn research/ops review và M5 aliases chưa làm. Những Python compatibility aliases root-level được giữ nếu còn CLI, imports hoặc tests phụ thuộc. Không tự tái tổ chức tất cả folder chỉ để đẹp cây thư mục.
 
 ## Model Hub
 
@@ -60,7 +60,7 @@ AgentForge/
 4. Owner inspect, feedback/approve/decision; không tự ACCEPTED khi thiếu gate.
 5. Local deliverable nằm trong `workspace/`; không có implicit deploy/upload.
 
-Với Film Studio: `domains/media/long_form.py` chỉ tạo shot slots; `motion_comfy.py` chỉ gửi job ComfyUI theo quyền Owner. ComfyUI `history.success` **không phải** QA đạt hoặc video đã hoàn thành.
+Với Film Studio: `features/film_studio/long_form.py` chỉ tạo shot slots; `features/film_studio/motion_comfy.py` gửi job tới `integrations/comfyui.py` theo quyền Owner. ComfyUI `history.success` **không phải** QA đạt hoặc video đã hoàn thành.
 
 ## Ranh giới vận hành
 
