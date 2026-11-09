@@ -14,7 +14,7 @@ LAYOUT = {
     "core": "src/agentforge/core",
     "website_domain": "src/agentforge/domains/websites",
     "storage": "src/agentforge/storage",
-    "ui": "ui/dashboard",
+    "ui": "dashboard",
     "contracts": "skills",
     "runtime_data": "data",
     "generated_products": "workspace",
@@ -22,7 +22,7 @@ LAYOUT = {
     "ops_scripts": "scripts",
 }
 PERSISTENT_DIRS = frozenset(("data", "workspace"))
-GENERATED_DIRS = frozenset(("ui/dashboard/dist", "ui/dashboard/node_modules"))
+GENERATED_DIRS = frozenset(("dashboard/dist", "dashboard/node_modules"))
 LEGACY_IMPORTS = {
     "agentforge.prompt_intake": "agentforge.ai.prompt_intake",
     "agentforge.result_view": "agentforge.core.result_view",

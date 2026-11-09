@@ -9,8 +9,8 @@ permissions and SQLite/artifact state.
 
 ```powershell
 cd D:\AgentForge
-npm.cmd ci --prefix ui/dashboard --ignore-scripts --no-audit --no-fund
-npm.cmd run build --prefix ui/dashboard
+npm.cmd ci --prefix dashboard --ignore-scripts --no-audit --no-fund
+npm.cmd run build --prefix dashboard
 .\.venv\Scripts\python.exe -m agentforge --port 8780
 ```
 
@@ -18,7 +18,7 @@ Open **http://127.0.0.1:8780/dashboard/**, then log in with the Owner code
 printed by the server. For gated external tools, add
 `--allow-external-tools`; each sensitive action still needs approval.
 
-The optional development command is `npm.cmd run dev --prefix ui/dashboard`
+The optional development command is `npm.cmd run dev --prefix dashboard`
 with the Python backend running. Never bind Vite or the Python server to the
 public network.
 

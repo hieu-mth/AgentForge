@@ -25,6 +25,7 @@ from agentforge import growth_store, skill_registry, task_history, goal_prefligh
 from agentforge import ops_control
 from agentforge.core import artifact_acceptance
 from agentforge.core.public_serialization import _artifact_names, _task_public
+from agentforge.paths import UI_DASHBOARD_DIR
 
 COOKIE = "af_owner_session"
 SESSION_SECONDS = 8 * 60 * 60
@@ -34,7 +35,7 @@ SENSITIVE_GRANTS = {"model.invoke", "network.read", "network.search",
 LOCAL_GRANTS = {"workspace.write", "workspace.propose", "workspace.read"}
 
 # React build output is a separate artifact, never a writable workspace file.
-REACT_DIST = Path(__file__).resolve().parents[2] / "ui" / "dashboard" / "dist"
+REACT_DIST = UI_DASHBOARD_DIR / "dist"
 REACT_ASSET_RE = re.compile(r"[A-Za-z0-9_.-]{1,120}\.(?:js|css|svg|png|webp|ico)\Z")
 
 

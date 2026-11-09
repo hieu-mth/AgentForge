@@ -11,7 +11,8 @@ class PathAndRegistryTests(unittest.TestCase):
         self.assertTrue((root / "pyproject.toml").is_file())
         self.assertEqual(root / "data", paths.DATA_DIR)
         self.assertEqual(root / "workspace", paths.WORKSPACE_DIR)
-        self.assertEqual(root / "ui" / "dashboard", paths.UI_DASHBOARD_DIR)
+        self.assertEqual(root / "dashboard", paths.UI_DASHBOARD_DIR)
+        self.assertTrue((paths.UI_DASHBOARD_DIR / "package-lock.json").is_file())
         self.assertEqual(model_ai.ROOT, root)
         self.assertEqual(worker_ai.ROOT, root)
 

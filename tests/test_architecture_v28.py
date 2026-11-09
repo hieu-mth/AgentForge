@@ -12,7 +12,7 @@ class ArchitectureBoundaryTests(unittest.TestCase):
     def test_explicit_python_domain_layout(self):
         root = architecture.REPOSITORY_ROOT
         self.assertTrue((root / "pyproject.toml").is_file())
-        self.assertTrue((root / "ui" / "dashboard" / "package.json").is_file())
+        self.assertTrue((root / "dashboard" / "package.json").is_file())
         for key in ("ai", "core", "website_domain", "storage"):
             package = root / architecture.LAYOUT[key]
             self.assertTrue((package / "__init__.py").is_file(), key)
@@ -50,12 +50,13 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         lines = (architecture.REPOSITORY_ROOT / ".gitignore").read_text(
             encoding="utf-8").splitlines()
         ignored = {line.strip() for line in lines}
-        for rule in ("data/", "workspace/", "ui/dashboard/dist/",
+        for rule in ("data/", "workspace/", "dashboard/dist/",
+                     "dashboard/node_modules/", "ui/dashboard/dist/",
                      "ui/dashboard/node_modules/"):
             self.assertIn(rule, ignored)
 
     def test_ui_does_not_embed_storage_operations(self):
-        sources = architecture.REPOSITORY_ROOT / "ui" / "dashboard" / "src"
+        sources = architecture.REPOSITORY_ROOT / "dashboard" / "src"
         for file in sources.rglob("*"):
             if file.suffix not in (".js", ".jsx", ".ts", ".tsx"):
                 continue

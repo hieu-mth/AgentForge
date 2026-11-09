@@ -14,7 +14,7 @@ COMPANY_DATA_DIR = DATA_DIR / "company"
 WORKSPACE_DIR = REPOSITORY_ROOT / "workspace"
 PRODUCTS_DIR = WORKSPACE_DIR / "products"
 MEDIA_DIR = WORKSPACE_DIR / "media"
-UI_DASHBOARD_DIR = REPOSITORY_ROOT / "ui" / "dashboard"
+UI_DASHBOARD_DIR = REPOSITORY_ROOT / "dashboard"
 
 def ensure_local_root(path: Path) -> Path:
     """Reject paths traversing a Windows junction/symlink before local writes."""
