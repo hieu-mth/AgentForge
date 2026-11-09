@@ -172,6 +172,14 @@ class MotionAdapterTests(unittest.TestCase):
             view = motion.job_status(job["job_id"], db_path=self.db)
         self.assertEqual(view["status"], "COMFY_COMPLETE_NOT_IMPORTED_OR_VERIFIED")
         self.assertFalse(view["video_verified"])
+        db = motion._db(self.db)
+        try:
+            saved_state = db.execute(
+                "SELECT state FROM motion_jobs WHERE job_id=?", (job["job_id"],)
+            ).fetchone()[0]
+        finally:
+            db.close()
+        self.assertEqual(saved_state, "COMPLETE_UNVERIFIED")
 
     def test_health_unavailable_never_claims_gpu_ready(self):
         with patch.object(motion, "_json_request", side_effect=OSError("offline")):

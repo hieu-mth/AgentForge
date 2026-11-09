@@ -84,7 +84,9 @@ This adapter does **not** have an automatic retry option. It writes an SQLite
 \`SUBMITTING\` checkpoint *before* the HTTP GPU request; if the HTTP result is
 ambiguous, it does not re-run or spend GPU again. A completed ComfyUI history
 says **COMFY_COMPLETE_NOT_IMPORTED_OR_VERIFIED**, never "film ready" or
-"video accepted". No user video, model source or YouTube credentials are
+"video accepted".
+Provider-confirmed terminal success frees the one-active-GPU-shot quota for
+another shot without auto-retrying the original shot. No user video, model source or YouTube credentials are
 stored in Git.
 
 ## Current blocker before claiming Milestone 2 complete

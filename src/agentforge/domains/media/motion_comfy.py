@@ -286,6 +286,15 @@ def job_status(job_id, *, db_path: Path = DB):
             status = "COMFY_COMPLETE_NOT_IMPORTED_OR_VERIFIED"
         else:
             status = "PROVIDER_FAILED_OR_INCOMPLETE"
+    if status == "COMFY_COMPLETE_NOT_IMPORTED_OR_VERIFIED":
+        # Provider completion is a durable, limited-scope status. It is NOT
+        # a video QA PASS. Release the one-active-shot quota only after the
+        # provider confirms terminal success; do not re-run this shot.
+        with closing(_db(db_path, write=True)) as conn, conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute("""UPDATE motion_jobs SET state='COMPLETE_UNVERIFIED',
+                updated_at=? WHERE job_id=? AND state='SUBMITTED'
+                AND provider_id=?""", (_now(), job_id, row["provider_id"]))
     return {"job_id": job_id, "film_slug": row["film_slug"], "shot_id": row["shot_id"],
             "status": status, "plan_sha": row["plan_sha"], "workflow_sha": row["workflow_sha"],
             "video_verified": False, "youtube_uploaded": False}
