@@ -758,3 +758,67 @@ class _Handler(BaseHTTPRequestHandler):
                     "artifact_acceptance": artifact_acceptance.inspect(
                             ident, document["sha256"], "proposals", db_path=self.server.task_db_path),
                     "files": [{"path": f["path"], "content": f["content"]}
+                              for f in document["files"]],
+                    "execution_authorized": False,
+                })
+            if route.startswith("/api/videos/"):
+                from agentforge import media_workflow_v15, media_quality
+                ident = route.removeprefix("/api/videos/")
+                record = media_workflow_v15._row(ident)
+                if record["status"] != "VIDEO_READY":
+                    raise PermissionError("Only completed MP4 can be reviewed")
+                _, manifest = media_workflow_v15._verify_storyboard_manifest(record)
+                qa = media_quality.check(record["run_id"])
+                if (qa["status"] != "VIDEO_PASS" or qa["failures"] or
+                        not qa["video_verified"] or
+                        manifest["artifacts"].get("video.mp4") != record["video_sha"]):
+                    raise PermissionError("MP4 integrity/quality is not verified")
+                self._session().setdefault("inspected_video", {})[ident] = record["video_sha"]
+                return self._reply(200, {
+                    "production_id": ident, "run_id": record["run_id"],
+                    "video_sha": record["video_sha"], "quality": qa["status"],
+                    "relative_path": "workspace/media/" + record["run_id"] + "/video.mp4",
+                    "published": False, "review_requires_playback": True})
+            if route.startswith("/api/drafts/"):
+                from agentforge import quality_v14
+                ident = route.removeprefix("/api/drafts/")
+                from agentforge import brain_store
+                brain_store._id(ident)
+                found = next((item for item in quality_v14.inbox()["reviews"]
+                              if item["job_id"] == ident), None)
+                if found is None:
+                    raise KeyError("Draft not found")
+                task = task_history.get_task(found["task_id"], db_path=self.server.task_db_path)
+                if (task.get("status") != "SUCCEEDED" or
+                        task.get("skill_id") != "media.copy_draft" or
+                        found["skill_id"] != "media.copy_draft"):
+                    raise PermissionError("Only bounded storyboard drafts can be inspected")
+                result = task.get("result")
+                if (not isinstance(result, dict) or
+                        len(quality_v14._canonical(result).encode("utf-8")) > 65000 or
+                        quality_v14._sha(result) != found["output_sha"]):
+                    raise PermissionError("Storyboard result digest mismatch")
+                # Read-only review: model data displayed as text, never executed.
+                session = self._session()
+                session.setdefault("reviewed_ai_drafts", {})[ident] = found["output_sha"]
+                return self._reply(200, {
+                    "job_id": ident, "output_sha": found["output_sha"],
+                    "quality": found["quality"], "decision": found["decision"],
+                    "task": _public_task(task),
+                    "storyboard": result})
+            if route.startswith("/api/goals/"):
+                ident = route.removeprefix("/api/goals/")
+                return self._reply(200, brain_runner.inspect(
+                    ident, brain_db_path=self.server.brain_db_path, task_db_path=self.server.task_db_path))
+            if route.startswith("/api/tasks/"):
+                ident = route.removeprefix("/api/tasks/")
+                task = task_history.get_task(ident, db_path=self.server.task_db_path)
+                return self._reply(200, {
+                    **_public_task(task, db_path=self.server.task_db_path),
+                    "events": [{"at": x["at"], "name": x["name"]}
+                               for x in task["events"]]})
+            if route.startswith("/api/growth/"):
+                return self._reply(200, growth_reports.report(
+                    route.removeprefix("/api/growth/"),
+                    db_path=self.server.growth_db_path))
+            return self._blocked(404, "not_found")
