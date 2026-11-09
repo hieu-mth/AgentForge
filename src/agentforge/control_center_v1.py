@@ -317,3 +317,73 @@ def _owner_action(server, path, request, session=None):
             raise PermissionError("Owner must explicitly approve standing delegation")
         if set(request) != {"ack", "enabled", "daily_cap"}:
             raise ValueError("Only bounded policy fields accepted")
+        return autopilot_v13.configure(
+            enabled=request["enabled"], daily_cap=request["daily_cap"],
+            confirm=True)
+    if path.startswith("/api/videos/") and path.endswith("/decide"):
+        from agentforge import media_workflow_v15
+        parts = path.split("/")
+        if len(parts) != 5:
+            raise ValueError("Invalid video review route")
+        ident = parts[3]
+        if set(request) != {"ack", "decision", "video_sha", "watched_local_file"}:
+            raise ValueError("Only bounded video approval fields accepted")
+        decision = request["decision"]
+        if decision not in ("APPROVE", "REJECT") or request["ack"] != "VIDEO_" + decision:
+            raise PermissionError("Explicit video decision required")
+        if request["watched_local_file"] is not True:
+            raise PermissionError("Owner must confirm watching local MP4")
+        if (session is None or
+                session.get("inspected_video", {}).get(ident) != request["video_sha"]):
+            raise PermissionError("Inspect exact MP4 metadata in this session first")
+        return media_workflow_v15.decide(
+            ident, decision, request["video_sha"], confirm_review=True)
+    if path.startswith("/api/drafts/") and path.endswith("/decide"):
+        from agentforge import quality_v14
+        parts = path.split("/")
+        if len(parts) != 5:
+            raise ValueError("Invalid content review route")
+        job_id = parts[3]
+        if set(request) != {"ack", "decision", "output_sha"}:
+            raise ValueError("Only bounded content review fields accepted")
+        decision = request["decision"]
+        if decision not in ("APPROVE", "REJECT") or request["ack"] != "REVIEW_" + decision:
+            raise PermissionError("Explicit exact owner decision required")
+        if (decision == "APPROVE" and
+                (session is None or session.get("reviewed_ai_drafts", {}).get(job_id)
+                 != request["output_sha"])):
+            raise PermissionError("Inspect the full task in this session before approving")
+        return quality_v14.decide(
+            job_id, decision, request["output_sha"], confirm=True)
+    if path == "/api/media/prepare":
+        if request.get("ack") != "PREPARE_EDITED_STORYBOARD":
+            raise PermissionError("Explicit owner storyboard edit confirmation required")
+        if set(request) - {"ack", "storyboard"}:
+            raise ValueError("Only owner storyboard content is accepted in dashboard")
+        from agentforge import media_workflow_v15
+        return media_workflow_v15.prepare(
+            request.get("storyboard"), confirm_edit=True)
+    if path == "/api/ops/control":
+        mode = request.get("mode")
+        expected = "PAUSE_OPERATIONS" if mode == "PAUSED" else (
+            "RESUME_OPERATIONS" if mode == "ACTIVE" else None)
+        if expected is None or request.get("ack") != expected:
+            raise PermissionError("Explicit matching operations control acknowledgment required")
+        return ops_control.set_mode(mode, confirm=True)
+    if path.startswith("/api/webapps/") and (
+            path.endswith("/revision") or path.endswith("/apply")):
+        from agentforge import webapp_developer
+        parts = path.split("/")
+        if len(parts) != 5 or parts[1:3] != ["api", "webapps"]:
+            raise ValueError("Invalid application action")
+        proposal_id, action = parts[3], parts[4]
+        if set(request) != ({"ack", "sha256", "feedback"} if action == "revision"
+                              else {"ack", "sha256"}):
+            raise ValueError("Invalid application request fields")
+        provider = webapp_developer.provider(proposal_id)
+        proposal = provider.inspect(proposal_id)
+        if request.get("sha256") != proposal["sha256"]:
+            raise PermissionError("Application proposal SHA mismatch")
+        if (session is None or session.get("reviewed_webapps", {}).get(proposal_id)
+                != proposal["sha256"]):
+            raise PermissionError("Inspect this exact app proposal before authorizing")
