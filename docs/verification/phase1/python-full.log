@@ -1100,3 +1100,61 @@ test_reject_noncommunity_source (test_search_quality.TestSearchQuality.test_reje
 test_reject_off_topic_community_post (test_search_quality.TestSearchQuality.test_reject_off_topic_community_post) ... 
 ok
 test_reject_spoofed_domain (test_search_quality.TestSearchQuality.test_reject_spoofed_domain) ... ok
+test_relevant_source_requires_review (test_search_quality.TestSearchQuality.test_relevant_source_requires_review) ... 
+ok
+test_boolean_is_not_integer (test_skill_registry.TestSkillRegistry.test_boolean_is_not_integer) ... ok
+test_builtin_registry_discovery_is_deterministic 
+(test_skill_registry.TestSkillRegistry.test_builtin_registry_discovery_is_deterministic) ... ok
+test_cli_list_validate_inspect_are_read_only 
+(test_skill_registry.TestSkillRegistry.test_cli_list_validate_inspect_are_read_only) ... ok
+test_invalid_input_missing_extra_and_wrong_type 
+(test_skill_registry.TestSkillRegistry.test_invalid_input_missing_extra_and_wrong_type) ... ok
+test_load_single_skill_and_validate_input_output 
+(test_skill_registry.TestSkillRegistry.test_load_single_skill_and_validate_input_output) ... ok
+test_no_handlers_imported_or_called_during_discovery 
+(test_skill_registry.TestSkillRegistry.test_no_handlers_imported_or_called_during_discovery) ... ok
+test_reject_bad_contract_version_worker_and_permission 
+(test_skill_registry.TestSkillRegistry.test_reject_bad_contract_version_worker_and_permission) ... ok
+test_reject_bad_schema_and_required_fields 
+(test_skill_registry.TestSkillRegistry.test_reject_bad_schema_and_required_fields) ... ok
+test_reject_invalid_skill_id_before_file_io 
+(test_skill_registry.TestSkillRegistry.test_reject_invalid_skill_id_before_file_io) ... ok
+test_reject_read_only_declaring_model_or_write 
+(test_skill_registry.TestSkillRegistry.test_reject_read_only_declaring_model_or_write) ... ok
+test_reject_symlink_manifest_and_directory 
+(test_skill_registry.TestSkillRegistry.test_reject_symlink_manifest_and_directory) ... ok
+test_reject_unknown_and_missing_fields (test_skill_registry.TestSkillRegistry.test_reject_unknown_and_missing_fields) 
+... ok
+test_allowlist_must_not_be_a_string 
+(test_source_reader_security.TestSourceReaderSecurity.test_allowlist_must_not_be_a_string) ... ok
+test_default_allowlist_does_not_inherit_review_permission 
+(test_source_reader_security.TestSourceReaderSecurity.test_default_allowlist_does_not_inherit_review_permission) ... ok
+test_explicit_allowlist_fetches_approved_host 
+(test_source_reader_security.TestSourceReaderSecurity.test_explicit_allowlist_fetches_approved_host) ... ok
+test_reader_and_reviewer_share_url_validation 
+(test_source_reader_security.TestSourceReaderSecurity.test_reader_and_reviewer_share_url_validation) ... ok
+test_reviewer_uses_per_call_allowlist 
+(test_source_reader_security.TestSourceReaderSecurity.test_reviewer_uses_per_call_allowlist) ... ok
+test_unapproved_host_never_opens_connection 
+(test_source_reader_security.TestSourceReaderSecurity.test_unapproved_host_never_opens_connection) ... ok
+test_unsafe_urls_rejected_before_network 
+(test_source_reader_security.TestSourceReaderSecurity.test_unsafe_urls_rejected_before_network) ... ok
+test_deferred_task_cannot_be_reviewed (test_source_review.TestSourceReview.test_deferred_task_cannot_be_reviewed) ... 
+ok
+test_no_whitelist_no_network (test_source_review.TestSourceReview.test_no_whitelist_no_network) ... ok
+SOURCE REVIEW COMPLETED
+PAGES FETCHED: 1 / 1
+MATCHED QUOTES: 1
+STATUS: QUOTE_REVIEW_ONLY
+AUTONOMOUS EXECUTION AUTHORIZED: False
+SAVED: C:\Users\hieu-mth\AppData\Local\Temp\tmp34vfxf1e\company\reviews\aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-source-review.json
+READING: sheet.com.vn https://sheet.com.vn/blog/test
+test_read_only_review_matches_quote_and_keeps_task_unchanged 
+(test_source_review.TestSourceReview.test_read_only_review_matches_quote_and_keeps_task_unchanged) ... ok
+test_refuses_host_not_in_task (test_source_review.TestSourceReview.test_refuses_host_not_in_task) ... ok
+test_refuses_without_manual_read_only_approval 
+(test_source_review.TestSourceReview.test_refuses_without_manual_read_only_approval) ... ok
+test_rejects_private_or_untrusted_urls (test_source_review.TestSourceReview.test_rejects_private_or_untrusted_urls) 
+... ok
+test_audit_invalid_jsx_and_broken_javascript_are_detected 
+(test_source_syntax.SourceSyntaxTests.test_audit_invalid_jsx_and_broken_javascript_are_detected) ... ok
