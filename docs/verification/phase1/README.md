@@ -70,3 +70,26 @@ node --test tests/test_control_center_task_detail.cjs tests/test_control_center_
 npm.cmd run test:navigation --prefix ui/dashboard
 npm.cmd test --prefix examples/novamart
 npm.cmd run build --prefix ui/dashboard
+npm.cmd run test:browser --prefix ui/dashboard
+npm.cmd run build --prefix examples/novamart
+npm.cmd run test:browser --prefix examples/novamart
+npm.cmd audit --prefix ui/dashboard --json
+npm.cmd audit --prefix examples/novamart --json
+```
+
+Audit environment dùng Python 3.13.17 và Node 24.19.0; CI vẫn Node 22. Node tests trong restricted environment dùng thêm `--test-isolation=none` để tránh spawn EPERM; trusted local test execution cần quyền tạo/dọn temporary directories. Không sửa manifest hoặc runner để hợp thức hóa test fail.
+
+## Commits
+
+1. `b97a6cc` — fix(deps): patch and lock trusted frontend dependencies
+2. `e8f1efe` — feat(acceptance): separate artifact acceptance from execution status
+3. `4a7ab6d` — fix(qa): reject malformed generated source
+4. `1657ede` — test(security): enforce generated-code execution boundaries
+
+## Giới hạn và điều kiện Phase 2
+
+Không Docker CLI/pinned image trong process audit. Không rebuild hoặc test real Docker image; runtime guard buộc rebuild bản đã vá và interactive preview tiếp tục bị khóa. Không có real-model generation/quality/cost verification, Python CVE scan đầy đủ, hoặc full browser flow engine cho source AI. npm audit 0 không chứng minh source AI an toàn.
+
+Để bắt đầu Phase 2: chuẩn bị Docker Linux và image pin mới từ locked recipe; kiểm tra isolation/egress/cleanup thực; chốt browser-flow acceptance contract theo SHA; Owner duyệt model/provider/cost budget trước inference thật. Giữ source revision, browser runner, full-stack và deadline/cancel nằm ngoài đợt Phase 1 này. NO-GO thương mại trong audit chưa được đảo thành GO chỉ vì tests Phase 1 PASS.
+
+Primary references đã kiểm tra: [Vite advisories](https://github.com/vitejs/vite/security/advisories), [Tree-sitter Python binding](https://github.com/tree-sitter/py-tree-sitter), [JavaScript/JSX grammar](https://github.com/tree-sitter/tree-sitter-javascript). Dependency lựa chọn dựa trên npm metadata + cả hai locked-tree audits, không tự nâng Vite major.
