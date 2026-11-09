@@ -1,0 +1,26 @@
+✔ execution success is never counted as product acceptance (1.1808ms)
+✔ all artifact states have distinct Owner labels and UI exposes both statuses (0.6442ms)
+✔ sidebar contains exactly six business-facing groups (0.4748ms)
+✔ every original screen is present once; no accidental deletion (0.1405ms)
+✔ every group selects a real initial tab (0.1779ms)
+✔ deep links preserve each feature and recover from invalid input (0.2305ms)
+✔ business and owner tools remain reachable in expected groups (0.0918ms)
+✔ overview is the initial landing, while existing deep links stay stable (0.0658ms)
+✔ every grant has an owner-facing title, effect, and risk level (0.1051ms)
+✔ only requested write/action permissions are presented, once (0.1757ms)
+✔ one explicit tick grants model and required confirmation; no implicit permissions (0.1451ms)
+✔ browser/process confirmations match selected required permissions only (0.0678ms)
+✔ unknown permissions are fail closed, never treated as explained (0.0539ms)
+✔ every registered skill has a human-readable Vietnamese label (2.2055ms)
+✔ V5 four-role prompt requires three model calls without magic prefix (0.2772ms)
+✔ single-role and ordinary website remain one call, not elevated by accident (0.0917ms)
+✔ policy cap is checked client-side without changing Owner limits (0.1372ms)
+✔ the UI guard handles an Owner who explicitly turns off prompt model use (0.0678ms)
+ℹ tests 18
+ℹ suites 0
+ℹ pass 18
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 31.1619
