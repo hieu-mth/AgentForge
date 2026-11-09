@@ -817,3 +817,76 @@ async function handleClick(event){
       '<p class="small muted">Mở video từ thư mục dự án trên Windows, xem hình ảnh, đọc chữ và nghe âm thanh.</p>'+
       '<div class="callout mono">'+esc(meta.relative_path)+'</div>'+
       '<p class="small muted">SHA-256: '+esc(meta.video_sha)+' · QA: '+esc(meta.quality)+
+      '. PASS chỉ xác minh cấu trúc và file; không đảm bảo thông tin quảng cáo đúng.</p>'+
+      '<label class="form-field"><input type="checkbox" id="v2-video-watched"> Tôi đã mở và xem toàn bộ file MP4 trên máy này.</label>'+
+      '<div class="form-actions"><button type="button" class="btn btn-outline" data-video-decision="REJECT">REJECT video</button>'+
+      '<button type="button" class="btn btn-primary" data-video-decision="APPROVE">APPROVE video</button></div>';
+    if(!dialog.open)dialog.showModal();
+    return;
+  }
+  if(button.dataset.videoDecision){
+    const meta=state.inspectedVideo;
+    const decision=button.dataset.videoDecision;
+    if(!meta||!["APPROVE","REJECT"].includes(decision)||!$("v2-video-watched")?.checked){
+      throw Error("Hãy kiểm tra file MP4 và xác nhận đã xem trước khi duyệt");
+    }
+    if(!confirm("Duyệt "+decision+" cho video đã xem?\\nSHA: "+meta.video_sha+
+      "\\nQuyết định không đăng bài và không cấp quyền upload."))return;
+    await mutate("/api/videos/"+encodeURIComponent(meta.production_id)+"/decide",{
+      ack:"VIDEO_"+decision,decision,video_sha:meta.video_sha,
+      watched_local_file:true
+    },"Đã ghi quyết định video: "+decision);
+    state.inspectedVideo=null;
+    $("task-dialog").close();
+    return;
+  }
+  if(button.dataset.draftInspect){
+    const id=button.dataset.draftInspect;
+    const review=await api("/api/drafts/"+encodeURIComponent(id));
+    if(review.decision!=="PENDING")throw Error("Bản nháp đã được quyết định");
+    if(!review.storyboard||!Array.isArray(review.storyboard.scenes)){
+      throw Error("Storyboard không hợp lệ");
+    }
+    state.inspectedDraft=review;
+    const dialog=$("task-dialog");
+    $("task-dialog-body").innerHTML=
+      '<div class="detail-header"><h3>Đọc đầy đủ storyboard trước khi quyết định</h3>'+badge(review.quality)+'</div>'+
+      '<p class="small muted">Job '+esc(id)+' · SHA '+esc(review.output_sha)+
+      ' · PASS_HEURISTIC chỉ là kiểm tra từ khóa.</p>'+
+      '<pre class="code-box">'+esc(JSON.stringify(review.storyboard,null,2))+'</pre>'+
+      '<div class="form-actions"><button class="btn btn-outline" type="button" data-draft-decision="REJECT">REJECT bản nháp</button>'+
+      '<button class="btn btn-primary" type="button" data-draft-decision="APPROVE">APPROVE bản nháp</button></div>'+
+      '<p class="small muted">Duyệt chỉ ghi nhận quyết định, không gọi model, không đăng bài.</p>';
+    if(!dialog.open)dialog.showModal();
+    return;
+  }
+  if(button.dataset.draftDecision){
+    const decision=button.dataset.draftDecision;
+    const review=state.inspectedDraft;
+    if(!review||!["APPROVE","REJECT"].includes(decision)){
+      throw Error("Hãy mở và đọc bản nháp trước");
+    }
+    if(decision==="APPROVE"&&review.quality!=="PASS_HEURISTIC"){
+      throw Error("Quality Gate chưa đạt, không thể APPROVE");
+    }
+    if(!confirm("Xác nhận "+decision+" cho storyboard đã đọc?\\n"+
+       "SHA-256: "+review.output_sha+
+       "\\nKhông tự xuất bản, không áp dụng hay gọi model."))return;
+    await mutate("/api/drafts/"+encodeURIComponent(review.job_id)+"/decide",{
+      ack:"REVIEW_"+decision,decision,output_sha:review.output_sha
+    },"Đã ghi nhận quyết định "+decision);
+    state.inspectedDraft=null;
+    $("task-dialog").close();
+    return;
+  }
+  if(button.dataset.mediaPrepare!==undefined){
+    const storyboard=formJson("media-editor-json");
+    if(!confirm("Xác nhận đã đọc và chỉnh sửa storyboard? Tạo PNG/WAV/SRT local, không gọi model và không dựng MP4."))return;
+    const outcome=await mutate("/api/media/prepare",{
+      ack:"PREPARE_EDITED_STORYBOARD",storyboard
+    },"Đã tạo tài nguyên storyboard local");
+    notice("Production ID: "+outcome.production_id+" · Run: "+outcome.run_id);
+    return;
+  }
+  if(button.dataset.opsMode){
+   const mode=button.dataset.opsMode;
