@@ -633,3 +633,55 @@ test_zip_slip_is_blocked_by_manifest
 test_approve_does_not_register (test_owner_review.TestOwnerReview.test_approve_does_not_register) ... ok
 test_deferred_task_rejected (test_owner_review.TestOwnerReview.test_deferred_task_rejected) ... ok
 test_duplicate_decision_preserves_original 
+(test_owner_review.TestOwnerReview.test_duplicate_decision_preserves_original) ... ok
+test_invalid_candidate_id_rejected (test_owner_review.TestOwnerReview.test_invalid_candidate_id_rejected) ... ok
+test_invalid_handoff_approval_flag_rejected 
+(test_owner_review.TestOwnerReview.test_invalid_handoff_approval_flag_rejected) ... ok
+test_no_approval_without_acknowledgment (test_owner_review.TestOwnerReview.test_no_approval_without_acknowledgment) 
+... ok
+test_reject_has_no_scope (test_owner_review.TestOwnerReview.test_reject_has_no_scope) ... ok
+test_tampered_candidate_quote_rejected (test_owner_review.TestOwnerReview.test_tampered_candidate_quote_rejected) ... 
+ok
+test_weak_quotes_cannot_prove_payment (test_owner_review.TestOwnerReview.test_weak_quotes_cannot_prove_payment) ... ok
+test_legacy_imports_keep_callable_and_types 
+(test_paths_v29.PathAndRegistryTests.test_legacy_imports_keep_callable_and_types) ... ok
+test_root_points_to_real_source_tree (test_paths_v29.PathAndRegistryTests.test_root_points_to_real_source_tree) ... ok
+test_symlink_refusal (test_paths_v29.PathAndRegistryTests.test_symlink_refusal) ... ok
+test_apply_requires_exact_digest (test_product_builder.TestProductBuilder.test_apply_requires_exact_digest) ... ok
+test_apply_requires_explicit_approval (test_product_builder.TestProductBuilder.test_apply_requires_explicit_approval) 
+... ok
+test_apply_writes_only_expected_files (test_product_builder.TestProductBuilder.test_apply_writes_only_expected_files) 
+... ok
+test_corrupted_proposal_rejected (test_product_builder.TestProductBuilder.test_corrupted_proposal_rejected) ... ok
+test_duplicate_apply_never_overwrites (test_product_builder.TestProductBuilder.test_duplicate_apply_never_overwrites) 
+... ok
+test_duplicate_output_file_rejected (test_product_builder.TestProductBuilder.test_duplicate_output_file_rejected) ... 
+ok
+test_inspect_hash_and_files (test_product_builder.TestProductBuilder.test_inspect_hash_and_files) ... ok
+test_invalid_output_shape_rejected (test_product_builder.TestProductBuilder.test_invalid_output_shape_rejected) ... ok
+test_missing_index_rejected (test_product_builder.TestProductBuilder.test_missing_index_rejected) ... ok
+test_model_failure_creates_no_proposal 
+(test_product_builder.TestProductBuilder.test_model_failure_creates_no_proposal) ... ok
+test_network_js_rejected (test_product_builder.TestProductBuilder.test_network_js_rejected) ... ok
+test_no_network_or_subprocess_on_apply 
+(test_product_builder.TestProductBuilder.test_no_network_or_subprocess_on_apply) ... ok
+test_other_project_cannot_be_modified (test_product_builder.TestProductBuilder.test_other_project_cannot_be_modified) 
+... ok
+test_oversized_file_rejected (test_product_builder.TestProductBuilder.test_oversized_file_rejected) ... ok
+test_permission_forgery_rejected (test_product_builder.TestProductBuilder.test_permission_forgery_rejected) ... ok
+test_proposal_id_path_escape_rejected (test_product_builder.TestProductBuilder.test_proposal_id_path_escape_rejected) 
+... ok
+test_propose_writes_plan_only (test_product_builder.TestProductBuilder.test_propose_writes_plan_only) ... ok
+test_remote_html_url_rejected (test_product_builder.TestProductBuilder.test_remote_html_url_rejected) ... ok
+test_symlink_product_directory_rejected 
+(test_product_builder.TestProductBuilder.test_symlink_product_directory_rejected) ... ok
+test_unapproved_script_source_rejected 
+(test_product_builder.TestProductBuilder.test_unapproved_script_source_rejected) ... ok
+test_unsafe_generated_filename_rejected 
+(test_product_builder.TestProductBuilder.test_unsafe_generated_filename_rejected) ... ok
+test_unsafe_project_slug_rejected_before_model 
+(test_product_builder.TestProductBuilder.test_unsafe_project_slug_rejected_before_model) ... ok
+test_ai_can_remove_hero_art_and_second_cta 
+(test_product_builder_raw_html.TestReliableWebBuilder.test_ai_can_remove_hero_art_and_second_cta) ... ok
+test_invalid_model_design_fails_without_proposal 
+(test_product_builder_raw_html.TestReliableWebBuilder.test_invalid_model_design_fails_without_proposal) ... ok
