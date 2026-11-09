@@ -29,7 +29,7 @@ COLOR = re.compile(r"#[0-9a-fA-F]{6}\Z")
 TONES = frozenset({"lilac", "sand", "peach", "mint", "blue"})
 TEMPLATES = ("index.html", "package.json", "vite.config.js", "src/App.jsx",
              "src/main.jsx", "src/store.js", "src/styles.css")
-OUTPUTS = tuple(sorted((*TEMPLATES, "src/catalog.js", "tests/store.test.js",
+OUTPUTS = tuple(sorted((*TEMPLATES, "package-lock.json", "src/catalog.js", "tests/store.test.js",
                         "README.md", "app.json")))
 MAX_TOTAL_BYTES, MAX_PROPOSAL_BYTES = 160_000, 300_000
 
@@ -158,11 +158,8 @@ def _compile(spec, slug):
         raise ValueError("HTML title marker missing")
     files["index.html"] = files["index.html"].replace(
         marker, "<title>" + html.escape(spec["brand"]) + " · Marketplace Demo</title>")
-    package = json.loads(files["package.json"])
-    package["name"] = "@agentforge/" + slug
-    package["scripts"].pop("test:browser", None)
-    package["devDependencies"].pop("playwright-core", None)
-    files["package.json"] = json.dumps(package, indent=2) + "\n"
+    from agentforge.domains.webapps.toolchain import project_files
+    files.update(project_files(slug))
     shop = {key: spec[key] for key in ("brand", "headline", "tagline", "accent")}
     categories = [{"id": "all", "name": "Tất cả", "icon": "✦"}] + spec["categories"]
     files["src/catalog.js"] = (
@@ -184,7 +181,7 @@ def _compile(spec, slug):
         "React/Vite application; fictional data, no checkout or network APIs.\n"
         "Owner must review and apply its exact SHA before writing files.\n\n"
         "From this directory, manually run PowerShell commands:\n\n"
-        "npm.cmd install\nnpm.cmd test\nnpm.cmd run build\nnpm.cmd run dev\n\n"
+        "npm.cmd ci\nnpm.cmd test\nnpm.cmd run build\nnpm.cmd run dev\n\n"
         "Open http://127.0.0.1:5184. AgentForge never runs these automatically.\n")
     if set(files) != set(OUTPUTS):
         raise ValueError("App file allowlist mismatch")
@@ -331,10 +328,11 @@ def _read_proposal(pid):
     slug = _name(doc["project_slug"], SLUG, "slug")
     brief = _text(doc["brief"], "brief", 6000)
     files = doc["files"]
-    if (not isinstance(files, list) or len(files) != len(OUTPUTS)
+    legacy_outputs = tuple(name for name in OUTPUTS if name != "package-lock.json")
+    if (not isinstance(files, list) or len(files) not in {len(OUTPUTS), len(legacy_outputs)}
             or any(not isinstance(item, dict) or set(item) != {"path", "content"}
                    for item in files)
-            or [item["path"] for item in files] != list(OUTPUTS)
+            or [item["path"] for item in files] not in (list(OUTPUTS), list(legacy_outputs))
             or any(not isinstance(item["content"], str) or
                    len(item["content"].encode("utf-8")) > 80_000 for item in files)
             or sum(len(x["content"].encode("utf-8")) for x in files) > MAX_TOTAL_BYTES):
