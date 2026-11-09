@@ -1,0 +1,9 @@
+npm.cmd : npm notice run @agentforge/novamart-reference@0.1.0 test:browser
+At line:2 char:412
++ ... STEXITCODE; npm.cmd run test:browser --prefix examples/novamart *> do ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (npm notice run ....0 test:browser:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+npm notice run node tests/browser-smoke.mjs
+NovaMart Edge interaction smoke: PASS (search/detail/cart/filters/mobile/offline)
