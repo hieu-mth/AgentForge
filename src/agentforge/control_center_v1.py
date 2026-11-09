@@ -182,3 +182,74 @@ def _summary(server):
                 "output_sha": x["output_sha"],
             } for x in review_items],
         },
+        "version": "v1", "local_only": True, "authenticated": True,
+        "external_actions_enabled": server.allow_external_actions,
+        "stats": {"tasks": len(tasks), "skills": len(skill_registry.load_registry()),
+                  "goals": len(goals),
+                  **{x.lower(): sum(t["status"] == x for t in tasks) for x in states}},
+        "tasks": [
+            _public_task(
+                task_history.get_task(t["task_id"], db_path=server.task_db_path)
+                if t["skill_id"] == "web.create" and t["status"] == "SUCCEEDED"
+                else t,
+                db_path=server.task_db_path
+            ) for t in tasks[:40]
+        ],
+        "goals": goals, "schedules": schedules,
+        "skills": [{"id": k, "worker": v["worker_id"],
+                    "mode": v["execution_mode"]}
+                   for k, v in skill_registry.load_registry().items()],
+        "datasets": [{"dataset": x["dataset"], "synthetic": bool(x["synthetic"]),
+                      "performance_rows": x["performance_rows"],
+                      "ledger_rows": x["ledger_rows"]} for x in datasets[:30]],
+        "growth": growth, "daemon": health,
+        "operations": ops_control.read(),
+        "attention": _owner_attention(goals, tasks, schedules, health),
+        "templates": {k: list(v) for k, v in brain_planner.TEMPLATES.items()},
+        "connectors": [
+            {"name": "YouTube", "status": "MANUAL_HANDOFF_ONLY",
+             "authenticated": False, "automated_upload": False},
+            {"name": "TikTok", "status": "MANUAL_HANDOFF_ONLY",
+             "authenticated": False, "automated_upload": False},
+            {"name": "Bank / affiliate", "status": "OWNER_RECORDED_ONLY",
+             "authenticated": False, "verified_profit": False},
+        ],
+    }
+
+
+def _owner_action(server, path, request, session=None):
+    """Explicit allowlist; no arbitrary skill invocation or Python execution."""
+    if path.startswith("/api/artifacts/") and path.endswith("/decision"):
+        parts = path.split("/")
+        if (len(parts) != 6 or parts[3] not in {"webapps", "proposals"}
+                or set(request) != {"ack", "sha256", "expected_revision", "evidence_sha"}):
+            raise ValueError("Invalid artifact decision")
+        namespace, pid = parts[3:5]
+        decision = {"ACCEPT_ARTIFACT": "ACCEPTED", "REJECT_ARTIFACT": "REJECTED"}.get(request["ack"])
+        reviewed = "reviewed_webapps" if namespace == "webapps" else "reviewed_proposals"
+        if (decision is None or session is None
+                or session.get(reviewed, {}).get(pid) != request["sha256"]):
+            raise PermissionError("Inspect the exact source before deciding acceptance")
+        from agentforge.ops_control import require_active
+        require_active()
+        return artifact_acceptance.decide(
+            pid, request["sha256"], namespace, decision, confirm=True,
+            expected_revision=request["expected_revision"], evidence_sha=request["evidence_sha"],
+            db_path=server.task_db_path)
+    if path == "/api/retention/backup":
+        from agentforge.storage import retention
+        if (set(request) != {"ack", "kind", "id", "tree_sha"} or
+                request.get("ack") != "BACKUP_ARTIFACT"):
+            raise PermissionError("Explicit reviewed artifact backup required")
+        key = (request["kind"], request["id"])
+        if (session is None or session.get("inspected_artifacts", {}).get(key)
+                != request["tree_sha"]):
+            raise PermissionError("Inspect exact live artifact SHA first")
+        return retention.backup(request["kind"], request["id"], request["tree_sha"],
+                                confirm=True)
+    if path == "/api/retention/quarantine":
+        from agentforge.storage import retention
+        if (set(request) != {"ack", "backup_id", "tree_sha"} or
+                request.get("ack") != "QUARANTINE_ARTIFACT"):
+            raise PermissionError("Explicit reversible quarantine required")
+        if (session is None or session.get("verified_artifact_backups", {}).get(
