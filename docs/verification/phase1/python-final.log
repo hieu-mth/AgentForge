@@ -1418,3 +1418,46 @@ test_feedback_limit_retains_last_char
 (test_website_feedback_v26.WebsiteFeedbackTests.test_feedback_limit_retains_last_char) ... ok
 test_owner_api_requires_exact_ack_and_inspected_sha 
 (test_website_feedback_v26.WebsiteFeedbackTests.test_owner_api_requires_exact_ack_and_inspected_sha) ... ok
+test_policy_and_sha_fail_closed (test_website_feedback_v26.WebsiteFeedbackTests.test_policy_and_sha_fail_closed) ... ok
+test_digest_change_refuses_preview 
+(test_website_visual_preview.WebsiteVisualPreviewTests.test_digest_change_refuses_preview) ... ok
+test_preview_is_auth_required_and_not_applied 
+(test_website_visual_preview.WebsiteVisualPreviewTests.test_preview_is_auth_required_and_not_applied) ... ok
+test_unchanged_normal_csp (test_website_visual_preview.WebsiteVisualPreviewTests.test_unchanged_normal_csp) ... ok
+test_opportunity_researcher (test_worker_registry.TestWorkerRegistry.test_opportunity_researcher) ... ok
+test_reject_disabled_model (test_worker_registry.TestWorkerRegistry.test_reject_disabled_model) ... ok
+test_reject_empty_instructions (test_worker_registry.TestWorkerRegistry.test_reject_empty_instructions) ... ok
+test_reject_path_traversal (test_worker_registry.TestWorkerRegistry.test_reject_path_traversal) ... ok
+test_reject_secret_field (test_worker_registry.TestWorkerRegistry.test_reject_secret_field) ... ok
+test_reject_unknown_model (test_worker_registry.TestWorkerRegistry.test_reject_unknown_model) ... ok
+test_source_reviewer (test_worker_registry.TestWorkerRegistry.test_source_reviewer) ... ok
+test_research_analysis_uses_worker (test_worker_wiring.TestWorkerWiring.test_research_analysis_uses_worker) ... ok
+test_research_plan_uses_worker (test_worker_wiring.TestWorkerWiring.test_research_plan_uses_worker) ... ok
+test_source_review_uses_worker (test_worker_wiring.TestWorkerWiring.test_source_review_uses_worker) ... ok
+test_default_does_not_create_db (test_workspace_policy_v23.WorkspacePolicyTests.test_default_does_not_create_db) ... ok
+test_owner_confirmation_strict_types_and_audit 
+(test_workspace_policy_v23.WorkspacePolicyTests.test_owner_confirmation_strict_types_and_audit) ... ok
+test_policy_is_enforced_before_goal_creation 
+(test_workspace_policy_v23.WorkspacePolicyTests.test_policy_is_enforced_before_goal_creation) ... ok
+test_workspace_policy_api_is_allowlisted 
+(test_workspace_policy_v23.WorkspacePolicyTests.test_workspace_policy_api_is_allowlisted) ... ok
+test_inventory_does_not_delete_or_read_file_contents 
+(test_workspace_v22.ArtifactCatalogTests.test_inventory_does_not_delete_or_read_file_contents) ... ok
+test_inventory_empty_directories (test_workspace_v22.ArtifactCatalogTests.test_inventory_empty_directories) ... ok
+test_missing_model_and_remote_urls (test_workspace_v22.LocalModelHealthTests.test_missing_model_and_remote_urls) ... ok
+test_probe_only_requests_tags (test_workspace_v22.LocalModelHealthTests.test_probe_only_requests_tags) ... ok
+test_unavailable_is_sanitized (test_workspace_v22.LocalModelHealthTests.test_unavailable_is_sanitized) ... ok
+
+----------------------------------------------------------------------
+Ran 767 tests in 62.516s
+
+OK
+SOURCE REVIEW COMPLETED
+PAGES FETCHED: 1 / 2
+MATCHED QUOTES: 1
+STATUS: QUOTE_REVIEW_ONLY
+AUTONOMOUS EXECUTION AUTHORIZED: False
+SAVED: C:\Users\hieu-mth\AppData\Local\Temp\tmpssqhgf_0\company\reviews\bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb-excel-automation-service-review.json
+SEARCH QUERIES:
+ - platform fees
+ - market demand
