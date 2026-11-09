@@ -782,3 +782,56 @@ test_preview_writes_only_ignored_data_copy
 test_quality_passes_well_formed_static_html 
 (test_product_quality.TestProductQuality.test_quality_passes_well_formed_static_html) ... ok
 test_remote_url_is_fail (test_product_quality.TestProductQuality.test_remote_url_is_fail) ... ok
+test_responsive_is_only_heuristic (test_product_quality.TestProductQuality.test_responsive_is_only_heuristic) ... ok
+test_stale_revision_blocks_check_and_preview 
+(test_product_quality.TestProductQuality.test_stale_revision_blocks_check_and_preview) ... ok
+test_tampered_preview_never_overwritten 
+(test_product_quality.TestProductQuality.test_tampered_preview_never_overwritten) ... ok
+test_tampered_proposal_blocks_preview (test_product_quality.TestProductQuality.test_tampered_proposal_blocks_preview) 
+... ok
+test_two_h1_is_warning (test_product_quality.TestProductQuality.test_two_h1_is_warning) ... ok
+test_apply_creates_verified_backup_and_receipt 
+(test_product_revision.TestProductRevision.test_apply_creates_verified_backup_and_receipt) ... ok
+test_apply_does_not_start_shell_or_network 
+(test_product_revision.TestProductRevision.test_apply_does_not_start_shell_or_network) ... ok
+test_apply_requires_exact_digest (test_product_revision.TestProductRevision.test_apply_requires_exact_digest) ... ok
+test_apply_requires_explicit_confirmation 
+(test_product_revision.TestProductRevision.test_apply_requires_explicit_confirmation) ... ok
+test_cannot_apply_twice (test_product_revision.TestProductRevision.test_cannot_apply_twice) ... ok
+test_diff_is_read_only (test_product_revision.TestProductRevision.test_diff_is_read_only) ... ok
+test_diff_refuses_stale_source (test_product_revision.TestProductRevision.test_diff_refuses_stale_source) ... ok
+test_extra_generated_file_rejected (test_product_revision.TestProductRevision.test_extra_generated_file_rejected) ... 
+ok
+test_forged_permission_flag_rejected (test_product_revision.TestProductRevision.test_forged_permission_flag_rejected) 
+... ok
+test_incomplete_html_rejected_without_proposal 
+(test_product_revision.TestProductRevision.test_incomplete_html_rejected_without_proposal) ... ok
+test_inspect_after_apply_reports_applied 
+(test_product_revision.TestProductRevision.test_inspect_after_apply_reports_applied) ... ok
+test_inspect_shows_current_and_sha_without_writing 
+(test_product_revision.TestProductRevision.test_inspect_shows_current_and_sha_without_writing) ... ok
+test_invalid_slug_rejected_before_model 
+(test_product_revision.TestProductRevision.test_invalid_slug_rejected_before_model) ... ok
+test_invalid_utf8_source_rejected (test_product_revision.TestProductRevision.test_invalid_utf8_source_rejected) ... ok
+test_lock_prevents_concurrent_write (test_product_revision.TestProductRevision.test_lock_prevents_concurrent_write) 
+... ok
+test_missing_project_rejected_before_model 
+(test_product_revision.TestProductRevision.test_missing_project_rejected_before_model) ... ok
+test_model_failure_no_revision_and_no_write 
+(test_product_revision.TestProductRevision.test_model_failure_no_revision_and_no_write) ... ok
+test_no_change_is_not_a_revision (test_product_revision.TestProductRevision.test_no_change_is_not_a_revision) ... ok
+test_original_changes_after_proposal_prevent_write 
+(test_product_revision.TestProductRevision.test_original_changes_after_proposal_prevent_write) ... ok
+test_other_product_and_unrelated_files_untouched 
+(test_product_revision.TestProductRevision.test_other_product_and_unrelated_files_untouched) ... ok
+test_oversized_source_rejected (test_product_revision.TestProductRevision.test_oversized_source_rejected) ... ok
+test_proposal_contains_correct_original_hash 
+(test_product_revision.TestProductRevision.test_proposal_contains_correct_original_hash) ... ok
+test_proposal_id_path_traversal_rejected 
+(test_product_revision.TestProductRevision.test_proposal_id_path_traversal_rejected) ... ok
+test_propose_keeps_existing_source_unchanged 
+(test_product_revision.TestProductRevision.test_propose_keeps_existing_source_unchanged) ... ok
+test_remote_network_html_rejected (test_product_revision.TestProductRevision.test_remote_network_html_rejected) ... ok
+test_revision_with_inline_onclick_never_applies 
+(test_product_revision.TestProductRevision.test_revision_with_inline_onclick_never_applies) ... ok
+test_source_modified_while_model_thinks_rejected 
