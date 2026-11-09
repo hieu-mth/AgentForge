@@ -20,6 +20,7 @@ import { Reviews } from './features/Reviews.jsx';
 import { Schedules, OperationsControl, Intelligence, Growth, OwnerSettings, OwnerMemory } from './features/Management.jsx';
 import { NAV_GROUPS, groupFor, labelFor, defaultSection, parseSection, hashFor, tabsFor } from './navigation.js';
 import { PERMISSIONS } from './permissions.js';
+import { AcceptanceStatus } from './components/AcceptanceStatus.jsx';
 
 const { Header, Sider, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
@@ -190,6 +191,17 @@ export default function App() {
     try{setWebapp(await api('/api/webapps/'+encodeURIComponent(id)));}
     catch(e){authError(e);}
   };
+  const decideArtifact=(p,decision,namespace='webapps')=>ask(
+    decision==='ACCEPTED'?'Owner chấp nhận sản phẩm?':'Từ chối sản phẩm?',
+    'Quyết định chỉ áp dụng cho đúng phiên bản mã nguồn và bằng chứng QA đã xem. Không tự xuất bản.',
+    async()=>{
+      const acceptance=p.artifact_acceptance;
+      const out=await runAction(()=>post('/api/artifacts/'+namespace+'/'+p.proposal_id+'/decision',{
+        ack:decision==='ACCEPTED'?'ACCEPT_ARTIFACT':'REJECT_ARTIFACT', sha256:p.sha256,
+        expected_revision:acceptance.revision, evidence_sha:acceptance.evidence_sha,
+      }));
+      if(out){if(namespace==='webapps')await openWebapp(p.proposal_id);else await openProposal(p.proposal_id);}
+    });
   const verifyWebapp=p=>ask('Lập kế hoạch QA container?',
     'Chỉ tạo Goal mới. Chạy container cần Docker Linux, image local được pin bằng SHA và quyền process.run được cấp riêng.',
     async()=>{
@@ -314,16 +326,17 @@ export default function App() {
     </Layout>
     <GoalDrawer goal={goal} onClose={()=>setGoal(null)} onApprove={approve}
       onExecute={execute} onViewResult={openGoalResult} busy={busy} externalEnabled={!!data.external_actions_enabled}/>
-    <ProposalDrawer proposal={proposal} onClose={()=>setProposal(null)}
+    <ProposalDrawer proposal={proposal} onClose={()=>setProposal(null)} onDecide={(p,d)=>decideArtifact(p,d,'proposals')}
       onRevise={revise} onApply={apply} busy={busy}/>
-    <WebappProposalDrawer proposal={webapp} onClose={()=>setWebapp(null)}
+    <WebappProposalDrawer proposal={webapp} onClose={()=>setWebapp(null)} onDecide={decideArtifact}
       onRevise={reviseWebapp} onApply={applyWebapp}
       onVerify={verifyWebapp} busy={busy}/>
     <Drawer title="Chi tiết tác vụ" size={720} open={!!task} onClose={()=>setTask(null)}>
       {task && <><Descriptions bordered column={1} size="small" items={[
         {key:'1',label:'Task ID',children:<code>{task.task_id}</code>},
         {key:'2',label:'Skill',children:task.skill_id},
-        {key:'3',label:'Status',children:badge(task.status)},
+        {key:'3',label:'Thực thi',children:badge(task.status)},
+        {key:'acceptance',label:'Nghiệm thu sản phẩm',children:<AcceptanceStatus acceptance={task.artifact_acceptance}/>},
         {key:'4',label:'Error',children:task.error||'Không có'},
       ]}/>
       {task.report?.kind==='v5_review'&&<Card title="V5 — AI Reviewer (chưa duyệt sản phẩm)" style={{marginTop:18}}>
