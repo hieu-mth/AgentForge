@@ -364,6 +364,7 @@ def dispatch(self, route):
     if route.startswith("/api/tasks/"):
         ident = route.removeprefix("/api/tasks/")
         task = task_history.get_task(ident, db_path=self.server.task_db_path)
+        storyboard_source_sha = None
         if task.get("status") == "SUCCEEDED" and task.get("skill_id") == "media.copy_draft":
             # Exact task result is shown to the Owner, not silently applied.
             # Bind the later prepare action to this inspected result digest.
@@ -376,11 +377,13 @@ def dispatch(self, route):
                                        "review_required", "verified_claims"}:
                         _text(result["title"], "title", 88)
                         _scenes(result["scenes"])
-                        self._session().setdefault("inspected_storyboard_tasks", {})[ident] = quality_v14._sha(result)
+                        storyboard_source_sha = quality_v14._sha(result)
+                        self._session().setdefault("inspected_storyboard_tasks", {})[ident] = storyboard_source_sha
                 except (ValueError, KeyError, TypeError):
                     pass
         return self._reply(200, {
             **_public_task(task, db_path=self.server.task_db_path),
+            "storyboard_source_sha": storyboard_source_sha,
             "events": [{"at": x["at"], "name": x["name"]}
                        for x in task["events"]]})
     if route.startswith("/api/growth/"):
