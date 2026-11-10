@@ -55,8 +55,8 @@ class RoleRoutingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             envfile = Path(temp) / ".env"
             envfile.write_text(
-                "AGENTFORGE_MODEL_REF=cloud_primary\\n"
-                "AGENTFORGE_CLOUD_MODEL_CONSENT=YES\\n",
+                "AGENTFORGE_MODEL_REF=cloud_primary\n"
+                "AGENTFORGE_CLOUD_MODEL_CONSENT=YES\n",
                 encoding="utf-8",
             )
             with patch.object(role_routing, "DOTENV_PATH", envfile):
@@ -69,8 +69,8 @@ class RoleRoutingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             envfile = Path(temp) / ".env"
             envfile.write_text(
-                "AGENTFORGE_MODEL_REF=cloud_primary\\n"
-                "AGENTFORGE_CLOUD_MODEL_CONSENT=YES\\n",
+                "AGENTFORGE_MODEL_REF=cloud_primary\n"
+                "AGENTFORGE_CLOUD_MODEL_CONSENT=YES\n",
                 encoding="utf-8",
             )
             with patch.object(role_routing, "DOTENV_PATH", envfile):
