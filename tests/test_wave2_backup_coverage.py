@@ -78,7 +78,7 @@ class BackupCoverageWave2Tests(unittest.TestCase):
             self.put(name, body)
         self.put("workspace/backups/previous.zip", b"do not recursively back up")
         self.put("workspace/.webapp-qa-staging/tmp/source.txt", b"ephemeral")
-        self.put("data/company/s1_tasks.sqlite3-wal", b"ignore WAL sidecar")
+        self.put("data/company/inactive.sqlite3-wal", b"ignore WAL sidecar")
         self.put("data/company/ops_daemon.lock", b"process lock")
 
         created = ops_backup.create(include_workspace=True, confirm_backup=True)
