@@ -325,6 +325,7 @@ def dispatch(self, route):
         self._session().setdefault("inspected_video", {})[ident] = record["video_sha"]
         return self._reply(200, {
             "production_id": ident, "run_id": record["run_id"],
+            "status": record["status"],
             "video_sha": record["video_sha"], "quality": qa["status"],
             "relative_path": "workspace/media/" + record["run_id"] + "/video.mp4",
             "stream_url": "/api/videos/" + ident + "/stream",
