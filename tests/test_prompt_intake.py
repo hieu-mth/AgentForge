@@ -44,6 +44,37 @@ class PromptWorkspaceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             plan_request("Tạo website " + "x" * MAX_PROMPT, brain_db_path=self.db)
 
+    def test_natural_video_requests_create_storyboard_first_plan_without_render(self):
+        prompts = (
+            "Hãy làm video quảng cáo nệm ngủ 30 giây cho khách Việt Nam",
+            "Tạo một video giới thiệu quán cà phê để đăng Reels",
+            "Dựng clip ngắn quảng bá sản phẩm mới cho khách hàng",
+            "Sản xuất video TikTok giới thiệu thương hiệu",
+        )
+        for prompt in prompts:
+            with self.subTest(prompt=prompt), patch("agentforge.model.generate_json") as model:
+                result = plan_request(prompt, brain_db_path=self.db)
+                model.assert_not_called()
+            self.assertEqual(result["status"], "PLAN_CREATED")
+            self.assertEqual(result["template"], "creative.storyboard")
+            self.assertEqual(result["next_step"], "OWNER_REVIEW_STORYBOARD_THEN_LOCAL_RENDER")
+            goal = brain_store.get_goal(result["goal_id"], db_path=self.db)
+            self.assertEqual([x["skill_id"] for x in goal["plan"]], ["media.copy_draft"])
+            self.assertEqual(goal["status"], "PLANNED")
+
+    def test_video_word_inside_web_brief_does_not_silently_create_video(self):
+        result = plan_request(
+            "Tạo landing page bán nệm có khu vực xem video YouTube giới thiệu sản phẩm",
+            brain_db_path=self.db)
+        self.assertEqual(result["template"], "website.draft")
+
+    def test_combined_website_and_video_creation_requires_two_jobs(self):
+        result = plan_request(
+            "Tạo website bán nệm và làm video quảng cáo 30 giây để đăng TikTok",
+            brain_db_path=self.db)
+        self.assertEqual(result["status"], "NEEDS_CLARIFICATION")
+        self.assertIn("hai công việc", result["message"])
+
     def test_unknown_or_multiple_intents_do_not_create_goal(self):
         for prompt in ("Hãy giúp tôi vận hành toàn bộ doanh nghiệp và tự mua quảng cáo",
                        "Tạo landing page và kịch bản video quảng cáo nệm ngay lập tức"):

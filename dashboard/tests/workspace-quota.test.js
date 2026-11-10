@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  isCompanyRequest, modelCallsForPrompt, normalizedRequest, quotaForPrompt,
+  isCompanyRequest, isVideoRequest, modelCallsForPrompt, normalizedRequest, quotaForPrompt,
 } from '../src/workspace_quota.js';
 
 const fourRoles = 'Tạo ứng dụng React quản lý cửa hàng demo. Yêu cầu AI Architect lập kiến trúc, AI Developer viết component, QA kiểm tra tĩnh và AI Reviewer phản biện kết quả.';
@@ -44,4 +44,18 @@ test('the UI guard handles an Owner who explicitly turns off prompt model use',(
     required:1,allowed:0,blocked:true,isCompany:false,
   });
   assert.equal(quotaForPrompt(fourRoles,{max_estimated_model_calls:2}).blocked,true);
+});
+
+test('normal Vietnamese video request shows storyboard-first UX instead of vague failure',()=>{
+  for(const prompt of [
+    'Làm video quảng cáo nệm 30 giây',
+    'Tạo một video giới thiệu cửa hàng',
+    'Dựng clip ngắn cho thương hiệu',
+    'Sản xuất video TikTok',
+    'Viết storyboard quảng cáo',
+  ]) {
+    assert.equal(isVideoRequest(prompt),true,prompt);
+    assert.equal(modelCallsForPrompt(prompt),1,prompt);
+  }
+  assert.equal(isVideoRequest('Tạo landing page có video YouTube nhúng'),false);
 });

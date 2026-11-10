@@ -34,6 +34,15 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
         "trang gioi thieu", "thiet ke web"))
     wants_storyboard = any(k in normalized for k in (
         "storyboard", "kich ban video", "noi dung video", "video script"))
+    # Explicit video-making verbs are a valid intent even when the Owner
+    # doesn't know the technical word "storyboard". The prompt workflow can
+    # prepare a script only; it MUST NOT imply that an MP4 is auto-rendered.
+    wants_video = wants_storyboard or bool(re.search(
+        r"\b(?:tao|lam|dung|san xuat|render|xuat|edit|chinh sua)\s+"
+        r"(?:mot|1|video|clip|doan|phim|video ngan|video quang cao)?\s*"
+        r"(?:video|clip|phim|mp4)\b", normalized)) or bool(re.search(
+        r"\b(?:video|clip)\s+(?:quang cao|gioi thieu|tiktok|reels|shorts)\b",
+        normalized))
     # Full-role requests such as "AI Architect ..., AI Developer ..., QA ...,
     # AI Reviewer ..." are intentional V5 requests, even without a magic
     # English prefix. The ordinary "AI Developer" prompt remains single-role.
@@ -51,9 +60,9 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
         "shopee", "marketplace", "san thuong mai dien tu",
         "thuong mai dien tu", "gio hang", "web app", "webapp",
         "ung dung mua sam", "ecommerce"))
-    if wants_website and wants_storyboard:
+    if wants_website and wants_video:
         return {"status": "NEEDS_CLARIFICATION",
-                "message": "Hãy chọn làm website hoặc storyboard trước. Một yêu cầu tạo một kế hoạch."}
+                "message": "Yêu cầu đang gồm cả website và video. Hãy tách thành hai công việc độc lập để bạn duyệt từng sản phẩm."}
     if wants_company:
         slug = "company-" + uuid4().hex[:12]
         template = "webapp.company"
@@ -80,15 +89,15 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
         template = "website.draft"
         inputs = {"slug": slug, "brief": text}
         title = "Thiết kế website theo yêu cầu owner"
-    elif wants_storyboard:
+    elif wants_video:
         template = "creative.storyboard"
         # The template's bounded slots require nonempty fields.
         inputs = {"topic": text, "audience": "Khách hàng quan tâm đến sản phẩm",
                   "goal": "Tạo storyboard dự thảo để owner xem xét"}
-        title = "Soạn storyboard theo yêu cầu owner"
+        title = "Bước 1/2: Tạo storyboard video để Owner duyệt (chưa render MP4)"
     else:
         return {"status": "NEEDS_CLARIFICATION",
-                "message": "Hiện hỗ trợ marketplace React demo, website/landing page và storyboard video. Hãy mô tả một trong hai mục tiêu; chưa tự chọn skill khác."}
+                "message": "Hiện Workspace hỗ trợ website/React và lập storyboard video. Để tạo video, hãy ghi 'Tạo video quảng cáo...' hoặc 'Viết storyboard...'. Kế hoạch prompt chỉ tạo kịch bản; MP4 cần bước render local riêng sau khi duyệt."}
     policy = workspace_policy.read(db_path=policy_db_path)
     if (template in {"website.draft", "webapp.draft", "webapp.develop", "webapp.company"} and not policy["website_enabled"] or
             template == "creative.storyboard" and not policy["storyboard_enabled"]):
@@ -109,5 +118,8 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
         title, template, inputs, max_model_calls=max_model_calls,
         max_external_runs=0, db_path=brain_db_path)
     return {"status": "PLAN_CREATED", "goal_id": goal["goal_id"],
-            "template": template, "model_dispatched": False,
+            "template": template,
+            "next_step": ("OWNER_REVIEW_STORYBOARD_THEN_LOCAL_RENDER"
+                          if template == "creative.storyboard" else None),
+            "model_dispatched": False,
             "requires_owner_approval": True, "published": False}
