@@ -59,11 +59,21 @@ def inspect(*, paths=None, backup_dir=None, task_db=None, brain_db=None,
         registry_valid = False
     if not registry_valid:
         findings.append({"severity": "FAIL", "rule": "skill_registry_invalid"})
-    tasks = task_history.list_tasks(db_path=task_db, limit=200) if (
-        (Path(task_db) if task_db else task_history.DEFAULT_DB).exists()) else []
-    goals = brain_store.list_goals(db_path=brain_db, limit=100)
-    running_tasks = sum(x["status"] == "RUNNING" for x in tasks)
-    running_goals = sum(x["status"] == "RUNNING" for x in goals)
+    # Recent-result windows are for UI pagination, not health accounting.
+    # Count every RUNNING record via read-only, status-filtered SQL.
+    running_tasks = running_goals = 0
+    for kind, read_count in (
+            ("tasks", lambda: task_history.count_status("RUNNING", db_path=task_db)),
+            ("goals", lambda: brain_store.count_status("RUNNING", db_path=brain_db))):
+        try:
+            value = read_count()
+            if kind == "tasks":
+                running_tasks = value
+            else:
+                running_goals = value
+        except (sqlite3.DatabaseError, OSError, ValueError, PermissionError):
+            findings.append({"severity": "FAIL", "rule": "running_count_unavailable",
+                             "name": kind})
     if running_tasks or running_goals:
         findings.append({"severity": "WARN", "rule": "inflight_tasks_manual_review",
                          "tasks": running_tasks, "goals": running_goals})
