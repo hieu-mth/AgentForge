@@ -269,7 +269,7 @@ export default function App() {
     };
     modal.confirm({
       title:'Bước 2A — Chọn visual và tạo tư liệu',
-      <Space orientation="vertical" style={{width:'100%'}}>
+      content:<Space orientation="vertical" style={{width:'100%'}}>
         <Paragraph>Chọn ảnh cho từng cảnh và chuyển động. Mỗi production mới có SHA riêng; không ghi đè bản cũ. Business Context vẫn được kiểm tra trước khi tạo.</Paragraph>
         <VisualPicker images={images} scenes={selected.report.scenes||[]} plan={plan}/>
         {!enough&&<Alert type="error" showIcon message="Không thể tạo video từ template rỗng"
