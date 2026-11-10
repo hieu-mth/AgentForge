@@ -277,6 +277,57 @@ def resume_step(goal_id, index, result_state, *, db_path=None):
                    (goal_id, now, "STEP_" + result_state, _json({"index": index})))
 
 
+
+def rearm_failed_step(goal_id, step_index, child_task_id, *, db_path=None):
+    """Owner-authorized retry of a *definitively failed* step.
+
+    Keep the signed plan and successful prior step receipts. The replaced
+    failed child remains in task_history and is referenced by an audit event.
+    Ambiguous DISPATCHING/INTERRUPTED and successful quality reports cannot
+    be replayed via this path.
+    """
+    _id(goal_id)
+    _id(child_task_id)
+    if type(step_index) is not int or not 0 <= step_index <= 5:
+        raise BrainError("Invalid retry step")
+    with closing(_connect(db_path, create=True)) as db, db:
+        row = db.execute(
+            "SELECT template,status,current_step,plan_json FROM goals WHERE goal_id=?",
+            (goal_id,)).fetchone()
+        if (row is None or row["template"] != "webapp.company"
+                or row["status"] != "FAILED" or row["current_step"] != step_index):
+            raise BrainError("Only a failed V5 step can be retried")
+        plan = json.loads(row["plan_json"])
+        failed = db.execute(
+            "SELECT skill_id,status,child_task_id FROM step_runs "
+            "WHERE goal_id=? AND step_index=?", (goal_id, step_index)).fetchone()
+        if (failed is None or failed["status"] != "FAILED"
+                or failed["child_task_id"] != child_task_id
+                or failed["skill_id"] != plan[step_index]["skill_id"]):
+            raise BrainError("Retry requires exact failed child task")
+        if db.execute(
+            "SELECT 1 FROM step_runs WHERE goal_id=? AND step_index>?",
+            (goal_id, step_index)).fetchone() is not None:
+            raise BrainError("Later steps exist; retry cannot overwrite history")
+        now = _now()
+        result = db.execute(
+            "UPDATE goals SET status='APPROVED', parent_task_id=NULL, "
+            "error=NULL, updated_at=? WHERE goal_id=? AND status='FAILED' "
+            "AND current_step=?", (now, goal_id, step_index))
+        if result.rowcount != 1:
+            raise BrainError("Concurrent retry conflict")
+        db.execute("DELETE FROM step_runs WHERE goal_id=? AND step_index=?",
+                   (goal_id, step_index))
+        db.execute(
+            "INSERT INTO goal_events(goal_id,at,name,detail_json) VALUES(?,?,?,?)",
+            (goal_id, now, "STEP_RETRY_ARMED",
+             _json({"index": step_index, "skill_id": failed["skill_id"],
+                    "previous_task_id": child_task_id})))
+    return {"goal_id": goal_id, "status": "APPROVED",
+            "retry_step": step_index, "previous_task_id": child_task_id,
+            "automatic_replay": False, "model_invoked": False}
+
+
 def recover(*, db_path=None):
     """Explicit interruption; never infer that side effects did not occur."""
     db = _connect(db_path)
