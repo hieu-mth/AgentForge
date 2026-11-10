@@ -290,6 +290,46 @@ def _safe_failure(skill_id, exc):
         if isinstance(exc, ValueError) and str(exc).startswith("APP_REVISION_INVALID:"):
             return "APP_REVISION_INVALID: Source or change request did not pass validation."
         return "WEBAPP_BUILD_FAILED: No app was executed or published."
+    if skill_id == "media.copy_draft":
+        import socket
+        from urllib.error import HTTPError, URLError
+        from agentforge.model_registry import ModelConfigError
+        from agentforge.worker_registry import WorkerConfigError
+        if isinstance(exc, HTTPError):
+            return "STORYBOARD_MODEL_HTTP_ERROR: Model provider rejected this request."
+        if isinstance(exc, (TimeoutError, socket.timeout)):
+            return "STORYBOARD_MODEL_TIMEOUT: Model did not respond in time."
+        if isinstance(exc, URLError):
+            return "STORYBOARD_MODEL_UNAVAILABLE: Cannot reach configured model."
+        if isinstance(exc, (ModelConfigError, WorkerConfigError)):
+            return "STORYBOARD_MODEL_CONFIG_INVALID: Check media model/worker route."
+        if isinstance(exc, PermissionError):
+            return "STORYBOARD_PERMISSION_DENIED: Check model authorization."
+        if isinstance(exc, json.JSONDecodeError):
+            return "STORYBOARD_MODEL_JSON_INVALID: Model did not return valid JSON."
+        if isinstance(exc, ValueError):
+            label = str(exc)
+            if label.startswith("STORYBOARD_INPUT_INVALID:"):
+                field = label.removeprefix("STORYBOARD_INPUT_INVALID:").strip()
+                if field in {"topic", "audience", "goal"}:
+                    return "STORYBOARD_INPUT_INVALID: Invalid " + field + " (type or length)."
+            if label.startswith("STORYBOARD_SCHEMA_INVALID:"):
+                field = label.removeprefix("STORYBOARD_SCHEMA_INVALID:").strip()
+                if field in {"fields", "title", "scenes"}:
+                    return "STORYBOARD_SCHEMA_INVALID: Invalid " + field + " in model output."
+            return "STORYBOARD_VALIDATION_FAILED: Draft did not satisfy media constraints."
+        if isinstance(exc, RuntimeError):
+            label = str(exc)
+            if label.startswith("Gateway response stopped at max_tokens"):
+                return "STORYBOARD_OUTPUT_LIMIT: Model hit output token budget; no partial draft saved."
+            if (label.startswith("Gateway returned no text content")
+                    or label.startswith("Gateway response has no content blocks")
+                    or label.startswith("Ollama returned an empty answer")):
+                return "STORYBOARD_MODEL_EMPTY: Model returned no usable text."
+            return "STORYBOARD_MODEL_RUNTIME_FAILED: Gateway or generation failed."
+        if isinstance(exc, OSError):
+            return "STORYBOARD_LOCAL_IO_FAILED: Local media data could not be read."
+        return "STORYBOARD_INTERNAL_FAILED: No video was rendered."
     if skill_id.startswith("analytics."):
         from agentforge.analytics_store import AnalyticsError
         if isinstance(exc, AnalyticsError):

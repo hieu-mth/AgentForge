@@ -294,10 +294,17 @@ def rearm_failed_step(goal_id, step_index, child_task_id, *, db_path=None):
         row = db.execute(
             "SELECT template,status,current_step,plan_json FROM goals WHERE goal_id=?",
             (goal_id,)).fetchone()
-        if (row is None or row["template"] != "webapp.company"
+        if (row is None or row["template"] not in {"webapp.company", "creative.storyboard"}
                 or row["status"] != "FAILED" or row["current_step"] != step_index):
-            raise BrainError("Only a failed V5 step can be retried")
+            raise BrainError("Only allowlisted failed steps can be retried")
         plan = json.loads(row["plan_json"])
+        # A storyboard draft uses one AI step and has no renderer or external
+        # process. Do not broaden retry to media.compose/video_render: a
+        # previous execution may have created local artifacts already.
+        if row["template"] == "creative.storyboard" and not (
+                step_index == 0 and len(plan) == 1
+                and plan[0]["skill_id"] == "media.copy_draft"):
+            raise BrainError("Only a failed storyboard model draft can be retried")
         failed = db.execute(
             "SELECT skill_id,status,child_task_id FROM step_runs "
             "WHERE goal_id=? AND step_index=?", (goal_id, step_index)).fetchone()

@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from agentforge.prompt_intake import plan_request
-from agentforge import brain_store
+from agentforge import brain_runner, brain_store, task_history
 from agentforge.control_center_v1 import _owner_action
 
 
@@ -80,6 +80,59 @@ class PromptWorkspaceTests(unittest.TestCase):
                        "Tạo landing page và kịch bản video quảng cáo nệm ngay lập tức"):
             result = plan_request(prompt, brain_db_path=self.db)
             self.assertEqual("NEEDS_CLARIFICATION", result["status"])
+
+    def test_failed_storyboard_retries_exact_step_with_new_owner_consent(self):
+        prompt = "Làm video quảng cáo ngắn về nệm ngủ dành cho gia đình"
+        planned = plan_request(prompt, brain_db_path=self.db)
+        task_db = self.db.with_name("tasks.sqlite3")
+        goal_id = planned["goal_id"]
+        goal = brain_store.get_goal(goal_id, db_path=self.db)
+        brain_store.approve_goal(goal_id, goal["plan_sha256"], db_path=self.db)
+        with patch("agentforge.model.generate_json", return_value={
+            "title": "x" * 90, "scenes": []
+        }) as model:
+            failed = brain_runner.execute(
+                goal_id, brain_db_path=self.db, task_db_path=task_db,
+                grants=("model.invoke", "workspace.propose"),
+                confirm_model_call=True)
+            model.assert_called_once()
+        self.assertEqual(failed["status"], "FAILED")
+        state = brain_store.get_goal(goal_id, db_path=self.db)
+        failed_child = state["steps"][0]["child_task_id"]
+        self.assertEqual(
+            task_history.get_task(failed_child, db_path=task_db)["status"], "FAILED")
+        with self.assertRaises(brain_store.BrainError):
+            brain_runner.retry_failed_step(
+                goal_id, "0" * 64, failed_child,
+                brain_db_path=self.db, task_db_path=task_db)
+        armed = brain_runner.retry_failed_step(
+            goal_id, goal["plan_sha256"], failed_child,
+            brain_db_path=self.db, task_db_path=task_db)
+        self.assertEqual(armed["status"], "APPROVED")
+        self.assertFalse(armed["model_invoked"])
+        with self.assertRaises(brain_store.BrainError):
+            brain_runner.retry_failed_step(
+                goal_id, goal["plan_sha256"], failed_child,
+                brain_db_path=self.db, task_db_path=task_db)
+        valid = {"title": "Chọn nệm", "scenes": [
+            {"headline": "Tìm hiểu", "caption": "Hỏi về nhu cầu",
+             "duration_seconds": 5},
+            {"headline": "Tư vấn", "caption": "Chọn đúng sản phẩm",
+             "duration_seconds": 5},
+        ]}
+        with patch("agentforge.model.generate_json", return_value=valid) as model:
+            completed = brain_runner.execute(
+                goal_id, brain_db_path=self.db, task_db_path=task_db,
+                grants=("model.invoke", "workspace.propose"),
+                confirm_model_call=True)
+            model.assert_called_once()
+        self.assertEqual(completed["status"], "SUCCEEDED")
+        self.assertEqual(
+            task_history.get_task(failed_child, db_path=task_db)["status"], "FAILED")
+        history = brain_store.get_goal(goal_id, db_path=self.db)
+        self.assertTrue(any(e["name"] == "STEP_RETRY_ARMED" and
+                            e["detail"]["previous_task_id"] == failed_child
+                            for e in history["events"]))
 
     def test_external_process_or_invalid_budget_rejected(self):
         prompt = "Tạo website giới thiệu nệm ngủ cho gia đình thật chuyên nghiệp"
