@@ -122,7 +122,7 @@ def render_video(run_id, *, confirm_external_run=False):
         for scene, frame in zip(data["scenes"], images):
             sequence.extend([f"file '{frame}'", f"duration {scene['duration_seconds']}"])
         sequence.append(f"file '{images[-1]}'")
-        concat.write_text("\\n".join(sequence) + "\\n", encoding="ascii")
+        concat.write_text("\n".join(sequence) + "\n", encoding="ascii")
         cmd = [executable, "-hide_banner", "-loglevel", "error", "-nostdin",
                "-n", "-safe", "1", "-f", "concat", "-i", concat.name,
                "-i", audio, "-map", "0:v:0", "-map", "1:a:0",
