@@ -130,10 +130,10 @@ class TestOperationsRecovery(unittest.TestCase):
                           return_value={"web.quality_check": {}}):
             with patch.object(ops_doctor.ops_daemon, "read_heartbeat",
                               return_value={"status": "NOT_RUNNING", "fresh": False}):
-                with patch.object(ops_doctor.task_history, "list_tasks",
-                                  return_value=[{"status": "RUNNING"}]):
-                    with patch.object(ops_doctor.brain_store, "list_goals",
-                                      return_value=[{"status": "RUNNING"}]):
+                with patch.object(ops_doctor.task_history, "count_status",
+                                  return_value=1):
+                    with patch.object(ops_doctor.brain_store, "count_status",
+                                      return_value=1):
                         result = ops_doctor.inspect(
                             paths={"test": self.sqlite_path},
                             backup_dir=self.backups, task_db=self.sqlite_path,
@@ -151,10 +151,10 @@ class TestOperationsRecovery(unittest.TestCase):
                           return_value={"web.quality_check": {}}):
             with patch.object(ops_doctor.ops_daemon, "read_heartbeat",
                               side_effect=ValueError("corrupt local heartbeat")):
-                with patch.object(ops_doctor.task_history, "list_tasks",
-                                  return_value=[]):
-                    with patch.object(ops_doctor.brain_store, "list_goals",
-                                      return_value=[]):
+                with patch.object(ops_doctor.task_history, "count_status",
+                                  return_value=0):
+                    with patch.object(ops_doctor.brain_store, "count_status",
+                                      return_value=0):
                         result = ops_doctor.inspect(
                             paths={"test": self.sqlite_path},
                             backup_dir=self.backups)
@@ -169,10 +169,10 @@ class TestOperationsRecovery(unittest.TestCase):
                           return_value={"web.quality_check": {}}):
             with patch.object(ops_doctor.ops_daemon, "read_heartbeat",
                               return_value={"status": "NOT_RUNNING", "fresh": False}):
-                with patch.object(ops_doctor.task_history, "list_tasks",
-                                  return_value=[]):
-                    with patch.object(ops_doctor.brain_store, "list_goals",
-                                      return_value=[]):
+                with patch.object(ops_doctor.task_history, "count_status",
+                                  return_value=0):
+                    with patch.object(ops_doctor.brain_store, "count_status",
+                                      return_value=0):
                         out = ops_doctor.inspect(
                             paths={"corrupt": damaged},
                             backup_dir=self.backups)
