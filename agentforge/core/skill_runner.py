@@ -147,6 +147,13 @@ def _safe_failure(skill_id, exc):
             # Never include arbitrary exception bodies or model-generated text.
             label = str(exc)
             if skill_id == "webapp.architect" and label.startswith("ARCHITECTURE_INVALID:"):
+                # Field names are fixed by the reviewed contract, not echoed
+                # from the model. This identifies the rejection without leaking text.
+                field = label.removeprefix("ARCHITECTURE_INVALID:").strip()
+                if field in {"title", "audience", "purpose", "ui_sections",
+                             "user_flows", "local_data", "constraints"}:
+                    return ("V5_ARCHITECTURE_SCHEMA_INVALID: Invalid Architect "
+                            + field + " field (type, count, or length).")
                 return "V5_ARCHITECTURE_SCHEMA_INVALID: Architect output does not meet the required schema."
             if skill_id == "webapp.review" and label.startswith("REVIEW_INVALID:"):
                 return "V5_REVIEW_SCHEMA_INVALID: Reviewer output does not meet the required schema."
