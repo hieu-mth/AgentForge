@@ -153,6 +153,8 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, o
     {developerReady&&<Button type="primary" block onClick={()=>onViewResult(goal)}>
       Xem source sản phẩm ngay (Developer đã tạo xong)
     </Button>}
+    {runs.some(step=>step.skill_id==='webapp.review'&&step.status==='SUCCEEDED')&&
+      <Button block onClick={()=>onViewResult(goal,'review')}>Xem báo cáo AI Reviewer</Button>}
     {goal.status==='SUCCEEDED'&&!developerReady&&<Button type="primary" block
       onClick={()=>onViewResult(goal)}>Xem kết quả công việc</Button>}
     {failedStep&&<Alert type="warning" showIcon style={{marginTop:12}}
