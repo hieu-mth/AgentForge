@@ -214,6 +214,98 @@ def image_for_job(job_id, *, db_path=None, output_root=None):
     return data, "image/png"
 
 
+def website_subject(slug):
+    """Get grounded visual subject from an already applied local static site."""
+    from html.parser import HTMLParser
+    from agentforge import web_assets
+    project = web_assets._project(slug)
+    source = project / "index.html"
+    product_builder._check_path_chain(source)
+    if not 0 < source.stat().st_size <= 600_000:
+        raise ValueError("Website source is missing or oversized")
+    class Content(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.parts = []
+            self.include = False
+            self.skip = 0
+        def handle_starttag(self, tag, attrs):
+            if tag in {"script", "style"}:
+                self.skip += 1
+            if tag in {"title", "h1", "h2", "p"} and self.skip == 0:
+                self.include = True
+        def handle_endtag(self, tag):
+            if tag in {"script", "style"} and self.skip:
+                self.skip -= 1
+            if tag in {"title", "h1", "h2", "p"}:
+                self.include = False
+        def handle_data(self, data):
+            if self.include and not self.skip and data.strip():
+                self.parts.append(data.strip())
+    parsed = Content()
+    parsed.feed(source.read_text(encoding="utf-8"))
+    subject = " ".join(parsed.parts)[:300].strip()
+    if len(subject) < 8:
+        raise ValueError("Website has insufficient content for an AI image prompt")
+    return subject
+
+
+def attach_website(job_id, slug, image_sha, html_sha, *,
+                   confirm_attach=False, db_path=None):
+    """Bridge a reviewed standalone GPU image into existing SHA-gated web attach.
+
+    Uses the original Image Studio website-attach quality gate/backups rather
+    than editing HTML directly here. No external deploy, model, or subprocess.
+    """
+    if confirm_attach is not True:
+        raise PermissionError("Explicit Owner consent to attach visual required")
+    ops_control.require_active()
+    from agentforge import web_assets
+    row = _row(job_id, db_path=db_path)
+    if (row["status"] != "ASSET_READY" or row["purpose"] != "website"
+            or not isinstance(image_sha, str) or image_sha != row["asset_sha"]
+            or not isinstance(html_sha, str) or not SHA.fullmatch(html_sha)):
+        raise PermissionError("Incorrect website visual receipt or SHA")
+    contents, mime = image_for_job(job_id, db_path=db_path)
+    if mime != "image/png":
+        raise ValueError("Only reviewed PNG may be attached to static website")
+    project = web_assets._project(slug)
+    original = project / "index.html"
+    product_builder._check_path_chain(original)
+    existing = original.read_bytes()
+    if hashlib.sha256(existing).hexdigest() != html_sha:
+        raise PermissionError("Website source changed since Owner review")
+    if b'af-ai-hero-style' in existing:
+        raise PermissionError("Website already contains an AI hero; review manually")
+    images = web_assets.list_images(slug)
+    if (len(images) >= web_assets.MAX_IMAGES
+            or sum(x["bytes"] for x in images) + len(contents) > web_assets.MAX_ALL_BYTES):
+        raise ValueError("Website image asset budget reached")
+    name = "af-ai-" + job_id + ".png"
+    target = web_assets._path(slug, name)
+    # Retry an uncertain promotion must never overwrite an existing image.
+    if target.exists():
+        raise FileExistsError("Image was already promoted; inspect existing job")
+    with closing(image_studio._connect(create=True)) as db:
+        if db.execute("SELECT 1 FROM jobs WHERE job_id=?", (job_id,)).fetchone():
+            raise FileExistsError("Image already registered for website")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    product_builder._check_path_chain(target.parent)
+    with target.open("xb") as stream:
+        stream.write(contents)
+        stream.flush()
+        os.fsync(stream.fileno())
+    # Persist a compatible Image Studio receipt. If attaching fails, it is
+    # recoverable from Projects & Files without re-generating the AI image.
+    with closing(image_studio._connect(create=True)) as db, db:
+        db.execute("INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                   (job_id, slug, "ASSET_READY", hashlib.sha256(row["prompt"].encode()).hexdigest(),
+                    row["checkpoint"], None, name, image_sha, None, _now(), _now()))
+    result = image_studio.attach(job_id, image_sha, html_sha,
+                                 confirm_attach=True)
+    return {**result, "source": "auto_visual_v3"}
+
+
 def report(*, db_path=None):
     db = _db(db_path)
     if db is None:
