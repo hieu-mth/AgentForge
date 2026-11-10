@@ -1,0 +1,25 @@
+{
+  "title": "Original fox film, continuity pilot",
+  "genre": "fantasy",
+  "style": "cinematic forest, same fox and blue scarf throughout",
+  "characters": [
+    {
+      "id": "fox",
+      "name": "The Fox",
+      "visual_bible": "Original red fox with blue scarf and a mark on the left ear, same fur/proportions.",
+      "voice_notes": "Soft Vietnamese narrator, no real-person voice cloning."
+    }
+  ],
+  "chapters": [
+    {
+      "id": "forest",
+      "title": "Into the forest",
+      "synopsis": "The fox follows a paper map while walking through the forest.",
+      "duration_seconds": 12,
+      "character_ids": [
+        "fox"
+      ]
+    }
+  ],
+  "shot_seconds": 4
+}

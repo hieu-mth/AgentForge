@@ -10,6 +10,7 @@ Không sử dụng các tài liệu milestone phiên bản cũ để suy luận 
 | --- | --- | --- |
 | Khởi chạy | [README tại root](../README.md) | Giới thiệu, lệnh chạy nhanh |
 | Xem hệ thống làm được gì | [STATUS.md](STATUS.md) | Matrix VERIFIED / PARTIAL / NOT IMPLEMENTED / UNVERIFIED |
+| Film Production Pipeline (Đợt 9) | [Wave 9 acceptance](verification/wave9/README.md) | Continuity metadata, Owner TTS/FFmpeg, SRT + output SHA, real-film pending |
 | Film Studio runtime (Đợt 8) | [Wave 8 acceptance](verification/wave8/README.md) | Wan 5B, MP4 SHA/decode/receipt; GPU Owner pending |
 | Product QA/ZIP export (Đợt 7) | [Wave 7 acceptance](verification/wave7/README.md) | Offline Chromium smoke + screenshot SHA; source ZIP manifest; Owner PC pending |
 | AI React source revision (Đợt 6) | [Wave 6 acceptance](verification/wave6/README.md) | Chỉnh JSX/CSS theo feedback, SHA/diff/rollback, chưa QA model/browser thật |

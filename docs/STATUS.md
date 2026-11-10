@@ -1,3 +1,7 @@
+## Đợt 9 — Film Production Pipeline (code/CI; Owner real-film PENDING)
+
+Đã thêm `agentforge/features/film_studio/production.py`: tạo episode draft từ SHA/receipt clip Wave 8, continuity metadata, 3–5-shot preview và 15–22-shot 60–90s, versioned edit SHA, SRT, TTS offline Windows/Piper tùy chọn, FFmpeg assembly và video/audio full decode + SHA receipt. Dashboard hiển thị episode, owner-gated TTS/render. **Không** có AI kiểm tra nhân vật bằng thị giác, **chưa** dựng phim thật trên Owner PC, không YouTube. [Nghiệm thu Đợt 9](verification/wave9/README.md).
+
 ## Đợt 7 — Product QA & Export
 
 Đã bổ sung Goal browser QA chạy trong image Docker offline riêng do Owner build/pin SHA, sinh report + screenshot theo proposal SHA, và export ZIP source deterministic có per-file manifest. Kiểm tra CI chỉ chứng minh hợp đồng code bằng mock; máy Owner chưa chạy Chromium thực và chưa xác nhận product flows. Xem [Wave 7 acceptance](verification/wave7/README.md).

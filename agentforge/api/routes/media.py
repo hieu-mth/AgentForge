@@ -3,6 +3,30 @@ from agentforge.api.routes._shared import UNHANDLED
 
 
 def handle(server, path, request, session=None):
+    if path in {"/api/film/productions/render", "/api/film/productions/voice"}:
+        if not server.allow_external_actions:
+            raise PermissionError("Explicit Owner external-process mode required")
+        from agentforge.features.film_studio import production
+        from agentforge import ops_control
+        ops_control.require_active()
+        action = "render" if path.endswith("/render") else "voice"
+        mandatory = {"ack", "film_slug", "episode_id", "episode_sha"}
+        expected = mandatory if action == "render" else mandatory | {"engine", "voice_name"}
+        if not isinstance(request, dict) or set(request) != expected:
+            raise ValueError("Unexpected film production action fields")
+        if request["ack"] != ("ASSEMBLE_LOCAL_FILM" if action == "render"
+                              else "SYNTHESIZE_LOCAL_VOICE"):
+            raise PermissionError("Explicit film production consent required")
+        slug, ident, sha = request["film_slug"], request["episode_id"], request["episode_sha"]
+        key = (slug + ":" + ident) if isinstance(slug, str) and isinstance(ident, str) else ""
+        if session is None or session.get("reviewed_film_productions", {}).get(key) != sha:
+            raise PermissionError("Inspect exact episode SHA before producing output")
+        if action == "render":
+            return production.render(ident, slug, sha, confirmed=True)
+        if request["engine"] not in {"windows", "piper"}:
+            raise ValueError("Unsupported offline TTS engine")
+        return production.voice(ident, slug, sha, engine=request["engine"],
+                                voice_name=request["voice_name"], confirmed=True)
     if path in {"/api/film/motion/poll", "/api/film/motion/collect"}:
         if not server.allow_external_actions:
             raise PermissionError("Film runtime requires explicit external-capable Owner mode")

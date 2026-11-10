@@ -31,8 +31,8 @@ Không mở rộng thêm agent/worker hoặc microservice khi hai vòng lặp n�
 | --- | --- | --- |
 | F1. Film planning | Chapter, cast/visual bible, shot slots 4–15 giây, SHA, CLI | **DONE ở mức planner**, không có video thật |
 | F2. Motion worker local 12 GB | Adapter ComfyUI + one-shot GPU + local verified MP4 | **Code/CI Wave8**, cần 1 clip Wan 2.2 thật và Owner VRAM/time/quality để chốt F2 |
-| F3. Continuity | Identity pack, bối cảnh, đạo cụ, pose/reference, seed provenance, shot notes | Chưa: cần so sánh 3–5 shot liên tục cùng nhân vật |
-| F4. Film editor/QA | Nhập và hash clip, âm thanh, thoại, phụ đề, transition, FFmpeg assembly; sửa một shot không render lại cả phim | Chưa: cần dựng sequence 60–90 giây với QA thực |
+| F3. Continuity | Cast bible, costume/reference SHA, shot notes | **Code/CI Wave 9**, visual consistency 3–5 shot Owner PENDING |
+| F4. Film editor/QA | FFmpeg hard-cut, local voice/SRT, SHA receipt, versioned edits | **Code/CI Wave 9**, real 60–90s film Owner PENDING |
 | F5. Long-form production | Theo tập/chapter, resume/checkpoint, resource budget, kiểm tra consistency xuyên tập | Chưa: mục tiêu 15–30 phút/tập, sau đó ghép 1–3 giờ |
 | F6. YouTube operations | OAuth, private upload, lịch đăng, metadata, khai báo nội dung tổng hợp, analytics | Chưa: Owner duyệt công khai, chống đăng trùng và lưu receipt API |
 
@@ -44,6 +44,10 @@ Không mở rộng thêm agent/worker hoặc microservice khi hai vòng lặp n�
 2. Import MP4 có kiểm tra SHA + ffprobe/FFmpeg decode; không cho QA PASS chỉ vì ComfyUI history success.
 3. Dựng 60–90 giây nhiều shot có chung nhân vật, voiceover/subtitles và continuity audit.
 4. Mở rộng lên tập 15–30 phút trước khi thử một phim dài hàng giờ.
+
+## Đợt 9 — Film Production Pipeline
+
+Code/CI: draft episode từ Wave 8 receipts; cast bible và mỗi-shot reference/costume/location/props/action/camera/caption; metadata continuity changes cần lý do. 3–5 shot (~12–20s) hoặc 15–22 shot (~61–90s), không loop clip; Owner-only TTS Windows/Piper, SRT, FFmpeg + ffprobe/full decode video/audio, receipt SHA và versioned edit (không regenerate GPU shots cũ). **Real 60–90s film, true GPU, voice và visual continuity PENDING**. [Wave 9](verification/wave9/README.md).
 
 ## Đợt 8 — Film Studio runtime 12 GiB
 

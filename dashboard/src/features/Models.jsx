@@ -25,6 +25,10 @@ export function ModelHub({mutate}) {
   const [motion,setMotion]=useState(null);
   const [motionBusy,setMotionBusy]=useState(false);
   const [motionFilename,setMotionFilename]=useState({});
+  const [productions,setProductions]=useState([]);
+  const [productionBusy,setProductionBusy]=useState(false);
+  const [voiceEngine,setVoiceEngine]=useState('windows');
+  const [voiceName,setVoiceName]=useState('');
   const [editorOpen,setEditorOpen]=useState(false);
   const [editing,setEditing]=useState(null);
   const [form]=Form.useForm();
@@ -46,6 +50,39 @@ export function ModelHub({mutate}) {
     finally{setMotionBusy(false);}
   },[message]);
   useEffect(()=>{reloadMotion();},[reloadMotion]);
+  const reloadProductions=useCallback(async()=>{
+    setProductionBusy(true);
+    try{const next=await api('/api/film/productions');setProductions(next.episodes||[]);}
+    catch(err){message.warning('Film production local: '+(err.message||'Không đọc được'));}
+    finally{setProductionBusy(false);}
+  },[message]);
+  useEffect(()=>{reloadProductions();},[reloadProductions]);
+  const filmProductionAction=(episode,action)=>{
+    modal.confirm({
+      title:action==='render'?'Kiểm tra và dựng MP4 local bằng FFmpeg?':'Tạo thoại offline bằng engine đã cài?',
+      content:<Space direction="vertical" style={{width:'100%'}}>
+        <Text strong>{episode.film_slug} / {episode.episode_id}</Text>
+        <Text code>Episode SHA: {episode.episode_sha256}</Text>
+        <Text>{episode.shot_count} clips · ~{episode.runtime_seconds} giây</Text>
+        {action==='voice'&&<Text>Engine: {voiceEngine} · voice: {voiceName||'mặc định'}</Text>}
+        <Alert showIcon type="warning"
+          message="Thực thi local, cần quyền Owner và xem đầy đủ source manifest"
+          description="Backend sẽ đọc lại SHA của từng clip gốc và chỉ chạy FFmpeg/TTS đã cài. Không gọi model hoặc GPU. Dựng kỹ thuật thành công KHÔNG chứng minh nhân vật đồng nhất hay phim đạt chất lượng."/>
+      </Space>,okText:'Kiểm tra SHA và xác nhận',cancelText:'Hủy',
+      onOk:async()=>{
+        const detail=await api('/api/film/productions/'+episode.film_slug+'/'+episode.episode_id);
+        if(detail.proposal.episode_sha256!==episode.episode_sha256)
+          throw new Error('Episode SHA đã thay đổi; không thực thi');
+        const result=await mutate('/api/film/productions/'+action,{
+          ack:action==='render'?'ASSEMBLE_LOCAL_FILM':'SYNTHESIZE_LOCAL_VOICE',
+          film_slug:episode.film_slug,episode_id:episode.episode_id,
+          episode_sha:episode.episode_sha256,
+          ...(action==='voice'?{engine:voiceEngine,voice_name:voiceName.trim()||null}:{}),
+        });
+        if(result){message.success(action==='render'?'Đã dựng MP4; Owner vẫn cần xem phim':'Tạo audio offline; chưa QA ngôn ngữ');await reloadProductions();}
+      },
+    });
+  };
   const actionMotion=(job,action)=>{
     const filename=(motionFilename[job.job_id]||'').trim();
     if(action==='collect'&&(!filename.startsWith('af_motion_'+job.job_id+'_')
@@ -274,6 +311,53 @@ export function ModelHub({mutate}) {
           </Space>},
         ]}/>
       <Text type="secondary">Để nhập file trên Dashboard, đặt AGENTFORGE_COMFY_OUTPUT_DIR trước khi khởi động với --allow-external-tools. Muốn đo peak VRAM thật hãy theo dõi nvidia-smi và khai báo thủ công qua CLI. Chưa có benchmark GPU 12 GB thực.</Text>
+    </Card>
+    <Card title="Film Studio · Đợt 9 (Continuity & Dựng phim)"
+      extra={<Button loading={productionBusy} onClick={reloadProductions}>Làm mới Episodes</Button>}>
+      <Alert type="warning" showIcon style={{marginBottom:14}}
+        message="Chỉ ghép clip Wave 8 đã có MP4 kỹ thuật"
+        description="Tạo episode-plan bằng CLI từ receipt clip thật; mỗi cảnh cần ghi identity/reference/costume/location/action/camera/caption. Không tự render GPU. 3–5 shot xem continuity (~12–20s), 15–22 shot làm pilot 60–90s. Các kiểm tra metadata KHÔNG thay thế quan sát nhân vật bằng mắt."/>
+      <Space wrap style={{marginBottom:14}}>
+        <Text>Giọng đọc:</Text>
+        <Select size="small" style={{minWidth:150}} value={voiceEngine}
+          onChange={setVoiceEngine}
+          options={[{label:'Windows SAPI local',value:'windows'},{label:'Piper offline',value:'piper'}]}/>
+        <Input size="small" style={{minWidth:210}} placeholder="Tên voice hoặc file .onnx (tùy chọn)"
+          value={voiceName} onChange={e=>setVoiceName(e.target.value)}/>
+      </Space>
+      <Table rowKey={r=>r.film_slug+':'+r.episode_id}
+        dataSource={productions} loading={productionBusy}
+        scroll={{x:960}} pagination={{pageSize:8,hideOnSinglePage:true}}
+        columns={[
+          {title:'Episode',width:190,render:(_,r)=><Space direction="vertical" size={0}>
+            <Text strong>{r.film_slug} / {r.episode_id}</Text>
+            {r.episode_sha256&&<Text code>{r.episode_sha256.slice(0,14)}</Text>}
+          </Space>},
+          {title:'Phạm vi',width:150,render:(_,r)=><Text>
+            {r.shot_count??'—'} shot · {r.runtime_seconds??'—'} giây
+          </Text>},
+          {title:'Trạng thái',dataIndex:'state',width:295,render:v=><Tag>{v}</Tag>},
+          {title:'Kiểm tra & dựng',width:300,render:(_,r)=><Space wrap>
+            <Button size="small" disabled={!r.episode_sha256} onClick={async()=>{
+              try{
+                const detail=await api('/api/film/productions/'+r.film_slug+'/'+r.episode_id);
+                modal.info({title:'Episode continuity & shot SHA',
+                  width:720,content:<Space direction="vertical" style={{width:'100%'}}>
+                    <Text code>{detail.proposal.episode_sha256}</Text>
+                    <Text>Reference/costume/location là metadata Owner nhập, chưa được thị giác máy xác nhận.</Text>
+                    <pre className="source-text">{JSON.stringify(detail.proposal.shots,null,2)}</pre>
+                    {detail.render&&<Text>Render SHA: {detail.render.video_sha256}</Text>}
+                  </Space>});
+              }catch(e){message.error(e.message||'Không đọc được episode');}
+            }}>Xem shot SHA</Button>
+            <Button size="small" disabled={!r.episode_sha256||r.state!=='PREPARED_NOT_RENDERED'}
+              onClick={()=>filmProductionAction(r,'voice')}>TTS local</Button>
+            <Button size="small" type="primary"
+              disabled={!r.episode_sha256||r.state!=='PREPARED_NOT_RENDERED'}
+              onClick={()=>filmProductionAction(r,'render')}>Dựng FFmpeg</Button>
+          </Space>},
+        ]}/>
+      <Text type="secondary">Bản dựng nằm trong workspace/films/&lt;film&gt;/productions/&lt;episode&gt;/episode.mp4 cùng captions.srt và render-receipt.json. Không tự publish hoặc đánh dấu QA hình ảnh PASS.</Text>
     </Card>
     <Alert showIcon type="info" message="Ranh giới vận hành"
       description="Trạng thái 'Đã gán' không xác nhận model đã cài, API key hoạt động, đủ VRAM, hiệu năng hay phí provider. Route Video Motion/Ảnh vẫn đòi hỏi adapter và QA riêng ở Film Studio."/>
