@@ -34,9 +34,9 @@ export function Reviews({data, mutate, onReload}) {
       }});
   };
   const decideVideo=decision=>{
-    if(!video||!watched){message.warning('Phải xem MP4 thật trên máy và xác nhận trước.');return;}
+    if(!video||!watched){message.warning('Hãy phát và tự kiểm tra video rồi xác nhận trước.');return;}
     modal.confirm({title:'Quyết định video local?',
-      content:<div><Paragraph>Đã mở và xem file MP4 có SHA sau:</Paragraph>
+      content:<div><Paragraph>Owner xác nhận đã xem video MP4 từ nguồn local có SHA sau:</Paragraph>
         <Text code>{video.video_sha}</Text><Paragraph>Không tự đăng lên mạng.</Paragraph></div>,
       okText:decision==='APPROVE'?'Duyệt video':'Từ chối',okButtonProps:{danger:decision==='REJECT'},
       onOk:async()=>{
@@ -65,7 +65,7 @@ export function Reviews({data, mutate, onReload}) {
           {title:'Status',dataIndex:'status',render:badge},
           {title:'QA',dataIndex:'quality',render:badge},
           {title:'Xem',render:(_,r)=><Button onClick={()=>inspectVideo(r)}
-            disabled={r.status!=='VIDEO_READY'}>Xem receipt</Button>},
+            disabled={!['VIDEO_READY','APPROVED','REJECTED'].includes(r.status)}>Xem video</Button>},
         ]}/>
     </Card>
     <Drawer title="Review storyboard AI" open={!!draft} onClose={()=>setDraft(null)}
@@ -89,19 +89,25 @@ export function Reviews({data, mutate, onReload}) {
     <Drawer title="Review MP4 local" open={!!video} onClose={()=>setVideo(null)}
       size="min(680px, 96vw)" destroyOnHidden>
       {video&&<Space orientation="vertical" size="middle" style={{width:'100%'}}>
-        <Alert type="warning" message="Phải xem video thật trên máy trước khi quyết định"
-          description="Bản metadata này không thay thế việc phát MP4. Không tự đăng video."/>
+        <Alert type="info" message="Phát video trực tiếp từ AgentForge local"
+          description="Dữ liệu MP4 được phát qua backend đã đăng nhập, không upload lên cloud. Hãy xem hình ảnh và nghe âm thanh trước khi nghiệm thu."/>
+        <video key={video.production_id} controls playsInline preload="metadata"
+          src={video.stream_url}
+          style={{width:'100%',maxHeight:460,background:'#10131b',borderRadius:10}}
+          aria-label="Phát video sản phẩm local">
+          Trình duyệt không hỗ trợ phát MP4 này.
+        </video>
         <Descriptions bordered column={1} items={[
           {key:'1',label:'File trên máy',children:<Text code>{video.relative_path}</Text>},
           {key:'2',label:'QA',children:badge(video.quality)},
           {key:'3',label:'SHA-256',children:<Text code>{video.video_sha}</Text>},
         ]}/>
         <Checkbox checked={watched} onChange={e=>setWatched(e.target.checked)}>
-          Tôi đã mở file video.mp4 từ workspace, xem nội dung và đối chiếu trước khi duyệt.
+          Tôi đã xem video và nghe âm thanh, đối chiếu nội dung với yêu cầu trước khi duyệt.
         </Checkbox>
-        <Space><Button danger disabled={!watched}
+        <Space><Button danger disabled={!watched||video.status==='APPROVED'||video.status==='REJECTED'}
           onClick={()=>decideVideo('REJECT')}>Từ chối</Button>
-          <Button type="primary" disabled={!watched}
+          <Button type="primary" disabled={!watched||video.status==='APPROVED'||video.status==='REJECTED'}
             onClick={()=>decideVideo('APPROVE')}>Duyệt video local</Button></Space>
       </Space>}
     </Drawer>
