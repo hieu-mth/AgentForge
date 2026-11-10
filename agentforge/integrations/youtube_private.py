@@ -106,6 +106,15 @@ def upload_private(release_id, release_sha, *, client_secrets_path,
         db_path=db_path, film_root=film_root)
     try:
         video_id = _dispatch(video_file, credentials, item)
+        # Re-hash *after* resumable upload, too. A local process may have
+        # replaced the file while OAuth/upload was in progress. We must not
+        # record a successful source-identical upload in that case. The API
+        # may already have created a private video: leave status UNCERTAIN.
+        after = production.inspect_render(
+            item["episode_id"], item["film_slug"], film_root=film_root)
+        if (after["video_sha256"] != item["video_sha256"]
+                or after["receipt_sha256"] != item["render_receipt_sha256"]):
+            raise PermissionError("Film source changed while uploading")
         publishing.complete_private_upload(
             release_id, release_sha, video_id, db_path=db_path)
     except Exception:

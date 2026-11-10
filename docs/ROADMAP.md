@@ -1,6 +1,6 @@
 # AgentForge — Roadmap thực thi
 
-**Cập nhật:** 09/11/2026. Đây là roadmap **hiện hành**, thay cho các bản V4/C8 trong tài liệu lịch sử. Chỉ đánh dấu DONE khi đạt tiêu chí kiểm chứng; mocked tests không thay thế real-model testing.
+**Cập nhật:** 10/11/2026. Đây là roadmap **hiện hành**, thay cho các bản V4/C8 trong tài liệu lịch sử. Chỉ đánh dấu DONE khi đạt tiêu chí kiểm chứng; mocked tests không thay thế real-model testing.
 
 ## Quyết định kiến trúc repository
 

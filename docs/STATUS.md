@@ -1,3 +1,5 @@
+# AgentForge — Trạng thái thực tế
+
 ## Đợt 10 — Publishing & Business Operations (code/CI; YouTube Owner PENDING)
 
 Đã có release ledger `agentforge/features/film_studio/publishing.py`: SHA/receipt phim Wave 9, Owner watched/rights/disclosure, metadata, lịch dự kiến local, Owner-attested Studio status và manual view/watch snapshots, tiếp tục dùng Growth ledger VND. Optional `agentforge/integrations/youtube_private.py` là CLI OAuth Desktop **private-only** có checkpoint one-shot, không auto publish/monetize. Dashboard Kênh xuất bản được nối với release workflow. **Chưa kiểm chứng Google OAuth, video YouTube thật, public schedule, platform analytics hoặc ngân hàng.** [Wave 10 acceptance](verification/wave10/README.md).
@@ -6,19 +8,15 @@
 
 Đã thêm `agentforge/features/film_studio/production.py`: tạo episode draft từ SHA/receipt clip Wave 8, continuity metadata, 3–5-shot preview và 15–22-shot 60–90s, versioned edit SHA, SRT, TTS offline Windows/Piper tùy chọn, FFmpeg assembly và video/audio full decode + SHA receipt. Dashboard hiển thị episode, owner-gated TTS/render. **Không** có AI kiểm tra nhân vật bằng thị giác, **chưa** dựng phim thật trên Owner PC, không YouTube. [Nghiệm thu Đợt 9](verification/wave9/README.md).
 
-## Đợt 7 — Product QA & Export
-
-Đã bổ sung Goal browser QA chạy trong image Docker offline riêng do Owner build/pin SHA, sinh report + screenshot theo proposal SHA, và export ZIP source deterministic có per-file manifest. Kiểm tra CI chỉ chứng minh hợp đồng code bằng mock; máy Owner chưa chạy Chromium thực và chưa xác nhận product flows. Xem [Wave 7 acceptance](verification/wave7/README.md).
-
-# AgentForge — Trạng thái thực tế
-
 ## Đợt 8 — Film Motion Runtime (code/CI; Owner GPU PENDING)
 
 Wan 2.2 TI2V 5B 4-giây: workflow 11 core nodes với checkpoint cố định, ComfyUI one-shot có Owner consent, thêm local MP4 import + ffprobe 49 frames/12fps + FFmpeg decode + SHA receipt. Dashboard Model Hub có read-only GPU/jobs và Owner-reconciled history/import. Wall-clock là tổng thời gian từ queue tới import, **không** phải inference time; peak VRAM chỉ có giá trị Owner tự đo, không tự đo/bịa. Real GPU và chất lượng phim trên PC Owner **UNVERIFIED**. [Hướng dẫn](verification/wave8/README.md).
 
+## Đợt 7 — Product QA & Export
 
+Đã bổ sung Goal browser QA chạy trong image Docker offline riêng do Owner build/pin SHA, sinh report + screenshot theo proposal SHA, và export ZIP source deterministic có per-file manifest. Kiểm tra CI chỉ chứng minh hợp đồng code bằng mock; máy Owner chưa chạy Chromium thực và chưa xác nhận product flows. Xem [Wave 7 acceptance](verification/wave7/README.md).
 
-**Baseline code:** M1–M3, M6–M8 và M4a–M4d2 (09/11/2026); canonical HTTP `agentforge/api/`, business `agentforge/features/`, ComfyUI transport `agentforge/integrations/`. M6/M7 Model Hub chỉ nối text task routing; ComfyUI video/image chưa nối qua route mới.
+**Baseline code:** M1–M3, M6–M8 và M4a–M4d2 (10/11/2026); canonical HTTP `agentforge/api/`, business `agentforge/features/`, ComfyUI transport `agentforge/integrations/`. M6/M7 Model Hub chỉ nối text task routing; ComfyUI video/image chưa nối qua route mới.
 
 Các nhãn được dùng thống nhất:
 

@@ -37,3 +37,27 @@ examples/novamart/dist/
 .ruff_cache/
 htmlcov/
 .coverage
+
+# Public-repository guardrails: locally downloaded weights and secrets are
+# Owner-owned. These patterns complement (do not replace) CI tracked-file audit.
+models/
+*.safetensors
+*.ckpt
+*.onnx
+*.pth
+*.pt
+*.p12
+*.pfx
+*.pem
+*.key
+client_secret*.json
+*oauth*client*.json
+credentials.json
+token.json
+*.sqlite3
+*.db
+*.mp4
+*.mov
+*.wav
+*.mp3
+*.zip

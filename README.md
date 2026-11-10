@@ -34,16 +34,17 @@ Nếu báo không tìm thấy `.venv\Scripts\python.exe`, chạy `py -0p` để 
 | **Website Builder** | Thiết kế website theo schema có giới hạn; feedback sinh phiên bản đề xuất | Không phải công cụ tạo full-stack tùy ý |
 | **Marketplace** | NovaMart demo, lọc/tìm kiếm/giỏ hàng, catalog do AI đề xuất | Không có thanh toán, backend bán hàng thật |
 | **AI React Developer** | Đề xuất source JSX/CSS và kiểm tra cú pháp | Source AI có revision/diff/rollback theo feedback; model thật và build/browser QA AI chưa xác minh |
-| **AI Film Studio** | Lập kế hoạch phim dài và adapter gửi shot ComfyUI theo quyền Owner | **Chưa kiểm chứng render video động thật trên GPU 12 GB**, chưa tự dựng phim dài |
-| **Media / Growth** | Ảnh tĩnh, SRT, TTS tùy chọn, FFmpeg MP4, gói bàn giao | YouTube upload vẫn thủ công; không có doanh thu tự xác minh |
+| **AI Film Studio** | Lập kế hoạch phim, ComfyUI shot, continuity, SRT/TTS và ghép 60–90 giây theo quyền Owner | GPU 12 GB và phim thực chưa nghiệm thu; ghép phim dài 15–30 phút chưa triển khai |
+| **Media / Growth** | Ảnh tĩnh, SRT, TTS tùy chọn, FFmpeg MP4, gói bàn giao | Có handoff thủ công và CLI OAuth private-only tùy chọn; không tự public hay xác minh doanh thu |
 
 Chi tiết và định nghĩa trạng thái: **[Current Status](docs/STATUS.md)**. Base V1 technical readiness: [Wave 5 Owner acceptance](docs/verification/base_v1/README.md); CI PASS không có nghĩa máy/model thật đã nghiệm thu.
 
 ## Điều hướng tài liệu
 
+- **[Kiểm toán cuối trước runtime](docs/verification/final_pre_runtime/README.md)** — bằng chứng CI, mức sẵn sàng và blocker Owner.
 - **[Trung tâm tài liệu](docs/README.md)** — bắt đầu từ đây, phân biệt docs hiện hành và lịch sử.
 - **[Hướng dẫn Windows & kiểm thử](docs/DEVELOPMENT.md)** — setup, build, chạy Dashboard và các giới hạn an toàn.
-- **[Roadmap hiện hành](docs/ROADMAP.md)** — ưu tiên AI Source Revision và AI Film Studio.
+- **[Roadmap hiện hành](docs/ROADMAP.md)** — ưu tiên nghiệm thu AI Source Revision, Film Studio và Publishing.
 - **[Kiến trúc repository đang chạy](docs/architecture/REPOSITORY_STRUCTURE.md)** — module nào thực sự đang chạy.
 - **[Model Hub M6/M7](docs/architecture/MODEL_HUB.md)** — cấu hình provider/model/task routing trên Dashboard.
 - **[Skill Engine M8](docs/architecture/SKILL_ENGINE.md)** — code-owned permissions và adapter theo domain.

@@ -201,6 +201,30 @@ class FilmPublishingWave10Tests(unittest.TestCase):
             self.assertNotIn("secret",str(caught.exception))
             self.assertEqual(self._inspect(rid)["status"],"UPLOAD_ATTEMPT_UNCERTAIN")
 
+    def test_source_mutation_during_successful_api_call_stays_uncertain(self):
+        item=self._prepare()
+        rid,sha=item["release_id"],item["release_sha256"]
+        with tempfile.TemporaryDirectory() as tmp:
+            client=Path(tmp)/"desktop-client.json"
+            client.write_text('{"installed":{}}')
+            def mutable_upload(video_file,credentials,release):
+                # Simulate another local program replacing the clip while the
+                # resumable upload is reading it.
+                self.folder.joinpath("episode.mp4").write_bytes(b"changed-during-upload")
+                return VIDEO_ID
+            with patch.object(youtube_private.ops_control,"require_active"),\
+                 patch.object(youtube_private,"_authorize",return_value=object()),\
+                 patch.object(youtube_private,"_dispatch",
+                              side_effect=mutable_upload) as one_call:
+                with self.assertRaisesRegex(RuntimeError,"YOUTUBE_UPLOAD_UNCERTAIN"):
+                    youtube_private.upload_private(
+                        rid,sha,client_secrets_path=client,confirmed=True,
+                        db_path=self.db,film_root=self.films)
+            one_call.assert_called_once()
+            self.assertEqual(publishing.inspect(
+                rid,db_path=self.db,film_root=self.films,verify_source=False
+            )["status"],"UPLOAD_ATTEMPT_UNCERTAIN")
+
     def test_sdk_client_build_cannot_request_public_or_schedule(self):
         import sys
         from unittest.mock import MagicMock
