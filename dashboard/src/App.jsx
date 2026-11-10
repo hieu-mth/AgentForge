@@ -74,8 +74,7 @@ function Login({onLogin, busy}) {
 }
 
 function VisualPicker({images, scenes, plan}) {
-  const available=images.length>=scenes.length;
-  const mode='studio';
+  const available=images.length>=scenes.length && scenes.length>0;
   const [motion,setMotion]=useState('static');
   const [ids,setIds]=useState(images.slice(0,scenes.length).map(x=>x.job_id));
   const change=(values)=>{
@@ -268,7 +267,8 @@ export default function App() {
       mode:'studio',motion:'static',
       image_job_ids:images.slice(0,count).map(x=>x.job_id),
     };
-    ask('Bước 2A — Chọn visual và tạo tư liệu',
+    modal.confirm({
+      title:'Bước 2A — Chọn visual và tạo tư liệu',
       <Space orientation="vertical" style={{width:'100%'}}>
         <Paragraph>Chọn ảnh cho từng cảnh và chuyển động. Mỗi production mới có SHA riêng; không ghi đè bản cũ. Business Context vẫn được kiểm tra trước khi tạo.</Paragraph>
         <VisualPicker images={images} scenes={selected.report.scenes||[]} plan={plan}/>
@@ -276,10 +276,13 @@ export default function App() {
           description="Chưa có đủ ảnh nệm/khung cảnh. AgentForge sẽ không tạo production cho đến khi bạn cung cấp hoặc tạo đủ ảnh trong Image Studio."/>}
         <Text code>{selected.storyboard_source_sha}</Text>
       </Space>,
-      async()=>{
+      okText:'Tạo tư liệu từ ảnh đã duyệt',
+      okButtonProps:{disabled:!enough},
+      onOk:async()=>{
         if(!enough || (plan.image_job_ids.length!==count
             ||new Set(plan.image_job_ids).size!==count)){
-          message.error('Chưa đủ ảnh AI độc lập cho mọi cảnh. Dừng tạo video để tránh slideshow chữ.');return;
+          message.error('Chưa đủ ảnh AI độc lập cho mọi cảnh. Dừng tạo video để tránh slideshow chữ.');
+          throw new Error('VIDEO_VISUALS_REQUIRED');
         }
         const result=await runAction(()=>post('/api/media/prepare-from-task',{
           ack:'PREPARE_REVIEWED_STORYBOARD',task_id:selected.task_id,
@@ -289,7 +292,8 @@ export default function App() {
           setMediaPrepared(result);
           message.success('Tư liệu đã sẵn sàng. Bước tiếp theo: render MP4');
         }
-      });
+      },
+    });
   };
   const renderPreparedVideo=production=>ask('Bước 2B — chạy FFmpeg tạo MP4?',
     <Space orientation="vertical">
