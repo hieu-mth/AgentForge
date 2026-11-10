@@ -181,6 +181,43 @@ class Wave3LegacyQualityInspectionTests(unittest.TestCase):
         self.assertNotIn("content_reviews", tables_before)
 
 
+
+class Wave3AuthenticatedReadTests(unittest.TestCase):
+    def test_owner_bootstrap_does_not_initialize_missing_task_or_quality_storage(self):
+        from tests.test_webapp_revision_http_v41 import WebappRevisionHttpTests
+        case = WebappRevisionHttpTests(
+            "test_get_requires_login_and_allows_signed_source_review")
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        autopilot_db = case.brain.parent / "missing-autopilot.sqlite3"
+        with patch.object(autopilot_v13, "DB", autopilot_db):
+            case.login()
+            status, response, _ = case.req("GET", "/api/bootstrap")
+        self.assertEqual(status, 200, response)
+        self.assertFalse(case.tasks.exists(), "Authenticated GET created S1 database")
+        self.assertFalse(case.brain.exists(), "Authenticated GET created S4 database")
+        self.assertFalse(autopilot_db.exists(),
+                         "Authenticated GET initialized quality/autopilot schema")
+
+    def test_doctor_reports_unreadable_running_counts_instead_of_false_pass(self):
+        with tempfile.TemporaryDirectory() as temp:
+            bad = Path(temp) / "bad.sqlite3"
+            bad.write_bytes(b"not a SQLite database")
+            with patch.object(ops_doctor.skill_registry, "load_registry",
+                              return_value={"web.quality_check": {}}), \
+                 patch.object(ops_doctor.ops_daemon, "read_heartbeat",
+                              return_value={"status": "NOT_RUNNING", "fresh": False}), \
+                 patch.object(ops_doctor.ops_control, "read",
+                              return_value={"mode": "ACTIVE", "reason": None}):
+                result = ops_doctor.inspect(
+                    paths={"bad_tasks": bad}, backup_dir=Path(temp) / "backups",
+                    task_db=bad, brain_db=Path(temp) / "no_goals.sqlite3")
+            self.assertEqual(result["status"], "FAIL")
+            self.assertIn("running_count_unavailable",
+                          {item["rule"] for item in result["findings"]})
+            self.assertEqual(bad.read_bytes(), b"not a SQLite database")
+
+
 class Wave3FilmTerminalFailureTests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
