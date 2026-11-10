@@ -22,6 +22,21 @@ BUILDER_CLOUD_TEXT_MAX_TOKENS = 8192
 # A React app embedded as structured JSON takes substantially more output
 # tokens than a short research answer. Still one Owner-approved call; no retry.
 DEVELOPER_CLOUD_JSON_MAX_TOKENS = 8192
+MAX_CONFIGURED_DEVELOPER_CLOUD_TOKENS = 16384
+
+
+def _developer_cloud_max_tokens():
+    """Owner-controlled response cap, never silently escalated or retried."""
+    raw = os.getenv("AGENTFORGE_DEVELOPER_MAX_TOKENS", "").strip()
+    if not raw:
+        return DEVELOPER_CLOUD_JSON_MAX_TOKENS
+    if not raw.isascii() or not raw.isdecimal():
+        raise ModelConfigError("AGENTFORGE_DEVELOPER_MAX_TOKENS must be 8192-16384")
+    budget = int(raw)
+    if not DEVELOPER_CLOUD_JSON_MAX_TOKENS <= budget <= MAX_CONFIGURED_DEVELOPER_CLOUD_TOKENS:
+        raise ModelConfigError("AGENTFORGE_DEVELOPER_MAX_TOKENS must be 8192-16384")
+    return budget
+
 
 # Ollama in non-streaming mode sends no answer until the whole React app is
 # generated. Keep shorter requests on the original 180s socket timeout; give
@@ -218,7 +233,7 @@ def _anthropic_chat(runtime, prompt, schema, *, worker_id=None):
         )
 
     max_tokens = (
-        DEVELOPER_CLOUD_JSON_MAX_TOKENS
+        _developer_cloud_max_tokens()
         if schema is not None and worker_id == "webapp_developer"
         else 4096 if schema is not None
         else BUILDER_CLOUD_TEXT_MAX_TOKENS if worker_id == "product_builder"
