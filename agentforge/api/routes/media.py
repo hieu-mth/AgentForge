@@ -121,6 +121,54 @@ def handle(server, path, request, session=None):
             raise PermissionError("Inspect the full task in this session before approving")
         return quality_v14.decide(
             job_id, decision, request["output_sha"], confirm=True)
+    if path == "/api/media/prepare-from-task":
+        # Create assets only from a *reviewed* completed task, never from an
+        # untrusted editable JSON submitted in this endpoint.
+        if (set(request) != {"ack", "task_id", "source_sha"}
+                or request.get("ack") != "PREPARE_REVIEWED_STORYBOARD"):
+            raise PermissionError("Exact storyboard source and Owner confirmation required")
+        from agentforge import brain_store, task_history, quality_v14
+        from agentforge.features.media import workflow
+        from uuid import uuid4
+        ident = brain_store._id(request["task_id"])
+        sha = request["source_sha"]
+        if not isinstance(sha, str) or not brain_store.SHA.fullmatch(sha):
+            raise ValueError("Invalid storyboard SHA")
+        if (session is None or
+                session.get("inspected_storyboard_tasks", {}).get(ident) != sha):
+            raise PermissionError("Inspect the exact storyboard task before producing media")
+        task = task_history.get_task(ident, db_path=server.task_db_path)
+        if task.get("skill_id") != "media.copy_draft" or task.get("status") != "SUCCEEDED":
+            raise PermissionError("Only completed storyboard tasks can prepare media")
+        result = task.get("result")
+        if not isinstance(result, dict) or set(result) != {
+                "title", "scenes", "status", "review_required", "verified_claims"}:
+            raise ValueError("Invalid storyboard source")
+        if (result["status"] != "DRAFT_NOT_VERIFIED"
+                or result["review_required"] is not True
+                or result["verified_claims"] is not False
+                or quality_v14._sha(result) != sha):
+            raise PermissionError("Storyboard provenance or review state mismatch")
+        # Separate versioned local media output. Never derive a filesystem path
+        # or a collision-prone slug from untrusted task content.
+        storyboard = {"slug": "video-" + uuid4().hex[:16],
+                      "title": result["title"], "scenes": result["scenes"]}
+        return workflow.prepare(storyboard, confirm_edit=True)
+    if path.startswith("/api/videos/") and path.endswith("/render"):
+        if not server.allow_external_actions:
+            raise PermissionError("Enable explicit local external-process mode to render MP4")
+        parts = path.split("/")
+        if (len(parts) != 5 or set(request) != {"ack", "storyboard_sha"}
+                or request.get("ack") != "RENDER_LOCAL_MP4"):
+            raise PermissionError("Explicit SHA-bound local video render approval required")
+        from agentforge import brain_store, media_workflow_v15
+        ident = brain_store._id(parts[3])
+        record = media_workflow_v15._row(ident)
+        sha = request["storyboard_sha"]
+        if (not isinstance(sha, str) or not brain_store.SHA.fullmatch(sha)
+                or sha != record["storyboard_sha"]):
+            raise PermissionError("Production storyboard SHA has changed")
+        return media_workflow_v15.render(ident, confirm_local_process=True)
     if path == "/api/media/prepare":
         if request.get("ack") != "PREPARE_EDITED_STORYBOARD":
             raise PermissionError("Explicit owner storyboard edit confirmation required")
