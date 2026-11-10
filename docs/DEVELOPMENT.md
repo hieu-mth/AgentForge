@@ -272,3 +272,34 @@ từ video model/Film Studio, không thể giả bằng Pan/Zoom PNG.
 .\.venv\Scripts\python.exe -m unittest tests.test_media_dashboard_flow -v
 npm.cmd run build --prefix dashboard
 ```
+
+## 13. Auto Visual Jobs V3 — shared local GPU artwork
+
+Sau khi tạo storyboard, **Giao việc → Xem kết quả → AI Visual Generation**.
+AgentForge tự chuyển mỗi headline/caption thành prompt hình ảnh, gửi một
+lượt GPU per shot qua ComfyUI loopback sử dụng graph Image Studio đã có.
+Không cần upload ảnh. Owner chỉ cần chọn checkpoint đang cài và phê duyệt
+batch một lần, rồi bấm **Nhận ảnh đã tạo** sau khi ComfyUI xử lý. Bản ghi
+tách riêng `data/company/visual_jobs_v3.sqlite3`; ảnh lưu dưới
+`workspace/visuals/<job_id>.png`, SHA trong ledger. Sau khi xem ảnh,
+chọn **Dùng bộ ảnh này cho video**, tiếp tục 2A/2B và nghiệm thu.
+Nếu thiếu model hoặc ảnh không đúng sản phẩm, phải dừng/sửa; không thay
+bằng gradient. Một job đã SUBMITTING/đang COLLECTING không được retry tự động.
+
+**Projects & Files → AI tự tạo hình ảnh** dùng cùng engine cho ảnh độc lập
+và ảnh dự kiến dùng trong website, không phụ thuộc website đã tồn tại.
+V3.1 chưa tự gắn trực tiếp ảnh vào proposal/React build, chưa tự upload
+hình ảnh lên các ứng dụng web ngoài máy. Khi ComfyUI không có checkpoint,
+hệ thống fail rõ, không tuyên bố đã tạo ảnh AI.
+
+Source code: `agentforge/features/media/visual_jobs.py`,
+`dashboard/src/features/Visuals.jsx`; API authenticated
+`/api/visuals/generate`, `/api/visuals/generate-for-task`,
+`/api/visuals/<job_id>/collect`, `/api/visuals/jobs`,
+`/api/visuals/<job_id>/preview`. Không có retry/ngầm phát sinh
+chi phí GPU, không tự đăng và không ngụy tạo hình sản phẩm thực tế.
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest tests.test_auto_visuals_v3 tests.test_media_dashboard_flow -v
+npm.cmd run build --prefix dashboard
+```
