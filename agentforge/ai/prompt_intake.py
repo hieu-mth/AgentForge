@@ -38,10 +38,10 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
     # doesn't know the technical word "storyboard". The prompt workflow can
     # prepare a script only; it MUST NOT imply that an MP4 is auto-rendered.
     wants_video = wants_storyboard or bool(re.search(
-        r"\\b(?:tao|lam|dung|san xuat|render|xuat|edit|chinh sua)\\s+"
-        r"(?:mot|1|video|clip|doan|phim|video ngan|video quang cao)?\\s*"
-        r"(?:video|clip|phim|mp4)\\b", normalized)) or bool(re.search(
-        r"\\b(?:video|clip)\\s+(?:quang cao|gioi thieu|tiktok|reels|shorts)\\b",
+        r"\b(?:tao|lam|dung|san xuat|render|xuat|edit|chinh sua)\s+"
+        r"(?:mot|1|video|clip|doan|phim|video ngan|video quang cao)?\s*"
+        r"(?:video|clip|phim|mp4)\b", normalized)) or bool(re.search(
+        r"\b(?:video|clip)\s+(?:quang cao|gioi thieu|tiktok|reels|shorts)\b",
         normalized))
     # Full-role requests such as "AI Architect ..., AI Developer ..., QA ...,
     # AI Reviewer ..." are intentional V5 requests, even without a magic
