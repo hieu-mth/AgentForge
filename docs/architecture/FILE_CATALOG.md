@@ -1,6 +1,6 @@
 # File Catalog — danh mục file AgentForge hiện tại
 
-**Source baseline:** sau M8 + M4a–M4d2 (09/11/2026). **205 file Python** (M0–M3 + Model Hub + M8 + M4a + M4b + M4c + M4d1 + M4d2); Dashboard đã có Model Hub tại `#/models`. M4a Growth, M4b Websites, M4c Webapps, M4d1 Media/Film Studio đã chuyển sang `features/`. M5 phase 1 đã chuyển 22 root compatibility aliases trỏ thẳng `features/` nhưng chưa xóa alias. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
+**Source baseline:** sau M8 + M4a–M4d2 (09/11/2026). **208 file Python** (M0–M3 + Model Hub + M8 + M4a + M4b + M4c + M4d1 + M4d2); Dashboard đã có Model Hub tại `#/models`. M4a Growth, M4b Websites, M4c Webapps, M4d1 Media/Film Studio đã chuyển sang `features/`. M5 phase 1 đã chuyển 22 root compatibility aliases trỏ thẳng `features/` nhưng chưa xóa alias. Các mô tả bên dưới là module hiện có, không phải lời hứa về feature tương lai.
 
 - [Cấu trúc đã được chốt](TARGET_STRUCTURE.md) — `agentforge/` và `dashboard/` ngay root, feature-first.
 - [Kế hoạch chuyển](MIGRATION_PLAN.md) — không phá paths/import/SQLite.
@@ -16,7 +16,7 @@
 | **CLI** | Công cụ vận hành/demo theo lệnh, cần xem callers trước khi bỏ. |
 | **CONTRACT** | Module mô tả/kiểm tra hợp đồng cấu trúc, không tự chạy workflow. |
 
-**Tổng cộng: 205 file `.py`** (137 baseline + 15 M3 + 2 M6 + 6 M8 adapters + 5 M4a + 13 M4b + 9 M4c + 8 M4d1 + 2 M4d2 + 2 M9 ops modules + 1 Wave 5 acceptance module + 1 Wave 6 source revision module + 2 Wave 7 QA/export modules + 1 Wave 8 Film runtime module + 1 Wave 9 production module). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
+**Tổng cộng: 208 file `.py`** (137 baseline + 15 M3 + 2 M6 + 6 M8 adapters + 5 M4a + 13 M4b + 9 M4c + 8 M4d1 + 2 M4d2 + 2 M9 ops modules + 1 Wave 5 acceptance module + 1 Wave 6 source revision module + 2 Wave 7 QA/export modules + 1 Wave 8 Film runtime module + 1 Wave 9 production module + 3 Wave 10 publishing/API integration modules). Package marker `__init__.py` vẫn được tính. Các mô tả ngắn không thay thế docstring và tests của từng module.
 
 ## **Entrypoints và modules tại package root**
 
@@ -121,6 +121,7 @@
 | `api/routes/read.py` | Authenticated GET endpoints, preserving 404 and review session markers. |
 | `api/routes/mutations.py` | Small static allowlisted dispatcher; never executes arbitrary model-supplied paths. |
 | `api/routes/artifacts.py` | SHA-bound artifact acceptance and reversible retention actions. |
+| `api/routes/publishing.py` | Owner session/CSRF/SHA gated local release, attestation and manual metrics mutations. |
 | `api/routes/media.py` | Explicit image generation/import, storyboard/video and draft decisions. |
 | `api/routes/workspace.py` | Workspace prompt/policy and bounded Autopilot configuration. |
 | `api/routes/operations.py` | Explicit Owner pause/resume operations. |
@@ -191,6 +192,7 @@
 | `features/media/render.py` | Canonical `media` implementation cho `render`. |
 | `features/media/workflow.py` | Canonical `media` implementation cho `workflow`. |
 | `features/film_studio/long_form.py` | Canonical `film_studio` implementation cho `long_form`. |
+| `features/film_studio/publishing.py` | Wave 10 SHA-bound local release ledger, Owner disclosures, manual publishing and observation states. |
 | `features/film_studio/production.py` | Wave 9 continuity metadata, versioned episode edits, owner local TTS, SRT/FFmpeg assembly and SHA receipts. |
 | `features/film_studio/motion_verify.py` | Wave 8 Comfy local MP4 intake, ffprobe/FFmpeg verification and immutable SHA receipt. |
 | `features/film_studio/motion_comfy.py` | Canonical `film_studio` implementation cho `motion_comfy`. |
@@ -287,6 +289,7 @@
 | File hiện tại dưới `agentforge/` | Vai trò |
 | --- | --- |
 | `integrations/__init__.py` | Package HTTP/local provider adapters; không quyết định Owner approval. |
+| `integrations/youtube_private.py` | Explicit opt-in OAuth desktop, one-shot PRIVATE videos.insert, no credentials persisted. |
 | `integrations/comfyui.py` | Bounded localhost ComfyUI JSON transport; no proxy, no redirects, no retry. |
 
 ## **Storage: `storage/` và package marker**

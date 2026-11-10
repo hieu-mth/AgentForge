@@ -1,3 +1,7 @@
+## Đợt 10 — Publishing & Business Operations (code/CI; YouTube Owner PENDING)
+
+Đã có release ledger `agentforge/features/film_studio/publishing.py`: SHA/receipt phim Wave 9, Owner watched/rights/disclosure, metadata, lịch dự kiến local, Owner-attested Studio status và manual view/watch snapshots, tiếp tục dùng Growth ledger VND. Optional `agentforge/integrations/youtube_private.py` là CLI OAuth Desktop **private-only** có checkpoint one-shot, không auto publish/monetize. Dashboard Kênh xuất bản được nối với release workflow. **Chưa kiểm chứng Google OAuth, video YouTube thật, public schedule, platform analytics hoặc ngân hàng.** [Wave 10 acceptance](verification/wave10/README.md).
+
 ## Đợt 9 — Film Production Pipeline (code/CI; Owner real-film PENDING)
 
 Đã thêm `agentforge/features/film_studio/production.py`: tạo episode draft từ SHA/receipt clip Wave 8, continuity metadata, 3–5-shot preview và 15–22-shot 60–90s, versioned edit SHA, SRT, TTS offline Windows/Piper tùy chọn, FFmpeg assembly và video/audio full decode + SHA receipt. Dashboard hiển thị episode, owner-gated TTS/render. **Không** có AI kiểm tra nhân vật bằng thị giác, **chưa** dựng phim thật trên Owner PC, không YouTube. [Nghiệm thu Đợt 9](verification/wave9/README.md).
