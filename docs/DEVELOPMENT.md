@@ -251,3 +251,24 @@ tự động đánh giá output là `professional` chỉ vì QA kỹ thuật PAS
 .\.venv\Scripts\python.exe -m unittest tests.test_s2_media tests.test_media_workflow_v15 -v
 npm.cmd run build --prefix dashboard
 ```
+
+## 12. Chặn video không có ảnh sản phẩm (Workspace)
+
+Các Goal storyboard được tạo từ **Giao việc** không được phép rơi về
+`classic` (nền màu + typography), kể cả khi Image Studio chưa có ảnh.
+`POST /api/media/prepare-from-task` bắt buộc `visual_plan.mode=studio`
+với đúng một ID ảnh đã import và duyệt/kiểm SHA cho mỗi cảnh.
+Nếu thiếu ảnh, trả `VIDEO_VISUALS_REQUIRED` **trước khi ghi production**.
+Dashboard vô hiệu hóa nút tạo tư liệu và giải thích cần ảnh thật.
+
+Dữ liệu `media.compose`/CLI Classic phục vụ demo kỹ thuật cũ vẫn chạy
+để tránh phá test và dữ liệu legacy; tuyệt đối không giới thiệu nó là
+video quảng cáo. Chế độ Studio hiện chỉ dùng các ảnh đã nhập vào Image
+Studio từ ComfyUI, không tự sinh ảnh nệm khi chỉ nhận prompt. Để tạo
+video có chuyển động thực (người nằm giường, vải chuyển động) cần clip
+từ video model/Film Studio, không thể giả bằng Pan/Zoom PNG.
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest tests.test_media_dashboard_flow -v
+npm.cmd run build --prefix dashboard
+```
