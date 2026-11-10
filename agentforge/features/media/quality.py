@@ -65,6 +65,20 @@ def check(run_id):
             raise assets.MediaError("Incorrect media dimensions")
         if manifest.get("duration_seconds") != sum(x["duration_seconds"] for x in scenes):
             raise assets.MediaError("Storyboard duration mismatch")
+        plan = assets.validate_visual_plan(manifest.get("visual_plan"), len(scenes))
+        receipts = manifest.get("studio_image_receipts", [])
+        if plan["mode"] == "studio":
+            if (not isinstance(receipts, list) or len(receipts) != len(scenes)
+                    or any(not isinstance(item, dict) or set(item) != {"job_id", "sha256"}
+                           or not isinstance(item["job_id"], str)
+                           or not assets.RUN_RE.fullmatch(item["job_id"])
+                           or not isinstance(item["sha256"], str)
+                           or not SHA.fullmatch(item["sha256"])
+                           for item in receipts)
+                    or [item["job_id"] for item in receipts] != plan["image_job_ids"]):
+                raise assets.MediaError("Studio source provenance mismatch")
+        elif receipts:
+            raise assets.MediaError("Unexpected AI image provenance in classic mode")
         if manifest.get("source_photo") and manifest.get("rights_attested") is not True:
             raise assets.MediaError("Unattested photo usage")
     except (KeyError, TypeError, assets.MediaError) as exc:
