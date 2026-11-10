@@ -86,6 +86,9 @@ export default function App() {
   const [webapp,setWebapp]=useState(null);
   const [task,setTask]=useState(null);
   const [mediaPrepared,setMediaPrepared]=useState(null);
+  // A prepared production is bound to the currently inspected storyboard.
+  // Never carry it into an unrelated task drawer.
+  useEffect(()=>setMediaPrepared(null),[task?.task_id]);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState(null);
   const [collapsed,setCollapsed]=useState(false);
