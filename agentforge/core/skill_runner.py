@@ -156,6 +156,10 @@ def _safe_failure(skill_id, exc):
                             + field + " field (type, count, or length).")
                 return "V5_ARCHITECTURE_SCHEMA_INVALID: Architect output does not meet the required schema."
             if skill_id == "webapp.review" and label.startswith("REVIEW_INVALID:"):
+                field = label.removeprefix("REVIEW_INVALID:").strip()
+                if field in {"recommendation", "summary", "missing_features", "risks"}:
+                    return ("V5_REVIEW_SCHEMA_INVALID: Invalid Reviewer "
+                            + field + " field (type, count, or length).")
                 return "V5_REVIEW_SCHEMA_INVALID: Reviewer output does not meet the required schema."
             if skill_id == "webapp.review" and label.startswith("ARCHITECTURE_INVALID:"):
                 return "V5_ARCHITECTURE_SOURCE_INVALID: Signed architecture failed validation."
