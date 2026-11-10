@@ -114,6 +114,7 @@
 | `api/__init__.py` | Package marker for modular HTTP API. |
 | `api/auth.py` | Owner one-time login, session, CSRF cookie lifecycle; no durable credentials. |
 | `api/server.py` | Canonical HTTP transport: localhost bind, Host/Origin/CSRF, JSON, CSP, read/write dispatch. |
+| `api/video_stream.py` | CORE | Strict HTTP byte-range parsing for authenticated local MP4 playback. |
 | `api/static.py` | Only serves allowlisted trusted React build assets from dashboard/dist. |
 | `api/routes/__init__.py` | Package marker for bounded route handlers. |
 | `api/routes/_shared.py` | Identity sentinel distinguishing an unhandled route from a valid None result. |
