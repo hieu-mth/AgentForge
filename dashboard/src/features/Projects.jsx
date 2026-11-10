@@ -3,6 +3,7 @@ import { App as AntApp, Alert, Button, Card, Checkbox, Empty, Form, Image,
   Input, Select, Space, Spin, Table, Tag, Typography } from 'antd';
 import { CheckCircleOutlined, FolderOpenOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api } from '../api.js';
+import { AutoVisuals } from './Visuals.jsx';
 import { badge, clip } from '../components/shared.jsx';
 const { Paragraph, Text, Title } = Typography;
 const { TextArea } = Input;
@@ -12,6 +13,8 @@ export function Projects({mutate}) {
   const [state,setState] = useState({artifacts:null, health:null, jobs:null});
   const [busy,setBusy] = useState(false);
   const [checked,setChecked] = useState({});
+  const [visualPurpose,setVisualPurpose]=useState('image');
+  const [visualTopic,setVisualTopic]=useState('');
   const [form] = Form.useForm();
 
   const refresh = useCallback(async()=>{
@@ -76,6 +79,23 @@ export function Projects({mutate}) {
           {title:'Public?',render:()=><Tag>Chưa xác minh</Tag>},
         ]}/>
       <Text type="secondary">{state.artifacts.total_items||0} mục đã kiểm kê (tối đa 40 mục hiển thị). Không bao gồm nội dung file hay dữ liệu khách hàng.</Text>
+    </Card>
+    <Card title="AI tự tạo hình ảnh — dùng chung cho Video / Ảnh / Website">
+      <Alert showIcon type="info"
+        message="Không cần tải ảnh lên hoặc viết prompt kỹ thuật"
+        description="Mô tả sản phẩm hoặc nội dung muốn làm. AgentForge tự biên soạn prompt hình ảnh và gọi model ComfyUI local được chọn. Ảnh sau đó được lưu thành job độc lập, không phụ thuộc có website trước."/>
+      <Space orientation="vertical" style={{width:'100%',marginTop:12}}>
+        <Select value={visualPurpose} style={{width:'100%'}} onChange={setVisualPurpose}
+          options={[{value:'image',label:'Tạo ảnh độc lập'},
+                    {value:'website',label:'Tạo ảnh cho website'}]}/>
+        <Input.TextArea rows={3} maxLength={350} showCount
+          placeholder="Ví dụ: Bộ ảnh nệm cao cấp trong phòng ngủ sáng sớm, ánh sáng tự nhiên, phong cách quảng cáo"
+          value={visualTopic} onChange={e=>setVisualTopic(e.target.value)}/>
+        {visualTopic.trim().length>=3
+          ?<AutoVisuals purpose={visualPurpose} topic={visualTopic.trim()}
+              scenes={[visualTopic.trim()]} mutate={mutate}/>
+          :<Text type="secondary">Nhập nội dung muốn tạo, AI sẽ tự lập prompt ảnh.</Text>}
+      </Space>
     </Card>
     <Card title="AI Image Studio · ComfyUI local" extra={badge(state.health?.status)}>
       <Alert type="warning" showIcon message="Ảnh do AI tạo không phải ảnh sản phẩm thật"
