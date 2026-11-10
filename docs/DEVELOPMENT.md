@@ -288,15 +288,22 @@ bằng gradient. Một job đã SUBMITTING/đang COLLECTING không được retr
 
 **Projects & Files → AI tự tạo hình ảnh** dùng cùng engine cho ảnh độc lập
 và ảnh dự kiến dùng trong website, không phụ thuộc website đã tồn tại.
-V3.1 chưa tự gắn trực tiếp ảnh vào proposal/React build, chưa tự upload
-hình ảnh lên các ứng dụng web ngoài máy. Khi ComfyUI không có checkpoint,
+Đối với **website tĩnh đã lưu local**, chọn site từ Projects & Files,
+AgentForge đọc H1/title/content để tự tạo prompt ảnh, nhập PNG và
+gắn vào HTML qua adapter Image Studio cũ sau khi Owner duyệt SHA của
+ảnh và website. HTML được backup, không deploy. V3.1 chưa hỗ trợ
+nhúng tự động vào **React webapp proposal/chưa apply**, không tự tải
+model ComfyUI và không tự upload hình lên các ứng dụng web ngoài máy. Khi ComfyUI không có checkpoint,
 hệ thống fail rõ, không tuyên bố đã tạo ảnh AI.
 
 Source code: `agentforge/features/media/visual_jobs.py`,
 `dashboard/src/features/Visuals.jsx`; API authenticated
 `/api/visuals/generate`, `/api/visuals/generate-for-task`,
 `/api/visuals/<job_id>/collect`, `/api/visuals/jobs`,
-`/api/visuals/<job_id>/preview`. Không có retry/ngầm phát sinh
+`/api/visuals/<job_id>/preview`,
+`/api/visuals/website/<slug>`,
+`/api/visuals/generate-for-website`,
+`/api/visuals/<job_id>/attach-website`. Không có retry/ngầm phát sinh
 chi phí GPU, không tự đăng và không ngụy tạo hình sản phẩm thực tế.
 
 ```powershell
