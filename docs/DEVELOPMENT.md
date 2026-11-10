@@ -198,3 +198,34 @@ Test API logic (không chạy model/FFmpeg):
 .\.venv\Scripts\python.exe -m unittest tests.test_media_dashboard_flow tests.test_media_workflow_v15 -v
 npm.cmd run build --prefix dashboard
 ```
+
+## 10. Media Standard V2 — ảnh AI theo từng shot và chuyển động camera
+
+Trong **Giao việc → Kết quả storyboard → Bước 2A**, chọn **Studio** để dùng
+một ảnh AI riêng cho mỗi cảnh. Gallery chỉ hiện các job ComfyUI trong Image
+Studio đã được `collect` vào local (`ASSET_READY`/`ATTACHED`). Có thể xem
+thumbnail bằng API preview hiện có, chọn lại ảnh từng shot và chọn camera
+`slow_zoom`, `slow_pan` hoặc `static`. Không download, không tự submit
+ComfyUI và không tự gọi model trong thao tác prepare.
+
+Từ gallery, backend kiểm tra từng ID job, receipt SHA và PNG thật trước khi
+rasterize. Ảnh ngang được giữ nguyên chủ thể trong hero, dùng nền blur phía
+sau và typographic layout phù hợp khung 9:16, thay vì chỉ thay màu gradient.
+Sau `ASSETS_PASS`, **Bước 2B** cần Owner xác nhận riêng để FFmpeg thực hiện
+camera movement khi render. Cấu hình hình ảnh và motion được lưu trong manifest
+cùng SHA từng ảnh đầu vào và đầu ra. Các video cũ không có `visual_plan` vẫn
+chạy kiểu Classic/static như trước.
+
+Nếu chưa có đủ ảnh AI riêng cho từng cảnh, Dashboard ghi rõ chế độ **Classic**
+là template cũ; không được nhận là tạo hình AI. Muốn Studio phải tạo/thu thập
+đủ ảnh qua Image Studio trước. Chế độ Studio không tự dựng video chuyển động
+bằng video model, không voiceover tự động và không tạo ảnh mới từ prompt ở
+lượt này. Cinematic/video model phải dùng pipeline riêng có review nguồn,
+GPU quota và quyền Owner; không tự kích hoạt.
+
+Kiểm thử:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest tests.test_s2_media tests.test_media_dashboard_flow tests.test_media_workflow_v15 -v
+npm.cmd run build --prefix dashboard
+```
