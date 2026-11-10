@@ -156,7 +156,7 @@ class DeveloperInferenceTests(unittest.TestCase):
             {"type":"text","text":'{"ok":true}'}
         ]}
         with patch.dict(os.environ, {}, clear=True), \
-             patch.object(model.urllib.request, "urlopen",
+             patch.object(model, "_cloud_open",
                           return_value=io.BytesIO(json.dumps(answer).encode())) as network:
             output = model._anthropic_chat(
                 CLOUD, "Prompt", {"type":"object"}, worker_id="webapp_developer")
