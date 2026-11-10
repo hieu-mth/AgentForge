@@ -283,6 +283,21 @@ def dispatch(self, route):
                       for f in document["files"]],
             "execution_authorized": False,
         })
+    if route == "/api/media/studio-images":
+        # Reuse already collected ComfyUI assets; no GPU invocation or remote
+        # fetch. Each selected job is SHA-verified again before composition.
+        from agentforge import image_studio_v24
+        rows = image_studio_v24.report()["jobs"]
+        images = [{
+            "job_id": row["job_id"], "source": row["slug"],
+            "sha256": row["asset_sha"],
+            "preview_url": "/api/image/" + row["job_id"] + "/preview"
+        } for row in rows
+            if row.get("status") in {"ASSET_READY", "ATTACHED"}
+            and row.get("asset_name") and row.get("asset_sha")]
+        return self._reply(200, {"images": images[:25],
+                                 "generation_started": False,
+                                 "require_distinct_images": True})
     if route.startswith("/api/videos/") and route.endswith("/stream"):
         from agentforge import media_workflow_v15, media_quality, media_assets
         from agentforge.api.video_stream import InvalidVideoRange, parse_range
