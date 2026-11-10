@@ -204,8 +204,16 @@ export default function App() {
     catch(e){authError(e);}
   };
   const openWebapp=async id => {
-    try{setWebapp(await api('/api/webapps/'+encodeURIComponent(id)));}
-    catch(e){authError(e);}
+    try{
+      const detail=await api('/api/webapps/'+encodeURIComponent(id));
+      // The proposal GET establishes exact-SHA review in this Owner session.
+      // Preview evidence is optional and never executes untrusted React.
+      let previewEvidence=null;
+      try{
+        previewEvidence=await api('/api/webapps/'+encodeURIComponent(id)+'/preview-evidence');
+      }catch{ /* No screenshot evidence does not hide the source proposal. */ }
+      setWebapp({...detail,previewEvidence});
+    }catch(e){authError(e);}
   };
   const decideArtifact=(p,decision,namespace='webapps')=>ask(
     decision==='ACCEPTED'?'Owner chấp nhận sản phẩm?':'Từ chối sản phẩm?',
