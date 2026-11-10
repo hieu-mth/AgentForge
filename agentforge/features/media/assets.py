@@ -200,11 +200,18 @@ def _studio_images(plan):
 def render_studio_scene(path, scene, index, *, photo_bytes, title):
     """Portrait editorial composition with a distinct, verified photo per shot."""
     import io
-    from PIL import Image, ImageDraw, ImageOps
+    from PIL import Image, ImageDraw, ImageFilter, ImageOps
     w, h = SIZE
     with Image.open(io.BytesIO(photo_bytes)) as opened:
-        picture = ImageOps.exif_transpose(opened.convert("RGB"))
-        picture = ImageOps.fit(picture, SIZE, method=Image.Resampling.LANCZOS)
+        original = ImageOps.exif_transpose(opened.convert("RGB"))
+        backdrop = ImageOps.fit(original, SIZE, method=Image.Resampling.LANCZOS)
+        backdrop = backdrop.filter(ImageFilter.GaussianBlur(24))
+        picture = Image.blend(backdrop, Image.new("RGB", SIZE, (9, 14, 22)), 0.42)
+        # Preserve an entire landscape ComfyUI shot; portrait cropping could
+        # otherwise remove the advertised product or main subject.
+        hero = ImageOps.contain(original, (w-36, 460),
+                                method=Image.Resampling.LANCZOS)
+    picture.paste(hero, ((w-hero.width)//2, 55+(460-hero.height)//2))
     picture = picture.convert("RGBA")
     overlay = Image.new("RGBA", SIZE, (0, 0, 0, 0))
     od = ImageDraw.Draw(overlay)
