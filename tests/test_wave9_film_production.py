@@ -258,6 +258,30 @@ class FilmProductionWave9Tests(unittest.TestCase):
         with self.assertRaises(production.FilmProductionError):
             production.inspect_render("episode-one", "fox-film", film_root=self.films)
 
+    def test_render_receipt_rejects_tampered_subtitles_even_rehashed(self):
+        folder = self._render_mock()
+        report_path = folder / "render-receipt.json"
+        caption = folder / "captions.srt"
+        caption.write_text("Unexpected subtitles", encoding="utf-8")
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        report["caption_sha256"] = hashlib.sha256(caption.read_bytes()).hexdigest()
+        report["receipt_sha256"] = production._digest({
+            k: v for k, v in report.items() if k != "receipt_sha256"})
+        report_path.write_text(json.dumps(report), encoding="utf-8")
+        with self.assertRaisesRegex(production.FilmProductionError, "integrity"):
+            production.inspect_render("episode-one", "fox-film", film_root=self.films)
+
+    def test_render_receipt_rejects_forged_source_order(self):
+        folder = self._render_mock()
+        report_path = folder / "render-receipt.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        report["source_clips"].reverse()
+        report["receipt_sha256"] = production._digest({
+            k: v for k, v in report.items() if k != "receipt_sha256"})
+        report_path.write_text(json.dumps(report), encoding="utf-8")
+        with self.assertRaises(production.FilmProductionError):
+            production.inspect_render("episode-one", "fox-film", film_root=self.films)
+
     def generate_voice(self, proposal):
         folder = self.films / "fox-film" / "productions" / "episode-one"
         def fake(command, *, cwd, timeout, input_text=None):

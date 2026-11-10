@@ -380,8 +380,12 @@ def inspect(episode_id, film_slug, *, film_root=FILMS):
         # The digest alone is insufficient: check parent still exists.
         parent = _signed(_read_json(_folder(film_slug, prev, film_root) / "episode-plan.json"),
                          "episode_sha256")
-        if parent["episode_sha256"] != record.get("source_sha256"):
-            raise PermissionError("Film production parent SHA changed")
+        if (parent["episode_sha256"] != record.get("source_sha256")
+                or parent.get("episode_id") != prev
+                or parent.get("film_slug") != film_slug
+                or parent.get("plan_sha") != record["plan_sha"]
+                or parent.get("shots") == record["shots"]):
+            raise PermissionError("Film production parent SHA or revision mismatch")
     return record
 
 
@@ -524,7 +528,7 @@ def _run(args, timeout):
         raise FilmProductionError("Install trusted FFmpeg on PATH")
     try:
         done = subprocess.run([executable, *args], stdin=subprocess.DEVNULL,
-                              stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                               timeout=timeout, check=False)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise FilmProductionError("Local FFmpeg timed out/failed") from exc
@@ -677,17 +681,38 @@ def inspect_render(episode_id, film_slug, *, film_root=FILMS):
     plan = inspect(episode_id, film_slug, film_root=film_root)
     folder = _folder(film_slug, episode_id, film_root)
     report = _signed(_read_json(folder / "render-receipt.json"), "receipt_sha256")
-    if (report.get("format") != OUTPUT_FORMAT
+    keys = {"format", "episode_id", "film_slug", "episode_sha256",
+            "source_clips", "video_sha256", "caption_sha256", "audio_sha256",
+            "audio_kind", "technical", "status", "visual_continuity_verified",
+            "owner_watched", "audio_language_verified", "video_accepted",
+            "published", "model_calls", "receipt_sha256"}
+    expected_clips = [
+        {"shot_id": x["shot_id"], "job_id": x["job_id"],
+         "clip_sha256": x["clip_sha256"], "receipt_sha256": x["receipt_sha256"]}
+        for x in plan["shots"]]
+    voice = _voice_receipt(folder, plan["episode_sha256"],
+                           _duration(plan["shot_count"]))
+    expected_audio = voice["voice_sha256"] if voice else None
+    expected_kind = "owner_local_tts" if voice else "silent"
+    subtitle = folder / "captions.srt"
+    ensure_local_root(subtitle)
+    if (set(report) != keys
+            or report.get("format") != OUTPUT_FORMAT
+            or report.get("episode_id") != episode_id
+            or report.get("film_slug") != film_slug
             or report.get("episode_sha256") != plan["episode_sha256"]
+            or report.get("source_clips") != expected_clips
+            or report.get("audio_sha256") != expected_audio
+            or report.get("audio_kind") != expected_kind
+            or report.get("model_calls") != 0
             or report.get("status") != READY
-            or report.get("video_accepted") is not False
-            or report.get("owner_watched") is not False
-            or report.get("visual_continuity_verified") is not False
-            or report.get("published") is not False
+            or any(report.get(k) is not False for k in
+                   ("video_accepted", "owner_watched", "audio_language_verified",
+                    "visual_continuity_verified", "published"))
             or report.get("video_sha256") != _file_hash(folder / "episode.mp4")
-            or report.get("caption_sha256") != _file_hash(folder / "captions.srt")):
+            or report.get("caption_sha256") != _file_hash(subtitle)
+            or subtitle.read_text(encoding="utf-8") != _srt(plan["shots"])):
         raise FilmProductionError("Rendered film receipt/file integrity mismatch")
-    _voice_receipt(folder, plan["episode_sha256"], _duration(plan["shot_count"]))
     return report
 
 
