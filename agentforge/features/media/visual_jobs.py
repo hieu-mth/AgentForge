@@ -263,6 +263,7 @@ def attach_website(job_id, slug, image_sha, html_sha, *,
     from agentforge import web_assets
     row = _row(job_id, db_path=db_path)
     if (row["status"] != "ASSET_READY" or row["purpose"] != "website"
+            or row["source_sha"] != html_sha
             or not isinstance(image_sha, str) or image_sha != row["asset_sha"]
             or not isinstance(html_sha, str) or not SHA.fullmatch(html_sha)):
         raise PermissionError("Incorrect website visual receipt or SHA")
