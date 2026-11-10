@@ -208,5 +208,86 @@ class MotionRuntimeWave8Tests(unittest.TestCase):
         self.assertIsNone(status["peak_vram_gib"])
 
 
+
+class Wave8MotionHttpTests(unittest.TestCase):
+    """Real localhost auth/CSRF and explicit job SHA gates, no GPU or video calls."""
+
+    def setUp(self):
+        from tests.test_webapp_revision_http_v41 import WebappRevisionHttpTests
+        fixture = WebappRevisionHttpTests(
+            "test_get_requires_login_and_allows_signed_source_review")
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        self.http = fixture
+        self.job_id = "c" * 32
+        self.row = {
+            "job_id": self.job_id, "film_slug": "pilot", "shot_id": "sh-00001",
+            "plan_sha": "a" * 64, "workflow_sha": "b" * 64,
+            "provider_id": str(uuid4()), "state": "SUBMITTED",
+        }
+        self.patch_job = patch.object(verify, "_job", return_value=self.row)
+        self.patch_job.start()
+        self.addCleanup(self.patch_job.stop)
+
+    def test_status_requires_auth_and_no_model_is_invoked(self):
+        from agentforge import model
+        with patch.object(model, "generate_json") as ai, \
+             patch.object(motion, "health", return_value={
+                 "status": "COMFYUI_UNAVAILABLE", "video_verified": False}), \
+             patch.object(verify, "list_jobs", return_value=[]):
+            self.assertEqual(self.http.req("GET", "/api/film/motion")[0], 401)
+            self.http.login()
+            code, body, _ = self.http.req("GET", "/api/film/motion")
+            self.assertEqual(code, 200, body)
+            self.assertEqual(body["status"], "LOCAL_MOTION_PILOT_UNVERIFIED")
+            self.assertFalse(body["owner_12gb_benchmark_verified"])
+            ai.assert_not_called()
+
+    def test_import_needs_owner_mode_review_csrf_sha_and_explicit_ack(self):
+        self.http.login()
+        payload = {"ack": "IMPORT_LOCAL_COMFY_MP4", "job_id": self.job_id,
+                   "filename": "af_motion_" + self.job_id + "_00001.mp4",
+                   "plan_sha": self.row["plan_sha"],
+                   "workflow_sha": self.row["workflow_sha"]}
+        self.assertEqual(self.http.req("POST", "/api/film/motion/collect", payload)[0], 400)
+        self.http.server.allow_external_actions = True
+        self.assertEqual(self.http.req("POST", "/api/film/motion/collect", payload)[0], 400)
+        code, info, _ = self.http.req("GET", "/api/film/motion/job/"+self.job_id)
+        self.assertEqual(code, 200, info)
+        self.assertEqual(info["plan_sha"], self.row["plan_sha"])
+        self.assertEqual(self.http.req("POST", "/api/film/motion/collect",
+                                       payload, csrf=False)[0], 403)
+        self.assertEqual(self.http.req("POST", "/api/film/motion/collect",
+                         {**payload, "workflow_sha": "f" * 64})[0], 400)
+        self.assertEqual(self.http.req("POST", "/api/film/motion/collect",
+                         {**payload, "ack": "NO"})[0], 400)
+        with patch.dict("os.environ", {"AGENTFORGE_COMFY_OUTPUT_DIR": str(self.http.brain.parent)}), \
+             patch.object(verify, "import_clip", return_value={
+                 "status": verify.TECHNICAL, "video_accepted": False}) as collector, \
+             patch.object(motion.ops_control, "require_active"):
+            status, result, _ = self.http.req("POST", "/api/film/motion/collect", payload)
+            self.assertEqual(status, 200, result)
+            self.assertFalse(result["video_accepted"])
+            collector.assert_called_once()
+            self.assertEqual(collector.call_args.kwargs["filename"], payload["filename"])
+            self.assertTrue(collector.call_args.kwargs["confirmed"])
+
+    def test_history_poll_requires_explicit_approval_and_trusted_job(self):
+        self.http.login()
+        self.http.server.allow_external_actions = True
+        payload = {"ack": "CHECK_LOCAL_COMFY_HISTORY", "job_id": self.job_id,
+                   "plan_sha": self.row["plan_sha"],
+                   "workflow_sha": self.row["workflow_sha"]}
+        with patch.object(motion, "job_status") as poll:
+            self.assertEqual(self.http.req("POST", "/api/film/motion/poll", payload)[0], 400)
+            poll.assert_not_called()
+            self.assertEqual(self.http.req("GET", "/api/film/motion/job/"+self.job_id)[0], 200)
+            poll.return_value = {"status": "COMFY_COMPLETE_NOT_IMPORTED_OR_VERIFIED"}
+            with patch.object(motion.ops_control, "require_active"):
+                status, result, _ = self.http.req("POST", "/api/film/motion/poll", payload)
+            self.assertEqual(status, 200, result)
+            poll.assert_called_once_with(self.job_id)
+
+
 if __name__ == "__main__":
     unittest.main()
