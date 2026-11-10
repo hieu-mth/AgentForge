@@ -229,3 +229,25 @@ Kiểm thử:
 .\.venv\Scripts\python.exe -m unittest tests.test_s2_media tests.test_media_dashboard_flow tests.test_media_workflow_v15 -v
 npm.cmd run build --prefix dashboard
 ```
+
+## 11. Media text-safe compositing (corrective release)
+
+V2 trước đây zoom/pan ảnh PNG **đã vẽ chữ** nên mất headline/phụ đề
+trong chuyển động. Renderer mới phân lớp Studio: mỗi cảnh có
+`background_NN.png` (ảnh AI đã nhập) và `overlay_NN.png` (RGBA, chữ đứng
+yên), kèm ảnh preview `scene_NN.png`. QA đối chiếu SHA/PNG từng lớp.
+FFmpeg chỉ dịch chuyển background; lớp overlay luôn cố định, sau đó
+ghép thành video. Các production Studio cũ **chưa** có layer không bị
+ghi đè mà được render tĩnh an toàn. Classic cũng không được phép zoom
+nguyên khung chữ nữa, kể cả khi preset đã từng chọn chuyển động.
+
+Dashboard mặc định `static` để tránh hiệu ứng giả. Đây vẫn là video
+từ **ảnh tĩnh**, không phải quảng cáo có motion/footage thật. Chất lượng
+quảng cáo cao hơn cần nguồn shot video có chuyển động thực, voiceover
+phù hợp, audio mix và editorial review trong Film Studio; không được
+tự động đánh giá output là `professional` chỉ vì QA kỹ thuật PASS.
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest tests.test_s2_media tests.test_media_workflow_v15 -v
+npm.cmd run build --prefix dashboard
+```

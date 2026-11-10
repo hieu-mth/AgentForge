@@ -76,7 +76,7 @@ function Login({onLogin, busy}) {
 function VisualPicker({images, scenes, plan}) {
   const available=images.length>=scenes.length;
   const [mode,setMode]=useState(available?'studio':'classic');
-  const [motion,setMotion]=useState('slow_zoom');
+  const [motion,setMotion]=useState('static');
   const [ids,setIds]=useState(available?images.slice(0,scenes.length).map(x=>x.job_id):[]);
   const change=(values)=>{
     Object.assign(plan,values);
@@ -96,8 +96,8 @@ function VisualPicker({images, scenes, plan}) {
   };
   return <Space orientation="vertical" size={12} style={{width:'100%',maxHeight:430,overflowY:'auto'}}>
     <Alert type="info" showIcon
-      message="Standard V2 — ảnh AI đã được nhập + chuyển động camera"
-      description="Chỉ tái sử dụng ảnh từ Image Studio đã hoàn tất và kiểm chứng SHA. Không tự gọi GPU/model hoặc tải ảnh trên Internet."/>
+      message="Standard V2 — ảnh tĩnh, không phải footage quảng cáo"
+      description="Chế độ này dựng video từ ảnh tĩnh. Zoom/Pan chỉ mô phỏng camera, không tạo chuyển động thực trong cảnh. Muốn video quảng cáo có chuyển động thực cần shot clip từ Film Studio hoặc video model."/>
     <Text strong>Hình ảnh cho mỗi cảnh</Text>
     <Select value={mode} onChange={setVisualMode} style={{width:'100%'}} options={[
       {value:'classic',label:'Classic — ảnh nền mẫu (không phải AI visual)'},
@@ -120,9 +120,9 @@ function VisualPicker({images, scenes, plan}) {
     <Text strong>Chuyển động camera khi render FFmpeg</Text>
     <Select value={motion} style={{width:'100%'}} onChange={setMotionMode}
       options={[
-        {value:'slow_zoom',label:'Slow zoom — camera tiến nhẹ'},
-        {value:'slow_pan',label:'Slow pan — camera trượt ngang'},
-        {value:'static',label:'Static — không chuyển động'},
+        {value:'slow_zoom',label:'Slow zoom — chỉ ảnh nền chuyển động, chữ đứng yên'},
+        {value:'slow_pan',label:'Slow pan — chỉ ảnh nền chuyển động, chữ đứng yên'},
+        {value:'static',label:'Static (khuyên dùng khi chưa có footage)'},
       ]}/>
     <Text type="secondary" style={{fontSize:12}}>Ảnh AI và lựa chọn chuyển động được ghi vào manifest của production. MP4 vẫn cần Owner duyệt render riêng.</Text>
   </Space>;
@@ -270,7 +270,7 @@ export default function App() {
     const count=selected.report?.scenes?.length||0;
     const enough=images.length>=count && count>0;
     const plan={
-      mode:enough?'studio':'classic',motion:'slow_zoom',
+      mode:enough?'studio':'classic',motion:'static',
       image_job_ids:enough?images.slice(0,count).map(x=>x.job_id):[],
     };
     ask('Bước 2A — Chọn visual và tạo tư liệu',

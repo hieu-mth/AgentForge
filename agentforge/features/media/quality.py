@@ -9,7 +9,7 @@ from pathlib import Path
 
 from agentforge import media_assets as assets
 
-PHOTO_NAMES = re.compile(r"scene_[0-9]{2}\.png\Z")
+PHOTO_NAMES = re.compile(r"(?:scene|background|overlay)_[0-9]{2}\.png\Z")
 SHA = re.compile(r"[a-f0-9]{64}\Z")
 
 
@@ -89,6 +89,13 @@ def check(run_id):
         fail("artifacts", "Invalid artifact records")
         recorded = {}
     expected = {f"scene_{index+1:02}.png" for index in range(len(scenes))}
+    if (scenes and isinstance(manifest.get("visual_plan"), dict)
+            and manifest["visual_plan"].get("mode") == "studio"
+            and manifest.get("studio_layers_version") == 1):
+        expected.update(
+            name for i in range(1, len(scenes)+1)
+            for name in (f"background_{i:02}.png", f"overlay_{i:02}.png")
+        )
     expected.update({"captions.srt", "ambient.wav"})
     if manifest.get("voiceover") is not None:
         expected.add("voiceover.wav")
@@ -118,6 +125,8 @@ def check(run_id):
                 with Image.open(path) as image:
                     if image.format != "PNG" or image.size != assets.SIZE:
                         raise assets.MediaError("Unexpected media frame dimensions/format")
+                    if filename.startswith("overlay_") and image.mode != "RGBA":
+                        raise assets.MediaError("Typography layer must have alpha")
                     image.load()
             elif filename in {"ambient.wav", "voiceover.wav"}:
                 with wave.open(str(path), "rb") as sound:

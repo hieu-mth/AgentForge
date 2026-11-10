@@ -70,39 +70,70 @@ def render_video(run_id, *, confirm_external_run=False):
         audio = "voiceover.wav"
     else:
         audio = "ambient.wav"
-    # Only trusted, tool-generated flat image names enter the concat script.
-    images = [f"scene_{i+1:02}.png" for i in range(len(data["scenes"]))]
-    sequence = ["ffconcat version 1.0"]
-    for scene, frame in zip(data["scenes"], images):
-        sequence.extend([f"file '{frame}'", f"duration {scene['duration_seconds']}"])
-    sequence.append(f"file '{images[-1]}'")
-    concat = folder / "frames.ffconcat"
-    if concat.exists():
-        raise FileExistsError("Previous FFmpeg script exists; review required")
-    concat.write_text("\n".join(sequence) + "\n", encoding="ascii")
+    visual_plan = assets.validate_visual_plan(data.get("visual_plan"), len(data["scenes"]))
     output = folder / "video.partial.mp4"
     if output.exists():
         raise FileExistsError("Previous incomplete MP4 exists; review required")
     executable = _ffmpeg()
     duration = str(data["duration_seconds"])
-    visual_plan = assets.validate_visual_plan(data.get("visual_plan"), len(data["scenes"]))
-    # Concat demuxer keeps individual frame durations; materialize frames
-    # at 15 fps *before* applying a bounded Ken Burns camera movement.
-    visual_filter = {
-        "static": "fps=15,format=yuv420p",
-        "slow_zoom": "fps=15,zoompan=z='min(zoom+0.0009,1.12)':d=1:s=540x960:fps=15,format=yuv420p",
-        "slow_pan": "fps=15,zoompan=z=1.10:x='min(on*0.24,48)':y='min(on*0.10,36)':d=1:s=540x960:fps=15,format=yuv420p",
-    }[visual_plan["motion"]]
-    cmd = [
-        executable, "-hide_banner", "-loglevel", "error", "-nostdin", "-n",
-        "-safe", "1", "-f", "concat", "-i", concat.name,
-        "-i", audio, "-map", "0:v:0", "-map", "1:a:0",
-        "-vf", visual_filter,
+    concat = folder / "frames.ffconcat"
+    if concat.exists():
+        raise FileExistsError("Previous FFmpeg script exists; review required")
+
+    if visual_plan["mode"] == "studio" and data.get("studio_layers_version") == 1:
+        # Per-shot inputs are signed locally generated photo/typography layers.
+        # The photo alone moves. The alpha typography layer stays motionless.
+        # No arbitrary text/path/model output is interpolated into filter syntax.
+        inputs, filters = [], []
+        motions = {
+            "static": "fps=15",
+            "slow_zoom": "zoompan=z='min(1+on*0.0003,1.045)':d=1:s=540x960:fps=15",
+            "slow_pan": "zoompan=z=1.045:x='min(on*0.14,22)':y='min(on*0.04,10)':d=1:s=540x960:fps=15",
+        }
+        for i, scene in enumerate(data["scenes"]):
+            shot_length = str(scene["duration_seconds"])
+            for prefix in ("background", "overlay"):
+                name = f"{prefix}_{i+1:02}.png"
+                if not (folder / name).is_file():
+                    raise assets.MediaError("Missing independently layered studio shot")
+                inputs.extend(["-loop", "1", "-framerate", "15",
+                               "-t", shot_length, "-i", name])
+            filters.append(
+                f"[{2*i}:v]{motions[visual_plan['motion']]},"
+                f"trim=duration={shot_length},setpts=PTS-STARTPTS[bg{i}]")
+            filters.append(
+                f"[{2*i+1}:v]fps=15,trim=duration={shot_length},"
+                f"setpts=PTS-STARTPTS,format=rgba[tx{i}]")
+            filters.append(
+                f"[bg{i}][tx{i}]overlay=shortest=1:format=auto,"
+                f"format=yuv420p[v{i}]")
+        filters.append("".join(f"[v{i}]" for i in range(len(data["scenes"])))
+                       + f"concat=n={len(data['scenes'])}:v=1:a=0[outv]")
+        inputs.extend(["-i", audio])
+        cmd = [executable, "-hide_banner", "-loglevel", "error", "-nostdin",
+               "-n", *inputs, "-filter_complex", ";".join(filters),
+               "-map", "[outv]", "-map", f"{2*len(data['scenes'])}:a:0"]
+        effective_motion = visual_plan["motion"]
+    else:
+        # Legacy cards have embedded text. Never zoom/pan those full frames:
+        # it crops the headline and captions, producing unreadable video.
+        images = [f"scene_{i+1:02}.png" for i in range(len(data["scenes"]))]
+        sequence = ["ffconcat version 1.0"]
+        for scene, frame in zip(data["scenes"], images):
+            sequence.extend([f"file '{frame}'", f"duration {scene['duration_seconds']}"])
+        sequence.append(f"file '{images[-1]}'")
+        concat.write_text("\n".join(sequence) + "\n", encoding="ascii")
+        cmd = [executable, "-hide_banner", "-loglevel", "error", "-nostdin",
+               "-n", "-safe", "1", "-f", "concat", "-i", concat.name,
+               "-i", audio, "-map", "0:v:0", "-map", "1:a:0",
+               "-vf", "fps=15,format=yuv420p"]
+        effective_motion = "static"
+    cmd.extend([
         "-r", "15", "-c:v", "libx264", "-preset", "veryfast",
         "-crf", "23", "-c:a", "aac", "-b:a", "112k",
         "-af", "apad", "-t", duration, "-movflags", "+faststart",
         "-f", "mp4", output.name,
-    ]
+    ])
     try:
         _run_process(cmd, cwd=folder, timeout=180)
         if not output.is_file() or not 1024 < output.stat().st_size < 160_000_000:
@@ -118,7 +149,8 @@ def render_video(run_id, *, confirm_external_run=False):
         digest = assets._sha(final)
         data["artifacts"]["video.mp4"] = digest
         data["video"] = {"file": "video.mp4", "sha256": digest,
-                         "decoded_by_ffmpeg": True, "audio_kind":
+                         "decoded_by_ffmpeg": True, "effective_motion": effective_motion,
+                         "text_layer_fixed": True, "audio_kind":
                          "voiceover" if audio == "voiceover.wav" else "original_ambient"}
         data["stage"] = "VIDEO_RENDERED"
         _save_manifest(folder, data)

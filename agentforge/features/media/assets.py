@@ -197,7 +197,8 @@ def _studio_images(plan):
     return images, receipts
 
 
-def render_studio_scene(path, scene, index, *, photo_bytes, title):
+def render_studio_scene(path, scene, index, *, photo_bytes, title,
+                        background_path=None, overlay_path=None):
     """Portrait editorial composition with a distinct, verified photo per shot."""
     import io
     from PIL import Image, ImageDraw, ImageFilter, ImageOps
@@ -222,8 +223,9 @@ def render_studio_scene(path, scene, index, *, photo_bytes, title):
         od.line((0, y, w, y), fill=(9, 14, 22, alpha))
     accent = [(235, 197, 146), (165, 215, 217), (244, 196, 181)][index % 3]
     od.rounded_rectangle((30, 578, 36, 825), radius=3, fill=accent)
-    image = Image.alpha_composite(picture, overlay).convert("RGB")
-    draw = ImageDraw.Draw(image)
+    # All type lives on a separate RGBA foreground. Never animate it with
+    # the camera: the source photograph can pan, but text stays legible.
+    draw = ImageDraw.Draw(overlay)
     draw.text((48, 565), f"SCENE {index+1:02}", font=_font(20, bold=True), fill=accent)
     headline = scene["headline"]
     head_font = _font(43, bold=True)
@@ -237,6 +239,10 @@ def render_studio_scene(path, scene, index, *, photo_bytes, title):
         body_font = _font(body_font.size - 1)
     _draw_lines(draw, scene["caption"], body_font, x=48, y=y+18,
                 width=w-98, fill=(232, 234, 236), spacing=6, max_lines=5)
+    if background_path is not None and overlay_path is not None:
+        picture.convert("RGB").save(background_path, format="PNG", optimize=True)
+        overlay.save(overlay_path, format="PNG", optimize=True)
+    image = Image.alpha_composite(picture, overlay).convert("RGB")
     image.save(path, format="PNG", optimize=True)
 
 
@@ -385,15 +391,20 @@ def make_assets(payload):
             name = f"scene_{index+1:02}.png"
             if visual_plan["mode"] == "studio":
                 render_studio_scene(stage / name, scene, index,
-                                    photo_bytes=studio_images[index], title=title)
+                                    photo_bytes=studio_images[index], title=title,
+                                    background_path=stage / f"background_{index+1:02}.png",
+                                    overlay_path=stage / f"overlay_{index+1:02}.png")
             else:
                 render_scene(stage / name, scene, index, photo=photo, title=title)
             names.append(name)
         write_captions(stage / "captions.srt", scenes)
         duration = sum(x["duration_seconds"] for x in scenes)
         write_ambient(stage / "ambient.wav", duration)
+        layer_names = ([part for i in range(1, len(scenes)+1)
+                        for part in (f"background_{i:02}.png", f"overlay_{i:02}.png")]
+                       if visual_plan["mode"] == "studio" else [])
         assets = {name: _sha(stage / name)
-                  for name in [*names, "captions.srt", "ambient.wav"]}
+                  for name in [*names, *layer_names, "captions.srt", "ambient.wav"]}
         metadata = {
             "schema_version": 1, "run_id": run_id, "slug": slug,
             "title": title, "scenes": scenes,
@@ -402,6 +413,7 @@ def make_assets(payload):
             "source_photo": photo.name if photo else None,
             "visual_plan": visual_plan,
             "studio_image_receipts": studio_receipts,
+            "studio_layers_version": 1 if visual_plan["mode"] == "studio" else None,
             "rights_attested": payload.get("rights_confirmed") is True if photo else None,
             "artifacts": assets, "video": None, "voiceover": None,
             "stage": "ASSETS_READY", "published": False,
