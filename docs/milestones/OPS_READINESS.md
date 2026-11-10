@@ -63,20 +63,23 @@ conservative. Failures from corrupted databases or invalid skill
 registry return a nonzero CLI exit status. No remediation is performed
 automatically.
 
-## Optional full artifact backup
+## Optional coverage-aware first-party backup
 
-The default backup includes SQLite files only. If you want to preserve
-created websites, videos, and manual channel packages:
+The default backup remains database-only and is explicitly marked
+`PARTIAL_DATABASE_ONLY`. For the known first-party persistence scopes (including
+nested proposals, checkpoints, AI visuals, React apps, film jobs and receipts):
 
 \`\`\`powershell
 .\\.venv\\Scripts\\python.exe -m agentforge.ops_backup create --include-workspace --confirm-backup
 \`\`\`
 
-Source files are limited to \`workspace/products\`, \`workspace/media\`,
-and \`workspace/growth\`, never arbitrary paths, voice model weights,
-private credentials or external directories. Files have an individual
-250 MB and combined 1.5 GB safety ceiling; larger projects need an
-owner-selected encrypted archival system.
+Full-mode scopes and safety exclusions are documented in
+[`WAVE2_BACKUP_COVERAGE.md`](WAVE2_BACKUP_COVERAGE.md). A future unrecognized
+storage root is marked `REVIEW_REQUIRED`, not automatically protected.
+Legacy schema 1 archives are still readable but labeled `LEGACY_UNATTESTED`.
+The original per-file 250 MiB and combined 1.5 GiB ceilings remain; oversized
+assets need an additional Owner-managed encrypted archival process. No
+cross-database atomicity or business-reference certification is claimed.
 
 All generated backups are stored in the ignored
 \`workspace/backups/agentforge-*.zip\` directory. They are NOT encrypted,
