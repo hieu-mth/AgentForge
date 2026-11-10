@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from agentforge.api.video_stream import InvalidVideoRange, parse_range
-from agentforge.api.server import Handler
+from agentforge.api.server import _Handler
 
 
 class VideoRangeTests(unittest.TestCase):
@@ -32,7 +32,7 @@ class VideoRangeTests(unittest.TestCase):
             file = Path(tmp) / "video.mp4"
             file.write_bytes(bytes(range(128)))
             class FakeHandler:
-                _stream_video = Handler._stream_video
+                _stream_video = _Handler._stream_video
                 def __init__(self):
                     self.headers = {"Range": "bytes=10-19"}
                     self.wfile = io.BytesIO()
