@@ -33,6 +33,22 @@ export function Reviews({data, mutate, onReload}) {
         if(out){message.success('Đã ghi quyết định');setDraft(null);onReload();}
       }});
   };
+  const renderVideo=record=>modal.confirm({
+    title:'Bước 2B — Render MP4 từ tư liệu đã chuẩn bị?',
+    content:<Space orientation="vertical">
+      <Paragraph>FFmpeg chạy local sau xác nhận này. Không upload lên cloud và không tự nghiệm thu sản phẩm. Mỗi production chỉ được render một lần để tránh ghi đè.</Paragraph>
+      <Text code>{record.storyboard_sha}</Text>
+      {!data?.external_actions_enabled&&<Alert type="warning"
+        message="Chưa bật external tools khi khởi động backend"/>}
+    </Space>,
+    okText:'Xác nhận render MP4',
+    okButtonProps:{disabled:!data?.external_actions_enabled},
+    onOk:async()=>{
+      const out=await mutate('/api/videos/'+record.production_id+'/render',{
+        ack:'RENDER_LOCAL_MP4',storyboard_sha:record.storyboard_sha});
+      if(out){message.success('Đã tạo video MP4. Nhấn Xem video để phát và nghiệm thu.');await onReload();}
+    },
+  });
   const decideVideo=decision=>{
     if(!video||!watched){message.warning('Hãy phát và tự kiểm tra video rồi xác nhận trước.');return;}
     modal.confirm({title:'Quyết định video local?',
@@ -64,8 +80,14 @@ export function Reviews({data, mutate, onReload}) {
           {title:'Production',render:(_,r)=><code>{clip(r.production_id)}</code>},
           {title:'Status',dataIndex:'status',render:badge},
           {title:'QA',dataIndex:'quality',render:badge},
-          {title:'Xem',render:(_,r)=><Button onClick={()=>inspectVideo(r)}
-            disabled={!['VIDEO_READY','APPROVED','REJECTED'].includes(r.status)}>Xem video</Button>},
+          {title:'Thực hiện',render:(_,r)=>r.status==='ASSETS_READY'
+            ? <Button type="primary" onClick={()=>renderVideo(r)}
+                disabled={!data?.external_actions_enabled}>Bước 2B: Render MP4</Button>
+            : ['VIDEO_READY','APPROVED','REJECTED'].includes(r.status)
+              ? <Button onClick={()=>inspectVideo(r)}>Xem video</Button>
+              : <Text type="secondary">{r.status==='RENDERING'
+                  ? 'Đang/đã nhận lệnh render; kiểm tra trạng thái'
+                  : 'Cần kiểm tra production'}</Text>},
         ]}/>
     </Card>
     <Drawer title="Review storyboard AI" open={!!draft} onClose={()=>setDraft(null)}
