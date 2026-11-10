@@ -100,6 +100,20 @@ class MotionRuntimeWave8Tests(unittest.TestCase):
         with self.assertRaises(motion.MotionError):
             motion.inspect_workflow(self.workflow)
 
+    def test_resource_budgets_cannot_be_raised_by_workflow(self):
+        for field, value in (("batch_size", 7), ("length", 121)):
+            doc = template()
+            doc["api"]["4"]["inputs"][field] = value
+            self.workflow.write_text(json.dumps(doc), encoding="utf-8")
+            with self.subTest(field=field), self.assertRaises(motion.MotionError):
+                motion.inspect_workflow(self.workflow)
+        for field, value in (("steps", 10_000), ("cfg", 100)):
+            doc = template()
+            doc["api"]["6"]["inputs"][field] = value
+            self.workflow.write_text(json.dumps(doc), encoding="utf-8")
+            with self.subTest(field=field), self.assertRaises(motion.MotionError):
+                motion.inspect_workflow(self.workflow)
+
     def test_import_requires_provider_success_explicit_confirm_and_matching_name(self):
         info = self.submitted()
         f = "af_motion_" + info["job_id"] + "_00001.mp4"

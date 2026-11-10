@@ -136,10 +136,23 @@ def inspect_workflow(path: Path):
     if ({k: params.get(k) for k in ("width", "height", "length")} !=
             {"width": PROFILE["width"], "height": PROFILE["height"],
              "length": PROFILE["frames"]}
-            or fps["inputs"].get("fps") != PROFILE["fps"]):
+            or fps["inputs"].get("fps") != PROFILE["fps"]
+            or params.get("batch_size") != PROFILE["batch_size"]):
         raise MotionError("Workflow exceeds or differs from the fixed 12GB pilot profile")
-    if graph[record["output_node"]]["inputs"].get("filename_prefix", "").find("/") >= 0:
-        raise MotionError("Output prefix must not contain paths")
+    sampler = seed["inputs"]
+    # AI/Owner workflow JSON cannot bypass pilot resource limits by setting
+    # gigantic sampler iterations/CFG or producing non-MP4 output.
+    steps, cfg = sampler.get("steps"), sampler.get("cfg")
+    if (type(steps) is not int or not 1 <= steps <= 30
+            or type(cfg) not in (int, float) or not 0 < cfg <= 8
+            or sampler.get("sampler_name") not in {"euler", "uni_pc"}
+            or sampler.get("scheduler") != "simple"
+            or sampler.get("denoise") != 1.0):
+        raise MotionError("Motion sampling exceeds fixed pilot budget")
+    save = graph[record["output_node"]]["inputs"]
+    if (save.get("format", "auto") not in {"mp4", "auto"}
+            or save.get("filename_prefix", "").find("/") >= 0):
+        raise MotionError("Pilot requires local MP4 output without a folder prefix")
     return {"sha256": _sha(raw), "workflow": record, "profile": dict(PROFILE),
             "validated_structure_only": True, "model_installed": False}
 
