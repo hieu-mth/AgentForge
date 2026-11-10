@@ -150,6 +150,16 @@ def handle(server, path, request, session=None):
                 or result["verified_claims"] is not False
                 or quality_v14._sha(result) != sha):
             raise PermissionError("Storyboard provenance or review state mismatch")
+        # Workspace requests promise a product video, not text-only slides.
+        # Reject missing/Classic visuals before creating a production row.
+        # Legacy media.compose and CLI demos can still opt into Classic.
+        from agentforge import media_assets
+        plan = media_assets.validate_visual_plan(
+            request.get("visual_plan"), len(result["scenes"]))
+        if plan["mode"] != "studio":
+            raise PermissionError(
+                "VIDEO_VISUALS_REQUIRED: Need one verified AI image for each scene. "
+                "No automatic Classic/template fallback for video requests.")
         # Separate versioned local media output. Never derive a filesystem path
         # or a collision-prone slug from untrusted task content.
         storyboard = {"slug": "video-" + uuid4().hex[:16],

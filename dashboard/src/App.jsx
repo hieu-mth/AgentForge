@@ -74,19 +74,14 @@ function Login({onLogin, busy}) {
 }
 
 function VisualPicker({images, scenes, plan}) {
-  const available=images.length>=scenes.length;
-  const [mode,setMode]=useState(available?'studio':'classic');
+  const available=images.length>=scenes.length && scenes.length>0;
   const [motion,setMotion]=useState('static');
-  const [ids,setIds]=useState(available?images.slice(0,scenes.length).map(x=>x.job_id):[]);
+  const [ids,setIds]=useState([]);
   const change=(values)=>{
     Object.assign(plan,values);
   };
   // Initial plan is also created by the parent (the modal controls never
   // execute a GPU job or mutate an already prepared production).
-  const setVisualMode=value=>{
-    setMode(value);
-    change({mode:value,image_job_ids:value==='studio'?ids:[]});
-  };
   const setMotionMode=value=>{
     setMotion(value);change({motion:value});
   };
@@ -99,14 +94,13 @@ function VisualPicker({images, scenes, plan}) {
       message="Standard V2 — ảnh tĩnh, không phải footage quảng cáo"
       description="Chế độ này dựng video từ ảnh tĩnh. Zoom/Pan chỉ mô phỏng camera, không tạo chuyển động thực trong cảnh. Muốn video quảng cáo có chuyển động thực cần shot clip từ Film Studio hoặc video model."/>
     <Text strong>Hình ảnh cho mỗi cảnh</Text>
-    <Select value={mode} onChange={setVisualMode} style={{width:'100%'}} options={[
-      {value:'classic',label:'Classic — ảnh nền mẫu (không phải AI visual)'},
-      {value:'studio',label:'Studio — ảnh AI riêng cho từng cảnh',disabled:!available},
-    ]}/>
+    <Alert type={available?'success':'error'} showIcon
+      message={available?'Đã đủ ảnh nguồn để chọn cho từng cảnh':'Chưa đủ hình ảnh thực tế để dựng video'}
+      description="AgentForge không tạo video chỉ có nền màu và chữ. Phải chọn thủ công ảnh AI đúng sản phẩm cho từng shot trước khi tạo production."/>
     {!available&&<Alert type="warning" showIcon
       message={`Chỉ có ${images.length} ảnh AI sẵn có, cần ${scenes.length} ảnh riêng`}
-      description="Hãy tạo/nhập đủ ảnh trong Image Studio trước. Bạn vẫn có thể dùng Classic để thử pipeline, nhưng bố cục sẽ còn mang tính template."/>}
-    {mode==='studio'&&scenes.map((scene,index)=><div key={index}>
+      description="Image Studio hiện hỗ trợ nhập ảnh đã tạo từ ComfyUI. Hãy chuẩn bị đủ ảnh nguồn cho các cảnh và mở lại storyboard. Tác vụ này không tự gọi model tạo ảnh."/>}
+    {available&&scenes.map((scene,index)=><div key={index}>
       <Text>Shot {index+1}: {scene.headline}</Text>
       <Select value={ids[index]} style={{width:'100%',marginTop:6}}
         onChange={value=>setShot(index,value)}
@@ -270,19 +264,25 @@ export default function App() {
     const count=selected.report?.scenes?.length||0;
     const enough=images.length>=count && count>0;
     const plan={
-      mode:enough?'studio':'classic',motion:'static',
-      image_job_ids:enough?images.slice(0,count).map(x=>x.job_id):[],
+      mode:'studio',motion:'static',
+      image_job_ids:[],
     };
-    ask('Bước 2A — Chọn visual và tạo tư liệu',
-      <Space orientation="vertical" style={{width:'100%'}}>
-        <Paragraph>Chọn ảnh cho từng cảnh và chuyển động. Mỗi production mới có SHA riêng; không ghi đè bản cũ. Business Context vẫn được kiểm tra trước khi tạo.</Paragraph>
+    modal.confirm({
+      title:'Bước 2A — Chọn visual và tạo tư liệu',
+      content:<Space orientation="vertical" style={{width:'100%'}}>
+        <Paragraph>Bạn phải chọn thủ công ảnh có đúng sản phẩm/chủ đề cho từng cảnh. Không tự lấy ảnh đầu tiên trong gallery. Nếu chưa có ảnh nệm thật, hãy dừng ở đây. Mỗi production có SHA riêng và không ghi đè bản cũ.</Paragraph>
         <VisualPicker images={images} scenes={selected.report.scenes||[]} plan={plan}/>
+        {!enough&&<Alert type="error" showIcon message="Không thể tạo video từ template rỗng"
+          description="Chưa có đủ ảnh nệm/khung cảnh. AgentForge sẽ không tạo production cho đến khi bạn cung cấp hoặc tạo đủ ảnh trong Image Studio."/>}
         <Text code>{selected.storyboard_source_sha}</Text>
       </Space>,
-      async()=>{
-        if(plan.mode==='studio'&&(plan.image_job_ids.length!==count
+      okText:'Tạo tư liệu từ ảnh đã duyệt',
+      okButtonProps:{disabled:!enough},
+      onOk:async()=>{
+        if(!enough || (plan.image_job_ids.length!==count
             ||new Set(plan.image_job_ids).size!==count)){
-          message.error('Cần chọn một ảnh AI khác nhau cho mỗi cảnh');return;
+          message.error('Chưa đủ ảnh AI độc lập cho mọi cảnh. Dừng tạo video để tránh slideshow chữ.');
+          throw new Error('VIDEO_VISUALS_REQUIRED');
         }
         const result=await runAction(()=>post('/api/media/prepare-from-task',{
           ack:'PREPARE_REVIEWED_STORYBOARD',task_id:selected.task_id,
@@ -292,7 +292,8 @@ export default function App() {
           setMediaPrepared(result);
           message.success('Tư liệu đã sẵn sàng. Bước tiếp theo: render MP4');
         }
-      });
+      },
+    });
   };
   const renderPreparedVideo=production=>ask('Bước 2B — chạy FFmpeg tạo MP4?',
     <Space orientation="vertical">
