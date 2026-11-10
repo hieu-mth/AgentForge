@@ -1,6 +1,6 @@
 # AgentForge Film Studio — 12 GB VRAM motion pilot
 
-Status: **ComfyUI adapter and safety contracts implemented; NO REAL VIDEO TESTED**.
+Status: **ComfyUI adapter plus local MP4 technical QA implemented (code/CI); NO REAL GPU VIDEO TESTED**.
 
 This milestone adds an opt-in, *one-shot* dispatch of a 4-second text-to-video shot
 to an Owner-installed local ComfyUI at **127.0.0.1:8188**. All video model weights,
@@ -40,9 +40,7 @@ Official references:
    downloaded scripts or custom nodes without review.
 5. Wrap its API graph as documented below in a locally owned JSON file.
 6. Start with a 4-second chapter/shot plan, and submit with explicit approval.
-7. Inspect/verify the ComfyUI output yourself. The adapter does NOT import
-   returned video, check motion quality, perform audio QA or attach clips to
-   the long-form plan.
+7. After ComfyUI history success, collect an MP4 under Owner-configured local output with exact job filename, ffprobe 49 frames, FFmpeg decode, SHA and immutable receipt. Motion quality still requires Owner playback; multi-shot/voice/upload remain missing.
 
 The trusted workflow wrapper is a JSON object with exactly these keys:
 
@@ -88,6 +86,10 @@ says **COMFY_COMPLETE_NOT_IMPORTED_OR_VERIFIED**, never "film ready" or
 Provider-confirmed terminal success frees the one-active-GPU-shot quota for
 another shot without auto-retrying the original shot. No user video, model source or YouTube credentials are
 stored in Git.
+
+## Wave 8 import and technical QA
+
+Sample graph: examples/film_studio/wan22_5b_4s_api.json. Commands and Owner checklist: [Wave 8](../verification/wave8/README.md). 49 frames at 12 fps means ~4.083 seconds. Wall duration from queue to import **includes waiting/manual handling**, not pure model latency. VRAM total/free snapshot is not peak; Owner can optionally record a manually observed peak (unverified). Never assume ComfyUI history success means the video decoded or was accepted.
 
 ## Current blocker before claiming Milestone 2 complete
 

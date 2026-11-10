@@ -23,6 +23,42 @@ def dispatch(self, route):
     if route == "/api/image/jobs":
         from agentforge.image_studio_v24 import report
         return self._reply(200, report())
+    if route == "/api/film/motion":
+        from agentforge.features.film_studio.motion_comfy import health
+        from agentforge.features.film_studio.motion_verify import list_jobs
+        return self._reply(200, {
+            "status": "LOCAL_MOTION_PILOT_UNVERIFIED",
+            "gpu": health(), "jobs": list_jobs(),
+            "model_route_execution": "CONFIG_ONLY",
+            "owner_12gb_benchmark_verified": False,
+            "automatic_model_download": False, "automatic_upload": False,
+        })
+    if route.startswith("/api/film/motion/job/"):
+        from agentforge.features.film_studio.motion_verify import _job, inspect_receipt
+        job_id = route.removeprefix("/api/film/motion/job/")
+        from agentforge.features.film_studio.motion_comfy import DB as motion_db
+        row = _job(job_id, motion_db)
+        session = self._session()
+        session.setdefault("reviewed_motion_jobs", {})[job_id] = {
+            "plan_sha": row["plan_sha"], "workflow_sha": row["workflow_sha"]}
+        result = {"job_id": job_id, "film_slug": row["film_slug"],
+                  "shot_id": row["shot_id"], "state": row["state"],
+                  "plan_sha": row["plan_sha"], "workflow_sha": row["workflow_sha"],
+                  "provider_submitted": row["provider_id"] is not None,
+                  "video_accepted": False}
+        if row["state"] == "COMPLETE_UNVERIFIED":
+            try:
+                receipt = inspect_receipt(job_id)
+            except KeyError:
+                pass
+            else:
+                result.update({"state": receipt["state"],
+                               "clip_sha256": receipt["clip_sha256"],
+                               "receipt_sha256": receipt["receipt_sha256"],
+                               "technical": receipt["technical"],
+                               "owner_reported_peak_vram_gib":
+                                   receipt["owner_reported_peak_vram_gib"]})
+        return self._reply(200, result)
     if route == "/api/model-hub":
         from agentforge.ai.model_hub import catalog
         return self._reply(200, catalog())
