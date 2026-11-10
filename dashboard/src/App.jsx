@@ -76,7 +76,7 @@ function Login({onLogin, busy}) {
 function VisualPicker({images, scenes, plan}) {
   const available=images.length>=scenes.length && scenes.length>0;
   const [motion,setMotion]=useState('static');
-  const [ids,setIds]=useState(images.slice(0,scenes.length).map(x=>x.job_id));
+  const [ids,setIds]=useState([]);
   const change=(values)=>{
     Object.assign(plan,values);
   };
@@ -96,7 +96,7 @@ function VisualPicker({images, scenes, plan}) {
     <Text strong>Hình ảnh cho mỗi cảnh</Text>
     <Alert type={available?'success':'error'} showIcon
       message={available?'Đã đủ ảnh nguồn để chọn cho từng cảnh':'Chưa đủ hình ảnh thực tế để dựng video'}
-      description="AgentForge không tạo video chỉ có nền màu và chữ. Cần ảnh AI đã nhập/được duyệt cho từng shot trước khi tạo production."/>
+      description="AgentForge không tạo video chỉ có nền màu và chữ. Phải chọn thủ công ảnh AI đúng sản phẩm cho từng shot trước khi tạo production."/>
     {!available&&<Alert type="warning" showIcon
       message={`Chỉ có ${images.length} ảnh AI sẵn có, cần ${scenes.length} ảnh riêng`}
       description="Image Studio hiện hỗ trợ nhập ảnh đã tạo từ ComfyUI. Hãy chuẩn bị đủ ảnh nguồn cho các cảnh và mở lại storyboard. Tác vụ này không tự gọi model tạo ảnh."/>}
@@ -265,12 +265,12 @@ export default function App() {
     const enough=images.length>=count && count>0;
     const plan={
       mode:'studio',motion:'static',
-      image_job_ids:images.slice(0,count).map(x=>x.job_id),
+      image_job_ids:[],
     };
     modal.confirm({
       title:'Bước 2A — Chọn visual và tạo tư liệu',
       content:<Space orientation="vertical" style={{width:'100%'}}>
-        <Paragraph>Chọn ảnh cho từng cảnh và chuyển động. Mỗi production mới có SHA riêng; không ghi đè bản cũ. Business Context vẫn được kiểm tra trước khi tạo.</Paragraph>
+        <Paragraph>Bạn phải chọn thủ công ảnh có đúng sản phẩm/chủ đề cho từng cảnh. Không tự lấy ảnh đầu tiên trong gallery. Nếu chưa có ảnh nệm thật, hãy dừng ở đây. Mỗi production có SHA riêng và không ghi đè bản cũ.</Paragraph>
         <VisualPicker images={images} scenes={selected.report.scenes||[]} plan={plan}/>
         {!enough&&<Alert type="error" showIcon message="Không thể tạo video từ template rỗng"
           description="Chưa có đủ ảnh nệm/khung cảnh. AgentForge sẽ không tạo production cho đến khi bạn cung cấp hoặc tạo đủ ảnh trong Image Studio."/>}
