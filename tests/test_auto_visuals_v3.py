@@ -1,6 +1,7 @@
 """Offline V3 auto visual jobs and Owner-gated storyboard requests."""
 import io
 import json
+from contextlib import closing
 import tempfile
 import unittest
 from pathlib import Path
@@ -126,7 +127,7 @@ class AutoVisualV3Tests(unittest.TestCase):
         self.files.mkdir()
         (self.files / (ident+".png")).write_bytes(buffer.getvalue())
         sha = hashlib.sha256(buffer.getvalue()).hexdigest()
-        with visual_jobs._db(self.db, create=True) as db:
+        with closing(visual_jobs._db(self.db, create=True)) as db, db:
             db.execute("UPDATE visual_jobs SET asset_sha=?,status='ASSET_READY' WHERE job_id=?",
                        (sha, ident))
         other_sha = "f"*64
