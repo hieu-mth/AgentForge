@@ -223,6 +223,22 @@ def _ollama_chat(runtime, prompt, schema, *, worker_id=None):
     return answer.strip()
 
 
+
+class _RejectCloudRedirect(urllib.request.HTTPRedirectHandler):
+    """Never forward cloud credentials to a redirect target."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _cloud_open(request, *, timeout):
+    # Keep normal proxy/HTTPS handling, but do not use the process-global
+    # urlopen opener: it follows 30x responses and may forward Bearer tokens.
+    # Building a per-call opener is safe for concurrent local API requests.
+    opener = urllib.request.build_opener(_RejectCloudRedirect())
+    return opener.open(request, timeout=timeout)
+
+
 def _anthropic_chat(runtime, prompt, schema, *, worker_id=None):
     system_prompt = runtime["system_prompt"]
     if schema is not None:
@@ -255,7 +271,7 @@ def _anthropic_chat(runtime, prompt, schema, *, worker_id=None):
         },
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=_request_timeout(worker_id)) as response:
+    with _cloud_open(request, timeout=_request_timeout(worker_id)) as response:
         raw = json.load(response)
 
     if not isinstance(raw, dict):
