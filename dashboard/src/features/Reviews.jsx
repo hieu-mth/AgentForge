@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { App as AntApp, Alert, Button, Card, Checkbox, Descriptions, Drawer, Empty,
+import { App as AntApp, Alert, Button, Card, Checkbox, Descriptions, Drawer, Empty, Image,
   Space, Table, Tag, Typography } from 'antd';
 import { api } from '../api.js';
 import { badge, clip } from '../components/shared.jsx';
@@ -9,6 +9,7 @@ export function Reviews({data, mutate, onReload}) {
   const {message,modal}=AntApp.useApp();
   const [draft,setDraft]=useState(null);
   const [video,setVideo]=useState(null);
+  const [assetsPreview,setAssetsPreview]=useState(null);
   const [watched,setWatched]=useState(false);
   const drafts=data?.autopilot_reviews?.items||[];
   const videos=data?.local_video?.items||[];
@@ -19,6 +20,10 @@ export function Reviews({data, mutate, onReload}) {
   };
   const inspectVideo=async record=>{
     try{setVideo(await api('/api/videos/'+record.production_id));}
+    catch(e){message.error(e.message);}
+  };
+  const inspectAssets=async record=>{
+    try{setAssetsPreview(await api('/api/media/'+record.production_id+'/preview'));}
     catch(e){message.error(e.message);}
   };
   const decideDraft=decision=>{
@@ -81,10 +86,14 @@ export function Reviews({data, mutate, onReload}) {
           {title:'Status',dataIndex:'status',render:badge},
           {title:'QA',dataIndex:'quality',render:badge},
           {title:'Thực hiện',render:(_,r)=>r.status==='ASSETS_READY'
-            ? <Button type="primary" onClick={()=>renderVideo(r)}
-                disabled={!data?.external_actions_enabled}>Bước 2B: Render MP4</Button>
+            ? <Space wrap>
+                <Button onClick={()=>inspectAssets(r)}>Xem từng cảnh</Button>
+                <Button type="primary" onClick={()=>renderVideo(r)}
+                  disabled={!data?.external_actions_enabled}>Bước 2B: Render MP4</Button>
+              </Space>
             : ['VIDEO_READY','APPROVED','REJECTED'].includes(r.status)
-              ? <Button onClick={()=>inspectVideo(r)}>Xem video</Button>
+              ? <Space><Button onClick={()=>inspectAssets(r)}>Xem cảnh</Button>
+                  <Button onClick={()=>inspectVideo(r)}>Xem video</Button></Space>
               : <Text type="secondary">{r.status==='RENDERING'
                   ? 'Đang/đã nhận lệnh render; kiểm tra trạng thái'
                   : 'Cần kiểm tra production'}</Text>},
@@ -106,6 +115,28 @@ export function Reviews({data, mutate, onReload}) {
           <Button danger onClick={()=>decideDraft('REJECT')}>Từ chối</Button>
           <Button type="primary" onClick={()=>decideDraft('APPROVE')}>Duyệt draft</Button>
         </Space>
+      </Space>}
+    </Drawer>
+    <Drawer title="Preview tư liệu từng cảnh" open={!!assetsPreview}
+      onClose={()=>setAssetsPreview(null)} size="min(780px,96vw)" destroyOnHidden>
+      {assetsPreview&&<Space orientation="vertical" size={14} style={{width:'100%'}}>
+        <Alert type="info" showIcon
+          message={assetsPreview.visual_mode==='studio'?'Studio — nguồn ảnh AI đã kiểm chứng':'Classic — nguồn hình ảnh template'}
+          description={`QA: ${assetsPreview.qa} · Camera: ${assetsPreview.motion}. Đây là các PNG thật, chưa phải video chuyển động.`}/>
+        <Title level={5}>{assetsPreview.title}</Title>
+        <Space wrap align="start">
+          {assetsPreview.frames.map((url,index)=><Card key={url} size="small"
+            style={{width:170}} title={'Shot '+(index+1)}>
+            <Image width={140} src={url} alt={'Ảnh cảnh '+(index+1)}/>
+            <Text type="secondary" style={{display:'block'}}>{assetsPreview.scene_titles[index]}</Text>
+          </Card>)}
+        </Space>
+        <Text type="secondary">SHA storyboard: <Text code>{assetsPreview.storyboard_sha}</Text></Text>
+        {assetsPreview.status==='ASSETS_READY'&&<Button type="primary"
+          disabled={!data?.external_actions_enabled}
+          onClick={()=>{setAssetsPreview(null);renderVideo(assetsPreview);}}>
+          Duyệt bước render MP4
+        </Button>}
       </Space>}
     </Drawer>
     <Drawer title="Review MP4 local" open={!!video} onClose={()=>setVideo(null)}
