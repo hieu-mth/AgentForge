@@ -16,10 +16,12 @@ destructive cleanup is introduced.
 - Markers `DISPATCHING`, existing task results, signed goal plans and all
   completed work remain intact. An interrupted / uncertain attempt is never
   automatically replayed. Unrelated S1 tasks are unchanged.
-- A crash between S4 and S1 database updates can still leave a partially
-  reconciled state. Re-running recovery is safe for S4 (idempotent), but
-  **manual inspection is required** for any S1 discrepancy; there is no
-  claimed cross-database atomic transaction.
+- A crash between S4 and S1 database updates can leave a partially
+  reconciled state. Each subsequent explicit recovery also revisits S1 task
+  IDs linked to **previously INTERRUPTED** S4 goals, so RUNNING entries are
+  reconciled without replay or duplicate S4 events. This is still not a
+  cross-database atomic transaction; any remaining discrepancy requires
+  Owner inspection.
 
 ## SQLite read boundary and Owner GET (004)
 
@@ -63,7 +65,7 @@ destructive cleanup is introduced.
 3. Windows CI: Python 3.13, dashboard and NovaMart builds, Edge smoke,
    PowerShell 5.1 acceptance and source-hygiene checks.
 4. Adversarial probes: >100 goals and >200 tasks hiding the original RUNNING
-   entry; exact parent+child recovery and unrelated RUNNING task preserved;
+   entry; exact parent+child recovery, fault-injected S4/S1 crash continuation and unrelated RUNNING task preserved;
    no files/schema on missing/legacy GET; corrupted status counts fail;
    terminal error versus pending ComfyUI history and quota release.
 
