@@ -121,6 +121,49 @@ def handle(server, path, request, session=None):
             raise PermissionError("Inspect the full task in this session before approving")
         return quality_v14.decide(
             job_id, decision, request["output_sha"], confirm=True)
+    if path == "/api/visuals/generate-for-website":
+        if not server.allow_external_actions:
+            raise PermissionError("Local image generation requires external-capable mode")
+        if (not isinstance(request, dict)
+                or set(request) != {"ack", "slug", "source_sha", "checkpoint"}
+                or request.get("ack") != "GENERATE_WEBSITE_VISUAL"):
+            raise PermissionError("Explicit Owner website visual generation required")
+        from agentforge.features.media import visual_jobs
+        from agentforge import product_builder, web_assets
+        from hashlib import sha256
+        slug = product_builder._check_slug(request["slug"])
+        digest = request["source_sha"]
+        if (not isinstance(digest, str) or not visual_jobs.SHA.fullmatch(digest)
+                or session is None
+                or session.get("inspected_visual_websites", {}).get(slug) != digest):
+            raise PermissionError("Inspect existing website source before GPU generation")
+        project = web_assets._project(slug)
+        current = sha256((project / "index.html").read_bytes()).hexdigest()
+        if current != digest:
+            raise PermissionError("Website changed since inspection")
+        topic = visual_jobs.website_subject(slug)
+        return visual_jobs.submit(
+            "website", topic, [topic], request["checkpoint"],
+            confirm_generation=True, source_sha=digest)
+    if path.startswith("/api/visuals/") and path.endswith("/attach-website"):
+        if (not isinstance(request, dict)
+                or set(request) != {"ack", "slug", "image_sha", "html_sha"}
+                or request["ack"] != "ATTACH_GENERATED_WEBSITE_IMAGE"):
+            raise PermissionError("Explicit SHA-bound website image approval required")
+        from agentforge.features.media import visual_jobs
+        from agentforge import product_builder
+        slug = product_builder._check_slug(request["slug"])
+        html_sha, image_sha = request["html_sha"], request["image_sha"]
+        parts = path.split("/")
+        if len(parts) != 5:
+            raise ValueError("Invalid website image route")
+        job_id = visual_jobs._id(parts[3])
+        if (session is None
+                or session.get("inspected_visual_websites", {}).get(slug) != html_sha
+                or session.get("reviewed_visual_images", {}).get(job_id) != image_sha):
+            raise PermissionError("Inspect website and exact generated image first")
+        return visual_jobs.attach_website(
+            job_id, slug, image_sha, html_sha, confirm_attach=True)
     if path == "/api/visuals/generate":
         if not server.allow_external_actions:
             raise PermissionError("Local ComfyUI requires external-process mode")
