@@ -35,7 +35,7 @@ class TestAnthropicGateway(unittest.TestCase):
 
     def test_worker_routes_to_gateway_messages_api(self):
         with self.cloud_env():
-            with patch.object(model.urllib.request, "urlopen", return_value=answer("OK")) as mocked:
+            with patch.object(model, "_cloud_open", return_value=answer("OK")) as mocked:
                 result = model.generate("Hello", worker_id="opportunity_researcher")
         self.assertEqual(result, "OK")
         request = mocked.call_args.args[0]
@@ -51,7 +51,7 @@ class TestAnthropicGateway(unittest.TestCase):
     def test_source_reviewer_structured_json_prompt(self):
         schema = {"type": "object", "properties": {"observations": {"type": "array"}}}
         with self.cloud_env():
-            with patch.object(model.urllib.request, "urlopen", return_value=answer('{"observations": []}')) as mocked:
+            with patch.object(model, "_cloud_open", return_value=answer('{"observations": []}')) as mocked:
                 result = model.generate_json("Find quotes", schema, worker_id="source_reviewer")
         self.assertEqual(result, {"observations": []})
         payload = json.loads(mocked.call_args.args[0].data)
@@ -61,27 +61,27 @@ class TestAnthropicGateway(unittest.TestCase):
 
     def test_no_worker_uses_same_cloud_override(self):
         with self.cloud_env():
-            with patch.object(model.urllib.request, "urlopen", return_value=answer("OK")) as mocked:
+            with patch.object(model, "_cloud_open", return_value=answer("OK")) as mocked:
                 self.assertEqual(model.generate("Hello"), "OK")
         self.assertTrue(mocked.call_args.args[0].full_url.endswith("/messages"))
 
     def test_missing_token_blocks_before_network(self):
         with self.cloud_env(ANTHROPIC_AUTH_TOKEN=""):
-            with patch.object(model.urllib.request, "urlopen") as mocked:
+            with patch.object(model, "_cloud_open") as mocked:
                 with self.assertRaises(ModelConfigError):
                     model.generate("Hello")
                 mocked.assert_not_called()
 
     def test_missing_url_blocks_before_network(self):
         with self.cloud_env(ANTHROPIC_BASE_URL=""):
-            with patch.object(model.urllib.request, "urlopen") as mocked:
+            with patch.object(model, "_cloud_open") as mocked:
                 with self.assertRaises(ModelConfigError):
                     model.generate("Hello")
                 mocked.assert_not_called()
 
     def test_http_url_is_rejected_before_network(self):
         with self.cloud_env(ANTHROPIC_BASE_URL="http://gateway.example/v1"):
-            with patch.object(model.urllib.request, "urlopen") as mocked:
+            with patch.object(model, "_cloud_open") as mocked:
                 with self.assertRaises(ModelConfigError):
                     model.generate("Hello")
                 mocked.assert_not_called()
@@ -89,13 +89,13 @@ class TestAnthropicGateway(unittest.TestCase):
     def test_empty_gateway_content_is_an_error(self):
         with self.cloud_env():
             raw = io.BytesIO(b'{"content": [{"type": "tool_use"}]}')
-            with patch.object(model.urllib.request, "urlopen", return_value=raw):
+            with patch.object(model, "_cloud_open", return_value=raw):
                 with self.assertRaises(RuntimeError):
                     model.generate("Hello")
 
     def test_invalid_json_is_rejected(self):
         with self.cloud_env():
-            with patch.object(model.urllib.request, "urlopen", return_value=answer("plain text")):
+            with patch.object(model, "_cloud_open", return_value=answer("plain text")):
                 with self.assertRaises(json.JSONDecodeError):
                     model.generate_json("Respond JSON", {"type": "object"})
 

@@ -33,7 +33,7 @@ class TestGatewayOutputBudget(unittest.TestCase):
         self.tmp.cleanup()
 
     def call(self, obj, *, worker_id=None, schema=None):
-        with patch.object(model.urllib.request, "urlopen",
+        with patch.object(model, "_cloud_open",
                           return_value=response(obj)) as network:
             if schema is None:
                 text = model.generate("Make HTML", worker_id=worker_id)
@@ -76,7 +76,7 @@ class TestGatewayOutputBudget(unittest.TestCase):
     def test_thinking_only_exhausted_budget_is_reported(self):
         obj = {"stop_reason": "max_tokens", "usage": {"output_tokens": 8192},
                "content": [{"type": "thinking", "thinking": "private reasoning"}]}
-        with patch.object(model.urllib.request, "urlopen",
+        with patch.object(model, "_cloud_open",
                           return_value=response(obj)) as net:
             with self.assertRaisesRegex(RuntimeError, "stopped at max_tokens") as raised:
                 model.generate("Make HTML", worker_id="product_builder")
@@ -91,7 +91,7 @@ class TestGatewayOutputBudget(unittest.TestCase):
     def test_truncated_partial_html_is_rejected_even_with_text(self):
         obj = {"stop_reason": "max_tokens",
                "content": [{"type": "text", "text": "<html><body>partial"}]}
-        with patch.object(model.urllib.request, "urlopen",
+        with patch.object(model, "_cloud_open",
                           return_value=response(obj)) as net:
             with self.assertRaisesRegex(RuntimeError, "Incomplete output rejected"):
                 model.generate("Make HTML", worker_id="product_builder")
@@ -100,7 +100,7 @@ class TestGatewayOutputBudget(unittest.TestCase):
     def test_thinking_only_end_turn_reports_content_types(self):
         obj = {"stop_reason": "end_turn",
                "content": [{"type": "thinking", "thinking": "reasoning"}]}
-        with patch.object(model.urllib.request, "urlopen",
+        with patch.object(model, "_cloud_open",
                           return_value=response(obj)):
             with self.assertRaisesRegex(RuntimeError, "no text content") as raised:
                 model.generate("Make HTML", worker_id="product_builder")
@@ -109,14 +109,14 @@ class TestGatewayOutputBudget(unittest.TestCase):
         self.assertNotIn("reasoning", str(raised.exception))
 
     def test_no_content_array_has_diagnostic(self):
-        with patch.object(model.urllib.request, "urlopen",
+        with patch.object(model, "_cloud_open",
                           return_value=response({"stop_reason": "end_turn"})):
             with self.assertRaisesRegex(RuntimeError, "no content blocks") as raised:
                 model.generate("Make HTML", worker_id="product_builder")
         self.assertIn("max_tokens=8192", str(raised.exception))
 
     def test_tools_only_response_is_not_treated_as_text(self):
-        with patch.object(model.urllib.request, "urlopen",
+        with patch.object(model, "_cloud_open",
                           return_value=response({
                               "stop_reason": "tool_use",
                               "content": [{"type": "tool_use", "name": "run"}]})) as net:
@@ -136,7 +136,7 @@ class TestGatewayOutputBudget(unittest.TestCase):
         self.assertEqual(text, "Part A\nPart B")
 
     def test_malformed_response_is_not_silently_accepted(self):
-        with patch.object(model.urllib.request, "urlopen",
+        with patch.object(model, "_cloud_open",
                           return_value=response(["unexpected"])):
             with self.assertRaisesRegex(RuntimeError, "must be a JSON object"):
                 model.generate("Make HTML", worker_id="product_builder")
@@ -153,7 +153,7 @@ class TestGatewayOutputBudget(unittest.TestCase):
             {"type": "thinking", "thinking": "not an html page"}]}
         with (patch.object(product_builder, "ROOT", root),
               patch.object(product_builder, "PRODUCTS", file.parent.parent),
-              patch.object(model.urllib.request, "urlopen",
+              patch.object(model, "_cloud_open",
                            return_value=response(obj)) as net):
             with self.assertRaisesRegex(RuntimeError, "stopped at max_tokens"):
                 product_revision.propose(
