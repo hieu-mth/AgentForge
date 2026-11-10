@@ -62,12 +62,50 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Security-Policy",
                 ("default-src 'none'; script-src 'self'; style-src 'self'"+
                  (" 'unsafe-inline'" if self.path.startswith("/dashboard") else "")+
-                 "; connect-src 'self'; img-src 'self' data:; font-src 'self' data:; "+
+                 "; connect-src 'self'; img-src 'self' data:; media-src 'self'; font-src 'self' data:; "+
                  "frame-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"))
         for k, v in headers:
             self.send_header(k, v)
         self.end_headers()
         self.wfile.write(raw)
+
+    def _stream_video(self, file_path):
+        """Authenticated, bounded-memory local MP4 stream with seek support.
+
+        Caller must verify ownership, source digest and path before entry.
+        Only a single strict byte range is supported; malformed ranges fail
+        closed instead of falling back to an unbounded full-file response.
+        """
+        from agentforge.api.video_stream import parse_range
+        length = file_path.stat().st_size
+        requested = self.headers.get("Range")
+        start, end, partial = parse_range(requested, length)
+        count = end - start + 1
+        self.send_response(206 if partial else 200)
+        self.send_header("Content-Type", "video/mp4")
+        self.send_header("Content-Length", str(count))
+        self.send_header("Accept-Ranges", "bytes")
+        if partial:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{length}")
+        self.send_header("Cache-Control", "private, no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "default-src 'none'")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.end_headers()
+        try:
+            with file_path.open("rb") as stream:
+                stream.seek(start)
+                remaining = count
+                while remaining:
+                    block = stream.read(min(64 * 1024, remaining))
+                    if not block:
+                        break
+                    self.wfile.write(block)
+                    remaining -= len(block)
+        except (BrokenPipeError, ConnectionResetError):
+            # Browser seek/cancel can close an in-progress response normally.
+            pass
 
     def _session(self):
         return auth.get_session(self)

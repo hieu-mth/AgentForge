@@ -82,7 +82,12 @@ def _scenes(scenes):
 
 
 def _sha(path):
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    """Hash local media without loading a potentially large MP4 into RAM."""
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(64 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def _font(size, bold=False):
