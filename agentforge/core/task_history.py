@@ -47,12 +47,21 @@ def _path(db_path):
     return path
 
 
-def _connect(db_path):
+def _connect(db_path, *, create=False):
     path = _path(db_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, timeout=10)
+    if not create and not path.is_file():
+        return None
+    if create:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(path, timeout=10)
+    else:
+        # Inspection never initializes a schema or writes a SQLite journal.
+        conn = sqlite3.connect(path.resolve().as_uri() + "?mode=ro",
+                               uri=True, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
+    if not create:
+        return conn
     conn.execute("CREATE TABLE IF NOT EXISTS tasks ("
                  "task_id TEXT PRIMARY KEY, kind TEXT NOT NULL, skill_id TEXT NOT NULL,"
                  "parent_id TEXT REFERENCES tasks(task_id), status TEXT NOT NULL,"
@@ -82,7 +91,7 @@ def create_task(kind, skill_id, request, *, parent_id=None, db_path=None):
         raise ValueError("Task input must be an object")
     raw_request = _json(request, limit=8192)
     task_id, now = uuid4().hex, _now()
-    with closing(_connect(db_path)) as conn, conn:
+    with closing(_connect(db_path, create=True)) as conn, conn:
         conn.execute("INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?)",
                      (task_id, kind, skill_id, parent_id, "QUEUED",
                       raw_request, None, None, now, now))
@@ -99,7 +108,7 @@ def transition(task_id, status, *, result=None, error=None, db_path=None):
     if error is not None and not isinstance(error, str):
         raise ValueError("Task error must be text")
     error = error[:240] if error else None
-    with closing(_connect(db_path)) as conn, conn:
+    with closing(_connect(db_path, create=True)) as conn, conn:
         row = conn.execute("SELECT status FROM tasks WHERE task_id=?", (task_id,)).fetchone()
         if row is None:
             raise KeyError("Unknown task")
@@ -123,7 +132,7 @@ def checkpoint(task_id, name, detail, *, db_path=None):
     if not isinstance(name, str) or not re.fullmatch(r"[A-Z][A-Z0-9_]{1,39}", name):
         raise ValueError("Invalid checkpoint event")
     raw = _json(detail, limit=4096)
-    with closing(_connect(db_path)) as conn, conn:
+    with closing(_connect(db_path, create=True)) as conn, conn:
         row = conn.execute("SELECT status FROM tasks WHERE task_id=?", (task_id,)).fetchone()
         if row is None or row["status"] != "RUNNING":
             raise ValueError("Only running tasks can checkpoint")
@@ -133,7 +142,10 @@ def checkpoint(task_id, name, detail, *, db_path=None):
 
 def get_task(task_id, *, db_path=None):
     _id(task_id)
-    with closing(_connect(db_path)) as conn:
+    db = _connect(db_path)
+    if db is None:
+        raise KeyError("Unknown task")
+    with closing(db) as conn:
         row = conn.execute("SELECT * FROM tasks WHERE task_id=?", (task_id,)).fetchone()
         if row is None:
             raise KeyError("Unknown task")
@@ -153,7 +165,10 @@ def get_task(task_id, *, db_path=None):
 def list_tasks(*, db_path=None, limit=50):
     if type(limit) is not int or not 1 <= limit <= 200:
         raise ValueError("Invalid task list limit")
-    with closing(_connect(db_path)) as conn:
+    db = _connect(db_path)
+    if db is None:
+        return []
+    with closing(db) as conn:
         return [dict(row) for row in conn.execute(
             "SELECT task_id, kind, skill_id, parent_id, status, error,"
             "created_at, updated_at FROM tasks ORDER BY created_at DESC, rowid DESC LIMIT ?",
@@ -161,10 +176,25 @@ def list_tasks(*, db_path=None, limit=50):
         )]
 
 
+def count_status(status, *, db_path=None):
+    """Exact global status count; no schema initialization or recent-row cap."""
+    if status not in STATES:
+        raise ValueError("Invalid task status")
+    db = _connect(db_path)
+    if db is None:
+        return 0
+    with closing(db):
+        return db.execute("SELECT COUNT(*) FROM tasks WHERE status=?",
+                          (status,)).fetchone()[0]
+
+
 def recover(*, db_path=None):
     """Explicitly mark orphaned RUNNING tasks interrupted, never replay them."""
+    path = _path(db_path)
+    if not path.is_file():
+        return 0
     interrupted = 0
-    with closing(_connect(db_path)) as conn, conn:
+    with closing(_connect(db_path, create=True)) as conn, conn:
         rows = conn.execute("SELECT task_id FROM tasks WHERE status='RUNNING'").fetchall()
         for row in rows:
             now = _now()

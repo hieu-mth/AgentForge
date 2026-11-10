@@ -37,7 +37,10 @@ def _connect(db_path=None, *, create=False):
     if create:
         path.parent.mkdir(parents=True, exist_ok=True)
         brain_store._safe(path.parent)
-    db = sqlite3.connect(path, timeout=20, isolation_level=None)
+    # A policy/report/inbox read must not upgrade or initialize a legacy DB.
+    db = (sqlite3.connect(path, timeout=20, isolation_level=None) if create
+          else sqlite3.connect(path.resolve().as_uri() + "?mode=ro",
+                               uri=True, timeout=20, isolation_level=None))
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA busy_timeout=20000")
     if create:

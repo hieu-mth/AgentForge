@@ -210,24 +210,20 @@ def retry_failed_step(goal_id, plan_sha256, child_task_id, *,
 
 def recover(*, brain_db_path=None, task_db_path=None):
     """Manual recovery of ambiguous in-flight work. No retries ever."""
-    running = [x for x in store.list_goals(db_path=brain_db_path, limit=100)
-               if x["status"] == "RUNNING"]
-    count = store.recover(db_path=brain_db_path)
-    for item in running:
-        goal = store.get_goal(item["goal_id"], db_path=brain_db_path)
-        ids = [goal["parent_task_id"]] + [
-            x["child_task_id"] for x in goal["steps"]]
-        for task_id in ids:
-            if not task_id:
-                continue
-            try:
-                child = task_history.get_task(task_id, db_path=task_db_path)
-                if child["status"] == "RUNNING":
-                    task_history.transition(task_id, "INTERRUPTED",
-                                            db_path=task_db_path)
-            except (KeyError, ValueError, RuntimeError):
-                pass
-    return {"interrupted_goals": count, "automatic_replay": False}
+    # Never use the 100-row recent-goal view for global recovery: older
+    # RUNNING goals may be hidden by newer terminal history.
+    recovered_ids = store.recover(db_path=brain_db_path, return_ids=True)
+    # Reconcile linked S1 tasks for ALL interrupted goals, including those
+    # interrupted in a prior invocation before a crash cut this process off.
+    for task_id in store.interrupted_task_ids(db_path=brain_db_path):
+        try:
+            child = task_history.get_task(task_id, db_path=task_db_path)
+            if child["status"] == "RUNNING":
+                task_history.transition(task_id, "INTERRUPTED",
+                                        db_path=task_db_path)
+        except (KeyError, ValueError, RuntimeError):
+            pass
+    return {"interrupted_goals": len(recovered_ids), "automatic_replay": False}
 
 
 def inspect(goal_id, *, brain_db_path=None, task_db_path=None):

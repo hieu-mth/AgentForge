@@ -297,6 +297,14 @@ def job_status(job_id, *, db_path: Path = DB):
         row = db.execute("SELECT * FROM motion_jobs WHERE job_id=?", (job_id,)).fetchone()
     if row is None:
         raise KeyError("Motion job does not exist")
+    # Terminal provider error is durable. Never poll/retry or reserve quota
+    # again just because the remote ComfyUI history was later pruned.
+    if row["state"] == "FAILED":
+        return {"job_id": job_id, "film_slug": row["film_slug"],
+                "shot_id": row["shot_id"], "status": "PROVIDER_FAILED",
+                "plan_sha": row["plan_sha"], "workflow_sha": row["workflow_sha"],
+                "video_verified": False, "youtube_uploaded": False,
+                "automatic_retry": False}
     # Local verified receipt is durable and does not need ComfyUI to stay online.
     if row["state"] == "COMPLETE_UNVERIFIED":
         from agentforge.features.film_studio import motion_verify
@@ -323,8 +331,30 @@ def job_status(job_id, *, db_path: Path = DB):
               and details["status"].get("completed") is True
               and details["status"].get("status_str") == "success"):
             status = "COMFY_COMPLETE_NOT_IMPORTED_OR_VERIFIED"
+        elif (isinstance(details, dict) and isinstance(details.get("status"), dict)
+              and details["status"].get("status_str") in {"error", "failed"}):
+            # Explicit ComfyUI terminal error, not a timeout, missing history,
+            # ambiguous dispatch or an incomplete/pending provider state.
+            status = "PROVIDER_FAILED"
         else:
-            status = "PROVIDER_FAILED_OR_INCOMPLETE"
+            status = "PROVIDER_QUEUED_OR_UNKNOWN"
+    if status == "PROVIDER_FAILED":
+        with closing(_db(db_path, write=True)) as conn, conn:
+            conn.execute("BEGIN IMMEDIATE")
+            changed = conn.execute("""UPDATE motion_jobs SET state='FAILED',
+                updated_at=? WHERE job_id=? AND state='SUBMITTED'
+                AND provider_id=?""", (_now(), job_id, row["provider_id"]))
+            if changed.rowcount != 1:
+                # A concurrent successful import/reconciliation must not be
+                # overwritten or misreported as a freshly failed job.
+                current = conn.execute("SELECT state FROM motion_jobs WHERE job_id=?",
+                                       (job_id,)).fetchone()
+                if current is None or current["state"] != "FAILED":
+                    return {"job_id": job_id, "film_slug": row["film_slug"],
+                            "shot_id": row["shot_id"], "status": "STATE_CHANGED_REVIEW_REQUIRED",
+                            "plan_sha": row["plan_sha"], "workflow_sha": row["workflow_sha"],
+                            "video_verified": False, "youtube_uploaded": False,
+                            "automatic_retry": False}
     if status == "COMFY_COMPLETE_NOT_IMPORTED_OR_VERIFIED":
         # Provider completion is a durable, limited-scope status. It is NOT
         # a video QA PASS. Release the one-active-shot quota only after the
