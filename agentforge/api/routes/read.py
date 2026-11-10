@@ -364,6 +364,21 @@ def dispatch(self, route):
     if route.startswith("/api/tasks/"):
         ident = route.removeprefix("/api/tasks/")
         task = task_history.get_task(ident, db_path=self.server.task_db_path)
+        if task.get("status") == "SUCCEEDED" and task.get("skill_id") == "media.copy_draft":
+            # Exact task result is shown to the Owner, not silently applied.
+            # Bind the later prepare action to this inspected result digest.
+            from agentforge import quality_v14
+            result = task.get("result")
+            if isinstance(result, dict):
+                from agentforge.media_assets import _text, _scenes
+                try:
+                    if set(result) == {"title", "scenes", "status",
+                                       "review_required", "verified_claims"}:
+                        _text(result["title"], "title", 88)
+                        _scenes(result["scenes"])
+                        self._session().setdefault("inspected_storyboard_tasks", {})[ident] = quality_v14._sha(result)
+                except (ValueError, KeyError, TypeError):
+                    pass
         return self._reply(200, {
             **_public_task(task, db_path=self.server.task_db_path),
             "events": [{"at": x["at"], "name": x["name"]}
