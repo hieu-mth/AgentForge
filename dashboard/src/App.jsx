@@ -134,10 +134,12 @@ export default function App() {
       setGoal(detail);
     }catch(e){authError(e);}
   };
-  const openGoalResult=async selectedGoal=>{
+  const openGoalResult=async (selectedGoal,prefer='developer')=>{
     const ordered=(selectedGoal.step_runs||[]).filter(step=>step.status==='SUCCEEDED'&&step.child_task_id);
     const completed=selectedGoal.template==='webapp.company'
-      ? ordered.find(step=>step.skill_id==='webapp.develop')||ordered[0]
+      ? (prefer==='review'
+          ? ordered.find(step=>step.skill_id==='webapp.review')
+          : ordered.find(step=>step.skill_id==='webapp.develop'))||ordered[0]
       : ordered[0];
     if(!completed){message.warning('Không tìm thấy thành phẩm của kế hoạch này');return;}
     try{
@@ -245,6 +247,17 @@ export default function App() {
         max_model_calls:0,max_external_runs:1,
       }));
       if(out){setWebapp(null);message.success('Đã lập Goal QA sandbox');await openGoal(out.goal_id);}
+    });
+  const browserQAWebapp=p=>ask('Lập kế hoạch QA Chromium offline?',
+    'Tạo Goal QA riêng để build và chụp desktop/mobile trong Docker Linux cách ly. Chưa chạy code hoặc gọi công cụ trong bước lập kế hoạch.',
+    async()=>{
+      const out=await runAction(()=>post('/api/goals/propose',{
+        ack:'PROPOSE',title:'Kiểm thử giao diện React bằng Chromium offline',
+        template:'webapp.browser_qa',
+        inputs:{proposal_id:p.proposal_id,sha256:p.sha256,confirm_external_run:true},
+        max_model_calls:0,max_external_runs:1,
+      }));
+      if(out){setWebapp(null);message.success('Đã lập Goal QA Chromium');await openGoal(out.goal_id);}
     });
   const reviseWebapp=(p,feedback)=>ask('Duyệt việc tạo Goal sửa ứng dụng?',
     'Phiên bản gốc được giữ nguyên; Goal mới cần duyệt SHA và quyền gọi model riêng.',
@@ -392,7 +405,7 @@ export default function App() {
       onRevise={revise} onApply={apply} busy={busy}/>
     <WebappProposalDrawer proposal={webapp} onClose={()=>setWebapp(null)} onDecide={decideArtifact} onValidate={validateArtifact}
       onRevise={reviseWebapp} onApply={applyWebapp} onRollback={rollbackWebapp}
-      onVerify={verifyWebapp} busy={busy}/>
+      onVerify={verifyWebapp} onBrowserQA={browserQAWebapp} busy={busy}/>
     <Drawer title="Chi tiết tác vụ" size={720} open={!!task} onClose={()=>setTask(null)}>
       {task && <><Descriptions bordered column={1} size="small" items={[
         {key:'1',label:'Task ID',children:<code>{task.task_id}</code>},
