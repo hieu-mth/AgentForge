@@ -121,6 +121,59 @@ def handle(server, path, request, session=None):
             raise PermissionError("Inspect the full task in this session before approving")
         return quality_v14.decide(
             job_id, decision, request["output_sha"], confirm=True)
+    if path == "/api/visuals/generate":
+        if not server.allow_external_actions:
+            raise PermissionError("Local ComfyUI requires external-process mode")
+        if (not isinstance(request, dict) or
+                set(request) != {"ack", "purpose", "topic", "scenes", "checkpoint"}
+                or request.get("ack") != "GENERATE_AI_VISUALS"):
+            raise PermissionError("Explicit visual GPU batch approval required")
+        from agentforge.features.media import visual_jobs
+        return visual_jobs.submit(
+            request["purpose"], request["topic"], request["scenes"],
+            request["checkpoint"], confirm_generation=True)
+    if path == "/api/visuals/generate-for-task":
+        if not server.allow_external_actions:
+            raise PermissionError("Local ComfyUI requires external-process mode")
+        if (not isinstance(request, dict) or
+                set(request) != {"ack", "task_id", "source_sha", "checkpoint"}
+                or request.get("ack") != "GENERATE_STORYBOARD_VISUALS"):
+            raise PermissionError("Explicit reviewed storyboard GPU approval required")
+        from agentforge import brain_store, task_history, quality_v14, media_assets
+        from agentforge.features.media import visual_jobs
+        ident = brain_store._id(request["task_id"])
+        digest = request["source_sha"]
+        if (not isinstance(digest, str) or not brain_store.SHA.fullmatch(digest)
+                or session is None
+                or session.get("inspected_storyboard_tasks", {}).get(ident) != digest):
+            raise PermissionError("Inspect storyboard before dispatching GPU")
+        task = task_history.get_task(ident, db_path=server.task_db_path)
+        result = task.get("result")
+        if (task.get("status") != "SUCCEEDED"
+                or task.get("skill_id") != "media.copy_draft"
+                or not isinstance(result, dict)
+                or set(result) != {"title", "scenes", "status", "review_required",
+                                  "verified_claims"}
+                or result.get("status") != "DRAFT_NOT_VERIFIED"
+                or result.get("review_required") is not True
+                or result.get("verified_claims") is not False
+                or quality_v14._sha(result) != digest):
+            raise PermissionError("Storyboard was changed or not reviewable")
+        scenes = media_assets._scenes(result["scenes"])
+        return visual_jobs.submit(
+            "video", result["title"],
+            [scene["headline"] + ". " + scene["caption"] for scene in scenes],
+            request["checkpoint"], confirm_generation=True)
+    if path.startswith("/api/visuals/") and path.endswith("/collect"):
+        if not server.allow_external_actions:
+            raise PermissionError("Local ComfyUI collection requires external mode")
+        if not isinstance(request, dict) or request != {"ack": "IMPORT_AI_VISUAL"}:
+            raise PermissionError("Explicit Owner import confirmation required")
+        from agentforge.features.media import visual_jobs
+        parts = path.split("/")
+        if len(parts) != 5:
+            raise ValueError("Invalid image job route")
+        return visual_jobs.collect(parts[3], confirm_import=True)
     if path == "/api/media/prepare-from-task":
         # Create assets only from a *reviewed* completed task, never from an
         # untrusted editable JSON submitted in this endpoint.
