@@ -66,9 +66,11 @@ def handle(server, path, request, session=None):
                     not set(grants).issubset(skill_registry.PERMISSIONS)):
                 raise ValueError("Invalid tool grants")
             external = set(grants) & SENSITIVE_GRANTS
-            uses_external = any(
-                set(step["required_permissions"]) & SENSITIVE_GRANTS
-                for step in goal["plan"])
+            # Only authorize tools required by the *current* step.
+            # Future model calls must be approved in their own turn.
+            current = goal["current_step"]
+            uses_external = (current < len(goal["plan"]) and bool(
+                set(goal["plan"][current]["required_permissions"]) & SENSITIVE_GRANTS))
             if (external or uses_external) and not server.allow_external_actions:
                 raise PermissionError("External tools are disabled in this Control Center")
             if (external or uses_external) and request.get(
