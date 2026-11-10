@@ -192,6 +192,7 @@
 | `features/media/quality.py` | Canonical `media` implementation cho `quality`. |
 | `features/media/render.py` | Canonical `media` implementation cho `render`. |
 | `features/media/workflow.py` | Canonical `media` implementation cho `workflow`. |
+| `features/media/visual_jobs.py` | Canonical V3 GPU image jobs dùng chung video/ảnh/website, SQLite và SHA receipts, không cần website có sẵn. |
 | `features/film_studio/long_form.py` | Canonical `film_studio` implementation cho `long_form`. |
 | `features/film_studio/publishing.py` | Wave 10 SHA-bound local release ledger, Owner disclosures, manual publishing and observation states. |
 | `features/film_studio/production.py` | Wave 9 continuity metadata, versioned episode edits, owner local TTS, SRT/FFmpeg assembly and SHA receipts. |
