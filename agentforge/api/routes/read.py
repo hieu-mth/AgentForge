@@ -23,6 +23,29 @@ def dispatch(self, route):
     if route == "/api/image/jobs":
         from agentforge.image_studio_v24 import report
         return self._reply(200, report())
+    if route == "/api/film/productions":
+        from agentforge.features.film_studio.production import list_episodes
+        return self._reply(200, {
+            "episodes": list_episodes(), "auto_gpu_render": False,
+            "auto_publish": False, "visual_continuity_verified": False,
+        })
+    if route.startswith("/api/film/productions/"):
+        from agentforge.features.film_studio.production import inspect, inspect_render
+        parts = route.split("/")
+        if len(parts) != 6 or parts[:4] != ["", "api", "film", "productions"]:
+            raise ValueError("Invalid film production path")
+        slug, episode = parts[4], parts[5]
+        proposal = inspect(episode, slug)
+        self._session().setdefault("reviewed_film_productions", {})[
+            slug + ":" + episode] = proposal["episode_sha256"]
+        result = {"proposal": proposal, "render": None,
+                  "visual_continuity_verified": False,
+                  "owner_watched": False}
+        from agentforge.features.film_studio import production
+        if (production._folder(slug, episode, production.FILMS) /
+                "render-receipt.json").is_file():
+            result["render"] = inspect_render(episode, slug)
+        return self._reply(200, result)
     if route == "/api/film/motion":
         from agentforge.features.film_studio.motion_comfy import health
         from agentforge.features.film_studio.motion_verify import list_jobs
