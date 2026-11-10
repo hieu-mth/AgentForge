@@ -413,6 +413,7 @@ def make_assets(payload):
             "source_photo": photo.name if photo else None,
             "visual_plan": visual_plan,
             "studio_image_receipts": studio_receipts,
+            "studio_layers_version": 1 if visual_plan["mode"] == "studio" else None,
             "rights_attested": payload.get("rights_confirmed") is True if photo else None,
             "artifacts": assets, "video": None, "voiceover": None,
             "stage": "ASSETS_READY", "published": False,
