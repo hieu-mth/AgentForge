@@ -55,6 +55,37 @@ class MediaDashboardFlowTests(unittest.TestCase):
                                         {**payload, "source_sha": sha}, session=sess)
             self.assertEqual(prepare.call_count, 1)
 
+    def test_visual_plan_is_forwarded_without_accepting_modified_storyboard(self):
+        plan = {"mode":"studio","motion":"slow_zoom",
+                "image_job_ids":["a"*32,"b"*32]}
+        payload = {"ack":"PREPARE_REVIEWED_STORYBOARD","task_id":ID,
+                   "source_sha":self.sha,"visual_plan":plan}
+        with patch("agentforge.task_history.get_task",return_value=self.task), \
+             patch("agentforge.features.media.workflow.prepare",
+                   return_value={"status":"ASSETS_READY"}) as prepare:
+            media_routes.handle(self.server,"/api/media/prepare-from-task",
+                                payload,session=self.session)
+            self.assertEqual(prepare.call_args.kwargs["visual_plan"],plan)
+            with self.assertRaises(PermissionError):
+                media_routes.handle(self.server,"/api/media/prepare-from-task",
+                                    {**payload,"other":"unsafe"},session=self.session)
+
+    def test_studio_gallery_contains_only_imported_comfyui_jobs(self):
+        class Handler:
+            def _reply(self,status,body):
+                return body
+        mocked={"jobs":[
+            {"job_id":"a"*32,"slug":"showroom","status":"ASSET_READY",
+             "asset_name":"photo.png","asset_sha":"a"*64},
+            {"job_id":"b"*32,"slug":"showroom","status":"SUBMITTED",
+             "asset_name":None,"asset_sha":None},
+        ]}
+        with patch("agentforge.image_studio_v24.report",return_value=mocked):
+            out=read_routes.dispatch(Handler(),"/api/media/studio-images")
+        self.assertEqual(len(out["images"]),1)
+        self.assertFalse(out["generation_started"])
+        self.assertEqual(out["images"][0]["job_id"],"a"*32)
+
     def test_unreviewed_modified_and_failed_model_results_refused(self):
         payload = {"ack": "PREPARE_REVIEWED_STORYBOARD",
                    "task_id": ID, "source_sha": self.sha}
