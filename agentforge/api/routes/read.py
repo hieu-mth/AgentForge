@@ -283,11 +283,38 @@ def dispatch(self, route):
                       for f in document["files"]],
             "execution_authorized": False,
         })
+    if route.startswith("/api/videos/") and route.endswith("/stream"):
+        from agentforge import media_workflow_v15, media_quality, media_assets
+        from agentforge.api.video_stream import InvalidVideoRange, parse_range
+        from pathlib import Path
+        ident = route.removeprefix("/api/videos/").removesuffix("/stream").rstrip("/")
+        record = media_workflow_v15._row(ident)  # validates strict ID
+        if record["status"] not in {"VIDEO_READY", "APPROVED", "REJECTED"}:
+            raise PermissionError("Video is not ready for playback")
+        folder, manifest = media_workflow_v15._verify_storyboard_manifest(record)
+        qa = media_quality.check(record["run_id"])
+        if (qa["status"] != "VIDEO_PASS" or qa["failures"]
+                or not qa["video_verified"]
+                or manifest["artifacts"].get("video.mp4") != record["video_sha"]):
+            raise PermissionError("Video digest or QA does not match")
+        if self._session().get("inspected_video", {}).get(ident) != record["video_sha"]:
+            raise PermissionError("Inspect exact production SHA before playback")
+        source = Path(folder) / "video.mp4"
+        media_assets._safe(source)
+        if not source.is_file() or not 0 < source.stat().st_size <= 512 * 1024 * 1024:
+            raise ValueError("MP4 missing or oversized")
+        try:
+            parse_range(self.headers.get("Range"), source.stat().st_size)
+        except InvalidVideoRange:
+            return self._reply(416, b"", mime="text/plain",
+                               headers=(("Content-Range", f"bytes */{source.stat().st_size}"),
+                                        ("Accept-Ranges", "bytes")))
+        return self._stream_video(source)
     if route.startswith("/api/videos/"):
         from agentforge import media_workflow_v15, media_quality
         ident = route.removeprefix("/api/videos/")
         record = media_workflow_v15._row(ident)
-        if record["status"] != "VIDEO_READY":
+        if record["status"] not in {"VIDEO_READY", "APPROVED", "REJECTED"}:
             raise PermissionError("Only completed MP4 can be reviewed")
         _, manifest = media_workflow_v15._verify_storyboard_manifest(record)
         qa = media_quality.check(record["run_id"])
@@ -300,6 +327,7 @@ def dispatch(self, route):
             "production_id": ident, "run_id": record["run_id"],
             "video_sha": record["video_sha"], "quality": qa["status"],
             "relative_path": "workspace/media/" + record["run_id"] + "/video.mp4",
+            "stream_url": "/api/videos/" + ident + "/stream",
             "published": False, "review_requires_playback": True})
     if route.startswith("/api/drafts/"):
         from agentforge import quality_v14
