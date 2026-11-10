@@ -50,6 +50,9 @@ jobs:
       - name: Validate documentation links
         run: python scripts/check_docs.py
 
+      - name: Check Git-tracked source for accidental credentials and binary artifacts
+        run: python scripts/check_source_hygiene.py
+
       - name: Audit retained compatibility imports (read-only)
         run: python scripts/compat_audit.py --check
 

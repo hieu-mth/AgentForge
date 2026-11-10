@@ -1,6 +1,6 @@
 # Tài liệu AgentForge
 
-> **Nguồn thông tin hiện hành** · Cập nhật 09/11/2026 · Local-first, Windows, một Owner.
+> **Nguồn thông tin hiện hành** · Cập nhật 10/11/2026 · Local-first, Windows, một Owner.
 
 Không sử dụng các tài liệu milestone phiên bản cũ để suy luận rằng tính năng vẫn tồn tại hoặc đã production-ready. **Source code, tests và evidence mới nhất** được ưu tiên hơn nội dung tài liệu lịch sử.
 
@@ -9,6 +9,7 @@ Không sử dụng các tài liệu milestone phiên bản cũ để suy luận 
 | Bạn cần | Tài liệu | Nội dung |
 | --- | --- | --- |
 | Khởi chạy | [README tại root](../README.md) | Giới thiệu, lệnh chạy nhanh |
+| Kết quả review toàn repo trước runtime | [Final pre-runtime acceptance](verification/final_pre_runtime/README.md) | CI evidence, security checks, findings và các gate còn chờ Owner |
 | Xem hệ thống làm được gì | [STATUS.md](STATUS.md) | Matrix VERIFIED / PARTIAL / NOT IMPLEMENTED / UNVERIFIED |
 | Publishing & Business Operations (Đợt 10) | [Wave 10 acceptance](verification/wave10/README.md) | SHA-reviewed release handoff, private-only OAuth CLI optional, Owner metrics, real account PENDING |
 | Film Production Pipeline (Đợt 9) | [Wave 9 acceptance](verification/wave9/README.md) | Continuity metadata, Owner TTS/FFmpeg, SRT + output SHA, real-film pending |
