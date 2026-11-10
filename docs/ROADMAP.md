@@ -30,7 +30,7 @@ Không mở rộng thêm agent/worker hoặc microservice khi hai vòng lặp n�
 | Mốc | Deliverable | Nghiệm thu / trạng thái |
 | --- | --- | --- |
 | F1. Film planning | Chapter, cast/visual bible, shot slots 4–15 giây, SHA, CLI | **DONE ở mức planner**, không có video thật |
-| F2. Motion worker local 12 GB | Adapter ComfyUI + workflow đã review, one-shot GPU queue | **PARTIAL**: adapter/fixtures có; cần 1 clip Wan 2.2 thật, MP4 decode, đo GPU/VRAM/thời gian |
+| F2. Motion worker local 12 GB | Adapter ComfyUI + one-shot GPU + local verified MP4 | **Code/CI Wave8**, cần 1 clip Wan 2.2 thật và Owner VRAM/time/quality để chốt F2 |
 | F3. Continuity | Identity pack, bối cảnh, đạo cụ, pose/reference, seed provenance, shot notes | Chưa: cần so sánh 3–5 shot liên tục cùng nhân vật |
 | F4. Film editor/QA | Nhập và hash clip, âm thanh, thoại, phụ đề, transition, FFmpeg assembly; sửa một shot không render lại cả phim | Chưa: cần dựng sequence 60–90 giây với QA thực |
 | F5. Long-form production | Theo tập/chapter, resume/checkpoint, resource budget, kiểm tra consistency xuyên tập | Chưa: mục tiêu 15–30 phút/tập, sau đó ghép 1–3 giờ |
@@ -44,6 +44,10 @@ Không mở rộng thêm agent/worker hoặc microservice khi hai vòng lặp n�
 2. Import MP4 có kiểm tra SHA + ffprobe/FFmpeg decode; không cho QA PASS chỉ vì ComfyUI history success.
 3. Dựng 60–90 giây nhiều shot có chung nhân vật, voiceover/subtitles và continuity audit.
 4. Mở rộng lên tập 15–30 phút trước khi thử một phim dài hàng giờ.
+
+## Đợt 8 — Film Studio runtime 12 GiB
+
+Code có mẫu core-node Wan2.2 5B, 640×352/49 frames/12 fps, one-shot Owner-gated, local output import với job/plan/workflow SHA, ffprobe+FFmpeg decode và receipt. Model Hub film.motion vẫn config-only, không lấy model tùy ý từ LLM, không auto-download/cloud/retry/upload. **Owner GPU 12GB và chất lượng clip PENDING**. Xem [Wave 8](verification/wave8/README.md). F2 chỉ chốt khi có file MP4, thời gian và VRAM thật.
 
 ## Đợt 7 — Product QA và Export
 

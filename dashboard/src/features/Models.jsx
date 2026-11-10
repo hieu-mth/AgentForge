@@ -22,6 +22,9 @@ export function ModelHub({mutate}) {
   const [error,setError]=useState(null);
   const [drafts,setDrafts]=useState({});
   const [checked,setChecked]=useState({});
+  const [motion,setMotion]=useState(null);
+  const [motionBusy,setMotionBusy]=useState(false);
+  const [motionFilename,setMotionFilename]=useState({});
   const [editorOpen,setEditorOpen]=useState(false);
   const [editing,setEditing]=useState(null);
   const [form]=Form.useForm();
@@ -36,6 +39,43 @@ export function ModelHub({mutate}) {
     finally{setLoading(false);}
   },[]);
   useEffect(()=>{reload();},[reload]);
+  const reloadMotion=useCallback(async()=>{
+    setMotionBusy(true);
+    try{setMotion(await api('/api/film/motion'));}
+    catch(err){message.warning('Film Studio local: '+(err.message||'Không thể kiểm tra'));}
+    finally{setMotionBusy(false);}
+  },[message]);
+  useEffect(()=>{reloadMotion();},[reloadMotion]);
+  const actionMotion=(job,action)=>{
+    const filename=(motionFilename[job.job_id]||'').trim();
+    if(action==='collect'&&(!filename.startsWith('af_motion_'+job.job_id+'_')
+        || !filename.endsWith('.mp4'))){
+      message.warning('Nhập tên MP4 đúng job trong thư mục ComfyUI output');
+      return;
+    }
+    modal.confirm({
+      title:action==='collect'?'Kiểm tra và nhập MP4 local?':'Kiểm tra lịch sử ComfyUI?',
+      content:<Space direction="vertical">
+        <Text>Shot: {job.film_slug} / {job.shot_id}</Text>
+        <Text code>Plan SHA: {job.plan_sha}</Text>
+        <Text code>Workflow SHA: {job.workflow_sha}</Text>
+        {action==='collect'&&<Text code>File: {filename}</Text>}
+        <Alert type="warning" showIcon message="Cần Owner xem video trước khi chấp nhận"
+          description="Lệnh chỉ xác minh history hoặc chạy ffprobe/FFmpeg local; không gọi model, không xuất bản và không tự duyệt chất lượng."/>
+      </Space>,okText:'Xác nhận',cancelText:'Hủy',
+      onOk:async()=>{
+        const inspected=await api('/api/film/motion/job/'+job.job_id);
+        if(inspected.plan_sha!==job.plan_sha || inspected.workflow_sha!==job.workflow_sha)
+          throw new Error('Motion job đã thay đổi; tải lại và kiểm tra SHA');
+        const result=await mutate('/api/film/motion/'+(action==='collect'?'collect':'poll'),{
+          ack:action==='collect'?'IMPORT_LOCAL_COMFY_MP4':'CHECK_LOCAL_COMFY_HISTORY',
+          job_id:job.job_id,plan_sha:job.plan_sha,workflow_sha:job.workflow_sha,
+          ...(action==='collect'?{filename}:{}),
+        });
+        if(result){message.success(action==='collect'?'MP4 đã kiểm tra kỹ thuật':'Đã đối chiếu lịch sử ComfyUI');await reloadMotion();}
+      },
+    });
+  };
 
   const profiles=hub?.profiles||[];
   const profileById=useMemo(()=>Object.fromEntries(profiles.map(p=>[p.id,p])),[profiles]);
@@ -200,6 +240,40 @@ export function ModelHub({mutate}) {
             {r.source==='owner'&&<Button size="small" onClick={()=>resetRoute(r)}>Reset</Button>}
           </Space>},
         ]}/>
+    </Card>
+    <Card title="Film Studio · Motion pilot 4 giây" extra={
+      <Button onClick={reloadMotion} loading={motionBusy}>Làm mới GPU / Jobs</Button>}>
+      <Alert type="warning" showIcon style={{marginBottom:12}}
+        message="Wan 2.2 5B chạy bằng CLI do Owner kiểm soát"
+        description="Model Hub video vẫn CONFIG_ONLY; phải tự cài ComfyUI/checkpoint và duyệt workflow SHA, không có auto-download/gọi GPU. QA kỹ thuật không phải duyệt chất lượng phim."/>
+      <Space wrap style={{marginBottom:12}}>
+        <Tag>{motion?.gpu?.status||'CHƯA KIỂM TRA GPU'}</Tag>
+        <Text>Tổng VRAM: {motion?.gpu?.vram_gib??'—'} GiB</Text>
+        <Text>VRAM rảnh (snapshot): {motion?.gpu?.vram_free_snapshot_gib??'—'} GiB</Text>
+        <Text>Peak VRAM: chưa đo tự động</Text>
+        <Text>Route: {routes.find(r=>r.id==='film.motion')?.model_ref||'CHƯA GÁN'}</Text>
+      </Space>
+      <Table size="small" rowKey="job_id" dataSource={motion?.jobs||[]}
+        loading={motionBusy} scroll={{x:980}}
+        pagination={{pageSize:6,hideOnSinglePage:true}}
+        columns={[
+          {title:'Shot',width:180,render:(_,r)=><Space direction="vertical" size={0}>
+            <Text strong>{r.film_slug} / {r.shot_id}</Text>
+            <Text code>{r.job_id.slice(0,12)}</Text></Space>},
+          {title:'State',dataIndex:'status',width:260,render:v=><Tag>{v}</Tag>},
+          {title:'Decode MP4',dataIndex:'mp4_technical_verified',width:145,
+            render:v=>v?<Tag color="green">PASS kỹ thuật</Tag>:<Tag>Chưa đạt</Tag>},
+          {title:'History',width:125,render:(_,r)=>
+            <Button size="small" onClick={()=>actionMotion(r,'poll')}>Đối chiếu</Button>},
+          {title:'Import MP4',width:270,render:(_,r)=><Space direction="vertical" style={{width:'100%'}}>
+            <Input size="small" value={motionFilename[r.job_id]||''}
+              placeholder={'af_motion_'+r.job_id+'_00001.mp4'}
+              onChange={e=>setMotionFilename(old=>({...old,[r.job_id]:e.target.value}))}/>
+            <Button size="small" disabled={r.mp4_technical_verified||r.state!=='COMPLETE_UNVERIFIED'}
+              onClick={()=>actionMotion(r,'collect')}>Xác minh & nhập file</Button>
+          </Space>},
+        ]}/>
+      <Text type="secondary">Để nhập file trên Dashboard, đặt AGENTFORGE_COMFY_OUTPUT_DIR trước khi khởi động với --allow-external-tools. Muốn đo peak VRAM thật hãy theo dõi nvidia-smi và khai báo thủ công qua CLI. Chưa có benchmark GPU 12 GB thực.</Text>
     </Card>
     <Alert showIcon type="info" message="Ranh giới vận hành"
       description="Trạng thái 'Đã gán' không xác nhận model đã cài, API key hoạt động, đủ VRAM, hiệu năng hay phí provider. Route Video Motion/Ảnh vẫn đòi hỏi adapter và QA riêng ở Film Studio."/>

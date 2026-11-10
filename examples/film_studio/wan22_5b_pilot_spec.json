@@ -1,0 +1,16 @@
+{
+  "title": "Original 4-second Wan2.2 5B pilot",
+  "genre": "fantasy",
+  "style": "cinematic moving shot",
+  "chapters": [
+    {
+      "id": "opening",
+      "title": "Forest scene",
+      "synopsis": "A fox walks through mist as the camera tracks slowly.",
+      "duration_seconds": 4,
+      "character_ids": []
+    }
+  ],
+  "characters": [],
+  "shot_seconds": 4
+}

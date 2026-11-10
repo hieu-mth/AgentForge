@@ -4,6 +4,12 @@
 
 # AgentForge — Trạng thái thực tế
 
+## Đợt 8 — Film Motion Runtime (code/CI; Owner GPU PENDING)
+
+Wan 2.2 TI2V 5B 4-giây: workflow 11 core nodes với checkpoint cố định, ComfyUI one-shot có Owner consent, thêm local MP4 import + ffprobe 49 frames/12fps + FFmpeg decode + SHA receipt. Dashboard Model Hub có read-only GPU/jobs và Owner-reconciled history/import. Wall-clock là tổng thời gian từ queue tới import, **không** phải inference time; peak VRAM chỉ có giá trị Owner tự đo, không tự đo/bịa. Real GPU và chất lượng phim trên PC Owner **UNVERIFIED**. [Hướng dẫn](verification/wave8/README.md).
+
+
+
 **Baseline code:** M1–M3, M6–M8 và M4a–M4d2 (09/11/2026); canonical HTTP `agentforge/api/`, business `agentforge/features/`, ComfyUI transport `agentforge/integrations/`. M6/M7 Model Hub chỉ nối text task routing; ComfyUI video/image chưa nối qua route mới.
 
 Các nhãn được dùng thống nhất:
@@ -36,7 +42,7 @@ Các nhãn được dùng thống nhất:
 | Build + browser QA source AI | UNVERIFIED | `agentforge/features/webapps/sandbox.py` | Docker bị thiếu ở máy Owner; CI không chạy generated source |
 | Media ảnh tĩnh → MP4 | IMPLEMENTED (bounded) | `agentforge/features/media/assets.py`, `render.py` | Không đồng nghĩa phim AI chuyển động |
 | AI Film planner nhiều giờ | IMPLEMENTED (planning) | `agentforge/features/film_studio/long_form.py` | 900 shot được **lập kế hoạch**, chưa render 900 clip |
-| ComfyUI motion adapter | IMPLEMENTED (adapter), UNVERIFIED (GPU) | `agentforge/features/film_studio/motion_comfy.py` | Chưa chứng minh model chạy trên GPU 12 GB, chưa import/QA clip |
+| ComfyUI motion adapter + MP4 runtime | IMPLEMENTED (code/CI), UNVERIFIED (Owner GPU) | `agentforge/features/film_studio/motion_comfy.py` | Đã có import/QA kỹ thuật MP4 và hash; model/GPU 12 GB thật chưa kiểm chứng |
 | Phim AI động 1–3 giờ | NOT IMPLEMENTED | Xem [roadmap](ROADMAP.md) | Chưa có pipeline multi-shot dựng phim dài thực |
 | YouTube upload & analytics thật | NOT IMPLEMENTED | `agentforge/growth_pipeline.py` chỉ manual handoff | Không có OAuth/publish API hay doanh thu verified |
 | TTS offline | PARTIAL | `agentforge/features/media/render.py` | Cần Piper/voice hoặc Windows SAPI phù hợp |

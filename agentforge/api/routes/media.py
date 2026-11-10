@@ -3,6 +3,40 @@ from agentforge.api.routes._shared import UNHANDLED
 
 
 def handle(server, path, request, session=None):
+    if path in {"/api/film/motion/poll", "/api/film/motion/collect"}:
+        if not server.allow_external_actions:
+            raise PermissionError("Film runtime requires explicit external-capable Owner mode")
+        from agentforge.features.film_studio.motion_verify import _job
+        from agentforge.features.film_studio.motion_comfy import DB as motion_db
+        from agentforge import ops_control
+        ops_control.require_active()
+        action = "poll" if path.endswith("/poll") else "collect"
+        expected = ({"ack", "job_id", "plan_sha", "workflow_sha"} if action == "poll"
+                    else {"ack", "job_id", "plan_sha", "workflow_sha", "filename"})
+        if not isinstance(request, dict) or set(request) != expected:
+            raise ValueError("Invalid motion action fields")
+        if request.get("ack") != ("CHECK_LOCAL_COMFY_HISTORY" if action == "poll"
+                                else "IMPORT_LOCAL_COMFY_MP4"):
+            raise PermissionError("Owner must explicitly confirm motion action")
+        job_id = request["job_id"]
+        row = _job(job_id, motion_db)
+        pair = {"plan_sha": row["plan_sha"], "workflow_sha": row["workflow_sha"]}
+        if (session is None or session.get("reviewed_motion_jobs", {}).get(job_id) != pair
+                or request["plan_sha"] != row["plan_sha"]
+                or request["workflow_sha"] != row["workflow_sha"]):
+            raise PermissionError("Inspect the exact motion job before acting")
+        if action == "poll":
+            from agentforge.features.film_studio.motion_comfy import job_status
+            return job_status(job_id)
+        import os
+        from pathlib import Path
+        from agentforge.features.film_studio.motion_verify import import_clip
+        folder = os.environ.get("AGENTFORGE_COMFY_OUTPUT_DIR")
+        if not folder:
+            raise ValueError("Owner must configure local ComfyUI output directory")
+        return import_clip(
+            job_id=job_id, filename=request["filename"], output_dir=Path(folder),
+            confirmed=True)
     if path == "/api/image/submit":
         from agentforge.image_studio_v24 import submit
         if not server.allow_external_actions:

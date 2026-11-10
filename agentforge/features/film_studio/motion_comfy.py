@@ -40,7 +40,14 @@ ALLOWED_NODES = frozenset({
     "VAEDecode", "CreateVideo", "SaveVideo",
     "ConditioningZeroOut", "FluxGuidance",
 })
-VIDEO_LATENTS = frozenset({"EmptyHunyuanLatentVideo", "EmptyWanLatentVideo"})
+VIDEO_LATENTS = frozenset({"EmptyHunyuanLatentVideo", "EmptyWanLatentVideo",
+                           "Wan22ImageToVideoLatent"})
+PILOT_MODEL_ID = "wan2.2_ti2v_5B_fp16"
+PILOT_WEIGHTS = {
+    "UNETLoader": ("unet_name", "wan2.2_ti2v_5B_fp16.safetensors"),
+    "CLIPLoader": ("clip_name", "umt5_xxl_fp8_e4m3fn_scaled.safetensors"),
+    "VAELoader": ("vae_name", "wan2.2_vae.safetensors"),
+}
 
 
 class MotionError(ValueError):
@@ -105,6 +112,13 @@ def inspect_workflow(path: Path):
             if isinstance(val, (dict, list)) and not (
                 isinstance(val, list) and len(val) == 2):
                 raise MotionError("Untrusted complex workflow input")
+    # A "5B, 12 GiB" label is not sufficient if the graph silently points at
+    # a different checkpoint. This one-shot pilot deliberately pins the known
+    # official Wan 2.2 5B family and rejects extra model loader nodes.
+    for klass, (field, filename) in PILOT_WEIGHTS.items():
+        nodes = [n for n in graph.values() if n["class_type"] == klass]
+        if len(nodes) != 1 or nodes[0]["inputs"].get(field) != filename:
+            raise MotionError("Pilot checkpoint/encoder/VAE does not match Wan 2.2 5B")
     ids = [record[x] for x in
            ("positive_node", "seed_node", "size_node", "fps_node", "output_node")]
     if any(not isinstance(i, str) or i not in graph for i in ids):
@@ -158,9 +172,15 @@ def health():
         if not gpu:
             return {"status": "GPU_NOT_DETECTED", "video_verified": False,
                     "profile": dict(PROFILE)}
-        vram = max(d["vram_total"] for d in gpu)
+        device = max(gpu, key=lambda d: d["vram_total"])
+        vram = device["vram_total"]
+        free = device.get("vram_free")
+        free_gib = (round(free / 2**30, 2)
+                    if type(free) is int and 0 <= free <= vram else None)
         return {"status": "GPU_DETECTED_UNBENCHMARKED",
                 "vram_gib": round(vram / 2**30, 2),
+                "vram_free_snapshot_gib": free_gib,
+                "peak_vram_gib": None,
                 "profile": dict(PROFILE), "video_verified": False}
     except (OSError, RuntimeError, MotionError, http.client.HTTPException):
         return {"status": "COMFYUI_UNAVAILABLE", "video_verified": False,
@@ -250,6 +270,7 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
             raise RuntimeError("Motion job ledger changed after dispatch")
     return {"job_id": job_id, "status": "SUBMITTED", "provider": "LOCAL_COMFYUI",
             "shot_id": shot_id, "video_verified": False, "youtube_uploaded": False,
+            "model_id": PILOT_MODEL_ID,
             "model_quality_verified": False}
 
 
@@ -263,6 +284,21 @@ def job_status(job_id, *, db_path: Path = DB):
         row = db.execute("SELECT * FROM motion_jobs WHERE job_id=?", (job_id,)).fetchone()
     if row is None:
         raise KeyError("Motion job does not exist")
+    # Local verified receipt is durable and does not need ComfyUI to stay online.
+    if row["state"] == "COMPLETE_UNVERIFIED":
+        from agentforge.features.film_studio import motion_verify
+        try:
+            receipt = motion_verify.inspect_receipt(job_id, db_path=db_path)
+        except KeyError:
+            pass
+        else:
+            return {"job_id": job_id, "film_slug": row["film_slug"],
+                    "shot_id": row["shot_id"], "status": receipt["state"],
+                    "plan_sha": row["plan_sha"], "workflow_sha": row["workflow_sha"],
+                    "clip_sha256": receipt["clip_sha256"],
+                    "receipt_sha256": receipt["receipt_sha256"],
+                    "video_decode_verified": True, "video_accepted": False,
+                    "motion_quality_verified": False, "youtube_uploaded": False}
     if row["provider_id"] is None:
         status = "SUBMITTING_UNCERTAIN"
     else:
@@ -306,6 +342,16 @@ def main(argv=None):
     submit.add_argument("--confirm-gpu-run", action="store_true")
     status = choices.add_parser("status")
     status.add_argument("--job-id", required=True)
+    jobs = choices.add_parser("jobs")
+    jobs.add_argument("--limit", type=int, default=12)
+    collect = choices.add_parser("collect")
+    collect.add_argument("--job-id", required=True)
+    collect.add_argument("--output-dir", type=Path, required=True)
+    collect.add_argument("--filename", required=True)
+    collect.add_argument("--owner-peak-vram-gib", type=float)
+    collect.add_argument("--confirm-import", action="store_true")
+    receipt = choices.add_parser("receipt")
+    receipt.add_argument("--job-id", required=True)
     args = p.parse_args(argv)
     if args.action == "health":
         result = health()
@@ -314,6 +360,19 @@ def main(argv=None):
         result = {k: v for k, v in info.items() if k != "workflow"}
     elif args.action == "status":
         result = job_status(args.job_id)
+    elif args.action == "jobs":
+        from agentforge.features.film_studio.motion_verify import list_jobs
+        result = {"jobs": list_jobs(limit=args.limit),
+                  "model_inference_verified": False}
+    elif args.action == "collect":
+        from agentforge.features.film_studio.motion_verify import import_clip
+        result = import_clip(
+            job_id=args.job_id, filename=args.filename,
+            output_dir=args.output_dir, confirmed=args.confirm_import,
+            owner_reported_peak_vram_gib=args.owner_peak_vram_gib)
+    elif args.action == "receipt":
+        from agentforge.features.film_studio.motion_verify import inspect_receipt
+        result = inspect_receipt(args.job_id)
     else:
         result = submit_shot(
             film_slug=args.film_slug, shot_id=args.shot_id,
@@ -321,7 +380,7 @@ def main(argv=None):
             workflow_sha=args.workflow_sha,
             prompt=args.prompt_file.read_text(encoding="utf-8"),
             seed=args.seed, confirmed=args.confirm_gpu_run)
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    print(json.dumps(result, ensure_ascii=True, indent=2))
 
 
 if __name__ == "__main__":
