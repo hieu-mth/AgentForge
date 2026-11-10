@@ -5,7 +5,7 @@ const {Paragraph,Text}=Typography;
 
 // One consent for bounded GPU batch and a separate explicit import action.
 // Generation is server-side: users never need to author image prompts manually.
-export function AutoVisuals({task=null,purpose='image',topic='',scenes=[],mutate,onReady}) {
+export function AutoVisuals({task=null,website=null,purpose='image',topic='',scenes=[],mutate,onReady}) {
   const {message,modal}=AntApp.useApp();
   const [health,setHealth]=useState(null);
   const [jobs,setJobs]=useState([]);
@@ -17,12 +17,13 @@ export function AutoVisuals({task=null,purpose='image',topic='',scenes=[],mutate
       setHealth(h);
       const mine=(j.jobs||[]).filter(x=>task
         ?x.purpose==='video'&&x.source_sha===task.storyboard_source_sha
+        :website?x.purpose==='website'&&x.source_sha===website.source_sha
         :x.purpose===purpose&&x.source_sha===null);
       setJobs(mine);
       const choices=h.checkpoints||[];
       if(!choices.includes(checkpoint))setCheckpoint(choices[0]||'');
     }catch(e){message.error(e.message);}
-  },[task?.storyboard_source_sha,purpose,checkpoint,message]);
+  },[task?.storyboard_source_sha,website?.source_sha,purpose,checkpoint,message]);
   useEffect(()=>{refresh();},[refresh]);
   const count=scenes.length;
   const groups={};
@@ -50,8 +51,13 @@ export function AutoVisuals({task=null,purpose='image',topic='',scenes=[],mutate
         const body=task
           ?{ack:'GENERATE_STORYBOARD_VISUALS',task_id:task.task_id,
             source_sha:task.storyboard_source_sha,checkpoint}
-          :{ack:'GENERATE_AI_VISUALS',purpose,topic,scenes,checkpoint};
-        const result=await mutate(task?'/api/visuals/generate-for-task':'/api/visuals/generate',body);
+          :website
+            ?{ack:'GENERATE_WEBSITE_VISUAL',slug:website.slug,
+              source_sha:website.source_sha,checkpoint}
+            :{ack:'GENERATE_AI_VISUALS',purpose,topic,scenes,checkpoint};
+        const route=task?'/api/visuals/generate-for-task'
+          :website?'/api/visuals/generate-for-website':'/api/visuals/generate';
+        const result=await mutate(route,body);
         if(result)message.success('Đã gửi '+result.gpu_jobs_submitted+' lượt tạo ảnh đến ComfyUI');
         await refresh();
       }finally{setBusy(false);}
@@ -73,6 +79,23 @@ export function AutoVisuals({task=null,purpose='image',topic='',scenes=[],mutate
         }
         await refresh();
       }finally{setBusy(false);}
+    },
+  });
+  const attachWebsite=()=>modal.confirm({
+    title:'Gắn ảnh AI vào website đã lưu local?',
+    content:<Space orientation="vertical">
+      <Paragraph>Ảnh này là minh họa AI, không xác nhận giống đúng sản phẩm. Website HTML hiện tại sẽ được sao lưu trước khi thay đổi. Không deploy.</Paragraph>
+      <Text code>{website?.source_sha}</Text>
+      <Text code>{ordered[0]?.asset_sha}</Text>
+    </Space>,
+    okText:'Đồng ý gắn ảnh',
+    onOk:async()=>{
+      if(!website||!complete||ordered.length!==1)return;
+      const out=await mutate('/api/visuals/'+ordered[0].job_id+'/attach-website',{
+        ack:'ATTACH_GENERATED_WEBSITE_IMAGE',slug:website.slug,
+        image_sha:ordered[0].asset_sha,html_sha:website.source_sha,
+      });
+      if(out)message.success('Đã gắn ảnh AI vào website, có backup HTML; không deploy');
     },
   });
   return <Card size="small" title={'AI Visual Generation · '+(task?'Video':'Ảnh '+purpose)}>
@@ -108,6 +131,8 @@ export function AutoVisuals({task=null,purpose='image',topic='',scenes=[],mutate
         description="Kiểm tra ảnh thực tế phía trên. Bạn có thể chọn dùng bộ ảnh này để tiếp tục dựng video."/>}
       {complete&&onReady&&<Button type="primary"
         onClick={()=>onReady(ordered.map(j=>j.job_id))}>Dùng bộ ảnh này cho video</Button>}
+      {complete&&website&&ordered.length===1&&<Button type="primary"
+        onClick={attachWebsite}>Gắn ảnh AI vào website local (có backup)</Button>}
     </Space>
   </Card>;
 }
