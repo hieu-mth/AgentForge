@@ -199,6 +199,28 @@ class TestS2Media(unittest.TestCase):
         self.assertEqual(movie["status"], "VIDEO_RENDERED")
         self.assertEqual(quality.check(receipt["run_id"])["status"], "VIDEO_PASS")
 
+    def test_motion_filter_graph_moves_background_only(self):
+        import io
+        from PIL import Image
+        buffer=io.BytesIO()
+        Image.new("RGB",(640,480),(120,160,190)).save(buffer,format="PNG")
+        with patch("agentforge.asset_preview.image_for_job",
+                   return_value=(buffer.getvalue(),"image/png")):
+            receipt=self.build({**demo(),"visual_plan":{
+                "mode":"studio","motion":"slow_zoom",
+                "image_job_ids":["a"*32,"b"*32]}})
+        with patch.object(render,"_run_process",
+                          side_effect=RuntimeError("inspect only")) as process:
+            with self.assertRaisesRegex(RuntimeError,"inspect only"):
+                render.render_video(receipt["run_id"],confirm_external_run=True)
+        command=process.call_args.args[0]
+        graph=command[command.index("-filter_complex")+1]
+        self.assertIn("[0:v]zoompan=",graph)
+        self.assertIn("[bg0][tx0]overlay=",graph)
+        self.assertIn("[bg1][tx1]overlay=",graph)
+        self.assertIn("format=rgba[tx0]",graph)
+        self.assertNotIn("-vf",command)
+
     def test_old_studio_without_layers_never_animates_embedded_text(self):
         """Existing Standard V2 productions remain playable, not re-written."""
         import io
