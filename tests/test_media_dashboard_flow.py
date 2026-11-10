@@ -37,7 +37,9 @@ class MediaDashboardFlowTests(unittest.TestCase):
 
     def test_prepared_assets_require_inspection_sha_and_fixed_task(self):
         payload = {"ack": "PREPARE_REVIEWED_STORYBOARD",
-                   "task_id": ID, "source_sha": self.sha}
+                   "task_id": ID, "source_sha": self.sha,
+                   "visual_plan": {"mode": "studio", "motion": "static",
+                                   "image_job_ids": ["a"*32, "b"*32]}}
         with patch("agentforge.task_history.get_task", return_value=self.task), \
              patch("agentforge.features.media.workflow.prepare",
                    return_value={"status": "ASSETS_READY"}) as prepare:
@@ -86,9 +88,26 @@ class MediaDashboardFlowTests(unittest.TestCase):
         self.assertFalse(out["generation_started"])
         self.assertEqual(out["images"][0]["job_id"],"a"*32)
 
-    def test_unreviewed_modified_and_failed_model_results_refused(self):
+    def test_video_task_refuses_classic_and_missing_visuals_before_composition(self):
         payload = {"ack": "PREPARE_REVIEWED_STORYBOARD",
                    "task_id": ID, "source_sha": self.sha}
+        with patch("agentforge.task_history.get_task", return_value=self.task), \
+             patch("agentforge.features.media.workflow.prepare") as prepare:
+            for plan in (None, {"mode": "classic", "motion": "static", "image_job_ids": []}):
+                with self.subTest(plan=plan):
+                    proposed = dict(payload)
+                    if plan is not None:
+                        proposed["visual_plan"] = plan
+                    with self.assertRaisesRegex(PermissionError, "VIDEO_VISUALS_REQUIRED"):
+                        media_routes.handle(self.server, "/api/media/prepare-from-task",
+                                            proposed, session=self.session)
+            prepare.assert_not_called()
+
+    def test_unreviewed_modified_and_failed_model_results_refused(self):
+        payload = {"ack": "PREPARE_REVIEWED_STORYBOARD",
+                   "task_id": ID, "source_sha": self.sha,
+                   "visual_plan": {"mode": "studio", "motion": "static",
+                                   "image_job_ids": ["a"*32, "b"*32]}}
         for changed in (
             {**self.task, "status": "FAILED"},
             {**self.task, "result": {**STORY, "title": "Edited"}},
