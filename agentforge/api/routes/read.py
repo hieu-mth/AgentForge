@@ -283,6 +283,35 @@ def dispatch(self, route):
                       for f in document["files"]],
             "execution_authorized": False,
         })
+    if route.startswith("/api/media/") and route.endswith("/preview"):
+        from agentforge import media_workflow_v15, media_quality, media_assets
+        import re
+        parts = route.split("/")
+        if (len(parts) != 5 or parts[:3] != ["", "api", "media"]
+                or parts[4] != "preview" or
+                not re.fullmatch(r"[a-f0-9]{32}", parts[3])):
+            raise ValueError("Invalid media preview request")
+        record = media_workflow_v15._row(parts[3])
+        if record["status"] not in {"ASSETS_READY", "VIDEO_READY",
+                                     "APPROVED", "REJECTED"}:
+            raise PermissionError("Media images not ready to review")
+        _, manifest = media_workflow_v15._verify_storyboard_manifest(record)
+        qa = media_quality.check(record["run_id"])
+        if qa["status"] not in {"ASSETS_PASS", "VIDEO_PASS"} or qa["failures"]:
+            raise PermissionError("Cannot preview media that failed QA")
+        plan = media_assets.validate_visual_plan(
+            manifest.get("visual_plan"), len(manifest["scenes"]))
+        return self._reply(200, {
+            "production_id": record["production_id"],
+            "status": record["status"], "qa": qa["status"],
+            "storyboard_sha": record["storyboard_sha"],
+            "title": manifest["title"], "scene_count": len(manifest["scenes"]),
+            "scene_titles": [x["headline"] for x in manifest["scenes"]],
+            "visual_mode": plan["mode"], "motion": plan["motion"],
+            "video_rendered": record["status"] in {"VIDEO_READY", "APPROVED", "REJECTED"},
+            "frames": [f"/api/media/{parts[3]}/frame/{i:02}"
+                       for i in range(1, len(manifest["scenes"])+1)],
+        })
     if route.startswith("/api/media/") and "/frame/" in route:
         import re
         from agentforge import media_workflow_v15, media_quality, media_assets
