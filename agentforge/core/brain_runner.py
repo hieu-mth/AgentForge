@@ -213,20 +213,16 @@ def recover(*, brain_db_path=None, task_db_path=None):
     # Never use the 100-row recent-goal view for global recovery: older
     # RUNNING goals may be hidden by newer terminal history.
     recovered_ids = store.recover(db_path=brain_db_path, return_ids=True)
-    for goal_id in recovered_ids:
-        goal = store.get_goal(goal_id, db_path=brain_db_path)
-        ids = [goal["parent_task_id"]] + [
-            x["child_task_id"] for x in goal["steps"]]
-        for task_id in ids:
-            if not task_id:
-                continue
-            try:
-                child = task_history.get_task(task_id, db_path=task_db_path)
-                if child["status"] == "RUNNING":
-                    task_history.transition(task_id, "INTERRUPTED",
-                                            db_path=task_db_path)
-            except (KeyError, ValueError, RuntimeError):
-                pass
+    # Reconcile linked S1 tasks for ALL interrupted goals, including those
+    # interrupted in a prior invocation before a crash cut this process off.
+    for task_id in store.interrupted_task_ids(db_path=brain_db_path):
+        try:
+            child = task_history.get_task(task_id, db_path=task_db_path)
+            if child["status"] == "RUNNING":
+                task_history.transition(task_id, "INTERRUPTED",
+                                        db_path=task_db_path)
+        except (KeyError, ValueError, RuntimeError):
+            pass
     return {"interrupted_goals": len(recovered_ids), "automatic_replay": False}
 
 
