@@ -334,8 +334,9 @@ def _read_manifest(archive):
         m = json.loads(archive.read("manifest.json"))
     except (ValueError, KeyError, UnicodeError, RuntimeError) as exc:
         raise BackupError("Invalid backup manifest") from exc
-    if m.get("schema") != 1 or not isinstance(m.get("contents"), list):
+    if m.get("schema") not in (1, 2) or not isinstance(m.get("contents"), list):
         raise BackupError("Unsupported manifest schema")
+    _coverage_from_manifest(m)
     expected = {"manifest.json"}
     for item in m["contents"]:
         if not isinstance(item, dict) or set(item) != {
@@ -343,8 +344,7 @@ def _read_manifest(archive):
             raise BackupError("Invalid manifest file entry")
         p = item["path"]
         _archive_parts(p)
-        if (not p.startswith(("data/company/", "workspace/products/",
-                                      "workspace/media/", "workspace/growth/"))
+        if (not _supported_archive_path(p, m)
                 or len(p) > 260 or p in expected
                 or not isinstance(item["sha256"], str)
                 or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"])
@@ -352,7 +352,11 @@ def _read_manifest(archive):
                 or not 0 <= item["bytes"] <= MAX_FILE
                 or type(item["sqlite"]) is not bool):
             raise BackupError("Unsafe ZIP manifest path or metadata")
-        if item["sqlite"] != (p.startswith("data/company/") and p.endswith(".sqlite3")):
+        if m["schema"] == 1 or m.get("include_workspace") is not True:
+            expected_sqlite = p.startswith("data/company/") and p.endswith(".sqlite3")
+        else:
+            expected_sqlite = _is_sqlite(p)
+        if item["sqlite"] != expected_sqlite:
             raise BackupError("Database classification mismatch")
         expected.add(p)
     if set(names) != expected:
@@ -396,8 +400,11 @@ def verify(path):
                 if item["sqlite"] and not _sqlite_bytes_ok(raw):
                     raise BackupError("Restored SQLite snapshot fails integrity_check")
             return {"status": "PASS", "files": len(m["contents"]),
-                    "total_bytes": total, "unencrypted": True,
-                    "external_upload": False}
+                    "total_bytes": total,
+                    "coverage_status": _coverage_from_manifest(m)["level"],
+                    "cross_database_atomic": False,
+                    "reference_integrity_certified": False,
+                    "unencrypted": True, "external_upload": False}
     except (zipfile.BadZipFile, OSError, RuntimeError, KeyError) as exc:
         raise BackupError("Backup ZIP unreadable or incomplete") from exc
 
@@ -436,6 +443,8 @@ def stage_restore(path, destination, *, confirm_restore=False):
                         raise BackupError("Archive changed since verification; staging discarded")
         return {"status": "RESTORED_TO_STAGING_ONLY",
                 "destination": str(target), "files": report["files"],
+                "coverage_status": report["coverage_status"],
+                "reference_integrity_certified": False,
                 "active_databases_overwritten": False,
                 "manual_owner_inspection_required": True}
     except BaseException:
