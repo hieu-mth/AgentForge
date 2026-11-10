@@ -17,7 +17,7 @@ import tempfile
 import zipfile
 from contextlib import closing
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from uuid import uuid4
 
 from agentforge.paths import REPOSITORY_ROOT
@@ -42,6 +42,39 @@ def _safe(path):
         if item.is_symlink() or (hasattr(item, "is_junction") and item.is_junction()):
             raise BackupError("Symlink/junction in backup source or destination")
     return path
+
+
+
+def _archive_parts(name):
+    """Validate ZIP names for both POSIX and Windows before filesystem I/O."""
+    if (not isinstance(name, str) or not name or name.startswith("/")
+            or "\\" in name or ":" in name
+            or any(ord(char) < 32 or ord(char) == 127 for char in name)):
+        raise BackupError("Unsafe ZIP manifest path or metadata")
+    parts = name.split("/")
+    if any(part in {"", ".", ".."} or part.endswith((" ", ".")) for part in parts):
+        raise BackupError("Unsafe ZIP manifest path or metadata")
+    # Drive-relative path components, alternate data streams, and Win32 device
+    # aliases must never reach Path.joinpath or file creation.
+    windows = PureWindowsPath(name)
+    if windows.drive or windows.root:
+        raise BackupError("Unsafe ZIP manifest path or metadata")
+    for part in parts:
+        component = PureWindowsPath(part)
+        stem = part.split(".", 1)[0].upper()
+        if (component.drive or component.root
+                or stem in {"CON", "PRN", "AUX", "NUL"}
+                or re.fullmatch(r"(?:COM|LPT)[1-9]", stem)):
+            raise BackupError("Unsafe ZIP manifest path or metadata")
+    return parts
+
+
+def _staged_file(target, archive_name):
+    """Enforce containment before mkdir/open, including existing junctions."""
+    candidate = target.joinpath(*_archive_parts(archive_name))
+    if not candidate.resolve(strict=False).is_relative_to(target.resolve(strict=False)):
+        raise BackupError("ZIP entry escapes restore destination")
+    return _safe(candidate)
 
 
 def _digest(data):
@@ -154,9 +187,8 @@ def _read_manifest(archive):
                 "path", "bytes", "sha256", "sqlite"}:
             raise BackupError("Invalid manifest file entry")
         p = item["path"]
-        if (not isinstance(p, str) or p.startswith("/") or "\\" in p
-                or any(part in {"", ".", ".."} for part in p.split("/"))
-                or not p.startswith(("data/company/", "workspace/products/",
+        _archive_parts(p)
+        if (not p.startswith(("data/company/", "workspace/products/",
                                       "workspace/media/", "workspace/growth/"))
                 or len(p) > 260 or p in expected
                 or not isinstance(item["sha256"], str)
@@ -230,8 +262,9 @@ def stage_restore(path, destination, *, confirm_restore=False):
         with zipfile.ZipFile(path) as archive:
             m = _read_manifest(archive)
             for item in m["contents"]:
-                p = _safe(target.joinpath(*item["path"].split("/")))
+                p = _staged_file(target, item["path"])
                 p.parent.mkdir(parents=True, exist_ok=True)
+                _safe(p)  # Recheck after creating parents.
                 with p.open("xb") as output, archive.open(item["path"]) as src:
                     checksum = hashlib.sha256()
                     copied = 0
