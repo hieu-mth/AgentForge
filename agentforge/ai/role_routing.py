@@ -4,7 +4,8 @@ Routing is fixed by reviewed worker.toml files. A global override is explicit
 configuration, never a task/LLM suggestion. This module does not call models.
 """
 import os
-from agentforge.ai.model_registry import load_models, ModelConfigError
+from dotenv import load_dotenv
+from agentforge.ai.model_registry import ROOT, load_models, ModelConfigError
 from agentforge.ai import model_hub
 from agentforge.ai.worker_registry import load_worker
 
@@ -14,6 +15,7 @@ ROLE_WORKERS = {
     "reviewer": "webapp_reviewer",
 }
 MAX_PIPELINE_MODEL_CALLS = 3
+DOTENV_PATH = ROOT / ".env"
 
 
 def describe_role(role, *, root=None, model_ref_override=None, cloud_consent=False):
@@ -63,6 +65,9 @@ def require_worker_model(worker_id):
     """Called before V5 model calls: deny cloud without explicit process opt-in."""
     if worker_id not in ROLE_WORKERS.values():
         raise ValueError("Unknown V5 worker")
+    # V5 planning may validate its model before model.resolve_runtime() runs.
+    # Load the same repository .env without overriding explicit process values.
+    load_dotenv(DOTENV_PATH, override=False)
     worker = load_worker(worker_id)
     override = os.environ.get("AGENTFORGE_MODEL_REF")
     route_ref, _, _ = model_hub.model_for_worker(worker_id, worker["model_ref"])
