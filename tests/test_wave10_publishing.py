@@ -148,16 +148,17 @@ class FilmPublishingWave10Tests(unittest.TestCase):
     def test_tampered_final_mp4_prevents_upload_or_release_inspection(self):
         item=self._prepare()
         self.folder.joinpath("episode.mp4").write_bytes(b"tampered")
-        with self.assertRaises(production.FilmProductionError):
+        with self.assertRaises(publishing.PublishingError):
             self._inspect(item["release_id"])
-        with self.assertRaises(production.FilmProductionError):
+        with self.assertRaises(publishing.PublishingError):
             publishing.checkpoint_private_upload(
                 item["release_id"],item["release_sha256"],confirmed=True,
                 db_path=self.db,film_root=self.films)
-        # Ledger is read-only except on an explicitly authorized action.
+        # A list is intentionally a fast, non-rehashing projection; exact
+        # inspect and upload remain strict full-video verification gates.
         self.assertEqual(publishing.list_releases(
-            db_path=self.db,film_root=self.films)[0]["status"],
-            "INTEGRITY_REVIEW_REQUIRED")
+            db_path=self.db,film_root=self.films)[0]["source_integrity"],
+            "NOT_RECHECKED")
 
     def test_optional_oauth_private_only_transport_mock(self):
         item=self._prepare()

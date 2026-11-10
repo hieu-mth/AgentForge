@@ -234,6 +234,7 @@ def inspect(release_id, *, db_path=DB, film_root=production.FILMS, verify_source
         "updated_at": item["updated_at"],
         "platform_api_connected": item["state"] == "PRIVATE_UPLOADED_API",
         "platform_publication_verified": False, "revenue_verified": False,
+        "source_integrity": "REHASH_VERIFIED" if verify_source else "NOT_RECHECKED",
     }
 
 
@@ -249,7 +250,8 @@ def list_releases(*, db_path=DB, film_root=production.FILMS, limit=30):
     results = []
     for ident in rows:
         try:
-            results.append(inspect(ident, db_path=db_path, film_root=film_root))
+            results.append(inspect(ident, db_path=db_path, film_root=film_root,
+                                   verify_source=False))
         except (PublishingError, PermissionError, KeyError, OSError):
             results.append({"release_id": ident, "status": "INTEGRITY_REVIEW_REQUIRED",
                             "platform_publication_verified": False})
