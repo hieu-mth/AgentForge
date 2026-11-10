@@ -89,7 +89,9 @@ def check(run_id):
         fail("artifacts", "Invalid artifact records")
         recorded = {}
     expected = {f"scene_{index+1:02}.png" for index in range(len(scenes))}
-    if scenes and manifest.get("visual_plan", {}).get("mode") == "studio":
+    if (scenes and isinstance(manifest.get("visual_plan"), dict)
+            and manifest["visual_plan"].get("mode") == "studio"
+            and manifest.get("studio_layers_version") == 1):
         expected.update(
             name for i in range(1, len(scenes)+1)
             for name in (f"background_{i:02}.png", f"overlay_{i:02}.png")
