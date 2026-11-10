@@ -25,6 +25,12 @@ media = [
     "imageio-ffmpeg==0.8.1",
 ]
 
+# Explicit consent only; NEVER installed by the default Dashboard setup.
+youtube = [
+    "google-api-python-client==2.201.0",
+    "google-auth-oauthlib==1.5.0",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["agentforge", "agentforge.*"]

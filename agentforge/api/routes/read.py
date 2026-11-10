@@ -23,6 +23,22 @@ def dispatch(self, route):
     if route == "/api/image/jobs":
         from agentforge.image_studio_v24 import report
         return self._reply(200, report())
+    if route == "/api/publishing":
+        from agentforge.features.film_studio.publishing import summary
+        return self._reply(200, summary())
+    if route.startswith("/api/publishing/"):
+        from agentforge.features.film_studio import publishing
+        parts = route.split("/")
+        if len(parts) not in (4, 5) or parts[:3] != ["", "api", "publishing"]:
+            raise ValueError("Invalid release read path")
+        rid = parts[3]
+        record = publishing.inspect(rid)
+        self._session().setdefault("reviewed_publishing", {})[rid] = record["release_sha256"]
+        if len(parts) == 5:
+            if parts[4] != "handoff":
+                raise ValueError("Unknown release operation")
+            return self._reply(200, publishing.handoff(rid))
+        return self._reply(200, record)
     if route == "/api/film/productions":
         from agentforge.features.film_studio.production import list_episodes
         return self._reply(200, {

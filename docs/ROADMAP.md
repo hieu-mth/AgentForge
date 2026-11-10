@@ -34,7 +34,7 @@ Không mở rộng thêm agent/worker hoặc microservice khi hai vòng lặp n�
 | F3. Continuity | Cast bible, costume/reference SHA, shot notes | **Code/CI Wave 9**, visual consistency 3–5 shot Owner PENDING |
 | F4. Film editor/QA | FFmpeg hard-cut, local voice/SRT, SHA receipt, versioned edits | **Code/CI Wave 9**, real 60–90s film Owner PENDING |
 | F5. Long-form production | Theo tập/chapter, resume/checkpoint, resource budget, kiểm tra consistency xuyên tập | Chưa: mục tiêu 15–30 phút/tập, sau đó ghép 1–3 giờ |
-| F6. YouTube operations | OAuth, private upload, lịch đăng, metadata, khai báo nội dung tổng hợp, analytics | Chưa: Owner duyệt công khai, chống đăng trùng và lưu receipt API |
+| F6. YouTube operations | OAuth Desktop optional, private upload, release SHA, metadata/owner status, local schedule intent, manual analytics | **Code/CI Wave 10**, real OAuth/private upload Owner PENDING, no automatic public scheduling or verified monetization |
 
 **Không được coi “phim 2 tiếng” đã hoàn tất chỉ vì có 900 slot trong JSON.** 900 clip ở 8 giây/shot còn đòi hỏi generation, selection, QA và dựng hậu kỳ; điều kiện phần cứng có thể buộc sử dụng offload hoặc API trả phí với quyền riêng.
 
@@ -48,6 +48,10 @@ Không mở rộng thêm agent/worker hoặc microservice khi hai vòng lặp n�
 ## Đợt 9 — Film Production Pipeline
 
 Code/CI: draft episode từ Wave 8 receipts; cast bible và mỗi-shot reference/costume/location/props/action/camera/caption; metadata continuity changes cần lý do. 3–5 shot (~12–20s) hoặc 15–22 shot (~61–90s), không loop clip; Owner-only TTS Windows/Piper, SRT, FFmpeg + ffprobe/full decode video/audio, receipt SHA và versioned edit (không regenerate GPU shots cũ). **Real 60–90s film, true GPU, voice và visual continuity PENDING**. [Wave 9](verification/wave9/README.md).
+
+## Đợt 10 — Publishing & Business Operations
+
+Local film release ledger từ Wave 9 đã kiểm SHA, Owner watch/rights và disclosure, planned UTC **không tự schedule**, YouTube Studio manual handoff, metrics do Owner ghi. Tùy chọn OAuth Desktop bằng CLI gửi video lên YouTube **private-only**, idempotent uncertain checkpoint, không tự public, auto-spend hoặc ghi nhận doanh thu. **Code/CI chỉ xác minh hợp đồng; Owner real OAuth/private upload vẫn PENDING**. Xem [Wave 10](verification/wave10/README.md).
 
 ## Đợt 8 — Film Studio runtime 12 GiB
 

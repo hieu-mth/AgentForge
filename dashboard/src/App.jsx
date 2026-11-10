@@ -14,6 +14,7 @@ import { modelCallsForPrompt } from './workspace_quota.js';
 import { Websites, ProposalDrawer } from './features/Websites.jsx';
 import { WebappProposalDrawer } from './features/Webapps.jsx';
 import { Overview, ReadOnlyPage } from './features/Operations.jsx';
+import { Publishing } from './features/Publishing.jsx';
 import { Projects } from './features/Projects.jsx';
 import { ModelHub } from './features/Models.jsx';
 import { Retention } from './features/Retention.jsx';
@@ -358,7 +359,8 @@ export default function App() {
           {section==='settings'&&<OwnerSettings data={data} mutate={mutate} onReload={refresh}/>}
           {section==='models'&&<ModelHub mutate={mutate}/>}
           {section==='memory'&&<OwnerMemory mutate={mutate}/>}
-          {['finance','channels','team'].includes(section)&&<ReadOnlyPage section={section} data={data}/>}
+          {section==='channels'&&<Publishing data={data} mutate={mutate}/>}
+          {['finance','team'].includes(section)&&<ReadOnlyPage section={section} data={data}/>}
         </div>
       </Content>
     </Layout>
