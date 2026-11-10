@@ -160,7 +160,7 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, o
       description={<Space orientation="vertical">
         <Text>Chỉ bước thất bại được chạy lại. Các bước đã thành công được giữ nguyên. Lần gọi model tiếp theo vẫn cần cấp quyền riêng.</Text>
         <Button loading={busy} onClick={()=>onRetry(goal,failedStep)}>Chuẩn bị chạy lại bước {activeIndex+1}</Button>
-      </Space>}/>
+      </Space>}/>}
     {goal.status==='PLANNED' && <Button type="primary" block loading={busy}
       onClick={()=>onApprove(goal)}>Duyệt SHA · chưa chạy AI</Button>}
     {runnable && <>
