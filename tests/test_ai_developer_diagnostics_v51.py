@@ -59,6 +59,28 @@ class AIModelFailureDiagnosticsTests(unittest.TestCase):
             self.assertEqual(send.call_count,1)
             self.assertNotIn("dummy-private-token",json.dumps(request))
 
+    def test_developer_budget_explicit_opt_in_is_bounded(self):
+        runtime={"system_prompt":"Trusted","model":"test",
+                 "base_url":"https://gateway.example","api_key":"private"}
+        for configured, expected in (("",8192),("12288",12288),("16384",16384)):
+            with self.subTest(configured=configured), \
+                 patch.dict(os.environ, {"AGENTFORGE_DEVELOPER_MAX_TOKENS":configured}), \
+                 patch.object(model.urllib.request, "urlopen",
+                              return_value=io.BytesIO(json.dumps({
+                                  "stop_reason":"end_turn",
+                                  "content":[{"type":"text","text":'{"ok":true}'}]
+                              }).encode())) as send:
+                model._anthropic_chat(runtime,"Generate JSON",{"type":"object"},
+                                      worker_id="webapp_developer")
+                payload=json.loads(send.call_args.args[0].data)
+                self.assertEqual(payload["max_tokens"],expected)
+                send.assert_called_once()
+        for invalid in ("8191","16385","unlimited","-1"):
+            with self.subTest(invalid=invalid), \
+                 patch.dict(os.environ, {"AGENTFORGE_DEVELOPER_MAX_TOKENS":invalid}):
+                with self.assertRaises(model.ModelConfigError):
+                    model._developer_cloud_max_tokens()
+
     def test_older_json_worker_budget_stays_four_k(self):
         runtime={"system_prompt":"Trusted","model":"test",
                  "base_url":"https://gateway.example","api_key":"not-leaked"}
