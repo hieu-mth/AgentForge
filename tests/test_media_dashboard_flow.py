@@ -55,6 +55,37 @@ class MediaDashboardFlowTests(unittest.TestCase):
                                         {**payload, "source_sha": sha}, session=sess)
             self.assertEqual(prepare.call_count, 1)
 
+    def test_visual_plan_is_forwarded_without_accepting_modified_storyboard(self):
+        plan = {"mode":"studio","motion":"slow_zoom",
+                "image_job_ids":["a"*32,"b"*32]}
+        payload = {"ack":"PREPARE_REVIEWED_STORYBOARD","task_id":ID,
+                   "source_sha":self.sha,"visual_plan":plan}
+        with patch("agentforge.task_history.get_task",return_value=self.task), \
+             patch("agentforge.features.media.workflow.prepare",
+                   return_value={"status":"ASSETS_READY"}) as prepare:
+            media_routes.handle(self.server,"/api/media/prepare-from-task",
+                                payload,session=self.session)
+            self.assertEqual(prepare.call_args.kwargs["visual_plan"],plan)
+            with self.assertRaises(PermissionError):
+                media_routes.handle(self.server,"/api/media/prepare-from-task",
+                                    {**payload,"other":"unsafe"},session=self.session)
+
+    def test_studio_gallery_contains_only_imported_comfyui_jobs(self):
+        class Handler:
+            def _reply(self,status,body):
+                return body
+        mocked={"jobs":[
+            {"job_id":"a"*32,"slug":"showroom","status":"ASSET_READY",
+             "asset_name":"photo.png","asset_sha":"a"*64},
+            {"job_id":"b"*32,"slug":"showroom","status":"SUBMITTED",
+             "asset_name":None,"asset_sha":None},
+        ]}
+        with patch("agentforge.image_studio_v24.report",return_value=mocked):
+            out=read_routes.dispatch(Handler(),"/api/media/studio-images")
+        self.assertEqual(len(out["images"]),1)
+        self.assertFalse(out["generation_started"])
+        self.assertEqual(out["images"][0]["job_id"],"a"*32)
+
     def test_unreviewed_modified_and_failed_model_results_refused(self):
         payload = {"ack": "PREPARE_REVIEWED_STORYBOARD",
                    "task_id": ID, "source_sha": self.sha}
@@ -90,6 +121,48 @@ class MediaDashboardFlowTests(unittest.TestCase):
             result = media_routes.handle(self.server, route, payload, session={})
             self.assertEqual(result["status"], "VIDEO_READY")
             render.assert_called_once_with(ID, confirm_local_process=True)
+
+    def test_media_preview_is_sha_bound_and_requires_quality_gate(self):
+        import hashlib
+        import tempfile
+        from pathlib import Path
+        from agentforge import media_quality
+        with tempfile.TemporaryDirectory() as temp:
+            folder=Path(temp)
+            content=b"trusted-png-placeholder"
+            (folder/"scene_01.png").write_bytes(content)
+            record={"production_id": ID, "run_id":"b"*32,
+                    "status":"ASSETS_READY", "storyboard_sha":SHA}
+            manifest={"slug":"video-sandbox","title":STORY["title"],
+                      "scenes":STORY["scenes"],"visual_plan":{
+                          "mode":"classic","motion":"slow_zoom","image_job_ids":[]},
+                      "artifacts":{"scene_01.png":hashlib.sha256(content).hexdigest()}}
+            class Handler:
+                def _reply(self,status,body,**kwargs):
+                    return (status,body)
+            handler=Handler()
+            with patch("agentforge.media_workflow_v15._row",return_value=record), \
+                 patch("agentforge.media_workflow_v15._verify_storyboard_manifest",
+                       return_value=(folder,manifest)), \
+                 patch("agentforge.media_quality.check",
+                       return_value={"status":"ASSETS_PASS","failures":0}):
+                status,metadata=read_routes.dispatch(
+                    handler,"/api/media/"+ID+"/preview")
+                self.assertEqual(status,200)
+                self.assertEqual(metadata["motion"],"slow_zoom")
+                self.assertEqual(len(metadata["frames"]),2)
+                status,data=read_routes.dispatch(
+                    handler,"/api/media/"+ID+"/frame/01")
+                self.assertEqual(status,200)
+                self.assertEqual(data,content)
+                manifest["artifacts"]["scene_01.png"]="c"*64
+                with self.assertRaises(PermissionError):
+                    read_routes.dispatch(handler,"/api/media/"+ID+"/frame/01")
+                manifest["artifacts"]["scene_01.png"]=hashlib.sha256(content).hexdigest()
+                with patch("agentforge.media_quality.check",
+                           return_value={"status":"FAIL","failures":1}):
+                    with self.assertRaises(PermissionError):
+                        read_routes.dispatch(handler,"/api/media/"+ID+"/preview")
 
     def test_inspect_task_binds_sha_in_session(self):
         class Handler:

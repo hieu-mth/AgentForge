@@ -124,7 +124,8 @@ def handle(server, path, request, session=None):
     if path == "/api/media/prepare-from-task":
         # Create assets only from a *reviewed* completed task, never from an
         # untrusted editable JSON submitted in this endpoint.
-        if (set(request) != {"ack", "task_id", "source_sha"}
+        if (set(request) not in ({"ack", "task_id", "source_sha"},
+                                 {"ack", "task_id", "source_sha", "visual_plan"})
                 or request.get("ack") != "PREPARE_REVIEWED_STORYBOARD"):
             raise PermissionError("Exact storyboard source and Owner confirmation required")
         from agentforge import brain_store, task_history, quality_v14
@@ -153,7 +154,8 @@ def handle(server, path, request, session=None):
         # or a collision-prone slug from untrusted task content.
         storyboard = {"slug": "video-" + uuid4().hex[:16],
                       "title": result["title"], "scenes": result["scenes"]}
-        return workflow.prepare(storyboard, confirm_edit=True)
+        return workflow.prepare(storyboard, confirm_edit=True,
+                                visual_plan=request.get("visual_plan"))
     if path.startswith("/api/videos/") and path.endswith("/render"):
         if not server.allow_external_actions:
             raise PermissionError("Enable explicit local external-process mode to render MP4")

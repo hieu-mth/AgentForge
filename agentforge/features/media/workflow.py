@@ -123,13 +123,14 @@ def _row(production_id, *, db_path=None):
         return dict(found)
 
 
-def prepare(storyboard, *, confirm_edit=False, source_job_id=None,
+def prepare(storyboard, *, confirm_edit=False, visual_plan=None, source_job_id=None,
             source_output_sha=None, db_path=None, autopilot_db_path=None):
     """One owner-approved source edit. Never silently copies rejected model output."""
     if confirm_edit is not True:
         raise PermissionError("Explicit owner approval of edited storyboard required")
     ops_control.require_active()
     data = _storyboard(storyboard)
+    visuals = media_assets.validate_visual_plan(visual_plan, len(data["scenes"]))
     context_sha = _business_check(data, autopilot_db_path=autopilot_db_path)
     source_job_id, source_output_sha = _link_source(
         source_job_id, source_output_sha, autopilot_db_path=autopilot_db_path)
@@ -142,7 +143,8 @@ def prepare(storyboard, *, confirm_edit=False, source_job_id=None,
                         None, now, now, None))
     # The permanent PREPARING marker is intentionally not retried automatically.
     try:
-        receipt = skill_runner.invoke("media.compose", data,
+        receipt = skill_runner.invoke("media.compose", {
+            **data, "visual_plan": visuals},
                                       grants=("workspace.write",))
         if receipt["status"] != "SUCCEEDED":
             raise RuntimeError("Media compose did not succeed")
@@ -161,7 +163,8 @@ def prepare(storyboard, *, confirm_edit=False, source_job_id=None,
         return {"production_id": production_id, "status": "ASSETS_READY",
                 "run_id": run_id, "storyboard_sha": _digest(data),
                 "source_job_id": source_job_id, "model_calls": 0,
-                "requires_owner_video_review": True}
+                "requires_owner_video_review": True,
+                "visual_mode": visuals["mode"], "motion": visuals["motion"]}
     except Exception:
         # No replay: local assets may exist after power loss.
         raise

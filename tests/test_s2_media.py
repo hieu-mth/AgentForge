@@ -164,6 +164,66 @@ class TestS2Media(unittest.TestCase):
         self.assertEqual(report["warnings"], 1)
         self.assertEqual(report["findings"][0]["rule"], "photo_rights")
 
+    def test_studio_video_uses_two_verified_independent_shot_images(self):
+        import hashlib
+        import io
+        from PIL import Image
+        ids = ["a"*32, "b"*32]
+        originals = []
+        for color in [(225, 155, 128), (76, 145, 195)]:
+            buffer = io.BytesIO()
+            Image.new("RGB", (768, 512), color).save(buffer, format="PNG")
+            originals.append(buffer.getvalue())
+        plan = {"mode": "studio", "motion": "slow_zoom", "image_job_ids": ids}
+        def image_for_job(job_id):
+            return originals[ids.index(job_id)], "image/png"
+        with patch("agentforge.asset_preview.image_for_job", side_effect=image_for_job) as review:
+            receipt = self.build({**demo(), "visual_plan": plan})
+            self.assertEqual(review.call_count, 2)
+        folder, manifest = assets.load_manifest(receipt["run_id"])
+        self.assertEqual(manifest["visual_plan"], plan)
+        self.assertEqual([x["sha256"] for x in manifest["studio_image_receipts"]],
+                         [hashlib.sha256(x).hexdigest() for x in originals])
+        self.assertNotEqual(assets._sha(folder/"scene_01.png"),
+                            assets._sha(folder/"scene_02.png"))
+        self.assertEqual(quality.check(receipt["run_id"])["status"], "ASSETS_PASS")
+        movie = render.render_video(receipt["run_id"], confirm_external_run=True)
+        self.assertEqual(movie["status"], "VIDEO_RENDERED")
+        self.assertEqual(quality.check(receipt["run_id"])["status"], "VIDEO_PASS")
+
+    def test_studio_plan_invalid_before_any_media_is_written(self):
+        for plan in [
+            {"mode":"studio","motion":"slow_zoom","image_job_ids":[]},
+            {"mode":"studio","motion":"slow_zoom","image_job_ids":["a"*32,"a"*32]},
+            {"mode":"studio","motion":"zoom-fast","image_job_ids":["a"*32,"b"*32]},
+            {"mode":"classic","motion":"static","image_job_ids":["a"*32]},
+            {"mode":"studio","motion":"slow_pan","image_job_ids":["../bad","b"*32]},
+            {"mode":"studio","motion":"slow_zoom","image_job_ids":["a"*32,"b"*32],"custom_node":"unsafe"},
+        ]:
+            with self.subTest(plan=plan):
+                with self.assertRaises(assets.MediaError):
+                    self.build({**demo(), "visual_plan": plan})
+        self.assertFalse(self.output.exists())
+
+    def test_studio_source_provenance_fails_if_manifest_is_modified(self):
+        from PIL import Image
+        import io
+        image=io.BytesIO()
+        Image.new("RGB",(512,512),"navy").save(image,format="PNG")
+        with patch("agentforge.asset_preview.image_for_job",
+                   return_value=(image.getvalue(),"image/png")):
+            # Distinct IDs are checked by validated job refs, not image bytes.
+            result=self.build({**demo(),"visual_plan":{
+                "mode":"studio","motion":"slow_pan",
+                "image_job_ids":["a"*32,"b"*32]}})
+        folder,manifest=assets.load_manifest(result["run_id"])
+        manifest["studio_image_receipts"][0]["sha256"]="not-a-sha"
+        (folder/"manifest.json").write_text(
+            json.dumps(manifest,ensure_ascii=False),encoding="utf-8")
+        report=quality.check(result["run_id"])
+        self.assertEqual(report["status"],"FAIL")
+        self.assertIn("manifest",[f["rule"] for f in report["findings"]])
+
     def test_non_destructive_image_edit(self):
         generated = self.build()
         folder = self.output / generated["run_id"]

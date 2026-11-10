@@ -283,6 +283,80 @@ def dispatch(self, route):
                       for f in document["files"]],
             "execution_authorized": False,
         })
+    if route.startswith("/api/media/") and route.endswith("/preview"):
+        from agentforge import media_workflow_v15, media_quality, media_assets
+        import re
+        parts = route.split("/")
+        if (len(parts) != 5 or parts[:3] != ["", "api", "media"]
+                or parts[4] != "preview" or
+                not re.fullmatch(r"[a-f0-9]{32}", parts[3])):
+            raise ValueError("Invalid media preview request")
+        record = media_workflow_v15._row(parts[3])
+        if record["status"] not in {"ASSETS_READY", "VIDEO_READY",
+                                     "APPROVED", "REJECTED"}:
+            raise PermissionError("Media images not ready to review")
+        _, manifest = media_workflow_v15._verify_storyboard_manifest(record)
+        qa = media_quality.check(record["run_id"])
+        if qa["status"] not in {"ASSETS_PASS", "VIDEO_PASS"} or qa["failures"]:
+            raise PermissionError("Cannot preview media that failed QA")
+        plan = media_assets.validate_visual_plan(
+            manifest.get("visual_plan"), len(manifest["scenes"]))
+        return self._reply(200, {
+            "production_id": record["production_id"],
+            "status": record["status"], "qa": qa["status"],
+            "storyboard_sha": record["storyboard_sha"],
+            "title": manifest["title"], "scene_count": len(manifest["scenes"]),
+            "scene_titles": [x["headline"] for x in manifest["scenes"]],
+            "visual_mode": plan["mode"], "motion": plan["motion"],
+            "video_rendered": record["status"] in {"VIDEO_READY", "APPROVED", "REJECTED"},
+            "frames": [f"/api/media/{parts[3]}/frame/{i:02}"
+                       for i in range(1, len(manifest["scenes"])+1)],
+        })
+    if route.startswith("/api/media/") and "/frame/" in route:
+        import re
+        from agentforge import media_workflow_v15, media_quality, media_assets
+        parts = route.split("/")
+        if (len(parts) != 6 or parts[:3] != ["", "api", "media"]
+                or parts[4] != "frame"
+                or not re.fullmatch(r"[0-9]{2}", parts[5])):
+            raise ValueError("Invalid media frame request")
+        ident, index = parts[3], int(parts[5])
+        record = media_workflow_v15._row(ident)
+        if record["status"] not in {"ASSETS_READY", "VIDEO_READY",
+                                     "APPROVED", "REJECTED"}:
+            raise PermissionError("No prepared media frame for this production")
+        folder, manifest = media_workflow_v15._verify_storyboard_manifest(record)
+        count = len(media_assets._scenes(manifest["scenes"]))
+        if not 1 <= index <= count:
+            raise ValueError("Invalid scene index")
+        qa = media_quality.check(record["run_id"])
+        if qa["status"] not in {"ASSETS_PASS", "VIDEO_PASS"} or qa["failures"]:
+            raise PermissionError("Cannot preview media that failed artifact QA")
+        name = f"scene_{index:02}.png"
+        file = folder / name
+        media_assets._safe(file)
+        if (name not in manifest["artifacts"] or not file.is_file()
+                or not 0 < file.stat().st_size <= 8_000_000
+                or media_assets._sha(file) != manifest["artifacts"][name]):
+            raise PermissionError("Scene image checksum mismatch")
+        return self._reply(200, file.read_bytes(), mime="image/png",
+                           headers=(("Cache-Control", "private, no-store"),
+                                    ("X-Content-Type-Options", "nosniff")))
+    if route == "/api/media/studio-images":
+        # Reuse already collected ComfyUI assets; no GPU invocation or remote
+        # fetch. Each selected job is SHA-verified again before composition.
+        from agentforge import image_studio_v24
+        rows = image_studio_v24.report()["jobs"]
+        images = [{
+            "job_id": row["job_id"], "source": row["slug"],
+            "sha256": row["asset_sha"],
+            "preview_url": "/api/image/" + row["job_id"] + "/preview"
+        } for row in rows
+            if row.get("status") in {"ASSET_READY", "ATTACHED"}
+            and row.get("asset_name") and row.get("asset_sha")]
+        return self._reply(200, {"images": images[:25],
+                                 "generation_started": False,
+                                 "require_distinct_images": True})
     if route.startswith("/api/videos/") and route.endswith("/stream"):
         from agentforge import media_workflow_v15, media_quality, media_assets
         from agentforge.api.video_stream import InvalidVideoRange, parse_range

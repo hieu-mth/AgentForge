@@ -154,6 +154,92 @@ def _photo_path(name, rights_confirmed):
     return source
 
 
+def validate_visual_plan(plan, scenes_count):
+    """Allowlisted Owner visual choices; old storyboard runs remain classic."""
+    if plan is None:
+        return {"mode": "classic", "motion": "static", "image_job_ids": []}
+    if not isinstance(plan, dict) or set(plan) != {"mode", "motion", "image_job_ids"}:
+        raise MediaError("Invalid visual plan fields")
+    mode, motion, ids = plan["mode"], plan["motion"], plan["image_job_ids"]
+    if mode not in {"classic", "studio"} or motion not in {"static", "slow_zoom", "slow_pan"}:
+        raise MediaError("Unsupported visual or motion mode")
+    if not isinstance(ids, list):
+        raise MediaError("Invalid studio image list")
+    if mode == "classic":
+        if ids:
+            raise MediaError("Classic mode cannot silently include AI images")
+    elif (len(ids) != scenes_count or len(set(str(x) for x in ids)) != len(ids)
+          or any(not isinstance(x, str) or not RUN_RE.fullmatch(x) for x in ids)):
+        raise MediaError("Studio mode requires one distinct verified image per scene")
+    return {"mode": mode, "motion": motion, "image_job_ids": list(ids)}
+
+
+def _studio_images(plan):
+    """Reuse previously collected ComfyUI images; verify bytes and receipts.
+    Never make an implicit model/GPU call or access arbitrary filesystem paths.
+    """
+    if plan["mode"] != "studio":
+        return [], []
+    from agentforge.asset_preview import image_for_job
+    from PIL import Image
+    import io
+    images, receipts = [], []
+    for job_id in plan["image_job_ids"]:
+        contents, mime = image_for_job(job_id)
+        with Image.open(io.BytesIO(contents)) as opened:
+            if (mime != "image/png" or opened.format != "PNG"
+                    or opened.width * opened.height > 18_000_000
+                    or min(opened.size) < 256):
+                raise MediaError("AI image has unsupported format or dimensions")
+            opened.verify()
+        images.append(contents)
+        receipts.append({"job_id": job_id, "sha256": hashlib.sha256(contents).hexdigest()})
+    return images, receipts
+
+
+def render_studio_scene(path, scene, index, *, photo_bytes, title):
+    """Portrait editorial composition with a distinct, verified photo per shot."""
+    import io
+    from PIL import Image, ImageDraw, ImageFilter, ImageOps
+    w, h = SIZE
+    with Image.open(io.BytesIO(photo_bytes)) as opened:
+        original = ImageOps.exif_transpose(opened.convert("RGB"))
+        backdrop = ImageOps.fit(original, SIZE, method=Image.Resampling.LANCZOS)
+        backdrop = backdrop.filter(ImageFilter.GaussianBlur(24))
+        picture = Image.blend(backdrop, Image.new("RGB", SIZE, (9, 14, 22)), 0.42)
+        # Preserve an entire landscape ComfyUI shot; portrait cropping could
+        # otherwise remove the advertised product or main subject.
+        hero = ImageOps.contain(original, (w-36, 460),
+                                method=Image.Resampling.LANCZOS)
+    picture.paste(hero, ((w-hero.width)//2, 55+(460-hero.height)//2))
+    picture = picture.convert("RGBA")
+    overlay = Image.new("RGBA", SIZE, (0, 0, 0, 0))
+    od = ImageDraw.Draw(overlay)
+    # Separate scene crops come from independent AI images rather than
+    # recoloring a single static card.
+    for y in range(410, h):
+        alpha = round(226 * ((y - 410) / (h - 410)) ** 0.85)
+        od.line((0, y, w, y), fill=(9, 14, 22, alpha))
+    accent = [(235, 197, 146), (165, 215, 217), (244, 196, 181)][index % 3]
+    od.rounded_rectangle((30, 578, 36, 825), radius=3, fill=accent)
+    image = Image.alpha_composite(picture, overlay).convert("RGB")
+    draw = ImageDraw.Draw(image)
+    draw.text((48, 565), f"SCENE {index+1:02}", font=_font(20, bold=True), fill=accent)
+    headline = scene["headline"]
+    head_font = _font(43, bold=True)
+    while head_font.size > 29 and len(_wrap(draw, headline, head_font, w - 98)) > 3:
+        head_font = _font(head_font.size - 2, bold=True)
+    y = _draw_lines(draw, headline, head_font, x=48, y=622,
+                    width=w-98, fill=(255, 255, 252), spacing=8, max_lines=3)
+    body_font = _font(24)
+    while body_font.size > 17 and (len(_wrap(draw, scene["caption"], body_font, w-98)) > 4
+                                   or y + 18 + len(_wrap(draw, scene["caption"], body_font, w-98)) * (body_font.size + 6) > 900):
+        body_font = _font(body_font.size - 1)
+    _draw_lines(draw, scene["caption"], body_font, x=48, y=y+18,
+                width=w-98, fill=(232, 234, 236), spacing=6, max_lines=5)
+    image.save(path, format="PNG", optimize=True)
+
+
 def render_scene(path, scene, index, *, photo=None, title="Creative Media"):
     """Rasterize a portrait card with Vietnamese copy; no remote image loads."""
     from PIL import Image, ImageDraw, ImageOps
@@ -275,13 +361,17 @@ def load_manifest(run_id):
 def make_assets(payload):
     """Create immutable PNG/SRT/WAV artifacts in one exclusive media run."""
     if not isinstance(payload, dict) or set(payload) - {
-        "slug", "title", "scenes", "photo_name", "rights_confirmed"
+        "slug", "title", "scenes", "photo_name", "rights_confirmed", "visual_plan"
     }:
         raise MediaError("Unexpected media request fields")
     slug = _slug(payload.get("slug"))
     title = _text(payload.get("title"), "project title", 88)
     scenes = _scenes(payload.get("scenes"))
+    visual_plan = validate_visual_plan(payload.get("visual_plan"), len(scenes))
+    if visual_plan["mode"] == "studio" and payload.get("photo_name") is not None:
+        raise MediaError("Use either verified studio images or owner photo")
     photo = _photo_path(payload.get("photo_name"), payload.get("rights_confirmed"))
+    studio_images, studio_receipts = _studio_images(visual_plan)
     _safe(OUTPUTS)
     OUTPUTS.mkdir(parents=True, exist_ok=True)
     run_id = uuid4().hex
@@ -293,7 +383,11 @@ def make_assets(payload):
         names = []
         for index, scene in enumerate(scenes):
             name = f"scene_{index+1:02}.png"
-            render_scene(stage / name, scene, index, photo=photo, title=title)
+            if visual_plan["mode"] == "studio":
+                render_studio_scene(stage / name, scene, index,
+                                    photo_bytes=studio_images[index], title=title)
+            else:
+                render_scene(stage / name, scene, index, photo=photo, title=title)
             names.append(name)
         write_captions(stage / "captions.srt", scenes)
         duration = sum(x["duration_seconds"] for x in scenes)
@@ -306,6 +400,8 @@ def make_assets(payload):
             "duration_seconds": duration, "size": list(SIZE),
             "created_at": datetime.now(timezone.utc).isoformat(),
             "source_photo": photo.name if photo else None,
+            "visual_plan": visual_plan,
+            "studio_image_receipts": studio_receipts,
             "rights_attested": payload.get("rights_confirmed") is True if photo else None,
             "artifacts": assets, "video": None, "voiceover": None,
             "stage": "ASSETS_READY", "published": False,

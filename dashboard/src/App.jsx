@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { App as AntApp, Alert, Button, Card, Collapse, Descriptions, Drawer, Form, Grid, Input,
-  Image, Layout, Menu, Space, Spin, Table, Tabs, Tooltip, Typography } from 'antd';
+  Image, Layout, Menu, Select, Space, Spin, Table, Tabs, Tooltip, Typography } from 'antd';
 import {
   BarChartOutlined, DashboardOutlined, FolderOpenOutlined,
   LeftOutlined, MenuOutlined, MoonOutlined, ReloadOutlined, RobotOutlined,
@@ -71,6 +71,61 @@ function Login({onLogin, busy}) {
       </div>
     </section>
   </div>;
+}
+
+function VisualPicker({images, scenes, plan}) {
+  const available=images.length>=scenes.length;
+  const [mode,setMode]=useState(available?'studio':'classic');
+  const [motion,setMotion]=useState('slow_zoom');
+  const [ids,setIds]=useState(available?images.slice(0,scenes.length).map(x=>x.job_id):[]);
+  const change=(values)=>{
+    Object.assign(plan,values);
+  };
+  // Initial plan is also created by the parent (the modal controls never
+  // execute a GPU job or mutate an already prepared production).
+  const setVisualMode=value=>{
+    setMode(value);
+    change({mode:value,image_job_ids:value==='studio'?ids:[]});
+  };
+  const setMotionMode=value=>{
+    setMotion(value);change({motion:value});
+  };
+  const setShot=(index,value)=>{
+    const next=[...ids];next[index]=value;setIds(next);
+    change({image_job_ids:next});
+  };
+  return <Space orientation="vertical" size={12} style={{width:'100%',maxHeight:430,overflowY:'auto'}}>
+    <Alert type="info" showIcon
+      message="Standard V2 — ảnh AI đã được nhập + chuyển động camera"
+      description="Chỉ tái sử dụng ảnh từ Image Studio đã hoàn tất và kiểm chứng SHA. Không tự gọi GPU/model hoặc tải ảnh trên Internet."/>
+    <Text strong>Hình ảnh cho mỗi cảnh</Text>
+    <Select value={mode} onChange={setVisualMode} style={{width:'100%'}} options={[
+      {value:'classic',label:'Classic — ảnh nền mẫu (không phải AI visual)'},
+      {value:'studio',label:'Studio — ảnh AI riêng cho từng cảnh',disabled:!available},
+    ]}/>
+    {!available&&<Alert type="warning" showIcon
+      message={`Chỉ có ${images.length} ảnh AI sẵn có, cần ${scenes.length} ảnh riêng`}
+      description="Hãy tạo/nhập đủ ảnh trong Image Studio trước. Bạn vẫn có thể dùng Classic để thử pipeline, nhưng bố cục sẽ còn mang tính template."/>}
+    {mode==='studio'&&scenes.map((scene,index)=><div key={index}>
+      <Text>Shot {index+1}: {scene.headline}</Text>
+      <Select value={ids[index]} style={{width:'100%',marginTop:6}}
+        onChange={value=>setShot(index,value)}
+        options={images.map(img=>({value:img.job_id,
+          label:img.source+' · '+img.job_id.slice(0,8)}))}/>
+      {ids[index]&&<Image preview={false} width={108}
+        alt={'Ảnh AI đã kiểm chứng cho cảnh '+(index+1)}
+        style={{marginTop:6,borderRadius:8}}
+        src={'/api/image/'+ids[index]+'/preview'}/>}
+    </div>)}
+    <Text strong>Chuyển động camera khi render FFmpeg</Text>
+    <Select value={motion} style={{width:'100%'}} onChange={setMotionMode}
+      options={[
+        {value:'slow_zoom',label:'Slow zoom — camera tiến nhẹ'},
+        {value:'slow_pan',label:'Slow pan — camera trượt ngang'},
+        {value:'static',label:'Static — không chuyển động'},
+      ]}/>
+    <Text type="secondary" style={{fontSize:12}}>Ảnh AI và lựa chọn chuyển động được ghi vào manifest của production. MP4 vẫn cần Owner duyệt render riêng.</Text>
+  </Space>;
 }
 
 export default function App() {
@@ -206,22 +261,39 @@ export default function App() {
       }));
       if(out){message.success('Đã chuẩn bị retry bước '+(step.step_index+1));await openGoal(goal.goal_id);}
     });
-  const prepareStoryboard=selected=>ask('Bước 2A — tạo tư liệu từ storyboard?',
-    <Space orientation="vertical">
-      <Paragraph>Đã xem storyboard này. AgentForge sẽ tạo ảnh cảnh, âm thanh và phụ đề local; chưa render MP4 hoặc xuất bản.</Paragraph>
-      <Paragraph>Cần cấu hình business profile trong phần Kinh doanh để kiểm tra nội dung. Mỗi lần chuẩn bị tạo production mới, không ghi đè video cũ.</Paragraph>
-      <Text code>{selected.storyboard_source_sha}</Text>
-    </Space>,
-    async()=>{
-      const result=await runAction(()=>post('/api/media/prepare-from-task',{
-        ack:'PREPARE_REVIEWED_STORYBOARD',task_id:selected.task_id,
-        source_sha:selected.storyboard_source_sha,
-      }));
-      if(result){
-        setMediaPrepared(result);
-        message.success('Đã tạo tư liệu; chuyển sang Bước 2B render MP4');
-      }
-    });
+  const prepareStoryboard=async selected=>{
+    let images=[];
+    try{
+      const catalog=await api('/api/media/studio-images');
+      images=catalog.images||[];
+    }catch(e){authError(e);return;}
+    const count=selected.report?.scenes?.length||0;
+    const enough=images.length>=count && count>0;
+    const plan={
+      mode:enough?'studio':'classic',motion:'slow_zoom',
+      image_job_ids:enough?images.slice(0,count).map(x=>x.job_id):[],
+    };
+    ask('Bước 2A — Chọn visual và tạo tư liệu',
+      <Space orientation="vertical" style={{width:'100%'}}>
+        <Paragraph>Chọn ảnh cho từng cảnh và chuyển động. Mỗi production mới có SHA riêng; không ghi đè bản cũ. Business Context vẫn được kiểm tra trước khi tạo.</Paragraph>
+        <VisualPicker images={images} scenes={selected.report.scenes||[]} plan={plan}/>
+        <Text code>{selected.storyboard_source_sha}</Text>
+      </Space>,
+      async()=>{
+        if(plan.mode==='studio'&&(plan.image_job_ids.length!==count
+            ||new Set(plan.image_job_ids).size!==count)){
+          message.error('Cần chọn một ảnh AI khác nhau cho mỗi cảnh');return;
+        }
+        const result=await runAction(()=>post('/api/media/prepare-from-task',{
+          ack:'PREPARE_REVIEWED_STORYBOARD',task_id:selected.task_id,
+          source_sha:selected.storyboard_source_sha,visual_plan:plan,
+        }));
+        if(result){
+          setMediaPrepared(result);
+          message.success('Tư liệu đã sẵn sàng. Bước tiếp theo: render MP4');
+        }
+      });
+  };
   const renderPreparedVideo=production=>ask('Bước 2B — chạy FFmpeg tạo MP4?',
     <Space orientation="vertical">
       <Paragraph>Chạy FFmpeg trên máy local để dựng video từ tư liệu đã kiểm tra. Đây là tác vụ tiến trình ngoài và có thể mất tài nguyên máy; không thể chạy lại nếu kết quả còn chưa xác định.</Paragraph>
@@ -519,7 +591,7 @@ export default function App() {
         <Space wrap style={{marginTop:16}}>
           <Button type="primary" loading={busy} disabled={!task.storyboard_source_sha||!!mediaPrepared}
             onClick={()=>prepareStoryboard(task)}>
-            Bước 2A — Tạo tư liệu từ storyboard
+            Bước 2A — Chọn hình ảnh & tạo tư liệu
           </Button>
           {mediaPrepared&&<Button type="primary" loading={busy}
             disabled={!data.external_actions_enabled}
@@ -533,6 +605,16 @@ export default function App() {
         {mediaPrepared&&<Alert style={{marginTop:12}} showIcon type="success"
           message="Đã tạo tư liệu local, chưa có MP4"
           description={<>Production: <Text code>{mediaPrepared.production_id}</Text> · QA tư liệu đạt. Bạn có thể render bây giờ hoặc vào Đánh giá → Video local sau.</>}/>}
+        {mediaPrepared&&<Card size="small" title="Preview từng cảnh đã dựng — trước render" style={{marginTop:12}}>
+          <Space wrap align="start">
+            {(task.report.scenes||[]).map((scene,i)=><div key={i} style={{maxWidth:126}}>
+              <Image width={112} alt={'Preview cảnh '+(i+1)}
+                src={'/api/media/'+mediaPrepared.production_id+'/frame/'+String(i+1).padStart(2,'0')}/>
+              <Text type="secondary" style={{display:'block',fontSize:11}}>Cảnh {i+1}: {scene.headline}</Text>
+            </div>)}
+          </Space>
+          <Paragraph type="secondary" style={{marginTop:10}}>Các PNG preview đã kiểm tra SHA. Nếu chưa ưng, không render; tạo một production mới với ảnh/motion khác để giữ nguyên lịch sử.</Paragraph>
+        </Card>}
         {!task.storyboard_source_sha&&<Alert type="warning" style={{marginTop:12}}
           message="Storyboard chưa có SHA được xác minh"
           description="Đóng và mở lại kết quả công việc từ Goal trước khi tạo tư liệu."/>}
