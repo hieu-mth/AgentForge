@@ -604,7 +604,7 @@ export default function App() {
         </Space>
         {mediaPrepared&&<Alert style={{marginTop:12}} showIcon type="success"
           message="Đã tạo tư liệu local, chưa có MP4"
-          description={<>Production: <Text code>{mediaPrepared.production_id}</Text> · QA tư liệu đạt. Bạn có thể render bây giờ hoặc vào Đánh giá → Video local sau.</>}/>
+          description={<>Production: <Text code>{mediaPrepared.production_id}</Text> · QA tư liệu đạt. Bạn có thể render bây giờ hoặc vào Đánh giá → Video local sau.</>}/>}
         {mediaPrepared&&<Card size="small" title="Preview từng cảnh đã dựng — trước render" style={{marginTop:12}}>
           <Space wrap align="start">
             {(task.report.scenes||[]).map((scene,i)=><div key={i} style={{maxWidth:126}}>
@@ -614,7 +614,7 @@ export default function App() {
             </div>)}
           </Space>
           <Paragraph type="secondary" style={{marginTop:10}}>Các PNG preview đã kiểm tra SHA. Nếu chưa ưng, không render; tạo một production mới với ảnh/motion khác để giữ nguyên lịch sử.</Paragraph>
-        </Card>}}
+        </Card>}
         {!task.storyboard_source_sha&&<Alert type="warning" style={{marginTop:12}}
           message="Storyboard chưa có SHA được xác minh"
           description="Đóng và mở lại kết quả công việc từ Goal trước khi tạo tư liệu."/>}
