@@ -188,6 +188,26 @@ def execute(goal_id, *, grants=(), confirm_model_call=False,
         brain_db_path=brain_db_path, task_db_path=task_db_path)
 
 
+
+def retry_failed_step(goal_id, plan_sha256, child_task_id, *,
+                      brain_db_path=None, task_db_path=None):
+    """Rearm only a confirmed failed V5 child; next run needs fresh consent."""
+    from agentforge.ops_control import require_active
+    require_active()
+    goal = store.get_goal(goal_id, db_path=brain_db_path)
+    _verify(goal)
+    if goal["plan_sha256"] != plan_sha256 or goal["status"] != "FAILED":
+        raise store.BrainError("Reviewed failed V5 goal and SHA required")
+    index = goal["current_step"]
+    step = next((x for x in goal["steps"] if x["step_index"] == index), None)
+    if step is None or step["status"] != "FAILED" or step["child_task_id"] != child_task_id:
+        raise store.BrainError("Only the exact failed step is retryable")
+    child = task_history.get_task(child_task_id, db_path=task_db_path)
+    if child["status"] != "FAILED" or child.get("skill_id") != step["skill_id"]:
+        raise store.BrainError("Ambiguous or nonfailed child cannot be retried")
+    return store.rearm_failed_step(goal_id, index, child_task_id, db_path=brain_db_path)
+
+
 def recover(*, brain_db_path=None, task_db_path=None):
     """Manual recovery of ambiguous in-flight work. No retries ever."""
     running = [x for x in store.list_goals(db_path=brain_db_path, limit=100)
@@ -215,6 +235,7 @@ def inspect(goal_id, *, brain_db_path=None, task_db_path=None):
     from agentforge.core import artifact_acceptance
     return {
         "goal_id": goal_id, "status": goal["status"],
+        "current_step": goal["current_step"],
         "artifact_acceptance": artifact_acceptance.for_goal(goal, task_db_path=task_db_path),
         "title": goal["title"], "template": goal["template"],
         "plan_sha256": goal["plan_sha256"],
