@@ -49,7 +49,7 @@ class AIModelFailureDiagnosticsTests(unittest.TestCase):
                   "content":[{"type":"text","text":'{"ok":true}'}]}
             with patch.dict(os.environ,env), \
                  patch.object(model,"DOTENV_PATH",Path(temp)/"missing.env"), \
-                 patch.object(model.urllib.request,"urlopen",
+                 patch.object(model, "_cloud_open",
                               return_value=io.BytesIO(json.dumps(body).encode())) as send:
                 result=model.generate_json("Write a React app",{"type":"object"},
                                            worker_id="webapp_developer")
@@ -65,7 +65,7 @@ class AIModelFailureDiagnosticsTests(unittest.TestCase):
         for configured, expected in (("",8192),("12288",12288),("16384",16384)):
             with self.subTest(configured=configured), \
                  patch.dict(os.environ, {"AGENTFORGE_DEVELOPER_MAX_TOKENS":configured}), \
-                 patch.object(model.urllib.request, "urlopen",
+                 patch.object(model, "_cloud_open",
                               return_value=io.BytesIO(json.dumps({
                                   "stop_reason":"end_turn",
                                   "content":[{"type":"text","text":'{"ok":true}'}]
@@ -87,7 +87,7 @@ class AIModelFailureDiagnosticsTests(unittest.TestCase):
         raw=io.BytesIO(json.dumps({
             "content":[{"type":"text","text":'{"ok":1}'}],
             "stop_reason":"end_turn"}).encode())
-        with patch.object(model.urllib.request,"urlopen",return_value=raw) as send:
+        with patch.object(model, "_cloud_open",return_value=raw) as send:
             result=model._anthropic_chat(runtime,"Prompt",{"type":"object"},
                                          worker_id="product_builder")
         self.assertEqual(json.loads(result),{"ok":1})
