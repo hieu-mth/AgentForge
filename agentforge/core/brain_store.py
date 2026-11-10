@@ -381,6 +381,31 @@ def recover(*, db_path=None, return_ids=False):
     return changed_ids if return_ids else len(changed_ids)
 
 
+
+def interrupted_task_ids(*, db_path=None):
+    """Idempotent S1 reconciliation targets for already INTERRUPTED S4 goals.
+
+    Recovering S4 and S1 uses separate SQLite databases. If a process dies
+    between them, a later explicit recovery must still find the linked S1
+    tasks without replaying a dispatched step or paging recent history.
+    """
+    db = _connect(db_path)
+    if db is None:
+        return []
+    with closing(db):
+        return [row[0] for row in db.execute("""
+            SELECT task_id FROM (
+                SELECT parent_task_id AS task_id FROM goals
+                 WHERE status='INTERRUPTED'
+                UNION
+                SELECT step_runs.child_task_id AS task_id FROM step_runs
+                 JOIN goals ON goals.goal_id=step_runs.goal_id
+                 WHERE goals.status='INTERRUPTED'
+            ) WHERE task_id IS NOT NULL ORDER BY task_id
+        """)]
+
+
+
 def set_memory(key, note, evidence_ref, *, confirm_write=False, db_path=None):
     """Owner-managed notes, not autonomous fact learning or hidden prompts."""
     if confirm_write is not True:
