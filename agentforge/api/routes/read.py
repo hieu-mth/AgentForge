@@ -164,6 +164,56 @@ def dispatch(self, route):
             raise PermissionError("Review this signed React proposal before viewing QA screenshot")
         return self._reply(200, browser_qa.image(report_id, report_sha, filename),
                            mime="image/png")
+    if route.startswith("/api/webapps/") and route.endswith("/preview-evidence"):
+        import json
+        import re
+        from itertools import islice
+        from agentforge.features.webapps import browser_qa
+        from agentforge import webapp_developer
+        parts = route.split("/")
+        if len(parts) != 5 or parts[1:3] != ["api", "webapps"]:
+            raise ValueError("Invalid preview evidence path")
+        pid = parts[3]
+        if not re.fullmatch(r"[a-f0-9]{32}", pid):
+            raise ValueError("Invalid proposal ID")
+        provider = webapp_developer.provider(pid)
+        doc, _ = provider._read_proposal(pid)
+        sha = doc["sha256"]
+        if self._session().get("reviewed_webapps", {}).get(pid) != sha:
+            raise PermissionError("Review this exact source SHA before preview evidence")
+        latest = None
+        root = browser_qa.REPORTS
+        if root.is_dir():
+            # Bounded local scan; never expose a screenshot without checking
+            # report signature, exact source lineage and image hashes.
+            for folder in islice(root.iterdir(), 512):
+                if not folder.is_dir() or not re.fullmatch(r"[a-f0-9]{32}", folder.name):
+                    continue
+                path = folder / "report.json"
+                if not path.is_file() or path.stat().st_size > 16000:
+                    continue
+                try:
+                    candidate = json.loads(path.read_text(encoding="utf-8"))
+                    if candidate.get("proposal_id") != pid or candidate.get("source_sha256") != sha:
+                        continue
+                    verified = browser_qa.read_report(folder.name, candidate.get("qa_report_sha"))
+                except (ValueError, PermissionError, OSError, KeyError, TypeError):
+                    continue
+                if latest is None or path.stat().st_mtime > latest[0]:
+                    latest = (path.stat().st_mtime, verified)
+        if latest is None:
+            return self._reply(200, {
+                "available": False, "source_sha256": sha,
+                "message": "Preview requires separately approved offline Chromium QA"})
+        report = latest[1]
+        prefix = "/api/webapps/qa/" + report["qa_report_id"] + "/" + report["qa_report_sha"] + "/"
+        return self._reply(200, {
+            "available": bool(report["screenshots"]),
+            "source_sha256": sha, "status": report["status"],
+            "browser_smoke_verified": report["browser_smoke_verified"],
+            "functional_flows_verified": False, "security_verified": False,
+            "screenshots": {name: prefix + name for name in report["screenshots"]},
+        })
     if route.startswith("/api/webapps/") and route.endswith("/export"):
         from agentforge.features.webapps.exporter import create_zip
         from agentforge import webapp_developer
