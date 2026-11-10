@@ -82,6 +82,44 @@ class Wave3RecoveryAndHealthTests(unittest.TestCase):
             brain_db_path=self.brain, task_db_path=self.tasks)["interrupted_goals"], 0)
         self.assertEqual(brain_store.recover(db_path=self.brain), 0)
 
+    def test_crash_between_s4_and_s1_recovery_is_reconciled_next_run(self):
+        goal = self.goal()
+        parent = task_history.create_task(
+            "workflow", "brain.goal", {"goal_id": goal["goal_id"]},
+            db_path=self.tasks)
+        child = task_history.create_task(
+            "skill", "web.quality_check", {}, parent_id=parent,
+            db_path=self.tasks)
+        task_history.transition(parent, "RUNNING", db_path=self.tasks)
+        task_history.transition(child, "RUNNING", db_path=self.tasks)
+        brain_store.change_state(
+            goal["goal_id"], "RUNNING", expected="APPROVED",
+            parent_task_id=parent, db_path=self.brain)
+        brain_store.claim_step(goal["goal_id"], 0, "web.quality_check",
+                              db_path=self.brain)
+        with closing(sqlite3.connect(self.brain)) as db, db:
+            db.execute("UPDATE step_runs SET child_task_id=? WHERE goal_id=?",
+                       (child, goal["goal_id"]))
+        # Simulate termination immediately after the S4 transaction, before
+        # S1 task transitions. Re-invocation must not overlook this state.
+        self.assertEqual(brain_store.recover(db_path=self.brain,
+                                             return_ids=True), [goal["goal_id"]])
+        self.assertEqual(task_history.get_task(parent, db_path=self.tasks)["status"],
+                         "RUNNING")
+        self.assertEqual(brain_store.interrupted_task_ids(db_path=self.brain),
+                         sorted([parent, child]))
+        resumed = brain_runner.recover(
+            brain_db_path=self.brain, task_db_path=self.tasks)
+        self.assertEqual(resumed["interrupted_goals"], 0)
+        for task_id in (parent, child):
+            self.assertEqual(task_history.get_task(
+                task_id, db_path=self.tasks)["status"], "INTERRUPTED")
+        self.assertEqual(brain_store.get_goal(
+            goal["goal_id"], db_path=self.brain)["steps"][0]["status"],
+            "DISPATCHING")
+        self.assertEqual(brain_store.recover(db_path=self.brain), 0)
+
+
     def test_doctor_global_counts_do_not_hide_old_running_history(self):
         old = self.goal()
         brain_store.change_state(old["goal_id"], "RUNNING", expected="APPROVED",
