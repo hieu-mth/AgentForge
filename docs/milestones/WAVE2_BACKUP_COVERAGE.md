@@ -41,9 +41,11 @@ Schema 1 archives remain verifiable and stage-restorable, but are labeled
 Intentionally excluded: `workspace/backups/**` (would recursively copy the
 archive being created), `workspace/.webapp-qa-staging/**` (disposable),
 SQLite WAL/SHM/journal sidecars (the SQLite database is snapshotted online),
-the transient `ops_daemon.lock` file, model weights, .env/credentials and
-external paths. The backup has an individual 250 MiB and aggregate 1.5 GiB
-budget. Large film/video backups may require a separate Owner-selected,
+the transient `ops_daemon.lock` file, root-level `.env`, model weights
+and external paths. **Nested records in included scopes may themselves
+contain sensitive values**: credential/content scanning is not performed
+(`contains_credentials_checked: false`). The backup has an individual
+250 MiB and aggregate 1.5 GiB budget. Large film/video backups may require a separate Owner-selected,
 encrypted archive workflow; the tool fails instead of silently omitting files.
 
 An unknown top-level location under data/workspace is reported in
