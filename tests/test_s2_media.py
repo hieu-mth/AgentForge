@@ -182,6 +182,14 @@ class TestS2Media(unittest.TestCase):
             self.assertEqual(review.call_count, 2)
         folder, manifest = assets.load_manifest(receipt["run_id"])
         self.assertEqual(manifest["visual_plan"], plan)
+        self.assertEqual(manifest["studio_layers_version"], 1)
+        for i in (1, 2):
+            self.assertIn(f"background_{i:02}.png", manifest["artifacts"])
+            self.assertIn(f"overlay_{i:02}.png", manifest["artifacts"])
+            with Image.open(folder/f"overlay_{i:02}.png") as layer:
+                self.assertEqual(layer.mode, "RGBA")
+                self.assertEqual(layer.size, assets.SIZE)
+                self.assertEqual(layer.getpixel((0, 0))[3], 0)
         self.assertEqual([x["sha256"] for x in manifest["studio_image_receipts"]],
                          [hashlib.sha256(x).hexdigest() for x in originals])
         self.assertNotEqual(assets._sha(folder/"scene_01.png"),
@@ -190,6 +198,36 @@ class TestS2Media(unittest.TestCase):
         movie = render.render_video(receipt["run_id"], confirm_external_run=True)
         self.assertEqual(movie["status"], "VIDEO_RENDERED")
         self.assertEqual(quality.check(receipt["run_id"])["status"], "VIDEO_PASS")
+
+    def test_old_studio_without_layers_never_animates_embedded_text(self):
+        """Existing Standard V2 productions remain playable, not re-written."""
+        import io
+        from PIL import Image
+        source=io.BytesIO()
+        Image.new("RGB",(768,512),(160, 180, 195)).save(source,format="PNG")
+        plan={"mode":"studio","motion":"slow_pan",
+              "image_job_ids":["a"*32,"b"*32]}
+        with patch("agentforge.asset_preview.image_for_job",
+                   return_value=(source.getvalue(),"image/png")):
+            receipt=self.build({**demo(),"visual_plan":plan})
+        folder,manifest=assets.load_manifest(receipt["run_id"])
+        for i in (1,2):
+            for prefix in ("background","overlay"):
+                name=f"{prefix}_{i:02}.png"
+                (folder/name).unlink()
+                del manifest["artifacts"][name]
+        del manifest["studio_layers_version"]
+        (folder/"manifest.json").write_text(
+            json.dumps(manifest,ensure_ascii=False),encoding="utf-8")
+        self.assertEqual(quality.check(receipt["run_id"])["status"],"ASSETS_PASS")
+        with patch.object(render,"_run_process",
+                          side_effect=RuntimeError("inspect args")) as process:
+            with self.assertRaisesRegex(RuntimeError,"inspect args"):
+                render.render_video(receipt["run_id"],confirm_external_run=True)
+        args=process.call_args.args[0]
+        self.assertIn("-vf",args)
+        self.assertEqual(args[args.index("-vf")+1],"fps=15,format=yuv420p")
+        self.assertNotIn("zoompan", " ".join(args))
 
     def test_studio_plan_invalid_before_any_media_is_written(self):
         for plan in [
