@@ -342,6 +342,21 @@ def dispatch(self, route):
         return self._reply(200, file.read_bytes(), mime="image/png",
                            headers=(("Cache-Control", "private, no-store"),
                                     ("X-Content-Type-Options", "nosniff")))
+    if route.startswith("/api/visuals/website/"):
+        from agentforge.features.media import visual_jobs
+        from agentforge import web_assets, product_builder
+        import hashlib
+        slug = product_builder._check_slug(
+            route.removeprefix("/api/visuals/website/"))
+        project = web_assets._project(slug)
+        target = project / "index.html"
+        product_builder._check_path_chain(target)
+        digest = hashlib.sha256(target.read_bytes()).hexdigest()
+        topic = visual_jobs.website_subject(slug)
+        self._session().setdefault("inspected_visual_websites", {})[slug] = digest
+        return self._reply(200, {"slug": slug, "source_sha": digest,
+                                 "visual_subject": topic,
+                                 "status": "READY_FOR_AI_VISUAL"})
     if route == "/api/visuals/jobs":
         from agentforge.features.media import visual_jobs
         return self._reply(200, visual_jobs.report())
@@ -351,6 +366,8 @@ def dispatch(self, route):
         if len(parts) != 5:
             raise ValueError("Invalid visual preview route")
         contents, mime = visual_jobs.image_for_job(parts[3])
+        from agentforge.features.media.visual_jobs import _row
+        self._session().setdefault("reviewed_visual_images", {})[parts[3]] = _row(parts[3])["asset_sha"]
         return self._reply(200, contents, mime=mime)
     if route == "/api/media/studio-images":
         # Reuse already collected ComfyUI assets; no GPU invocation or remote
