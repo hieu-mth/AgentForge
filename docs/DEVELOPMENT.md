@@ -146,3 +146,24 @@ Kiểm tra hồi quy:
 .\.venv\Scripts\python.exe -m unittest tests.test_v5_company tests.test_control_center_v1 -v
 npm.cmd run build --prefix dashboard
 ```
+
+## 8. Phát video MP4 local trực tiếp trên Dashboard
+
+Vào **Đánh giá → Video local → Xem video** cho production đã render
+(`VIDEO_READY`) hoặc đã duyệt (`APPROVED`/`REJECTED`). Trình phát HTML5
+có Play/Pause, âm lượng, tua và toàn màn hình. File tiếp tục nằm tại
+`workspace/media/<run_id>/video.mp4`, **không upload lên cloud**.
+
+API `GET /api/videos/<production_id>/stream` yêu cầu phiên Owner đăng nhập
+và việc mở thông tin production trước đó trong cùng phiên. Server kiểm tra
+QA hiện tại, dấu SHA và nguồn local hợp lệ, trả video theo byte range
+(`206 Partial Content`) bằng các chunk 64 KiB. Range không hợp lệ được
+trả `416`. Không nhận đường dẫn file tùy ý hoặc phát source chưa kiểm chứng.
+Trình phát không tự nghiệm thu; Owner cần xem/nghe rồi tự xác nhận.
+
+Kiểm thử logic streaming:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest tests.test_video_stream -v
+npm.cmd run build --prefix dashboard
+```
