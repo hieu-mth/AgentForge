@@ -6,7 +6,7 @@ import { BulbOutlined, CheckCircleOutlined, FolderOpenOutlined, SafetyCertificat
   SendOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { badge, clip, fallback, StatTile } from '../components/shared.jsx';
 import { PERMISSIONS, WORKERS, SKILLS, requiredPermissions, permissionsKnown, executionConsent } from '../permissions.js';
-import { quotaForPrompt } from '../workspace_quota.js';
+import { isVideoRequest, quotaForPrompt } from '../workspace_quota.js';
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 
@@ -14,7 +14,7 @@ const MIN_PROMPT = 20;
 const IDEAS = [
   'AI Company V5: Tạo ứng dụng quản lý bán hàng React local với bảng sản phẩm, tìm kiếm, lọc và giỏ demo; yêu cầu Architect, Developer, QA và Reviewer phân tích độc lập.',
   'Thiết kế landing page nệm ngủ cao cấp, tối ưu điện thoại và có nút gọi nhanh.',
-  'Viết storyboard video 30 giây giới thiệu cửa hàng cà phê rang xay thủ công.',
+  'Làm video quảng cáo 30 giây giới thiệu cửa hàng cà phê (bắt đầu bằng storyboard để duyệt).',
   'Tạo website portfolio tối giản cho nhiếp ảnh gia, tông màu ấm và nhiều khoảng trắng.',
 ];
 const STEPS = [
@@ -33,6 +33,7 @@ function greeting() {
 
 export function Workspace({data, onPlan, openGoal, onOpenSettings, prompt, setPrompt, loading}) {
   const limits = quotaForPrompt(prompt, data?.workspace_policy);
+  const videoIntent = isVideoRequest(prompt);
   const goals = data?.goals || [];
   const waiting = goals.filter(g => ['PLANNED', 'WAITING_APPROVAL'].includes(g.status)).length;
   const done = goals.filter(g => g.status === 'SUCCEEDED').length;
@@ -61,6 +62,9 @@ export function Workspace({data, onPlan, openGoal, onOpenSettings, prompt, setPr
             disabled={length < MIN_PROMPT || limits.blocked} onClick={submit}>Tạo kế hoạch</Button>
         </div>
       </div>
+      {length >= MIN_PROMPT && videoIntent && <Alert type="info" showIcon style={{marginTop:14}}
+        message="Video — giai đoạn đầu: lập storyboard"
+        description="AgentForge sẽ tạo kịch bản để bạn duyệt, chưa xuất MP4 trong bước này. Sau khi duyệt storyboard, bạn cần thực hiện bước tạo tư liệu và render video local riêng (cấp quyền chạy FFmpeg). Video hoàn thành xem tại Đánh giá → Video local."/>}
       {length >= MIN_PROMPT && limits.blocked && <Alert
         type="warning" showIcon style={{marginTop:14}}
         message={`Giới hạn Workspace hiện là ${limits.allowed} lượt model/Goal, nhưng yêu cầu cần ${limits.required} lượt`}
