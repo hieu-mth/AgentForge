@@ -109,16 +109,24 @@ export function Workspace({data, onPlan, openGoal, onOpenSettings, prompt, setPr
   </div>;
 }
 
-export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, busy, externalEnabled}) {
+export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, onRetry, busy, externalEnabled}) {
   const [grants, setGrants] = useState([]);
-  useEffect(()=>{setGrants([]);},[goal?.goal_id]);
+  useEffect(()=>{setGrants([]);},[goal?.goal_id,goal?.current_step]);
   if (!goal) return null;
-  const required = requiredPermissions(goal.plan);
+  const activeIndex = Number.isInteger(goal.current_step) ? goal.current_step : 0;
+  const activeStep = goal.plan?.[activeIndex];
+  // Explicit consent is scoped to the upcoming stage, not the entire Goal.
+  const required = requiredPermissions(activeStep ? [activeStep] : []);
   const known = permissionsKnown(required);
   const consent = executionConsent(required, grants);
   const complete = known && required.every(permission=>grants.includes(permission));
   const sensitive = consent.sensitive;
   const runnable = ['APPROVED','WAITING_APPROVAL'].includes(goal.status);
+  const runs = goal.step_runs||[];
+  const failedStep = goal.status==='FAILED'
+    ? runs.find(step=>step.step_index===activeIndex && step.status==='FAILED' && step.child_task_id)
+    : null;
+  const developerReady = runs.some(step=>step.skill_id==='webapp.develop' && step.status==='SUCCEEDED');
   return <Drawer title="Kế hoạch & phê duyệt" open={!!goal} onClose={onClose}
     size="min(640px, 96vw)" destroyOnHidden extra={badge(goal.status)}>
     <Title level={4}>{goal.title}</Title>
@@ -133,6 +141,7 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, b
       <div className="plan-step" key={i}>
         <span className="step-number">{i+1}</span>
         <div><strong>{SKILLS[step.skill_id]||step.skill_id}</strong>
+        <div className="subtle">{runs.find(run=>run.step_index===i)?.status|| (i===activeIndex?'Chờ chạy':'Chưa tới bước')}{i===activeIndex&&runnable?' · BƯỚC ĐANG CHỜ BẠN DUYỆT':''}</div>
         <div className="subtle">{WORKERS[step.worker_id]||step.worker_id}</div>
         <Text type="secondary">{(step.required_permissions||[]).map(p=>PERMISSIONS[p]?.title||p).join(' · ')||'Chỉ đọc dữ liệu'}</Text>
         <Collapse ghost size="small" items={[{key:'technical',label:'Thông tin kỹ thuật',
@@ -141,12 +150,26 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, b
     <Collapse ghost items={[{key:'1',label:'Xem chi tiết dữ liệu và plan (nâng cao)',
       children:<pre className="source-text">{JSON.stringify({inputs:goal.inputs,plan:goal.plan},null,2)}</pre>}]}/>
     <Divider/>
-    {goal.status==='SUCCEEDED'&&<Button type="primary" block
+    {developerReady&&<Button type="primary" block onClick={()=>onViewResult(goal)}>
+      Xem source sản phẩm ngay (Developer đã tạo xong)
+    </Button>}
+    {runs.some(step=>step.skill_id==='webapp.review'&&step.status==='SUCCEEDED')&&
+      <Button block onClick={()=>onViewResult(goal,'review')}>Xem báo cáo AI Reviewer</Button>}
+    {goal.status==='SUCCEEDED'&&!developerReady&&<Button type="primary" block
       onClick={()=>onViewResult(goal)}>Xem kết quả công việc</Button>}
+    {failedStep&&<Alert type="warning" showIcon style={{marginTop:12}}
+      message={`Bước ${activeIndex+1} thất bại: ${SKILLS[activeStep?.skill_id]||activeStep?.skill_id}`}
+      description={<Space orientation="vertical">
+        <Text>Chỉ bước thất bại được chạy lại. Các bước đã thành công được giữ nguyên. Lần gọi model tiếp theo vẫn cần cấp quyền riêng.</Text>
+        <Button loading={busy} onClick={()=>onRetry(goal,failedStep)}>Chuẩn bị chạy lại bước {activeIndex+1}</Button>
+      </Space>}/>}
     {goal.status==='PLANNED' && <Button type="primary" block loading={busy}
       onClick={()=>onApprove(goal)}>Duyệt SHA · chưa chạy AI</Button>}
     {runnable && <>
-      <Title level={5}>AI cần bạn cho phép những gì?</Title>
+      <Title level={5}>Đang duyệt bước {activeIndex+1}/{goal.plan?.length}: {SKILLS[activeStep?.skill_id]||activeStep?.skill_id}</Title>
+      <Alert type="info" showIcon
+        message={activeStep?.estimated_model_calls ? 'Bước này có gọi model AI' : 'Bước này không yêu cầu lượt model'}
+        description={`Chỉ cấp quyền cho bước ${activeIndex+1}. Không duyệt thay các bước tiếp theo.`}/>
       <Alert type="info" showIcon message="Chỉ yêu cầu quyền có trong kế hoạch đã duyệt"
         description="Các quyền chỉ có hiệu lực trong lượt chạy này. Bạn có thể bỏ chọn để chưa chạy."/>
       {!known && <Alert type="error" showIcon style={{marginTop:12}}
@@ -181,7 +204,7 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, b
       <Button type="primary" block style={{marginTop:20}} loading={busy}
         disabled={!complete||(sensitive&&!externalEnabled)}
         onClick={()=>onExecute(goal,consent)}>
-        {goal.status==='APPROVED'?'Xác nhận quyền và bắt đầu chạy':'Xác nhận quyền và tiếp tục chạy'}
+        {goal.status==='APPROVED'?'Chạy bước '+(activeIndex+1)+': ':'Tiếp tục bước '+(activeIndex+1)+': '}{SKILLS[activeStep?.skill_id]||activeStep?.skill_id}
       </Button>
       {!complete && known && required.length>0 &&
         <Text type="secondary" className="subtle">Hãy đọc và chọn đủ {required.length} quyền được yêu cầu trước khi chạy.</Text>}

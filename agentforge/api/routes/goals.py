@@ -42,6 +42,15 @@ def handle(server, path, request, session=None):
                 growth_db_path=server.growth_db_path)
             return brain_store.approve_goal(
                 ident, request["plan_sha256"], db_path=server.brain_db_path)
+        if action == "retry":
+            if request.get("ack") != "RETRY_FAILED_STEP":
+                raise PermissionError("Explicit failed-step retry approval required")
+            # This call only rearms the exact failed step. It never invokes a
+            # model; the following RUN needs separate grants and confirmations.
+            return brain_runner.retry_failed_step(
+                ident, request["plan_sha256"], request.get("child_task_id"),
+                brain_db_path=server.brain_db_path,
+                task_db_path=server.task_db_path)
         if action in {"run", "resume"}:
             required_status = "APPROVED" if action == "run" else "WAITING_APPROVAL"
             if goal["status"] != required_status or request.get("ack") != action.upper():
@@ -57,9 +66,11 @@ def handle(server, path, request, session=None):
                     not set(grants).issubset(skill_registry.PERMISSIONS)):
                 raise ValueError("Invalid tool grants")
             external = set(grants) & SENSITIVE_GRANTS
-            uses_external = any(
-                set(step["required_permissions"]) & SENSITIVE_GRANTS
-                for step in goal["plan"])
+            # Only authorize tools required by the *current* step.
+            # Future model calls must be approved in their own turn.
+            current = goal["current_step"]
+            uses_external = (current < len(goal["plan"]) and bool(
+                set(goal["plan"][current]["required_permissions"]) & SENSITIVE_GRANTS))
             if (external or uses_external) and not server.allow_external_actions:
                 raise PermissionError("External tools are disabled in this Control Center")
             if (external or uses_external) and request.get(

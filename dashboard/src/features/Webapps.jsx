@@ -49,6 +49,31 @@ export function WebappProposalDrawer({proposal,onClose,onRevise,onApply,onVerify
           {key:'files',label:'Số file mã nguồn',children:proposal.files?.length||0},
         ]}/>
       </Card>
+      {isCode&&<Card size="small" title="Xem sản phẩm — ngay sau bước Developer">
+        <Alert type={proposal.previewEvidence?.available?'info':'warning'} showIcon
+          message={proposal.previewEvidence?.available
+            ? 'Ảnh giao diện từ Chromium QA cách ly'
+            : 'Đã có source React, nhưng chưa có ảnh giao diện đã kiểm chứng'}
+          description={proposal.previewEvidence?.available
+            ? 'Ảnh chỉ chứng minh trạng thái trình duyệt khi chạy QA; không chứng minh mọi chức năng hoạt động hoặc bảo mật.'
+            : 'Bạn có thể xem mã nguồn ngay bên dưới, hoặc chạy QA Chromium offline để tạo ảnh desktop/mobile. AgentForge không thực thi JSX AI trực tiếp trong Dashboard hay Windows.'}/>
+        {proposal.previewEvidence?.available&&<Space orientation="vertical" size={12}
+          style={{width:'100%',marginTop:12}}>
+          {['desktop.png','mobile.png'].filter(name=>proposal.previewEvidence.screenshots?.[name]).map(name=>
+            <div key={name}>
+              <Text strong>{name==='desktop.png'?'Giao diện Desktop':'Giao diện Mobile'}</Text>
+              <img src={proposal.previewEvidence.screenshots[name]} alt={'Ảnh QA '+name}
+                style={{display:'block',width:'100%',maxHeight:560,objectFit:'contain',
+                  objectPosition:'top',marginTop:8,borderRadius:8,border:'1px solid #7774'}}/>
+            </div>)}
+          <Text type="secondary">Trạng thái Chromium: {proposal.previewEvidence.status};
+            các luồng chức năng vẫn cần kiểm tra riêng.</Text>
+        </Space>}
+        <Space wrap style={{marginTop:12}}>
+          <Button onClick={()=>onBrowserQA?.(proposal)} loading={busy}>Tạo ảnh Preview bằng QA Chromium offline</Button>
+          <Button onClick={()=>onValidate?.(proposal)} loading={busy}>Kiểm tra source</Button>
+        </Space>
+      </Card>}
       {spec&&<Card size="small" title="Thông tin ứng dụng do AI đề xuất">
         <Space orientation="vertical" size={8}>
           <Text strong>{spec.brand}</Text>

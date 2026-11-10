@@ -117,3 +117,32 @@ Nếu `git status` có thay đổi local chưa commit, cần đối chiếu trư
 | Không thấy ComfyUI | Kiểm tra service local `127.0.0.1:8188`, không mở cổng ra Internet |
 | Motion job báo `UNVERIFIED` | Đây là trạng thái đúng khi chưa có clip QA, không phải tự động PASS |
 | CLI model/worker lỗi | Kiểm tra `config/`, `workers/`, quyền Owner và model được enable |
+
+## 7. V5 Owner workflow: duyệt theo bước, retry và xem sản phẩm
+
+- Trong **Giao việc → Kế hoạch & phê duyệt**, mỗi lần **Chạy/Tiếp tục** chỉ yêu cầu
+  các quyền của bước hiện tại (Architect, Developer, QA tĩnh, Reviewer). Tên bước,
+  chỉ số và trạng thái thực thi xuất hiện trước khi xác nhận. Một lượt chạy không
+  tự cho phép các bước gọi model kế tiếp.
+- Nếu V5 có child task ở trạng thái **FAILED** rõ ràng, nút
+  **Chuẩn bị chạy lại bước N** sẽ mở lại *đúng bước lỗi* sau khi Owner duyệt
+  mã SHA và task ID. Đây chỉ là thao tác chuẩn bị; bấm chạy tiếp vẫn cần cấp
+  lại quyền model/công cụ. Task FAILED cũ giữ nguyên trong lịch sử và event
+  `STEP_RETRY_ARMED` lưu ID cũ để kiểm toán. Bước thành công không bị chạy lại.
+- **INTERRUPTED**, `DISPATCHING` và quality gate thất bại không có child
+  task FAILED rõ ràng **không được tự retry**; Owner cần kiểm tra trạng thái
+  và tác dụng phụ trước. Không xóa dữ liệu để ép chạy lại.
+- Ngay sau bước Developer thành công, kể cả khi QA/Reviewer chưa xong hay
+  báo lỗi, có thể chọn **Xem source sản phẩm ngay**. Trang duyệt proposal cho
+  xem mã nguồn và, nếu đã có bằng chứng, ảnh desktop/mobile từ Chromium QA
+  offline có SHA khớp proposal. Chưa có ảnh phải chạy riêng QA Chromium trong
+  Docker với sự cho phép của Owner. Không thực thi JSX do AI sinh trong Dashboard
+  hoặc trên Windows host; ảnh smoke-test không thay thế kiểm thử tương tác.
+- Lưu source, review, QA và nghiệm thu là các trạng thái riêng; không tự deploy.
+
+Kiểm tra hồi quy:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest tests.test_v5_company tests.test_control_center_v1 -v
+npm.cmd run build --prefix dashboard
+```
