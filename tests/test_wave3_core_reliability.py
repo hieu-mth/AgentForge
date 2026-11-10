@@ -96,8 +96,9 @@ class Wave3RecoveryAndHealthTests(unittest.TestCase):
         for i in range(205):
             task_history.create_task(
                 "skill", "web.quality_check", {"index": i}, db_path=self.tasks)
-        self.assertEqual(task_history.list_tasks(db_path=self.tasks, limit=200)
-                         .count({"status": "RUNNING"}), 0)
+        recent_tasks = task_history.list_tasks(db_path=self.tasks, limit=200)
+        self.assertEqual(sum(t["status"] == "RUNNING" for t in recent_tasks), 0)
+        self.assertEqual(len(recent_tasks), 200)
         self.assertEqual(brain_store.count_status("RUNNING", db_path=self.brain), 1)
         self.assertEqual(task_history.count_status("RUNNING", db_path=self.tasks), 1)
         with patch.object(ops_doctor.skill_registry, "load_registry",
