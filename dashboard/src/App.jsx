@@ -137,7 +137,7 @@ export default function App() {
   const openGoalResult=async selectedGoal=>{
     const ordered=(selectedGoal.step_runs||[]).filter(step=>step.status==='SUCCEEDED'&&step.child_task_id);
     const completed=selectedGoal.template==='webapp.company'
-      ? ordered.find(step=>step.skill_id==='webapp.review')||ordered.find(step=>step.skill_id==='webapp.develop')||ordered[0]
+      ? ordered.find(step=>step.skill_id==='webapp.develop')||ordered[0]
       : ordered[0];
     if(!completed){message.warning('Không tìm thấy thành phẩm của kế hoạch này');return;}
     try{
@@ -169,8 +169,8 @@ export default function App() {
     async()=>{const out=await runAction(()=>post('/api/goals/'+goal.goal_id+'/approve',
       {ack:'APPROVE',plan_sha256:goal.plan_sha256}));
       if(out){message.success('Đã duyệt');await openGoal(goal.goal_id);}});
-  const execute=(goal,permissions)=>ask('Cho phép thực thi Goal này?',
-    <><Paragraph>Chỉ cấp quyền trong lượt chạy này. Có thể gọi model hoặc tiến trình ngoài nếu bạn đã bật.</Paragraph>
+  const execute=(goal,permissions)=>ask('Duyệt bước '+((goal.current_step||0)+1)+': '+(goal.plan?.[goal.current_step||0]?.skill_id||'tác vụ'),
+    <><Paragraph>Chỉ phê duyệt giai đoạn hiện tại; không cấp quyền cho các lượt AI hoặc tác vụ tiếp theo.</Paragraph>
       <Paragraph><strong>Quyền được cấp:</strong></Paragraph>
       <ul>{permissions.grants.length ? permissions.grants.map(p=>
         <li key={p}>{PERMISSIONS[p]?.title||'Quyền không xác định'}</li>) :
@@ -185,6 +185,20 @@ export default function App() {
         ack_external:permissions.sensitive?'AUTHORIZE_EXTERNAL_TOOLS':''};
       const out=await runAction(()=>post('/api/goals/'+goal.goal_id+'/'+action,payload));
       if(out){message.success('Trạng thái: '+out.status);await openGoal(goal.goal_id);}});
+  const retryFailed=(goal,step)=>ask(
+    'Chuẩn bị chạy lại bước '+(step.step_index+1)+'?',
+    <Space orientation="vertical">
+      <Paragraph>Chỉ chạy lại bước đã FAILED: <b>{step.skill_id}</b>. Các bước thành công, bản thiết kế và SHA vẫn giữ nguyên.</Paragraph>
+      <Paragraph>Không gọi model trong thao tác này. Khi đã chuẩn bị, bạn cần phê duyệt riêng để chạy lại.</Paragraph>
+      <Text code>{step.child_task_id}</Text>
+    </Space>,
+    async()=>{
+      const out=await runAction(()=>post('/api/goals/'+goal.goal_id+'/retry',{
+        ack:'RETRY_FAILED_STEP',plan_sha256:goal.plan_sha256,
+        child_task_id:step.child_task_id,
+      }));
+      if(out){message.success('Đã chuẩn bị retry bước '+(step.step_index+1));await openGoal(goal.goal_id);}
+    });
   const openProposal=async id => {
     try{setProposal(await api('/api/proposals/'+encodeURIComponent(id)));}
     catch(e){authError(e);}
@@ -365,7 +379,7 @@ export default function App() {
       </Content>
     </Layout>
     <GoalDrawer goal={goal} onClose={()=>setGoal(null)} onApprove={approve}
-      onExecute={execute} onViewResult={openGoalResult} busy={busy} externalEnabled={!!data.external_actions_enabled}/>
+      onExecute={execute} onRetry={retryFailed} onViewResult={openGoalResult} busy={busy} externalEnabled={!!data.external_actions_enabled}/>
     <ProposalDrawer proposal={proposal} onClose={()=>setProposal(null)} onDecide={(p,d)=>decideArtifact(p,d,'proposals')} onValidate={p=>validateArtifact(p,'proposals')}
       onRevise={revise} onApply={apply} busy={busy}/>
     <WebappProposalDrawer proposal={webapp} onClose={()=>setWebapp(null)} onDecide={decideArtifact} onValidate={validateArtifact}
