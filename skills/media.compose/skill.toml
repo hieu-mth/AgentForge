@@ -24,6 +24,7 @@ title = "string"
 scenes = "array"
 photo_name = "string"
 rights_confirmed = "boolean"
+visual_plan = "object"
 
 [output_schema]
 type = "object"
