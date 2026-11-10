@@ -66,7 +66,11 @@ def _connect(db_path=None, *, create=False):
         return None
     if create:
         path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, timeout=10)
+    # Queries must not create a database, journal or schema. Only explicit
+    # mutating entry points may open a read/write connection.
+    conn = (sqlite3.connect(path, timeout=10) if create else
+            sqlite3.connect(path.resolve().as_uri() + "?mode=ro",
+                            uri=True, timeout=10))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
     if create:
@@ -335,22 +339,46 @@ def rearm_failed_step(goal_id, step_index, child_task_id, *, db_path=None):
             "automatic_replay": False, "model_invoked": False}
 
 
-def recover(*, db_path=None):
-    """Explicit interruption; never infer that side effects did not occur."""
+def count_status(status, *, db_path=None):
+    """Exact global status count; never page recent goals or initialize schema."""
+    if status not in STATES:
+        raise BrainError("Invalid goal state")
     db = _connect(db_path)
     if db is None:
         return 0
-    with closing(db), db:
-        rows = db.execute("SELECT goal_id,status FROM goals "
-                          "WHERE status='RUNNING'").fetchall()
+    with closing(db):
+        return db.execute("SELECT COUNT(*) FROM goals WHERE status=?",
+                          (status,)).fetchone()[0]
+
+
+def recover(*, db_path=None, return_ids=False):
+    """Atomically interrupt every RUNNING goal; no replay or bounded listing.
+
+    Default return is the historical integer. An explicit caller may request
+    the exact changed IDs to reconcile corresponding S1 task state.
+    """
+    if type(return_ids) is not bool:
+        raise BrainError("Invalid recovery result mode")
+    source = Path(db_path) if db_path is not None else DB
+    _safe(source)
+    if not source.is_file():
+        return [] if return_ids else 0
+    changed_ids = []
+    with closing(_connect(db_path, create=True)) as db, db:
+        db.execute("BEGIN IMMEDIATE")
+        rows = db.execute("SELECT goal_id FROM goals WHERE status='RUNNING'").fetchall()
         for row in rows:
             now = _now()
-            db.execute("UPDATE goals SET status='INTERRUPTED',updated_at=?,"
-                       "error='manual recovery: inspect possible side effects' "
-                       "WHERE goal_id=? AND status='RUNNING'", (now, row["goal_id"]))
-            db.execute("INSERT INTO goal_events(goal_id,at,name,detail_json)"
-                       " VALUES(?,?,?,?)", (row["goal_id"], now, "INTERRUPTED", "{}"))
-    return len(rows)
+            updated = db.execute(
+                "UPDATE goals SET status='INTERRUPTED',updated_at=?,"
+                "error='manual recovery: inspect possible side effects' "
+                "WHERE goal_id=? AND status='RUNNING'", (now, row["goal_id"]))
+            if updated.rowcount == 1:
+                changed_ids.append(row["goal_id"])
+                db.execute("INSERT INTO goal_events(goal_id,at,name,detail_json)"
+                           " VALUES(?,?,?,?)",
+                           (row["goal_id"], now, "INTERRUPTED", "{}"))
+    return changed_ids if return_ids else len(changed_ids)
 
 
 def set_memory(key, note, evidence_ref, *, confirm_write=False, db_path=None):
