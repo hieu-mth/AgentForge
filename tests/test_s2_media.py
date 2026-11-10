@@ -54,6 +54,66 @@ class TestS2Media(unittest.TestCase):
     def build(self, payload=None):
         return assets.make_assets(demo() if payload is None else payload)
 
+    def test_storyboard_prompt_contract_matches_media_validator(self):
+        valid = {
+            "title": "Video tư vấn nệm ngủ",
+            "scenes": [
+                {"headline": "Chọn đúng nệm", "caption": "Tìm hiểu nhu cầu sử dụng.",
+                 "duration_seconds": 5},
+                {"headline": "Liên hệ tư vấn", "caption": "Trao đổi để chọn nệm phù hợp.",
+                 "duration_seconds": 5},
+            ],
+        }
+        with patch("agentforge.model.generate_json", return_value=valid) as generate:
+            result = pipeline.suggest_copy("Tạo video nệm: " + "x" * 1500,
+                                           "Khách hàng", "Lập kịch bản")
+        self.assertEqual(result["title"], valid["title"])
+        self.assertEqual(result["status"], "DRAFT_NOT_VERIFIED")
+        schema = generate.call_args.args[1]
+        self.assertEqual(schema["properties"]["title"]["maxLength"], 88)
+        scene = schema["properties"]["scenes"]["items"]
+        self.assertFalse(scene["additionalProperties"])
+        self.assertEqual(scene["properties"]["headline"]["maxLength"], 68)
+        self.assertEqual(scene["properties"]["caption"]["maxLength"], 180)
+        self.assertEqual(scene["properties"]["duration_seconds"]["maximum"], 8)
+        self.assertIn("TOTAL duration", generate.call_args.args[0])
+        for changed, field in [
+            ({**valid, "title": "x" * 89}, "title"),
+            ({**valid, "scenes": [dict(valid["scenes"][0], duration_seconds=9),
+                                  valid["scenes"][1]]}, "scenes"),
+            ({**valid, "scenes": [dict(valid["scenes"][0], caption="x" * 181),
+                                  valid["scenes"][1]]}, "scenes"),
+            ({**valid, "extra": "untrusted"}, "fields"),
+        ]:
+            with self.subTest(field=field), patch("agentforge.model.generate_json",
+                                                  return_value=changed):
+                with self.assertRaises(assets.MediaError) as raised:
+                    pipeline.suggest_copy("Viết nội dung video", "Khách hàng",
+                                          "Lập kịch bản")
+                self.assertEqual(str(raised.exception),
+                                 "STORYBOARD_SCHEMA_INVALID: " + field)
+
+    def test_storyboard_diagnostics_redact_untrusted_response(self):
+        secret = "private-model-response-or-api-key"
+        cases = [
+            (assets.MediaError("STORYBOARD_SCHEMA_INVALID: title"),
+             "STORYBOARD_SCHEMA_INVALID"),
+            (assets.MediaError("STORYBOARD_SCHEMA_INVALID: " + secret),
+             "STORYBOARD_VALIDATION_FAILED"),
+            (assets.MediaError("STORYBOARD_INPUT_INVALID: topic"),
+             "STORYBOARD_INPUT_INVALID"),
+            (RuntimeError("Gateway response stopped at max_tokens (" + secret + ")"),
+             "STORYBOARD_OUTPUT_LIMIT"),
+            (json.JSONDecodeError(secret, "{", 0),
+             "STORYBOARD_MODEL_JSON_INVALID"),
+            (RuntimeError(secret), "STORYBOARD_MODEL_RUNTIME_FAILED"),
+        ]
+        for error, code in cases:
+            with self.subTest(code=code):
+                message = skill_runner._safe_failure("media.copy_draft", error)
+                self.assertTrue(message.startswith(code + ":"), message)
+                self.assertNotIn(secret, message)
+
     def test_original_png_wav_srt_and_quality(self):
         receipt = self.build()
         self.assertFalse(receipt["video_rendered"])
