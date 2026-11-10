@@ -10,6 +10,7 @@ import { api } from './api.js';
 import { useThemeMode } from './theme.jsx';
 import { badge, clip, PageHeader } from './components/shared.jsx';
 import { Workspace, GoalDrawer } from './features/Workspace.jsx';
+import { AutoVisuals } from './features/Visuals.jsx';
 import { modelCallsForPrompt } from './workspace_quota.js';
 import { Websites, ProposalDrawer } from './features/Websites.jsx';
 import { WebappProposalDrawer } from './features/Webapps.jsx';
@@ -76,7 +77,7 @@ function Login({onLogin, busy}) {
 function VisualPicker({images, scenes, plan}) {
   const available=images.length>=scenes.length && scenes.length>0;
   const [motion,setMotion]=useState('static');
-  const [ids,setIds]=useState([]);
+  const [ids,setIds]=useState(plan.image_job_ids||[]);
   const change=(values)=>{
     Object.assign(plan,values);
   };
@@ -135,9 +136,10 @@ export default function App() {
   const [webapp,setWebapp]=useState(null);
   const [task,setTask]=useState(null);
   const [mediaPrepared,setMediaPrepared]=useState(null);
+  const [generatedVisuals,setGeneratedVisuals]=useState(null);
   // A prepared production is bound to the currently inspected storyboard.
   // Never carry it into an unrelated task drawer.
-  useEffect(()=>setMediaPrepared(null),[task?.task_id]);
+  useEffect(()=>{setMediaPrepared(null);setGeneratedVisuals(null);},[task?.task_id]);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState(null);
   const [collapsed,setCollapsed]=useState(false);
@@ -207,6 +209,7 @@ export default function App() {
         setGoal(null);
       }else{
         setMediaPrepared(null);
+        setGeneratedVisuals(null);
         setTask(detail);
       }
     }catch(e){authError(e);}
@@ -265,12 +268,13 @@ export default function App() {
     const enough=images.length>=count && count>0;
     const plan={
       mode:'studio',motion:'static',
-      image_job_ids:[],
+      image_job_ids:generatedVisuals?.task_id===selected.task_id
+        ?generatedVisuals.job_ids:[],
     };
     modal.confirm({
       title:'Bước 2A — Chọn visual và tạo tư liệu',
       content:<Space orientation="vertical" style={{width:'100%'}}>
-        <Paragraph>Bạn phải chọn thủ công ảnh có đúng sản phẩm/chủ đề cho từng cảnh. Không tự lấy ảnh đầu tiên trong gallery. Nếu chưa có ảnh nệm thật, hãy dừng ở đây. Mỗi production có SHA riêng và không ghi đè bản cũ.</Paragraph>
+        <Paragraph>Ảnh AI có thể được tạo tự động theo storyboard ở bên dưới kết quả. Nếu đã chọn bộ ảnh AI vừa tạo, các cảnh sẽ dùng chính các ảnh đó; bạn có thể đổi thủ công trước khi duyệt. Không tự lấy ảnh ngẫu nhiên từ gallery.</Paragraph>
         <VisualPicker images={images} scenes={selected.report.scenes||[]} plan={plan}/>
         {!enough&&<Alert type="error" showIcon message="Không thể tạo video từ template rỗng"
           description="Chưa có đủ ảnh nệm/khung cảnh. AgentForge sẽ không tạo production cho đến khi bạn cung cấp hoặc tạo đủ ảnh trong Image Studio."/>}
@@ -583,6 +587,13 @@ export default function App() {
         <Alert type="info" showIcon style={{marginBottom:16}}
           message="Đây là kịch bản nháp, chưa phải video hoàn chỉnh"
           description="Nội dung AI chưa được xác minh; cần Owner duyệt trước khi sử dụng."/>
+        <AutoVisuals task={task} purpose="video" topic={task.report.title||''}
+          scenes={(task.report.scenes||[]).map(s=>s.headline+'. '+s.caption)}
+          mutate={mutate}
+          onReady={ids=>{
+            setGeneratedVisuals({task_id:task.task_id,job_ids:ids});
+            message.success('Đã chọn ảnh AI tạo từ storyboard. Tiếp tục Bước 2A để duyệt và dựng.');
+          }}/>
         {(task.report.scenes||[]).map((scene,index)=><div key={index}
           className="storyboard-scene">
           <Text type="secondary">Cảnh {index+1} · {scene.duration_seconds} giây</Text>
