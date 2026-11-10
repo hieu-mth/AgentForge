@@ -163,7 +163,8 @@ def handle(server, path, request, session=None):
         return visual_jobs.submit(
             "video", result["title"],
             [scene["headline"] + ". " + scene["caption"] for scene in scenes],
-            request["checkpoint"], confirm_generation=True)
+            request["checkpoint"], confirm_generation=True,
+            source_sha=digest)
     if path.startswith("/api/visuals/") and path.endswith("/collect"):
         if not server.allow_external_actions:
             raise PermissionError("Local ComfyUI collection requires external mode")
