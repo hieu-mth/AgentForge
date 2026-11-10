@@ -283,6 +283,36 @@ def dispatch(self, route):
                       for f in document["files"]],
             "execution_authorized": False,
         })
+    if route.startswith("/api/media/") and "/frame/" in route:
+        import re
+        from agentforge import media_workflow_v15, media_quality, media_assets
+        parts = route.split("/")
+        if (len(parts) != 6 or parts[:3] != ["", "api", "media"]
+                or parts[4] != "frame"
+                or not re.fullmatch(r"[0-9]{2}", parts[5])):
+            raise ValueError("Invalid media frame request")
+        ident, index = parts[3], int(parts[5])
+        record = media_workflow_v15._row(ident)
+        if record["status"] not in {"ASSETS_READY", "VIDEO_READY",
+                                     "APPROVED", "REJECTED"}:
+            raise PermissionError("No prepared media frame for this production")
+        folder, manifest = media_workflow_v15._verify_storyboard_manifest(record)
+        count = len(media_assets._scenes(manifest["scenes"]))
+        if not 1 <= index <= count:
+            raise ValueError("Invalid scene index")
+        qa = media_quality.check(record["run_id"])
+        if qa["status"] not in {"ASSETS_PASS", "VIDEO_PASS"} or qa["failures"]:
+            raise PermissionError("Cannot preview media that failed artifact QA")
+        name = f"scene_{index:02}.png"
+        file = folder / name
+        media_assets._safe(file)
+        if (name not in manifest["artifacts"] or not file.is_file()
+                or not 0 < file.stat().st_size <= 8_000_000
+                or media_assets._sha(file) != manifest["artifacts"][name]):
+            raise PermissionError("Scene image checksum mismatch")
+        return self._reply(200, file.read_bytes(), mime="image/png",
+                           headers=(("Cache-Control", "private, no-store"),
+                                    ("X-Content-Type-Options", "nosniff")))
     if route == "/api/media/studio-images":
         # Reuse already collected ComfyUI assets; no GPU invocation or remote
         # fetch. Each selected job is SHA-verified again before composition.
