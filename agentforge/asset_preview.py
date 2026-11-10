@@ -7,7 +7,11 @@ import hashlib
 from agentforge import image_studio_v24, web_assets
 
 def image_for_job(job_id):
-    row = image_studio_v24._row(job_id)
+    from agentforge.features.media import visual_jobs
+    try:
+        row = image_studio_v24._row(job_id)
+    except KeyError:
+        return visual_jobs.image_for_job(job_id)
     if row["status"] not in ("ASSET_READY", "ATTACHED"):
         raise PermissionError("Image not ready for owner review")
     if not row["asset_name"] or not row["asset_sha"]:

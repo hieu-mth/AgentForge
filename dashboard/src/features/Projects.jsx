@@ -3,6 +3,7 @@ import { App as AntApp, Alert, Button, Card, Checkbox, Empty, Form, Image,
   Input, Select, Space, Spin, Table, Tag, Typography } from 'antd';
 import { CheckCircleOutlined, FolderOpenOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api } from '../api.js';
+import { AutoVisuals } from './Visuals.jsx';
 import { badge, clip } from '../components/shared.jsx';
 const { Paragraph, Text, Title } = Typography;
 const { TextArea } = Input;
@@ -12,6 +13,9 @@ export function Projects({mutate}) {
   const [state,setState] = useState({artifacts:null, health:null, jobs:null});
   const [busy,setBusy] = useState(false);
   const [checked,setChecked] = useState({});
+  const [visualPurpose,setVisualPurpose]=useState('image');
+  const [visualTopic,setVisualTopic]=useState('');
+  const [visualSite,setVisualSite]=useState(null);
   const [form] = Form.useForm();
 
   const refresh = useCallback(async()=>{
@@ -76,6 +80,40 @@ export function Projects({mutate}) {
           {title:'Public?',render:()=><Tag>Chưa xác minh</Tag>},
         ]}/>
       <Text type="secondary">{state.artifacts.total_items||0} mục đã kiểm kê (tối đa 40 mục hiển thị). Không bao gồm nội dung file hay dữ liệu khách hàng.</Text>
+    </Card>
+    <Card title="AI tự tạo hình ảnh — dùng chung cho Video / Ảnh / Website">
+      <Alert showIcon type="info"
+        message="Không cần tải ảnh lên hoặc viết prompt kỹ thuật"
+        description="Mô tả sản phẩm hoặc nội dung muốn làm. AgentForge tự biên soạn prompt hình ảnh và gọi model ComfyUI local được chọn. Ảnh sau đó được lưu thành job độc lập, không phụ thuộc có website trước."/>
+      <Space orientation="vertical" style={{width:'100%',marginTop:12}}>
+        <Select value={visualPurpose} style={{width:'100%'}}
+          onChange={value=>{setVisualPurpose(value);setVisualSite(null);}}
+          options={[{value:'image',label:'Tạo ảnh độc lập'},
+                    {value:'website',label:'AI tự làm ảnh cho website đã lưu local'}]}/>
+        {visualPurpose==='website'?<>
+          <Select placeholder="Chọn website đã lưu local"
+            style={{width:'100%'}} value={visualSite?.slug}
+            options={sites.map(x=>({value:x.id,label:x.id}))}
+            onChange={async slug=>{
+              setVisualSite(null);
+              try{setVisualSite(await api('/api/visuals/website/'+encodeURIComponent(slug)));}
+              catch(e){message.error(e.message);}
+            }}/>
+          {visualSite&&<AutoVisuals key={visualSite.slug+visualSite.source_sha}
+            purpose="website" website={visualSite}
+            topic={visualSite.visual_subject}
+            scenes={[visualSite.visual_subject]} mutate={mutate}/>}
+          {!visualSite&&<Text type="secondary">Hệ thống sẽ đọc nội dung website để tự quyết định prompt ảnh phù hợp. Không cần bạn nhập prompt.</Text>}
+        </>:<>
+          <Input.TextArea rows={3} maxLength={350} showCount
+            placeholder="Ví dụ: Tạo bộ ảnh nệm cao cấp, phòng ngủ sáng sớm, ánh sáng tự nhiên"
+            value={visualTopic} onChange={e=>setVisualTopic(e.target.value)}/>
+          {visualTopic.trim().length>=3
+            ?<AutoVisuals purpose="image" topic={visualTopic.trim()}
+                scenes={[visualTopic.trim()]} mutate={mutate}/>
+            :<Text type="secondary">Nói bạn muốn tạo ảnh về gì; hệ thống tự viết prompt cho model ảnh.</Text>}
+        </>}
+      </Space>
     </Card>
     <Card title="AI Image Studio · ComfyUI local" extra={badge(state.health?.status)}>
       <Alert type="warning" showIcon message="Ảnh do AI tạo không phải ảnh sản phẩm thật"

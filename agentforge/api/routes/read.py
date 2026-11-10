@@ -342,6 +342,33 @@ def dispatch(self, route):
         return self._reply(200, file.read_bytes(), mime="image/png",
                            headers=(("Cache-Control", "private, no-store"),
                                     ("X-Content-Type-Options", "nosniff")))
+    if route.startswith("/api/visuals/website/"):
+        from agentforge.features.media import visual_jobs
+        from agentforge import web_assets, product_builder
+        import hashlib
+        slug = product_builder._check_slug(
+            route.removeprefix("/api/visuals/website/"))
+        project = web_assets._project(slug)
+        target = project / "index.html"
+        product_builder._check_path_chain(target)
+        digest = hashlib.sha256(target.read_bytes()).hexdigest()
+        topic = visual_jobs.website_subject(slug)
+        self._session().setdefault("inspected_visual_websites", {})[slug] = digest
+        return self._reply(200, {"slug": slug, "source_sha": digest,
+                                 "visual_subject": topic,
+                                 "status": "READY_FOR_AI_VISUAL"})
+    if route == "/api/visuals/jobs":
+        from agentforge.features.media import visual_jobs
+        return self._reply(200, visual_jobs.report())
+    if route.startswith("/api/visuals/") and route.endswith("/preview"):
+        from agentforge.features.media import visual_jobs
+        parts = route.split("/")
+        if len(parts) != 5:
+            raise ValueError("Invalid visual preview route")
+        contents, mime = visual_jobs.image_for_job(parts[3])
+        from agentforge.features.media.visual_jobs import _row
+        self._session().setdefault("reviewed_visual_images", {})[parts[3]] = _row(parts[3])["asset_sha"]
+        return self._reply(200, contents, mime=mime)
     if route == "/api/media/studio-images":
         # Reuse already collected ComfyUI assets; no GPU invocation or remote
         # fetch. Each selected job is SHA-verified again before composition.
@@ -354,7 +381,14 @@ def dispatch(self, route):
         } for row in rows
             if row.get("status") in {"ASSET_READY", "ATTACHED"}
             and row.get("asset_name") and row.get("asset_sha")]
-        return self._reply(200, {"images": images[:25],
+        from agentforge.features.media import visual_jobs
+        for item in visual_jobs.report()["jobs"]:
+            if item["status"] == "ASSET_READY" and item["purpose"] in {"video", "image", "website"}:
+                images.append({"job_id": item["job_id"],
+                               "source": "AI " + item["purpose"] + " · scene " + str(item["scene_index"]+1),
+                               "sha256": item["asset_sha"],
+                               "preview_url": "/api/visuals/" + item["job_id"] + "/preview"})
+        return self._reply(200, {"images": images[:80],
                                  "generation_started": False,
                                  "require_distinct_images": True})
     if route.startswith("/api/videos/") and route.endswith("/stream"):
