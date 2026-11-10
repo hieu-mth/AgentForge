@@ -33,7 +33,7 @@ class FilmProductionWave9Tests(unittest.TestCase):
         self.plan = None
         self.spec = None
 
-    def bootstrap(self, size=3):
+    def bootstrap(self, size=3, duplicate_media=False):
         self.plan = long_form.build_plan(
             title="Original Fox Film", genre="fantasy", style="noir",
             characters=[{"id": "fox", "name": "The Fox",
@@ -50,7 +50,9 @@ class FilmProductionWave9Tests(unittest.TestCase):
             name = shot["shot_id"]
             folder = self.films / "fox-film" / "motion_clips" / job
             folder.mkdir(parents=True)
-            (folder / "clip.mp4").write_bytes(RAW)
+            payload = RAW + (b"same" if duplicate_media else index.to_bytes(4, "big"))
+            clip_sha = hashlib.sha256(payload).hexdigest()
+            (folder / "clip.mp4").write_bytes(payload)
             provider = str(uuid4())
             body = {
                 "format": "agentforge.film.motion.receipt.v1",
@@ -60,7 +62,7 @@ class FilmProductionWave9Tests(unittest.TestCase):
                 "seed": index + 1, "provider_id": provider,
                 "model_id": motion_verify.MODEL_ID,
                 "state": motion_verify.TECHNICAL,
-                "clip_sha256": CLIP_SHA, "bytes": len(RAW),
+                "clip_sha256": clip_sha, "bytes": len(payload),
                 "technical": {"codec": "h264", "width": 640, "height": 352,
                               "fps": 12, "frames_decoded": 49,
                               "duration_seconds": 4.083},
@@ -83,7 +85,7 @@ class FilmProductionWave9Tests(unittest.TestCase):
                      motion_comfy._now()))
                 conn.commit()
             entries.append({
-                "shot_id": name, "job_id": job, "clip_sha256": CLIP_SHA,
+                "shot_id": name, "job_id": job, "clip_sha256": clip_sha,
                 "receipt_sha256": receipt_sha, "character_ids": ["fox"],
                 "location_id": "forest", "costume_id": "blue-scarf",
                 "prop_ids": ["small-map"], "reference_sha256": REFERENCE_SHA,
@@ -144,6 +146,13 @@ class FilmProductionWave9Tests(unittest.TestCase):
         with self.assertRaises(production.FilmProductionError):
             production.draft("fox-film", "big", shot_count=4,
                              film_root=self.films, db_path=self.db)
+
+    def test_duplicate_mp4_content_sha_is_blocked_even_when_job_ids_differ(self):
+        self.bootstrap(3, duplicate_media=True)
+        self.assertNotEqual(self.spec["shots"][0]["job_id"], self.spec["shots"][1]["job_id"])
+        self.assertEqual(self.spec["shots"][0]["clip_sha256"], self.spec["shots"][1]["clip_sha256"])
+        with self.assertRaisesRegex(production.FilmProductionError, "Duplicate motion MP4 SHA"):
+            self.propose()
 
     def test_rejects_missing_real_clip_tamper_and_fake_success(self):
         self.bootstrap(3)
@@ -287,6 +296,55 @@ class FilmProductionWave9Tests(unittest.TestCase):
         with self.assertRaises((ValueError, EOFError, wave.Error)):
             production._voice_receipt(
                 voice_file.parent, proposal["episode_sha256"], 12.25)
+
+    def test_final_master_ffprobe_requires_real_frame_audio_and_duration(self):
+        metadata = {
+            "streams": [{"codec_name": "h264", "width": 640, "height": 352,
+                         "avg_frame_rate": "12/1", "nb_read_frames": "147"}],
+            "format": {"duration": "12.250", "format_name": "mov,mp4,m4a"},
+        }
+        audio = {"streams": [{"codec_name": "aac", "sample_rate": "16000",
+                              "channels": 1}]}
+        def stdout(info):
+            return json.dumps(info).encode("utf-8")
+        path = Path("trusted-master.mp4")
+        with patch.object(production.motion_verify, "_run",
+                          side_effect=[stdout(metadata), stdout(audio)]) as probe, \
+             patch.object(production, "_run") as decoded:
+            report = production._probe_master(path, 3)
+            self.assertEqual(report["frames_decoded"], 147)
+            self.assertTrue(report["full_decode_pass"])
+            decoded.assert_called_once()
+            self.assertIn("0:a:0", decoded.call_args.args[0])
+            self.assertEqual(probe.call_count, 2)
+        for change in (
+            {"streams": [{**metadata["streams"][0], "nb_read_frames": "146"}]},
+            {"format": {"duration": "999.0", "format_name": "mov,mp4"}},
+        ):
+            damaged = json.loads(json.dumps(metadata))
+            damaged.update(change)
+            with self.subTest(change=change), \
+                 patch.object(production.motion_verify, "_run",
+                              side_effect=[stdout(damaged), stdout(audio)]), \
+                 patch.object(production, "_run") as decoded:
+                with self.assertRaises(production.FilmProductionError):
+                    production._probe_master(path, 3)
+                decoded.assert_not_called()
+        with patch.object(production.motion_verify, "_run",
+                          side_effect=[stdout(metadata), stdout({"streams": []})]), \
+             patch.object(production, "_run") as decoded:
+            with self.assertRaises(production.FilmProductionError):
+                production._probe_master(path, 3)
+            decoded.assert_not_called()
+
+    def test_prop_change_needs_owner_transition_note(self):
+        self.bootstrap(3)
+        self.spec["shots"][1]["prop_ids"] = []
+        with self.assertRaisesRegex(production.FilmProductionError, "Location/props"):
+            self.propose()
+        self.spec["shots"][1]["change_note"] = "Map was left on the river bank."
+        self.spec["shots"][2]["prop_ids"] = []
+        self.propose()
 
     def test_ffmpeg_failure_does_not_commit_video_or_replace_clip(self):
         self.bootstrap(3)

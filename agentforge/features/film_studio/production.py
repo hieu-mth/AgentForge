@@ -143,10 +143,12 @@ def _check_continuity(shots):
                 raise FilmProductionError(
                     "Character costume/reference changed without continuity note")
             previous[character] = value
-        if index and shots[index - 1]["location_id"] != shot["location_id"]:
+        if index and (
+                shots[index - 1]["location_id"] != shot["location_id"]
+                or set(shots[index - 1]["prop_ids"]) != set(shot["prop_ids"])):
             if not shot["change_note"]:
                 raise FilmProductionError(
-                    "Location changed without explicit continuity note")
+                    "Location/props changed without explicit continuity note")
     return {"metadata_checks_pass": True, "visual_continuity_verified": False,
             "identity_model_invoked": False}
 
@@ -189,11 +191,15 @@ def _sources(shots, film_slug, plan_sha, film_root, db_path):
     """Re-read and rehash every Wave 8 receipt + MP4 before a process run."""
     paths = []
     seen = set()
+    seen_bytes = set()
     for shot in shots:
         ident = shot["job_id"]
         if ident in seen:
             raise FilmProductionError("Duplicate clip job; no motion looping")
         seen.add(ident)
+        if shot["clip_sha256"] in seen_bytes:
+            raise FilmProductionError("Duplicate motion MP4 SHA; looping a clip is forbidden")
+        seen_bytes.add(shot["clip_sha256"])
         receipt = motion_verify.inspect_receipt(
             ident, film_root=film_root, db_path=db_path)
         if (receipt["film_slug"] != film_slug
