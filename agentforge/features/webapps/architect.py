@@ -34,7 +34,7 @@ def _items(value, name, minimum, maximum):
         raise ValueError("ARCHITECTURE_INVALID: " + name)
     return [base._text(x, name, 150) for x in value]
 
-def validate_spec(raw):
+def _validate_spec(raw):
     if not isinstance(raw, dict) or set(raw) != set(SPEC_SCHEMA["properties"]):
         raise ValueError("ARCHITECTURE_INVALID: root")
     return {
@@ -46,6 +46,16 @@ def validate_spec(raw):
         "local_data": _items(raw["local_data"], "local_data", 1, 5),
         "constraints": _items(raw["constraints"], "constraints", 1, 5),
     }
+
+
+def validate_spec(raw):
+    # Normalize trusted validation failures without echoing untrusted text.
+    try:
+        return _validate_spec(raw)
+    except ValueError as exc:
+        if str(exc).startswith("ARCHITECTURE_INVALID:"):
+            raise
+        raise ValueError("ARCHITECTURE_INVALID: field constraint") from None
 
 def _path(ident):
     base._name(ident, base.PROPOSAL, "architecture id")
