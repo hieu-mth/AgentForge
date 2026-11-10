@@ -140,7 +140,20 @@ def _safe_failure(skill_id, exc):
             return "V5_MODEL_UNAVAILABLE: Configured model endpoint failed."
         if isinstance(exc, PermissionError):
             return "V5_SOURCE_OR_MODEL_DENIED: Source SHA or cloud consent required."
-        if isinstance(exc, (ValueError, json.JSONDecodeError)):
+        if isinstance(exc, json.JSONDecodeError):
+            return "V5_MODEL_JSON_INVALID: Model response or signed document is not valid JSON."
+        if isinstance(exc, ValueError):
+            # Only recognize fixed validator labels from trusted V5 modules.
+            # Never include arbitrary exception bodies or model-generated text.
+            label = str(exc)
+            if skill_id == "webapp.architect" and label.startswith("ARCHITECTURE_INVALID:"):
+                return "V5_ARCHITECTURE_SCHEMA_INVALID: Architect output does not meet the required schema."
+            if skill_id == "webapp.review" and label.startswith("REVIEW_INVALID:"):
+                return "V5_REVIEW_SCHEMA_INVALID: Reviewer output does not meet the required schema."
+            if skill_id == "webapp.review" and label.startswith("ARCHITECTURE_INVALID:"):
+                return "V5_ARCHITECTURE_SOURCE_INVALID: Signed architecture failed validation."
+            if skill_id == "webapp.review" and label.startswith("APP_CODE_"):
+                return "V5_APP_SOURCE_INVALID: Reviewed React proposal failed validation."
             return "V5_OUTPUT_INVALID: Signed source or model schema validation failed."
         return "V5_STAGE_FAILED: No code executed or deployed."
     if skill_id == "webapp.develop":
