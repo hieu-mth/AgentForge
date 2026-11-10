@@ -167,3 +167,34 @@ Kiểm thử logic streaming:
 .\.venv\Scripts\python.exe -m unittest tests.test_video_stream -v
 npm.cmd run build --prefix dashboard
 ```
+
+## 9. Từ AI storyboard sang video MP4 trong Dashboard
+
+Quy trình local-first: **Giao việc → Xem kết quả storyboard → Bước 2A: Tạo
+tư liệu → Bước 2B: Render MP4 → Đánh giá → Video local → Xem video**.
+
+Bước 2A chỉ khả dụng sau khi Owner mở đúng task `media.copy_draft` thành công.
+`GET /api/tasks/<task_id>` ghi nhận SHA-256 của storyboard đã xem trong
+session; `POST /api/media/prepare-from-task` phải chứa `ack:
+PREPARE_REVIEWED_STORYBOARD`, `task_id`, `source_sha`. Backend **tự lấy**
+nội dung từ task history, không tin vào JSON gửi bởi trình duyệt; kiểm tra SHA,
+loại task, status và media schema, tạo `slug` mới, gọi lại local `media.compose`
+và kiểm tra QA. Cần cấu hình business profile của Owner trước khi prepare.
+
+Bước 2B dùng `POST /api/videos/<production_id>/render` với `ack:
+RENDER_LOCAL_MP4` và `storyboard_sha`. Phải bật external tools khi khởi động
+backend; server xác thực SHA và production status rồi mới cho phép FFmpeg chạy
+**một lần duy nhất**. Không tự render ở bước 2A; không retry production chưa rõ
+trạng thái, không ghi đè artifact, không tự xuất bản. Nếu đóng Dashboard sau 2A,
+vào **Đánh giá → Video local** để render production `ASSETS_READY`.
+
+Khi render xong, production chuyển `VIDEO_READY` và có thể mở trình phát MP4
+được xác thực bằng session. Render/QA hoàn tất không có nghĩa Owner đã nghiệm thu.
+Phần này tạo video **tĩnh từ PNG + WAV + phụ đề**, không hứa tạo chuyển động AI.
+
+Test API logic (không chạy model/FFmpeg):
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest tests.test_media_dashboard_flow tests.test_media_workflow_v15 -v
+npm.cmd run build --prefix dashboard
+```
