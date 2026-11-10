@@ -1,4 +1,5 @@
 """Streaming MP4 byte-range parsing and bounded server response tests."""
+import hashlib
 import io
 import tempfile
 import unittest
@@ -6,6 +7,7 @@ from pathlib import Path
 
 from agentforge.api.video_stream import InvalidVideoRange, parse_range
 from agentforge.api.server import _Handler
+from agentforge import media_assets
 
 
 class VideoRangeTests(unittest.TestCase):
@@ -26,6 +28,14 @@ class VideoRangeTests(unittest.TestCase):
                     parse_range(bad, 100)
         with self.assertRaises(InvalidVideoRange):
             parse_range(None, 0)
+
+    def test_media_hash_reads_existing_binary_without_mutating_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            file = Path(tmp) / "demo.mp4"
+            content = bytes(range(256)) * 700
+            file.write_bytes(content)
+            self.assertEqual(media_assets._sha(file), hashlib.sha256(content).hexdigest())
+            self.assertEqual(file.read_bytes(), content)
 
     def test_bounded_stream_respects_requested_range(self):
         with tempfile.TemporaryDirectory() as tmp:
