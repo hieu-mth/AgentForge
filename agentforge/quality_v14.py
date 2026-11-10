@@ -250,16 +250,20 @@ def record_success(db, job_id, task_id, skill_id, result):
 
 
 def inbox(*, db_path=None):
+    """Pure inspection: absent/legacy quality tables do not get created by GET."""
     from agentforge.autopilot_v13 import _connect
-    # Existing V1.3 databases do not yet have V1.4 tables. Initialize them
-    # without altering any existing policy, queued job or schedule.
-    db = _connect(db_path, create=True)
-    with db:
-        profile = current_profile(db)
-        rows = db.execute("""SELECT job_id,task_id,skill_id,output_sha,profile_sha,
+    db = _connect(db_path)
+    if db is None:
+        return {"business_context": None, "reviews": []}
+    with closing(db):
+        existing = {row[0] for row in db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name IN ('business_profile','content_reviews')")}
+        profile = current_profile(db) if "business_profile" in existing else None
+        rows = (db.execute("""SELECT job_id,task_id,skill_id,output_sha,profile_sha,
             quality,reasons_json,decision,created_at,decided_at FROM content_reviews
             ORDER BY created_at DESC,job_id DESC LIMIT 100""").fetchall()
-    db.close()
+                if "content_reviews" in existing else [])
     return {"business_context": None if profile is None else {
         "business": profile["business"], "industry": profile["industry"],
         "profile_sha": _sha(profile)},
