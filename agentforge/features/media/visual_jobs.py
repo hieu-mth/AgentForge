@@ -54,7 +54,7 @@ def _db(path=None, *, create=False):
             purpose TEXT NOT NULL, scene_index INTEGER NOT NULL,
             prompt TEXT NOT NULL, checkpoint TEXT NOT NULL,
             provider_id TEXT, status TEXT NOT NULL,
-            asset_sha TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""")
+            asset_sha TEXT, source_sha TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""")
         db.commit()
     return db
 
@@ -89,10 +89,13 @@ def _prompt(topic, scene, index, purpose):
 
 
 def submit(purpose, topic, scenes, checkpoint, *, confirm_generation=False,
+           source_sha=None,
            db_path=None, opener=None):
     if confirm_generation is not True:
         raise PermissionError("Owner must authorize image GPU calls")
     ops_control.require_active()
+    if source_sha is not None and (not isinstance(source_sha, str) or not SHA.fullmatch(source_sha)):
+        raise ValueError("Invalid source SHA")
     if purpose not in PURPOSES:
         raise ValueError("Unknown visual purpose")
     if (not isinstance(scenes, list) or not 1 <= len(scenes) <= MAX_JOBS
@@ -111,9 +114,9 @@ def submit(purpose, topic, scenes, checkpoint, *, confirm_generation=False,
     for index, prompt in enumerate(prompts):
         ident = uuid4().hex
         with closing(_db(db_path, create=True)) as db, db:
-            db.execute("INSERT INTO visual_jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            db.execute("INSERT INTO visual_jobs VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                        (ident, package_id, purpose, index, prompt, checkpoint,
-                        None, "SUBMITTING", None, _now(), _now()))
+                        None, "SUBMITTING", None, source_sha, _now(), _now()))
         planned.append(ident)
         raw = image_studio._request(
             "/prompt", payload={"prompt": image_studio._workflow(ident, prompt, checkpoint)},
@@ -217,6 +220,6 @@ def report(*, db_path=None):
         return {"jobs": []}
     with closing(db):
         rows = [dict(x) for x in db.execute(
-            "SELECT job_id,package_id,purpose,scene_index,status,asset_sha,checkpoint,"
+            "SELECT job_id,package_id,purpose,scene_index,status,asset_sha,source_sha,checkpoint,"
             "created_at,updated_at FROM visual_jobs ORDER BY created_at DESC LIMIT 80")]
     return {"jobs": rows, "no_auto_publication": True, "auto_retry": False}
