@@ -64,6 +64,9 @@ class BackupCoverageWave2Tests(unittest.TestCase):
             "data/backups/agentforge/retention-receipt.json": b'{"backup":"local"}',
             "workspace/products/site/index.html": b"<html>persisted</html>",
             "workspace/products/site/assets/hero.png": payload,
+            "workspace/products/site/asset-receipt.json": json.dumps({
+                "path": "assets/hero.png", "sha256": sha
+            }).encode("utf-8"),
             "workspace/media/demo/video.mp4": b"fixture video",
             "workspace/growth/campaign.json": b'{"leads":1}',
             "workspace/webapps/react/src/App.jsx": b"export default function App(){}",
@@ -115,6 +118,12 @@ class BackupCoverageWave2Tests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(
             (staged / "workspace/products/site/assets/hero.png").read_bytes()
         ).hexdigest(), sha)
+        receipt = json.loads((staged /
+            "workspace/products/site/asset-receipt.json").read_text(encoding="utf-8"))
+        linked = staged / "workspace/products/site" / receipt["path"]
+        self.assertTrue(linked.is_file())
+        self.assertEqual(hashlib.sha256(linked.read_bytes()).hexdigest(),
+                         receipt["sha256"])
         for relative, text in (
             ("data/company/s1_tasks.sqlite3", "tasks"),
             ("data/film_studio/motion.sqlite3", "motion"),
