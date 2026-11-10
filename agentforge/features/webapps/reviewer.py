@@ -23,7 +23,7 @@ REVIEW_SCHEMA = _obj({
     "risks":{"type":"array","maxItems":8,"items":{"type":"string"}},
 })
 
-def validate_review(raw):
+def _validate_review(raw):
     if not isinstance(raw,dict) or set(raw) != set(REVIEW_SCHEMA["properties"]):
         raise ValueError("REVIEW_INVALID: fields")
     verdict = raw["recommendation"]
@@ -38,6 +38,16 @@ def validate_review(raw):
     return {"recommendation":verdict,
             "summary":base._text(raw["summary"],"summary",400),
             "missing_features":missing,"risks":risks}
+
+
+def validate_review(raw):
+    # Normalize trusted validation failures without echoing untrusted text.
+    try:
+        return _validate_review(raw)
+    except ValueError as exc:
+        if str(exc).startswith("REVIEW_INVALID:"):
+            raise
+        raise ValueError("REVIEW_INVALID: field constraint") from None
 
 def _hash(body):
     raw = json.dumps(body,sort_keys=True,ensure_ascii=False,
