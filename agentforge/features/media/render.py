@@ -80,7 +80,7 @@ def render_video(run_id, *, confirm_external_run=False):
     if concat.exists():
         raise FileExistsError("Previous FFmpeg script exists; review required")
 
-    if visual_plan["mode"] == "studio":
+    if visual_plan["mode"] == "studio" and data.get("studio_layers_version") == 1:
         # Per-shot inputs are signed locally generated photo/typography layers.
         # The photo alone moves. The alpha typography layer stays motionless.
         # No arbitrary text/path/model output is interpolated into filter syntax.
