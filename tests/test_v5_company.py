@@ -203,6 +203,47 @@ class V5CompanyTests(unittest.TestCase):
                 goal["goal_id"], goal["plan_sha256"], failed_id,
                 brain_db_path=self.brain, task_db_path=self.tasks)
 
+    def test_retry_developer_preserves_signed_architecture(self):
+        goal = self.plan()
+        brain_store.approve_goal(goal["goal_id"], goal["plan_sha256"],
+                                db_path=self.brain)
+        with patch("agentforge.model.generate_json", return_value=ARCH):
+            first = brain_runner.execute(
+                goal["goal_id"], brain_db_path=self.brain, task_db_path=self.tasks,
+                grants=("model.invoke", "workspace.propose"),
+                confirm_model_call=True)
+        self.assertEqual(first["status"], "WAITING_APPROVAL")
+        arch_step = brain_store.get_goal(goal["goal_id"], db_path=self.brain)["steps"][0]
+        with patch("agentforge.model.generate_json",
+                   side_effect=ValueError("APP_CODE_INVALID: bad code")):
+            failed = brain_runner.execute(
+                goal["goal_id"], brain_db_path=self.brain, task_db_path=self.tasks,
+                grants=("model.invoke", "workspace.propose"),
+                confirm_model_call=True)
+        self.assertEqual(failed["status"], "FAILED")
+        current = brain_store.get_goal(goal["goal_id"], db_path=self.brain)
+        self.assertEqual(current["current_step"], 1)
+        failed_task = current["steps"][1]["child_task_id"]
+        brain_runner.retry_failed_step(
+            goal["goal_id"], goal["plan_sha256"], failed_task,
+            brain_db_path=self.brain, task_db_path=self.tasks)
+        preserved = brain_store.get_goal(goal["goal_id"], db_path=self.brain)
+        self.assertEqual(len(preserved["steps"]), 1)
+        self.assertEqual(preserved["steps"][0]["child_task_id"], arch_step["child_task_id"])
+        with patch("agentforge.model.generate_json", return_value=MODEL) as generate:
+            resumed = brain_runner.execute(
+                goal["goal_id"], brain_db_path=self.brain, task_db_path=self.tasks,
+                grants=("model.invoke", "workspace.propose"),
+                confirm_model_call=True)
+            generate.assert_called_once()
+        self.assertEqual(resumed["status"], "WAITING_APPROVAL")
+        state = brain_runner.inspect(goal["goal_id"],
+                                     brain_db_path=self.brain, task_db_path=self.tasks)
+        self.assertEqual(state["current_step"], 3)
+        self.assertTrue(any(x["skill_id"] == "webapp.develop" and
+                            x["status"] == "SUCCEEDED" for x in state["step_runs"]))
+        self.assertEqual(state["step_runs"][0]["child_task_id"], arch_step["child_task_id"])
+
     def test_interrupted_goal_is_never_retryable(self):
         goal = self.plan()
         brain_store.approve_goal(goal["goal_id"], goal["plan_sha256"],
