@@ -11,7 +11,9 @@ from agentforge.model_registry import ModelConfigError
 
 
 class RoleRoutingTests(unittest.TestCase):
-    def test_roles_default_to_enabled_local_profiles(self):
+    @patch.object(role_routing.model_hub, "model_for_worker",
+                  return_value=("local_primary", 0, False))
+    def test_roles_default_to_enabled_local_profiles(self, _route):
         plan = role_routing.pipeline_plan(max_model_calls=3)
         self.assertEqual(plan["model_calls"], 3)
         self.assertEqual(plan["external_runs"], 0)
@@ -22,7 +24,9 @@ class RoleRoutingTests(unittest.TestCase):
         self.assertTrue(all(x["provider"] == "ollama" for x in plan["roles"]))
         self.assertTrue(all(x["model_ref"] == "local_primary" for x in plan["roles"]))
 
-    def test_budget_and_unknown_model_fail_before_invocation(self):
+    @patch.object(role_routing.model_hub, "model_for_worker",
+                  return_value=("local_primary", 0, False))
+    def test_budget_and_unknown_model_fail_before_invocation(self, _route):
         with self.assertRaisesRegex(PermissionError, "MODEL_BUDGET_EXCEEDED"):
             role_routing.pipeline_plan(max_model_calls=2)
         with self.assertRaises(ValueError):
@@ -90,7 +94,9 @@ class RoleRoutingTests(unittest.TestCase):
         self.assertIn("AI Application Architect", runtime["system_prompt"])
         self.assertIn("Return valid structured JSON", runtime["system_prompt"])
 
-    def test_no_unknown_worker_routing_and_no_secrets_in_plan(self):
+    @patch.object(role_routing.model_hub, "model_for_worker",
+                  return_value=("local_primary", 0, False))
+    def test_no_unknown_worker_routing_and_no_secrets_in_plan(self, _route):
         with self.assertRaises(ValueError):
             role_routing.require_worker_model("product_builder")
         plan = role_routing.pipeline_plan()
