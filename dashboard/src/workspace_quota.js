@@ -20,8 +20,8 @@ export function isCompanyRequest(prompt) {
 export function isVideoRequest(prompt) {
   const text = normalizedRequest(prompt);
   return ['storyboard','kich ban video','noi dung video','video script'].some(x=>text.includes(x))
-    || /\\b(?:tao|lam|dung|san xuat|render|xuat|edit|chinh sua)\\s+(?:mot|1|video|clip|doan|phim|video ngan|video quang cao)?\\s*(?:video|clip|phim|mp4)\\b/.test(text)
-    || /\\b(?:video|clip)\\s+(?:quang cao|gioi thieu|tiktok|reels|shorts)\\b/.test(text);
+    || /\b(?:tao|lam|dung|san xuat|render|xuat|edit|chinh sua)\s+(?:mot|1|video|clip|doan|phim|video ngan|video quang cao)?\s*(?:video|clip|phim|mp4)\b/.test(text)
+    || /\b(?:video|clip)\s+(?:quang cao|gioi thieu|tiktok|reels|shorts)\b/.test(text);
 }
 
 export function modelCallsForPrompt(prompt) {
