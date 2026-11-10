@@ -51,6 +51,37 @@ class RoleRoutingTests(unittest.TestCase):
                     model.resolve_runtime("webapp_developer", model.DEFAULT_JSON_SYSTEM)
                 network.assert_not_called()
 
+    def test_v5_direct_model_check_loads_dotenv_before_runtime(self):
+        with tempfile.TemporaryDirectory() as temp:
+            envfile = Path(temp) / ".env"
+            envfile.write_text(
+                "AGENTFORGE_MODEL_REF=cloud_primary\\n"
+                "AGENTFORGE_CLOUD_MODEL_CONSENT=YES\\n",
+                encoding="utf-8",
+            )
+            with patch.object(role_routing, "DOTENV_PATH", envfile):
+                with patch.dict(os.environ, {}, clear=True):
+                    selected = role_routing.require_worker_model("webapp_architect")
+                    self.assertEqual(selected["model_ref"], "cloud_primary")
+                    self.assertEqual(selected["provider"], "anthropic")
+
+    def test_v5_dotenv_cannot_override_process_consent_denial(self):
+        with tempfile.TemporaryDirectory() as temp:
+            envfile = Path(temp) / ".env"
+            envfile.write_text(
+                "AGENTFORGE_MODEL_REF=cloud_primary\\n"
+                "AGENTFORGE_CLOUD_MODEL_CONSENT=YES\\n",
+                encoding="utf-8",
+            )
+            with patch.object(role_routing, "DOTENV_PATH", envfile):
+                with patch.dict(os.environ, {
+                    "AGENTFORGE_MODEL_REF": "cloud_primary",
+                    "AGENTFORGE_CLOUD_MODEL_CONSENT": "",
+                }, clear=True):
+                    with self.assertRaisesRegex(
+                            PermissionError, "CLOUD_MODEL_CONSENT_REQUIRED"):
+                        role_routing.require_worker_model("webapp_architect")
+
     def test_local_role_runtime_preserves_role_specific_prompt(self):
         with patch.dict(os.environ, {"AGENTFORGE_MODEL_REF": "local_primary"}):
             runtime = model.resolve_runtime("webapp_architect", model.DEFAULT_JSON_SYSTEM)
