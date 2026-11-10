@@ -85,6 +85,7 @@ export default function App() {
   const [proposal,setProposal]=useState(null);
   const [webapp,setWebapp]=useState(null);
   const [task,setTask]=useState(null);
+  const [mediaPrepared,setMediaPrepared]=useState(null);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState(null);
   const [collapsed,setCollapsed]=useState(false);
@@ -153,6 +154,7 @@ export default function App() {
         await openWebapp(detail.report.proposal_id);
         setGoal(null);
       }else{
+        setMediaPrepared(null);
         setTask(detail);
       }
     }catch(e){authError(e);}
@@ -200,6 +202,37 @@ export default function App() {
         child_task_id:step.child_task_id,
       }));
       if(out){message.success('Đã chuẩn bị retry bước '+(step.step_index+1));await openGoal(goal.goal_id);}
+    });
+  const prepareStoryboard=selected=>ask('Bước 2A — tạo tư liệu từ storyboard?',
+    <Space orientation="vertical">
+      <Paragraph>Đã xem storyboard này. AgentForge sẽ tạo ảnh cảnh, âm thanh và phụ đề local; chưa render MP4 hoặc xuất bản.</Paragraph>
+      <Paragraph>Cần cấu hình business profile trong phần Kinh doanh để kiểm tra nội dung. Mỗi lần chuẩn bị tạo production mới, không ghi đè video cũ.</Paragraph>
+      <Text code>{selected.storyboard_source_sha}</Text>
+    </Space>,
+    async()=>{
+      const result=await runAction(()=>post('/api/media/prepare-from-task',{
+        ack:'PREPARE_REVIEWED_STORYBOARD',task_id:selected.task_id,
+        source_sha:selected.storyboard_source_sha,
+      }));
+      if(result){
+        setMediaPrepared(result);
+        message.success('Đã tạo tư liệu; chuyển sang Bước 2B render MP4');
+      }
+    });
+  const renderPreparedVideo=production=>ask('Bước 2B — chạy FFmpeg tạo MP4?',
+    <Space orientation="vertical">
+      <Paragraph>Chạy FFmpeg trên máy local để dựng video từ tư liệu đã kiểm tra. Đây là tác vụ tiến trình ngoài và có thể mất tài nguyên máy; không thể chạy lại nếu kết quả còn chưa xác định.</Paragraph>
+      <Text code>{production.storyboard_sha}</Text>
+      {!data.external_actions_enabled&&<Alert type="warning" message="Cần bật chế độ external tools khi chạy backend"/>}
+    </Space>,
+    async()=>{
+      const result=await runAction(()=>post('/api/videos/'+production.production_id+'/render',{
+        ack:'RENDER_LOCAL_MP4',storyboard_sha:production.storyboard_sha,
+      }));
+      if(result){
+        message.success('Đã render MP4. Mở Đánh giá → Video local để phát và nghiệm thu.');
+        setTask(null);setMediaPrepared(null);navigate('reviews');
+      }
     });
   const openProposal=async id => {
     try{setProposal(await api('/api/proposals/'+encodeURIComponent(id)));}
@@ -480,6 +513,26 @@ export default function App() {
           <Typography.Title level={5} style={{margin:'8px 0'}}>{scene.headline}</Typography.Title>
           <Typography.Paragraph>{scene.caption}</Typography.Paragraph>
         </div>)}
+        <Space wrap style={{marginTop:16}}>
+          <Button type="primary" loading={busy} disabled={!task.storyboard_source_sha||!!mediaPrepared}
+            onClick={()=>prepareStoryboard(task)}>
+            Bước 2A — Tạo tư liệu từ storyboard
+          </Button>
+          {mediaPrepared&&<Button type="primary" loading={busy}
+            disabled={!data.external_actions_enabled}
+            onClick={()=>renderPreparedVideo(mediaPrepared)}>
+            Bước 2B — Render video MP4
+          </Button>}
+          {mediaPrepared&&<Button onClick={()=>{setTask(null);navigate('reviews');}}>
+            Xem production trong Đánh giá
+          </Button>}
+        </Space>
+        {mediaPrepared&&<Alert style={{marginTop:12}} showIcon type="success"
+          message="Đã tạo tư liệu local, chưa có MP4"
+          description={<>Production: <Text code>{mediaPrepared.production_id}</Text> · QA tư liệu đạt. Bạn có thể render bây giờ hoặc vào Đánh giá → Video local sau.</>}/>}
+        {!task.storyboard_source_sha&&<Alert type="warning" style={{marginTop:12}}
+          message="Storyboard chưa có SHA được xác minh"
+          description="Đóng và mở lại kết quả công việc từ Goal trước khi tạo tư liệu."/>}
       </Card>}
       {task.report?.kind==='webapp'&&<Card title={task.report.format==='agentforge.webapp.ai-code.v1'
         ? 'AI Developer thử nghiệm — mã React cần kiểm duyệt'
