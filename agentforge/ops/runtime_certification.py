@@ -41,7 +41,8 @@ def _safe_probe(callback):
     try:
         return callback()
     except (OSError, ValueError, RuntimeError, KeyError, TypeError,
-            TimeoutError, http.client.HTTPException, UnicodeError):
+            TimeoutError, subprocess.TimeoutExpired, http.client.HTTPException,
+            UnicodeError):
         return _result("UNAVAILABLE")
 
 
@@ -241,17 +242,34 @@ def _docker_runtime():
     if image is None:
         raise ValueError("A local browser QA image must be pinned by SHA")
     sandbox._image_ready(docker, host, image)
+    name = "af-runtime-" + uuid4().hex[:16]
     args = [
         docker, "-H", host, "run", "--rm", "--pull", "never",
-        "--network", "none", "--read-only", "--cap-drop", "ALL",
+        "--name", name, "--network", "none", "--read-only", "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges=true",
         "--user", "10001:10001", "--cpus", "1", "--memory", "512m",
         "--memory-swap", "512m", "--pids-limit", "32", "--ipc", "none",
         "--entrypoint", "node", image, "--version",
     ]
-    result = subprocess.run(
-        args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL, timeout=45, check=False, env=sandbox._env())
+    needs_cleanup = True
+    try:
+        result = subprocess.run(
+            args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, timeout=45, check=False,
+            env=sandbox._env())
+        needs_cleanup = False
+    finally:
+        if needs_cleanup:
+            # A timed-out CLI can leave its disposable container running.
+            # Remove ONLY our randomized container, never an Owner container.
+            try:
+                subprocess.run(
+                    [docker, "-H", host, "container", "rm", "-f", name],
+                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL, timeout=12, check=False,
+                    env=sandbox._env())
+            except (OSError, subprocess.TimeoutExpired):
+                pass
     if result.returncode != 0:
         raise RuntimeError("Pinned offline QA container failed to start")
     return _result("PASS_RUNTIME", container_started=True,
