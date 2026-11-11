@@ -1,4 +1,4 @@
-// A single declarative route map: six sidebar destinations; 17 original screens + Model Hub.
+// A single declarative route map; Owner-only mattress workflow lives inside Business.
 // No API permissions are changed by client-side navigation.
 export const NAV_GROUPS = Object.freeze([
   {key:'overview',label:'Tổng quan',tabs:[['overview','Tổng quan']]},
@@ -7,7 +7,7 @@ export const NAV_GROUPS = Object.freeze([
     ['websites','Websites'],['projects','Kho thành phẩm & Ảnh AI'],
     ['reviews','Duyệt AI & Video'],['retention','Sao lưu & Cleanup']]},
   {key:'business',label:'Kinh doanh',tabs:[
-    ['growth','Growth & Revenue'],['finance','Finance'],
+    ['mattress','Bán nệm'],['growth','Growth & Revenue'],['finance','Finance'],
     ['channels','Channels'],['intelligence','Intelligence']]},
   {key:'team',label:'Đội ngũ AI',tabs:[
     ['team','Team & Roles'],['goals','Kế hoạch & Duyệt'],['tasks','Task History']]},
