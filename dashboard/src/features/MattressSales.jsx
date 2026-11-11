@@ -290,7 +290,7 @@ export function MattressSales({mutate}) {
         <Button onClick={copyNotice}>Sao chép để gửi qua Zalo/SMS</Button>
         <ConfirmButton title="Bạn đã thực sự gửi cho người phụ trách?"
           explanation="Sao chép tin chưa phải là đã gửi. Chỉ xác nhận sau khi tin được gửi thật; không có gửi Zalo tự động."
-          disabled={!['PENDING','NEEDS_REVIEW'].includes(noticeText.notice.status)}
+          disabled={!['PENDING','NEEDS_REVIEW','DISPATCHING'].includes(noticeText.notice.status)}
           onConfirm={attestNotice}>Đã gửi thực tế — ghi nhận</ConfirmButton>
       </Space>}
     </Drawer>
