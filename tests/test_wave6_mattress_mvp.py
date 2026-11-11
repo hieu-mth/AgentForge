@@ -197,6 +197,20 @@ class MattressStoreTests(unittest.TestCase):
         service.mark_notified(notice, ack="OWNER_ATTEST_ACTUALLY_NOTIFIED",
                               db_path=self.db)
 
+    def test_crash_stuck_dispatching_requires_owner_delivery_review(self):
+        self.new()
+        notice = self._notices()[0]["notice_id"]
+        service.claim_notice(notice, ack="OWNER_AUTHORIZE_EXTERNAL_MESSAGE",
+                             db_path=self.db)
+        self.assertEqual(self._notices()[0]["status"], "DISPATCHING")
+        with self.assertRaises(service.MattressError):
+            cli.dispatch_telegram(notice, confirmed=True, sender=lambda _: True,
+                                  db_path=self.db)
+        self.assertEqual(self._notices()[0]["status"], "DISPATCHING")
+        settled = service.mark_notified(
+            notice, ack="OWNER_ATTEST_ACTUALLY_NOTIFIED", db_path=self.db)
+        self.assertEqual(settled["status"], "SENT_MANUAL")
+
     def test_confirmed_telegram_ack_has_one_durable_notice(self):
         self.new()
         notice = self._notices()[0]["notice_id"]
