@@ -105,7 +105,7 @@ section.products{{padding:72px 0 80px}}h2{{font-size:clamp(27px,3vw,39px);line-h
 .step{{padding:22px;border-left:3px solid #27694d;background:#fff;border-radius:8px}}
 .step strong{{display:block;margin-bottom:8px}}
 footer{{padding:30px 0;color:var(--muted);font-size:14px}}
-@media(max-width:740px){{.hero-grid,.steps{{grid-template-columns:1fr}}.hero{{padding:45px 0}}
+@media(max-width:740px){{.hero-grid,.steps{{grid-template-columns:1fr}}.hero{{padding:45px 0}}}}
 header .shell{{flex-wrap:wrap}}.hero-aside{{padding:22px}}}}
 @media(prefers-reduced-motion:reduce){{*,*:before,*:after{{scroll-behavior:auto!important}}}}
 </style>
