@@ -126,6 +126,7 @@
 | `api/routes/media.py` | Explicit image generation/import, storyboard/video and draft decisions. |
 | `api/routes/workspace.py` | Workspace prompt/policy and bounded Autopilot configuration. |
 | `api/routes/operations.py` | Explicit Owner pause/resume operations. |
+| `api/routes/mattress.py` | Owner/CSRF-only lead, quote, shipping and notification actions; no public ingress. |
 | `api/routes/products.py` | Signed Website/WebApp inspect/revise/apply action guards. |
 | `api/routes/goals.py` | Goal approval/execution, schedules, campaigns and Owner memory actions. |
 | `api/routes/model_hub.py` | GET/POST Owner Model Hub, CAS revision, local model metadata probe có xác nhận. |
@@ -172,6 +173,15 @@
 | `features/growth/store.py` | Canonical SQLite campaign/lead/finance, giữ data path cũ. |
 | `features/growth/reports.py` | Canonical read-only growth reports. |
 | `features/growth/bundle.py` | Canonical manual-owner publishing handoffs. |
+
+## **Feature-first: `features/mattress_sales/` (post-audit Đợt 6)**
+
+| File hiện tại dưới `agentforge/` | Vai trò |
+| --- | --- |
+| `features/mattress_sales/__init__.py` | Package marker cho MVP nệm local-first. |
+| `features/mattress_sales/service.py` | Consent-based leads/quote/order SQLite, exact Owner state transitions, durable notice outbox; read-only queries không tạo DB. |
+| `features/mattress_sales/site.py` | Static HTML liên hệ qua điện thoại/Zalo; không checkout hoặc tự tuyên bố giao hàng/giá. |
+| `features/mattress_sales/cli.py` | Owner lead intake/CSV import, site export và Telegram one-shot đã xác nhận, không retry mù. |
 
 ## **Domains: `domains/growth/` (COMPAT)**
 
