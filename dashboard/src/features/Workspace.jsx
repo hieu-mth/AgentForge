@@ -135,7 +135,7 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, o
     ? runs.find(step=>step.step_index===activeIndex && step.status==='FAILED' && step.child_task_id)
     : null;
   const developerReady = runs.some(step=>step.skill_id==='webapp.develop' && step.status==='SUCCEEDED');
-  return <Drawer title="Kế hoạch & phê duyệt" open={!!goal} onClose={onClose}
+  return <Drawer title="Kế hoạch & phê duyệt" className="goal-drawer" open={!!goal} onClose={onClose}
     size="min(640px, 96vw)" destroyOnHidden extra={badge(goal.status)}>
     <Title level={4}>{goal.title}</Title>
     <AcceptanceStatus acceptance={goal.artifact_acceptance}/>

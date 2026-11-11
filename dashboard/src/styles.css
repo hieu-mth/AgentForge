@@ -233,6 +233,7 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .ant-form-item .ant-switch{margin-top:2px}
 
 /* Owner consent: readable, narrowly scoped permissions rather than API flags. */
+.goal-drawer .ant-drawer-body > .ant-alert + .ant-alert{margin-top:12px}
 .permission-list{display:grid;gap:10px;margin:16px 0}
 .permission-item{display:flex;gap:12px;align-items:flex-start;padding:13px 14px;
   border:1px solid var(--line);border-radius:12px;background:var(--surface-2);
