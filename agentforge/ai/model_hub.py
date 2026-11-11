@@ -180,8 +180,12 @@ def _validate_state(doc):
     for key, ref in doc["routes"].items():
         if key not in defaults:
             raise ModelConfigError("Unknown task route")
-        if defaults[key]["kind"] == "rules":
+        if defaults[key]["kind"] == "rules" and key not in {
+                "analytics.quality_check", "growth.report"}:
             raise ModelConfigError("Deterministic monitoring cannot use a model")
+        # Legacy Owner overlays may still contain these two previously-wired
+        # routes. They remain inert/readable until an explicit Owner edit;
+        # GET must never mutate or reject the entire existing Model Hub.
         _required_text(ref, ID_RE, "routed model ID")
     if len(json.dumps(doc, ensure_ascii=False).encode("utf-8")) > MAX_STATE_BYTES:
         raise ModelConfigError("Model Hub state exceeds safe size")
@@ -235,7 +239,8 @@ def catalog(*, db_path=None):
     profiles = _profiles(state=state)
     routes = []
     for key, route in _defaults().items():
-        selected = state["routes"].get(key, route["default_model"])
+        selected = (None if route["kind"] == "rules"
+                    else state["routes"].get(key, route["default_model"]))
         if route["kind"] == "rules":
             status = "DETERMINISTIC"
         elif not selected:
@@ -251,7 +256,9 @@ def catalog(*, db_path=None):
         else:
             status = "ROUTED" if route["execution"] == "wired" else "CONFIG_ONLY"
         routes.append({**route, "model_ref": selected,
-                       "source": "owner" if key in state["routes"] else "default",
+                       "source": ("legacy_inactive" if route["kind"] == "rules"
+                                  and key in state["routes"] else
+                                  "owner" if key in state["routes"] else "default"),
                        "status": status,
                        "runtime_wired": route["execution"] == "wired"})
     return {
