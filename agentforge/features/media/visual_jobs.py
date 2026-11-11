@@ -85,7 +85,9 @@ def _prompt(topic, scene, index, purpose):
     suffix = (" No text, logos, watermark, price, medical claims or UI. "
               "Full scene, clearly visible subject.")
     shot = f". Shot {index+1}: "
-    scene_text = scene.strip()[:210]
+    # Keep explicit room for the subject while prioritizing a distinct shot.
+    scene_budget = min(210, 450 - len(prefix + "Product/subject: " + shot + "." + suffix) - 40)
+    scene_text = scene.strip()[:scene_budget]
     fixed = prefix + "Product/subject: " + shot + scene_text + "." + suffix
     topic_budget = 450 - len(fixed)
     if topic_budget < 1:
