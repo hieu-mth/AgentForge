@@ -21,6 +21,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from agentforge import ops_control, product_builder, web_assets
+from agentforge.integrations import comfyui as _comfyui
 
 BASE = "http://127.0.0.1:8188"
 DB = product_builder.ROOT / "data" / "company" / "image_studio_v24.sqlite3"
@@ -66,16 +67,20 @@ def _connect(db_path=None, *, create=False):
 
 
 def _request(path, *, payload=None, max_bytes=262144, timeout=5, opener=None):
-    """Use ONLY the fixed loopback host and a hardcoded route."""
-    if not isinstance(path, str) or not path.startswith("/") or path.startswith("//"):
-        raise ValueError("Invalid local image route")
+    """Use fixed-loopback transport. Injected opener is only a test seam."""
+    _comfyui.validate_image_route(path, has_body=payload is not None)
+    if opener is None:
+        return _comfyui.request_image_bytes(
+            path, body=payload, timeout=timeout, max_response_bytes=max_bytes)
+    # Preserve existing deterministic fixture seam while applying the same
+    # strict path/response checks before any response is parsed.
     data = None if payload is None else json.dumps(
         payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
     req = urllib.request.Request(
         BASE + path, data=data,
-        headers={"Accept": "application/json" if data is None else "application/json",
-                 "Content-Type": "application/json"}, method="GET" if data is None else "POST")
-    with (opener or urllib.request.urlopen)(req, timeout=timeout) as response:
+        headers={"Accept": "application/json", "Content-Type": "application/json"},
+        method="GET" if data is None else "POST")
+    with opener(req, timeout=timeout) as response:
         if response.status != 200:
             raise RuntimeError("Local ComfyUI returned non-success status")
         raw = response.read(max_bytes + 1)
@@ -94,7 +99,7 @@ def health(*, opener=None):
         return {"status": "READY" if models else "NO_CHECKPOINT",
                 "checkpoints": models[:32], "truncated": len(models) > 32,
                 "generation_invoked": False}
-    except (OSError, ValueError, TypeError, urllib.error.URLError):
+    except (OSError, RuntimeError, ValueError, TypeError, urllib.error.URLError):
         return {"status": "UNAVAILABLE", "checkpoints": [],
                 "generation_invoked": False}
 
