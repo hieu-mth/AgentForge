@@ -2,6 +2,7 @@
 
 import json
 import os
+import time
 import urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -46,6 +47,10 @@ DEFAULT_DEVELOPER_TIMEOUT_SECONDS = 600
 MAX_DEVELOPER_TIMEOUT_SECONDS = 900
 MAX_OLLAMA_DEVELOPER_STREAM_BYTES = 512_000
 MAX_OLLAMA_DEVELOPER_STREAM_EVENTS = 30_000
+# Raw network envelopes are separate from decoded generated text budgets.
+MAX_MODEL_RESPONSE_BYTES = 1_000_000
+MAX_OLLAMA_STREAM_LINE_BYTES = 64_000
+MAX_OLLAMA_STREAM_WIRE_BYTES = 4_000_000
 
 
 def _request_timeout(worker_id):
@@ -157,6 +162,59 @@ def resolve_runtime(worker_id, default_system):
     }
 
 
+
+def _remaining(deadline):
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError("Model invocation exceeded total deadline")
+    return remaining
+
+
+def _bound_socket(response, deadline):
+    """Bound the next receive where urllib exposes a real HTTP socket.
+
+    BytesIO/testing gateways intentionally lack a socket. This supplements
+    monotonic checks; socket timeouts alone are per I/O, not a total budget.
+    """
+    _remaining(deadline)
+    fp = getattr(response, "fp", None)
+    sock = getattr(getattr(fp, "raw", None), "_sock", None)
+    if sock is not None:
+        sock.settimeout(_remaining(deadline))
+
+
+def _read_json_envelope(response, deadline):
+    chunks, size = [], 0
+    while True:
+        _bound_socket(response, deadline)
+        remaining = MAX_MODEL_RESPONSE_BYTES + 1 - size
+        if remaining <= 0:
+            raise RuntimeError("Model response exceeds safe size limit")
+        reader = getattr(response, "read1", None) or response.read
+        block = reader(min(8192, remaining))
+        _remaining(deadline)
+        if not block:
+            break
+        size += len(block)
+        if size > MAX_MODEL_RESPONSE_BYTES:
+            raise RuntimeError("Model response exceeds safe size limit")
+        chunks.append(block)
+    try:
+        return json.loads(b"".join(chunks))
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise RuntimeError("Model response returned invalid JSON") from exc
+
+
+def _read_stream_event(response, deadline, max_bytes):
+    _bound_socket(response, deadline)
+    line = response.readline(max_bytes + 1)
+    _remaining(deadline)
+    if len(line) > max_bytes:
+        raise RuntimeError("Ollama stream exceeds safe size limit")
+    return line
+
+
+
 def _ollama_chat(runtime, prompt, schema, *, worker_id=None):
     stream_developer = worker_id == "webapp_developer" and schema is not None
     payload = {
@@ -178,16 +236,26 @@ def _ollama_chat(runtime, prompt, schema, *, worker_id=None):
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=_request_timeout(worker_id)) as response:
+    timeout = _request_timeout(worker_id)
+    deadline = time.monotonic() + timeout
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        _remaining(deadline)
         if stream_developer:
             parts = []
             received_bytes = 0
+            wire_bytes = 0
             completed = False
-            for event_count, line in enumerate(response, start=1):
-                # Each Ollama token repeats substantial JSON metadata; cap
-                # actual generated text, not inflated NDJSON transport bytes.
-                if (event_count > MAX_OLLAMA_DEVELOPER_STREAM_EVENTS
-                        or len(line) > MAX_OLLAMA_DEVELOPER_STREAM_BYTES):
+            for event_count in range(1, MAX_OLLAMA_DEVELOPER_STREAM_EVENTS + 2):
+                # Never iterate an unbounded line: readline(limit) caps bytes
+                # *before* the event is allocated or JSON-decoded.
+                if event_count > MAX_OLLAMA_DEVELOPER_STREAM_EVENTS:
+                    raise RuntimeError("Ollama stream exceeds safe size limit")
+                line = _read_stream_event(response, deadline,
+                                          MAX_OLLAMA_STREAM_LINE_BYTES)
+                if not line:
+                    break
+                wire_bytes += len(line)
+                if wire_bytes > MAX_OLLAMA_STREAM_WIRE_BYTES:
                     raise RuntimeError("Ollama stream exceeds safe size limit")
                 if not line.strip():
                     continue
@@ -216,7 +284,7 @@ def _ollama_chat(runtime, prompt, schema, *, worker_id=None):
                 raise RuntimeError("Ollama stream ended before done")
             answer = "".join(parts)
         else:
-            raw = json.load(response)
+            raw = _read_json_envelope(response, deadline)
             answer = raw["message"]["content"]
     if not isinstance(answer, str) or not answer.strip():
         raise RuntimeError("Ollama returned an empty answer")
@@ -271,8 +339,10 @@ def _anthropic_chat(runtime, prompt, schema, *, worker_id=None):
         },
         method="POST",
     )
-    with _cloud_open(request, timeout=_request_timeout(worker_id)) as response:
-        raw = json.load(response)
+    timeout = _request_timeout(worker_id)
+    deadline = time.monotonic() + timeout
+    with _cloud_open(request, timeout=timeout) as response:
+        raw = _read_json_envelope(response, deadline)
 
     if not isinstance(raw, dict):
         raise RuntimeError("Gateway response must be a JSON object")

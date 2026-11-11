@@ -124,3 +124,7 @@ def main():
 
     elif args.command == "status":
         show_status(args.thread_id)
+
+
+if __name__ == "__main__":
+    main()

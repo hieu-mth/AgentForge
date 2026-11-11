@@ -53,16 +53,14 @@ execution = "wired"
 worker = "media_producer"
 
 [routes."analytics.quality_check"]
-label = "Phân tích dữ liệu"
-kind = "text"
-execution = "wired"
-worker = "analytics_analyst"
+label = "Phân tích dữ liệu (quy tắc Python)"
+kind = "rules"
+execution = "rules"
 
 [routes."growth.report"]
-label = "Báo cáo Growth"
-kind = "text"
-execution = "wired"
-worker = "growth_operator"
+label = "Báo cáo Growth (quy tắc Python)"
+kind = "rules"
+execution = "rules"
 
 [routes."film.storyboard"]
 label = "Kịch bản phim dài"

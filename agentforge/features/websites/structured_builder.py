@@ -250,6 +250,11 @@ def validate_copy(raw):
         "introduction": 380, "call_to_action": 120,
     }
     values = {key: _text(raw[key], key, limit) for key, limit in limits.items()}
+    # Optional, validated style metadata is part of the compatibility render
+    # contract and must survive normalization.
+    for choice in ("theme", "layout"):
+        if choice in raw:
+            values[choice] = raw[choice]
     features = raw["highlights"]
     if not isinstance(features, list) or not 2 <= len(features) <= 4:
         raise ValueError("Structured website content invalid: highlights")

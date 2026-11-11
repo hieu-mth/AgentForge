@@ -8,7 +8,10 @@ import re
 
 from agentforge import product_builder
 
-MAX_PREVIEW_BYTES = 32000
+# Accept every byte-bounded valid proposal. Inline CSS adds at most a
+# small style wrapper; do not impose a smaller preview budget than the
+# generator/validator allow for index.html + styles.css.
+MAX_PREVIEW_BYTES = product_builder.MAX_TOTAL_BYTES + 256
 STYLESHEET = re.compile(
     r"""<link\b(?=[^>]*\brel\s*=\s*["']stylesheet["'])(?=[^>]*\bhref\s*=\s*["']styles\.css["'])[^>]*>""",
     re.IGNORECASE,

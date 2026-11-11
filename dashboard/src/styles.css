@@ -1,15 +1,15 @@
 /* AgentForge design system — "the forge": deep ink + indigo, with an ember accent. */
 :root{
   --bg:#f5f6fb;--surface:#fff;--surface-2:#f8f9fd;--line:#e4e7f2;--line-soft:#edf0f8;
-  --text:#171a2e;--muted:#6a7192;--faint:#9aa0bd;
+  --text:#171a2e;--muted:#596181;--faint:#626b8c;
   --primary:#5b5ef4;--primary-soft:#eef0ff;--ember:#ff7a3d;--ember-2:#f43f7a;
-  --good:#16a34a;--good-bg:#e8f8ee;--warn:#b7791f;--warn-bg:#fff4dc;--bad:#e5484d;--bad-bg:#fdebec;--info:#4f52e8;--info-bg:#eef0ff;
+  --good:#106c37;--good-bg:#e8f8ee;--warn:#b7791f;--warn-bg:#fff4dc;--bad:#e5484d;--bad-bg:#fdebec;--info:#4f52e8;--info-bg:#eef0ff;
   --shadow:0 1px 2px rgba(23,26,46,.04),0 8px 28px rgba(40,48,110,.07);
   --radius:16px;--ease:cubic-bezier(.2,.7,.2,1);
 }
 :root[data-theme=dark]{
   --bg:#090b14;--surface:#141729;--surface-2:#191d33;--line:#262b45;--line-soft:#202540;
-  --text:#eceefa;--muted:#a0a6c8;--faint:#6f769c;
+  --text:#eceefa;--muted:#b5b9d3;--faint:#a1a9ce;
   --primary:#7c7fff;--primary-soft:#1e2146;
   --good:#4ade80;--good-bg:#12301f;--warn:#fbbf24;--warn-bg:#3a2e10;--bad:#ff7b80;--bad-bg:#3b1a1d;--info:#9fa2ff;--info-bg:#1f2247;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);

@@ -99,6 +99,30 @@ class WebsiteVisualPreviewTests(unittest.TestCase):
         other_status, _, _ = self.request("/api/proposals/" + "c" * 32 + "/preview", cookie)
         self.assertEqual(404, other_status)
 
+    def test_valid_large_production_proposal_can_be_previewed(self):
+        # A valid Designer-sized document may exceed the old 32 KiB preview
+        # ceiling while remaining within the product builder's 48 KiB file cap.
+        paragraphs = '<p>Mô tả nệm mẫu, chưa xác minh thông tin. </p>' * 610
+        large = GOOD.replace('</main>', paragraphs + '</main>')
+        self.assertGreater(len(large.encode('utf-8')), 32000)
+        self.assertLess(len(large.encode('utf-8')), b.MAX_FILE_BYTES)
+        proposal = b.propose(
+            'nem-demo-large', self.brief, model_client=lambda *_args, **_kwargs: {
+                'summary': 'Bounded designer proposal',
+                'files': [{'path': 'index.html', 'content': large}],
+            })
+        raw = from_proposal(proposal['proposal_id'])
+        self.assertGreater(len(raw), 32000)
+        self.assertLessEqual(len(raw), b.MAX_TOTAL_BYTES + 256)
+        cookie = self.login()
+        path = '/api/proposals/' + proposal['proposal_id'] + '/preview'
+        status, headers, body = self.request(path, cookie)
+        self.assertEqual(status, 200)
+        self.assertEqual(body, raw)
+        self.assertIn("script-src 'none'", headers['Content-Security-Policy'])
+        self.assertFalse(b.PRODUCTS.exists())
+
+
     def test_unchanged_normal_csp(self):
         cookie = self.login()
         _, headers, _ = self.request("/", cookie)

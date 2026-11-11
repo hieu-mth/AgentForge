@@ -1,6 +1,6 @@
 # Skill Engine — M8: adapter theo domain
 
-**Trạng thái:** M8 refactor adapter hoàn tất ở mức source, chưa chuyển `domains/` sang `features/` (M4). Skill invocation thực tế vẫn do `agentforge/core/skill_runner.py` kiểm soát, có Owner permission và task history. Không đồng nghĩa thêm skill hay model mới đã hoạt động.
+**Trạng thái hiện tại (11/2026):** M8 adapter đã hoàn tất; M4 chuyển canonical implementation sang `agentforge/features/` cho website, webapps, media, film và growth. `agentforge/domains/` và một số top-level modules là **compatibility aliases**, không phải nơi thêm logic mới. Skill invocation vẫn do `agentforge/core/skill_runner.py` kiểm soát (Owner permissions, task history, no automatic replay). Các giới hạn runtime AI/GPU/Docker chưa được chứng nhận; không coi việc có skill/route là bằng chứng model đang chạy.
 
 ## Thêm một kỹ năng an toàn
 
@@ -24,6 +24,6 @@ Các adapter **không import implementation ở module load time**; chỉ import
 
 ## Ranh giới và việc chưa làm
 
-- Chưa chuyển `domains/websites`, `domains/webapps`, `domains/media`, `domains/growth` sang `features/`. M4 sẽ đi từng domain/PR, giữ alias và SHA.
-- M8 hiện chỉ chia lại policy và invocation theo domain, không thay schema v1, không thêm permission, route HTTP, model billing hay tự chạy tools.
+- Các feature đã có canonical code dưới `agentforge/features/`; các `domains/*` shims được giữ lại vì một số caller và test monkeypatch dựa vào cùng module object. Đừng xóa hoặc viết implementation mới trong shim nếu chưa có migration/evidence.
+- M8 chỉ chia lại policy và invocation theo domain, không thay schema v1, không thêm permission, route HTTP, model billing hay tự chạy tools. `analytics.quality_check` và `growth.report` là deterministic Python rules, **không** dùng model route.
 - Kể cả khi unit tests PASS, browser sandbox generated React, ComfyUI GPU thực, channel publishing và doanh thu vẫn chưa được kiểm chứng.

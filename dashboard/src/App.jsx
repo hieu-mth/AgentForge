@@ -7,6 +7,7 @@ import {
   SafetyCertificateOutlined, SettingOutlined, SunOutlined, TeamOutlined,
 } from '@ant-design/icons';
 import { api } from './api.js';
+import { actionWithRefresh } from './action_receipt.js';
 import { useThemeMode } from './theme.jsx';
 import { badge, clip, PageHeader } from './components/shared.jsx';
 import { Workspace, GoalDrawer } from './features/Workspace.jsx';
@@ -169,8 +170,12 @@ export default function App() {
   };
   const runAction=async(fn,{refreshData=true}={})=>{
     setBusy(true);setError(null);
-    try{const result=await fn();if(refreshData)await refresh();return result;}
-    catch(e){authError(e);return null;}
+    try{
+      return await actionWithRefresh(fn,refreshData?refresh:null,e=>{
+        if(e.status===401){setLoginNeeded(true);setData(null);setCsrf(null);}
+        else{setError(e);message.warning('Thao tác đã thành công nhưng chưa làm mới được dữ liệu. Không bấm thực hiện lại; hãy tải lại trang.');}
+      });
+    }catch(e){authError(e);return null;}
     finally{setBusy(false);}
   };
   const post=(path,body)=>api(path,{method:'POST',body,csrf});
