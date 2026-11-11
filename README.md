@@ -40,6 +40,15 @@ Chúng kiểm tra **runtime thật trong phạm vi nhỏ**, không auto tạo GP
 hoặc biến CI PASS thành production GO. Quy trình từng bước tại
 [Owner Runtime Certification](docs/verification/runtime_2026_11/README.md).
 
+## Đợt 6 — MVP bán nệm gia đình
+
+Trong Dashboard: **Kinh doanh → Bán nệm**. Đã có sổ lead đã đồng ý liên hệ,
+báo giá, xác minh phí/khu vực vận chuyển với người giao, Owner chốt đơn và
+notification outbox. Website giới thiệu contact-first có thể xuất HTML local,
+không yêu cầu AI. Không có checkout, public form hoặc tự gửi Zalo OA; kênh
+Telegram chỉ hoạt động khi Owner cấu hình và bật một lượt gửi có xác nhận.
+Xem [hướng dẫn triển khai nệm](docs/milestones/WAVE6_MATTRESS_BUSINESS_MVP.md).
+
 ## Hiện có những gì?
 
 | Mảng | Khả năng đang có | Giới hạn quan trọng |
@@ -50,6 +59,7 @@ hoặc biến CI PASS thành production GO. Quy trình từng bước tại
 | **Marketplace** | NovaMart demo, lọc/tìm kiếm/giỏ hàng, catalog do AI đề xuất | Không có thanh toán, backend bán hàng thật |
 | **AI React Developer** | Đề xuất source JSX/CSS và kiểm tra cú pháp | Source AI có revision/diff/rollback theo feedback; model thật và build/browser QA AI chưa xác minh |
 | **AI Film Studio** | Lập kế hoạch phim, ComfyUI shot, continuity, SRT/TTS và ghép 60–90 giây theo quyền Owner | GPU 12 GB và phim thực chưa nghiệm thu; ghép phim dài 15–30 phút chưa triển khai |
+| **Bán nệm referral-first** | Leads có consent, Owner báo giá/xác minh giao, lưu đơn và hàng đợi thông báo, xuất site tĩnh | Không tự nhận lead Internet, không tự Zalo/giao/thu tiền, chưa có giá/khu vực giao thực |
 | **Media / Growth** | Ảnh tĩnh, SRT, TTS tùy chọn, FFmpeg MP4, gói bàn giao | Có handoff thủ công và CLI OAuth private-only tùy chọn; không tự public hay xác minh doanh thu |
 
 Chi tiết và định nghĩa trạng thái: **[Current Status](docs/STATUS.md)**. Base V1 technical readiness: [Wave 5 Owner acceptance](docs/verification/base_v1/README.md); CI PASS không có nghĩa máy/model thật đã nghiệm thu.
@@ -67,7 +77,7 @@ Chi tiết và định nghĩa trạng thái: **[Current Status](docs/STATUS.md)*
 - **[Compatibility M5](docs/architecture/COMPATIBILITY_POLICY.md)** — root aliases tới features và quy tắc cleanup an toàn.
 - **[API contract M0/M3](docs/architecture/API_CONTRACT_V1.md)** — Owner login, CSRF, routes và compatibility.
 - **[Cấu trúc đã chốt (M1–M4)](docs/architecture/TARGET_STRUCTURE.md)** — Python/React ở root, các feature canonical đã chuyển.
-- **[Giải thích từng file Python/React](docs/architecture/FILE_CATALOG.md)** — inventory 208 module Python và Dashboard.
+- **[Giải thích từng file Python/React](docs/architecture/FILE_CATALOG.md)** — inventory các module Python và Dashboard.
 - **[Templates](templates/README.md)** và **[Examples](examples/README.md)** — phân biệt template runtime với file JSON mẫu.
 - **[AI Film Studio 12 GB](docs/architecture/FILM_MOTION_12GB_PILOT.md)** — điều kiện cần trước khi tạo clip thật.
 - **[Bằng chứng Phase 1](docs/verification/phase1/README.md)** — snapshot kiểm thử, không phải trạng thái live.
