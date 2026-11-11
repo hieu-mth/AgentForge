@@ -11,6 +11,8 @@ NOTICE_MARK = re.compile(r"/api/mattress/notices/([a-f0-9]{32})/mark\Z")
 def handle(server, path, request, session=None):
     if not path.startswith("/api/mattress/"):
         return UNHANDLED
+    if session is None:
+        raise PermissionError("Owner session required for mattress mutations")
     db_path = getattr(server, "mattress_db_path", None)
     if path == "/api/mattress/leads":
         if set(request) != {"ack", "lead"} or request["ack"] != "OWNER_RECORD_CONSENTED_LEAD":
