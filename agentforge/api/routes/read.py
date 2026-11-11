@@ -12,6 +12,16 @@ def dispatch(self, route):
             "status": "AUTHENTICATED", "csrf": session["csrf"]})
     if route == "/api/bootstrap":
         return self._reply(200, _summary(self.server))
+    if route == "/api/mattress":
+        from agentforge.features.mattress_sales.service import report
+        return self._reply(200, report(db_path=self.server.mattress_db_path))
+    if route.startswith("/api/mattress/notices/") and route.endswith("/message"):
+        from agentforge.features.mattress_sales.service import message_for_notice
+        parts = route.split("/")
+        if len(parts) != 6 or parts[:4] != ["", "api", "mattress", "notices"]:
+            raise ValueError("Invalid notice preview route")
+        return self._reply(200, {"message": message_for_notice(
+            parts[4], db_path=self.server.mattress_db_path)})
     if route.startswith("/api/image/") and route.endswith("/preview"):
         from agentforge.asset_preview import image_for_job
         job_id = route[len("/api/image/"):-len("/preview")]

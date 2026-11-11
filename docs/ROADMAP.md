@@ -1,6 +1,20 @@
 # AgentForge — Roadmap thực thi
 
-**Cập nhật:** 10/11/2026. Đây là roadmap **hiện hành**, thay cho các bản V4/C8 trong tài liệu lịch sử. Chỉ đánh dấu DONE khi đạt tiêu chí kiểm chứng; mocked tests không thay thế real-model testing.
+**Cập nhật:** 11/11/2026. Đây là roadmap **hiện hành**, thay cho các bản V4/C8 trong tài liệu lịch sử. Chỉ đánh dấu DONE khi đạt tiêu chí kiểm chứng; mocked tests không thay thế real-model testing.
+
+## Post-audit Đợt 6 — MVP nệm theo kênh người quen
+
+Mục tiêu: biến một use case thật thành doanh thu được Owner xác nhận
+trước khi tự động quảng cáo. Code/CI: lead đã có consent → liên hệ →
+báo giá theo hàng thật → xác minh phạm vi/phí giao → Owner và khách chốt →
+giao hàng, cùng durable notification outbox, Dashboard và website tĩnh.
+Thông báo Zalo mặc định **thủ công**; Telegram foreground watcher chỉ
+opt-in, không chạy khi máy tắt. Không mở port API local ra Internet.
+
+**Live Owner PENDING:** số liên hệ chính thức, danh sách sản phẩm có thật,
+phạm vi/giá giao hàng, kênh nhận thông báo đã kiểm tra, static website
+public và public form/24h lead sync. Không nhận trạng thái production GO
+từ CI fixture. [Runbook nệm](milestones/WAVE6_MATTRESS_BUSINESS_MVP.md).
 
 ## Quyết định kiến trúc repository
 

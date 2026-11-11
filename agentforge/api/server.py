@@ -202,7 +202,7 @@ class _Handler(BaseHTTPRequestHandler):
 
 def create_server(port=8780, *, owner_code=None, allow_external_actions=False,
                   task_db_path=None, brain_db_path=None, analytics_db_path=None,
-                  growth_db_path=None):
+                  growth_db_path=None, mattress_db_path=None):
     if type(port) is not int or not 0 <= port <= 65535:
         raise ValueError("Invalid port")
     if owner_code is not None and (
@@ -218,6 +218,7 @@ def create_server(port=8780, *, owner_code=None, allow_external_actions=False,
     server.brain_db_path = brain_db_path
     server.analytics_db_path = analytics_db_path
     server.growth_db_path = growth_db_path
+    server.mattress_db_path = mattress_db_path
     server.allow_external_actions = allow_external_actions is True
     return server
 
