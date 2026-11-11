@@ -42,8 +42,15 @@ def check(*, resolve=None, opener=None):
     request = urllib.request.Request(base.rstrip("/") + "/api/tags",
                                      headers={"Accept": "application/json"},
                                      method="GET")
+    # Metadata probe is local-only: environment proxies and redirects must
+    # not carry the request to any remote destination.
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+    safe_open = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}), NoRedirect()).open if opener is None else opener
     try:
-        with (opener or urllib.request.urlopen)(request, timeout=3) as resp:
+        with safe_open(request, timeout=3) as resp:
             if resp.status != 200:
                 return {"status": "HTTP_ERROR", "ready": False, "generation_invoked": False}
             raw = resp.read(MAX_TAGS_BYTES + 1)
