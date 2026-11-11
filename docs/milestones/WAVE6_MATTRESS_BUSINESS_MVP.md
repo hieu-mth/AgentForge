@@ -69,12 +69,22 @@ credentials vào biến môi trường, **không commit/lưu vào repo**:
     $env:AGENTFORGE_MATTRESS_TELEGRAM_CHAT_ID = '<chat ID>'
     .\.venv\Scripts\python.exe -m agentforge.features.mattress_sales.cli notify-telegram --notice-id <id từ Dashboard> --confirm-external-send
 
-Mỗi lệnh chỉ gửi 1 notice. Outbox chuyển PENDING → DISPATCHING trước khi
-gửi. Chỉ HTTP 200 và JSON ok=true mới là SENT; timeout/unknown đánh dấu
-NEEDS_REVIEW (hoặc DISPATCHING khi process chết). Không có retry mù, không
-in token và không tự bật scheduler. Muốn tự động gửi khi PC chạy phải xây
-cấu hình vận hành và xác nhận kênh trước; bản này chưa tuyên bố tự thông báo
-24/7.
+Mỗi lệnh notify-telegram chỉ gửi 1 notice. Outbox chuyển
+PENDING → DISPATCHING trước khi gửi. Chỉ HTTP 200 và JSON ok=true mới là SENT;
+timeout/unknown đánh dấu NEEDS_REVIEW (hoặc DISPATCHING khi process chết).
+Không có retry mù; nếu đã kiểm tra đúng tin được gửi sau crash, Owner có
+thể xác nhận SENT_MANUAL trong Dashboard.
+
+**Tùy chọn tự gửi khi máy còn chạy:** sau khi đã thử bot/chat bằng một lead
+synthetic, Owner có thể chủ động mở foreground watcher trong PowerShell:
+
+    .\.venv\Scripts\python.exe -m agentforge.features.mattress_sales.cli notify-watch --confirm-auto-send --confirm-recipient-tested --interval 30
+
+Watcher kiểm tra tối đa 5 notice PENDING mỗi chu kỳ; không in SĐT/token,
+không gửi lại trạng thái DISPATCHING/NEEDS_REVIEW, Ctrl+C để dừng. Không
+đăng ký service tự khởi động, không chạy khi PC tắt và **không** tạo public
+form receiver. Nếu người nhận chỉ dùng Zalo, giữ mặc định gửi thủ công
+thay vì cấu hình Telegram sai đối tượng.
 
 ## 4. Nhận CSV từ một public form provider (không có public API AgentForge)
 
