@@ -105,6 +105,12 @@ jobs:
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
 
+      - name: Verify actual FFmpeg encode and decode with disposable CI fixture
+        run: python -B -m agentforge.ops.runtime_certification --run-ffmpeg --confirm-local-exec
+
+      - name: Smoke-test new Owner runtime preflight wrapper (PowerShell 5.1, no AI)
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/agentforge_runtime_certify_windows.ps1
+
       - name: Wave 5 Base V1 acceptance (read-only, no Owner data writes)
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/agentforge_acceptance_windows.ps1 -RunContractTests
 
