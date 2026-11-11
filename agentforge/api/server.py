@@ -145,7 +145,7 @@ class _Handler(BaseHTTPRequestHandler):
             raise ValueError("Content-Length required")
         length = int(length_text)
         if not 2 <= length <= MAX_BODY:
-            raise ValueError("Request must be 2–8192 bytes")
+            raise ValueError(f"Request must be 2–{MAX_BODY} bytes")
         raw = self.rfile.read(length)
         if len(raw) != length:
             raise ValueError("Incomplete request")

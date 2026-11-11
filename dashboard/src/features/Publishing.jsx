@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, App as AntApp, Button, Card, Checkbox, Descriptions, Form,
   Input, InputNumber, Select, Space, Table, Tag, Typography } from 'antd';
 import { api } from '../api.js';
+import {useScreenRefresh} from '../refresh_scope.jsx';
+import {useReadSequence} from '../use_resource.jsx';
 
 const { Text, Paragraph } = Typography;
 const CLAIMS = [
@@ -23,15 +25,18 @@ export function Publishing({mutate,data}) {
   const [attestForm]=Form.useForm();
   const [metricsForm]=Form.useForm();
 
+  const beginRead=useReadSequence();
   const reload=useCallback(async()=>{
+    const current=beginRead();
     setBusy(true);
     try{
       const [r,e]=await Promise.all([api('/api/publishing'),api('/api/film/productions')]);
-      setReport(r);setEpisodes(e.episodes||[]);
-    }catch(err){message.error(err.message||'Không đọc được sổ phát hành local');}
-    finally{setBusy(false);}
-  },[message]);
+      if(current()){setReport(r);setEpisodes(e.episodes||[]);}
+    }catch(err){if(current())message.error(err.message||'Không đọc được sổ phát hành local');}
+    finally{if(current())setBusy(false);}
+  },[message,beginRead]);
   useEffect(()=>{reload();},[reload]);
+  useScreenRefresh(reload);
 
   const inspectEpisode=async value=>{
     setSelected(null);

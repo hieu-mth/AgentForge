@@ -267,6 +267,26 @@ def propose(title, template, inputs, *, max_model_calls=0,
         "max_model_calls": max_model_calls,
         "max_external_runs": max_external_runs,
     }}
+    # Keep the existing storage/SHA contracts. Check all serialized records
+    # before any Goal is written, including resolved S1 task payloads.
+    from agentforge import task_history
+    try:
+        brain_store._json(recorded)
+        brain_store._json(plan)
+        for step in plan:
+            payload = {}
+            for key, value in step["payload"].items():
+                if isinstance(value, dict):
+                    size = 32 if key == "run_id" else V5_BINDINGS[(step["skill_id"], key)][2]
+                    payload[key] = "0" * size
+                else:
+                    payload[key] = value
+            task_history._json(payload, limit=8192)
+    except (brain_store.BrainError, ValueError) as exc:
+        raise brain_store.BrainError(
+            "PLAN_UTF8_BUDGET: Kế hoạch vượt ngân sách lưu trữ 8 KiB UTF-8 "
+            "(V5 lặp brief nhiều bước). Hãy rút gọn hoặc chia nhỏ yêu cầu; chưa lưu hay gọi AI."
+        ) from exc
     # Limits are stored in goal metadata, not passed to underlying skill.
     result = brain_store.create_goal(title, template, recorded, plan, db_path=db_path)
     result.update({

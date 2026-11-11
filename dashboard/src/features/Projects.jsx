@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { App as AntApp, Alert, Button, Card, Checkbox, Empty, Form, Image,
-  Input, Select, Space, Spin, Table, Tag, Typography } from 'antd';
-import { CheckCircleOutlined, FolderOpenOutlined, ReloadOutlined } from '@ant-design/icons';
+  Input, Select, Space, Table, Tag, Typography } from 'antd';
+import { ReloadOutlined } from '@ant-design/icons';
 import { api } from '../api.js';
+import {useResource, ResourceStatus} from '../use_resource.jsx';
+import {useScreenRefresh} from '../refresh_scope.jsx';
 import { AutoVisuals } from './Visuals.jsx';
 import { badge, clip } from '../components/shared.jsx';
 const { Paragraph, Text, Title } = Typography;
@@ -10,24 +12,20 @@ const { TextArea } = Input;
 
 export function Projects({mutate}) {
   const {message,modal} = AntApp.useApp();
-  const [state,setState] = useState({artifacts:null, health:null, jobs:null});
-  const [busy,setBusy] = useState(false);
+  const artifacts=useResource('/api/artifacts');
+  const health=useResource('/api/image/health');
+  const jobs=useResource('/api/image/jobs');
+  const state={artifacts:artifacts.data,health:health.data,jobs:jobs.data};
+  const busy=artifacts.loading||health.loading||jobs.loading;
   const [checked,setChecked] = useState({});
   const [visualPurpose,setVisualPurpose]=useState('image');
   const [visualTopic,setVisualTopic]=useState('');
   const [visualSite,setVisualSite]=useState(null);
   const [form] = Form.useForm();
 
-  const refresh = useCallback(async()=>{
-    setBusy(true);
-    try {
-      const [artifacts,health,jobs] = await Promise.all([
-        api('/api/artifacts'),api('/api/image/health'),api('/api/image/jobs')]);
-      setState({artifacts,health,jobs});
-    } catch(err) { message.error(err.message); }
-    finally {setBusy(false);}
-  },[message]);
-  useEffect(()=>{refresh();},[refresh]);
+  const refresh=useCallback(()=>Promise.all([artifacts.reload(),health.reload(),jobs.reload()]),
+    [artifacts.reload,health.reload,jobs.reload]);
+  useScreenRefresh(refresh);
   const submit = values => modal.confirm({
     title:'Tạo một ảnh bằng ComfyUI local?',
     content:'Tác vụ này sử dụng GPU/điện trên máy. Không tự tải model, không đăng bài và không chi API cloud.',
@@ -62,16 +60,16 @@ export function Projects({mutate}) {
       },
     });
   };
-  if(!state.artifacts)return <Card><Spin/> Đang đọc kho thành phẩm local...</Card>;
-  const sites=(state.artifacts.items||[]).filter(x=>x.kind==='website');
+  const sites=(state.artifacts?.items||[]).filter(x=>x.kind==='website');
   const models=state.health?.checkpoints||[];
   return <Space orientation="vertical" size={18} style={{width:'100%'}}>
     <Alert showIcon type="info" message="Kho sản phẩm và lịch sử local — không tự xóa"
       description="Danh sách dưới đây chỉ kiểm kê những sản phẩm được lưu tại máy. Website local không phải website đã triển khai Internet."/>
     <Card title="Projects & Files" extra={<Button icon={<ReloadOutlined/>} onClick={refresh} loading={busy}>Làm mới</Button>}>
+      <ResourceStatus resource={artifacts} label="kho thành phẩm"/>
       <Table rowKey={x=>x.kind+':'+x.id} size="middle" pagination={{pageSize:8}}
-        dataSource={state.artifacts.items||[]}
-        locale={{emptyText:'Chưa có artifact local hợp lệ'}}
+        dataSource={state.artifacts?.items||[]} loading={artifacts.loading}
+        locale={{emptyText:artifacts.error?'Không tải được dữ liệu': 'Chưa có artifact local hợp lệ'}}
         columns={[
           {title:'Loại',dataIndex:'kind'},
           {title:'Mã sản phẩm',dataIndex:'id',render:value=><code>{value}</code>},
@@ -79,7 +77,7 @@ export function Projects({mutate}) {
           {title:'Dung lượng',dataIndex:'bytes',render:n=>(n/1024).toFixed(1)+' KB'},
           {title:'Public?',render:()=><Tag>Chưa xác minh</Tag>},
         ]}/>
-      <Text type="secondary">{state.artifacts.total_items||0} mục đã kiểm kê (tối đa 40 mục hiển thị). Không bao gồm nội dung file hay dữ liệu khách hàng.</Text>
+      {state.artifacts&&<Text type="secondary">{state.artifacts.total_items||0} mục đã kiểm kê (tối đa 40 mục hiển thị). Không bao gồm nội dung file hay dữ liệu khách hàng.</Text>}
     </Card>
     <Card title="AI tự tạo hình ảnh — dùng chung cho Video / Ảnh / Website">
       <Alert showIcon type="info"
@@ -116,6 +114,7 @@ export function Projects({mutate}) {
       </Space>
     </Card>
     <Card title="AI Image Studio · ComfyUI local" extra={badge(state.health?.status)}>
+      <ResourceStatus resource={health} label="kết nối ảnh"/>
       <Alert type="warning" showIcon message="Ảnh do AI tạo không phải ảnh sản phẩm thật"
         description="Cần checkpoint ComfyUI cài riêng tại 127.0.0.1:8188. Sinh ảnh có thể dùng GPU. Phải xem ảnh trước khi gắn vào website."/>
       <Form form={form} layout="vertical" style={{marginTop:20}} onFinish={submit}>
@@ -131,13 +130,14 @@ export function Projects({mutate}) {
             placeholder="Photorealistic cozy bedroom with premium mattress, natural window light, no lettering or logo"/>
         </Form.Item>
         <Button type="primary" htmlType="submit"
-          disabled={state.health?.status!=='READY'||!sites.length}>Tạo một ảnh AI local</Button>
-        <Button style={{marginLeft:10}} onClick={refresh}>Kiểm tra ComfyUI</Button>
+          disabled={health.loading||!!health.error||state.health?.status!=='READY'||!sites.length}>Tạo một ảnh AI local</Button>
+        <Button style={{marginLeft:10}} onClick={health.reload}>Kiểm tra ComfyUI</Button>
       </Form>
     </Card>
     <Card title="Lượt tạo ảnh và duyệt file">
+      <ResourceStatus resource={jobs} label="lịch sử ảnh"/>
       <Space orientation="vertical" style={{width:'100%'}} size="middle">
-        {(state.jobs?.jobs||[]).length===0?<Empty description="Chưa có job ảnh AI"/>:
+        {(state.jobs?.jobs||[]).length===0?(!jobs.error&&!jobs.loading&&<Empty description="Chưa có job ảnh AI"/>):
           (state.jobs?.jobs||[]).map(job=><Card size="small" key={job.job_id}>
             <div className="image-job">
               <div><Text strong>{job.slug}</Text> · <Text code>{clip(job.job_id)}</Text>

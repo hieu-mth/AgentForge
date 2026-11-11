@@ -3,6 +3,8 @@ import { App as AntApp, Alert, Button, Card, Checkbox, Col, Descriptions,
   Divider, Drawer, Form, Input, InputNumber, Row, Select, Space, Statistic,
   Table, Tag, Typography } from 'antd';
 import { api } from '../api.js';
+import {useScreenRefresh} from '../refresh_scope.jsx';
+import {useReadSequence} from '../use_resource.jsx';
 
 const { Text, Paragraph } = Typography;
 const STATES = {
@@ -43,13 +45,16 @@ export function MattressSales({mutate}) {
   const [quoteForm]=Form.useForm();
   const [shippingForm]=Form.useForm();
   const leadRequestId=useRef(null);
+  const beginRead=useReadSequence();
   const load=useCallback(async()=>{
+    const current=beginRead();
     setLoading(true);
-    try {setData(await api('/api/mattress'));}
-    catch(e){message.error(e.status===401?'Phiên Owner đã hết hạn':'Không đọc được dữ liệu bán nệm.');}
-    finally{setLoading(false);}
-  },[message]);
+    try {const next=await api('/api/mattress');if(current())setData(next);}
+    catch(e){if(current())message.error(e.status===401?'Phiên Owner đã hết hạn':'Không đọc được dữ liệu bán nệm.');}
+    finally{if(current())setLoading(false);}
+  },[message,beginRead]);
   useEffect(()=>{load();},[load]);
+  useScreenRefresh(load);
 
   const write=async(path,body)=>{
     const result=await mutate(path,body);

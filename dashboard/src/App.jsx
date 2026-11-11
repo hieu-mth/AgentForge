@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { App as AntApp, Alert, Button, Card, Collapse, Descriptions, Drawer, Form, Grid, Input,
   Image, Layout, Menu, Select, Space, Spin, Table, Tabs, Tooltip, Typography } from 'antd';
 import {
@@ -6,7 +6,8 @@ import {
   LeftOutlined, MenuOutlined, MoonOutlined, ReloadOutlined, RobotOutlined,
   SafetyCertificateOutlined, SettingOutlined, SunOutlined, TeamOutlined,
 } from '@ant-design/icons';
-import { api } from './api.js';
+import { api, onAuthExpired, requestError, sessionRevision } from './api.js';
+import { useRefreshScreen } from './refresh_scope.jsx';
 import { actionWithRefresh } from './action_receipt.js';
 import { useThemeMode } from './theme.jsx';
 import { badge, clip, PageHeader } from './components/shared.jsx';
@@ -144,18 +145,35 @@ export default function App() {
   useEffect(()=>{setMediaPrepared(null);setGeneratedVisuals(null);},[task?.task_id]);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState(null);
+  const [connecting,setConnecting]=useState(true);
+  const bootstrapPending=useRef(null);
+  const refreshScreen=useRefreshScreen();
   const [collapsed,setCollapsed]=useState(false);
   const [navOpen,setNavOpen]=useState(false);
   const screens=Grid.useBreakpoint();
   const mobile=screens.lg===false;
   const {mode,toggle:toggleTheme}=useThemeMode();
+  const expireSession=useCallback(()=>{
+    setLoginNeeded(true);setData(null);setCsrf(null);
+    setGoal(null);setProposal(null);setWebapp(null);setTask(null);
+    setMediaPrepared(null);setGeneratedVisuals(null);setNavOpen(false);
+    modal.destroyAll?.();message.destroy();
+  },[modal,message]);
+  useEffect(()=>onAuthExpired(expireSession),[expireSession]);
   const authError = err => {
-    if (err.status===401) {setLoginNeeded(true);setData(null);setCsrf(null);}
+    if (err.status===401) expireSession();
     else {setError(err);message.error(err.message || 'API error');}
   };
-  const refresh=useCallback(async()=>{
-    const [session,bootstrap] = await Promise.all([api('/api/session'),api('/api/bootstrap')]);
-    setCsrf(session.csrf);setData(bootstrap);setLoginNeeded(false);
+  const refresh=useCallback(()=>{
+    if(bootstrapPending.current)return bootstrapPending.current;
+    const revision=sessionRevision();
+    setConnecting(true);
+    bootstrapPending.current=(async()=>{
+      const [session,bootstrap] = await Promise.all([api('/api/session'),api('/api/bootstrap')]);
+      if(revision!==sessionRevision())return;
+      setCsrf(session.csrf);setData(bootstrap);setLoginNeeded(false);setError(null);
+    })().finally(()=>{bootstrapPending.current=null;setConnecting(false);});
+    return bootstrapPending.current;
   },[]);
   useEffect(()=>{refresh().catch(e=>{if(e.status===401)setLoginNeeded(true);else setError(e);});},[refresh]);
   useEffect(()=>{
@@ -173,14 +191,21 @@ export default function App() {
     setBusy(true);setError(null);
     try{
       return await actionWithRefresh(fn,refreshData?refresh:null,e=>{
-        if(e.status===401){setLoginNeeded(true);setData(null);setCsrf(null);}
+        if(e.status===401)expireSession();
         else{setError(e);message.warning('Thao tác đã thành công nhưng chưa làm mới được dữ liệu. Không bấm thực hiện lại; hãy tải lại trang.');}
       });
     }catch(e){authError(e);return null;}
     finally{setBusy(false);}
   };
   const post=(path,body)=>api(path,{method:'POST',body,csrf});
-  const mutate=(path,body)=>runAction(()=>post(path,body));
+  // Feature mutation handlers own their one follow-up GET; do not refresh bootstrap twice.
+  const mutate=(path,body)=>runAction(()=>post(path,body),{refreshData:false});
+  const reloadBootstrap=()=>runAction(refresh,{refreshData:false});
+  const refreshCurrent=()=>runAction(async()=>{
+    const results=await Promise.allSettled([refresh(),refreshScreen?.()]);
+    const failed=results.find(result=>result.status==='rejected');
+    if(failed)throw failed.reason;
+  },{refreshData:false});
   const ask=(title,content,onOk)=>modal.confirm({title,content,okText:'Xác nhận',cancelText:'Hủy',onOk});
   const openGoal=async id => {
     try{
@@ -436,9 +461,13 @@ export default function App() {
   if(loginNeeded)return <><Login onLogin={async({code})=>{
     await runAction(async()=>{await api('/api/login',{method:'POST',body:{code}});await refresh();},
       {refreshData:false});}} busy={busy}/><ErrorBoundary error={error} onReset={()=>setError(null)}/></>;
-  if(!data)return <div className="loading-screen"><Brand/><Spin size="large"/>
-    <Text type="secondary">Đang kết nối AgentForge…</Text>
-    <ErrorBoundary error={error} onReset={()=>setError(null)}/></div>;
+  if(!data)return <div className="loading-screen"><Brand/>
+    {connecting?<><Spin size="large"/><Text type="secondary">Đang kết nối AgentForge…</Text></>:
+      <Alert type="error" showIcon message="Chưa kết nối được AgentForge"
+        description={<><Paragraph>{requestError(error)}</Paragraph>
+          <Paragraph>Kiểm tra backend AgentForge đang chạy trên máy này và dùng đúng địa chỉ localhost.</Paragraph></>}
+        action={<Button onClick={reloadBootstrap} loading={busy}>Thử kết nối lại</Button>}/>}
+    </div>;
   const title = labelFor(section);
   const goals = data.goals||[], tasks=data.tasks||[];
   const goTo=key=>{navigate(defaultSection(key));setNavOpen(false);};
@@ -476,7 +505,7 @@ export default function App() {
               icon={mode==='dark'?<SunOutlined/>:<MoonOutlined/>} onClick={toggleTheme}/></Tooltip>
           <Tooltip title="Làm mới dữ liệu">
             <Button shape="circle" aria-label="Làm mới" icon={<ReloadOutlined/>} loading={busy}
-              onClick={()=>runAction(refresh,{refreshData:false})}/></Tooltip>
+              onClick={refreshCurrent}/></Tooltip>
         </Space>
       </Header>
       <Content className="app-content">
@@ -505,13 +534,13 @@ export default function App() {
           {section==='websites'&&<Websites data={data} showProposal={openProposal}/>}
           {section==='projects'&&<Projects mutate={mutate}/>}
           {section==='retention'&&<Retention data={data} mutate={mutate}/>}
-          {section==='reviews'&&<Reviews data={data} mutate={mutate} onReload={refresh}/>}
-          {section==='schedules'&&<Schedules data={data} mutate={mutate} onReload={refresh}/>}
-          {section==='operations'&&<OperationsControl data={data} mutate={mutate} onReload={refresh}/>}
+          {section==='reviews'&&<Reviews data={data} mutate={mutate} onReload={reloadBootstrap}/>}
+          {section==='schedules'&&<Schedules data={data} mutate={mutate} onReload={reloadBootstrap}/>}
+          {section==='operations'&&<OperationsControl data={data} mutate={mutate} onReload={reloadBootstrap}/>}
           {section==='intelligence'&&<Intelligence data={data}/>}
-          {section==='growth'&&<Growth data={data} mutate={mutate} onReload={refresh}/>}
+          {section==='growth'&&<Growth data={data} mutate={mutate} onReload={reloadBootstrap}/>}
           {section==='mattress'&&<MattressSales mutate={mutate}/>}
-          {section==='settings'&&<OwnerSettings data={data} mutate={mutate} onReload={refresh}/>}
+          {section==='settings'&&<OwnerSettings data={data} mutate={mutate} onReload={reloadBootstrap}/>}
           {section==='models'&&<ModelHub mutate={mutate}/>}
           {section==='memory'&&<OwnerMemory mutate={mutate}/>}
           {section==='channels'&&<Publishing data={data} mutate={mutate}/>}

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { App as AntApp, Alert, Button, Card, Checkbox, Descriptions,
   Form, Input, InputNumber, Select, Space, Switch, Table, Tag, Typography } from 'antd';
 import { api } from '../api.js';
+import {useScreenRefresh} from '../refresh_scope.jsx';
+import {useReadSequence} from '../use_resource.jsx';
 import { badge, clip } from '../components/shared.jsx';
 import { preflightTone, preflightLabel } from '../ops_preflight_ui.js';
 const { Paragraph, Text } = Typography;
@@ -93,21 +95,25 @@ export function OperationsControl({data,mutate,onReload}) {
   const [acceptance,setAcceptance]=useState(null);
   const [checking,setChecking]=useState(false);
   const [checkError,setCheckError]=useState('');
+  const beginRead=useReadSequence();
   const refreshChecks=useCallback(async()=>{
+    const current=beginRead();
     setChecking(true);
     try {
       const [env,health,base]=await Promise.all([
         api('/api/ops/preflight'),api('/api/ops/health'),api('/api/ops/acceptance'),
       ]);
+      if(!current())return;
       setPreflight(env);
       setDoctor(health);
       setAcceptance(base);
       setCheckError('');
     } catch (error) {
-      setCheckError(error.message||'Không thể tải kiểm tra local');
-    } finally { setChecking(false); }
-  },[]);
+      if(current())setCheckError(error.message||'Không thể tải kiểm tra local');
+    } finally { if(current())setChecking(false); }
+  },[beginRead]);
   useEffect(()=>{refreshChecks();},[refreshChecks]);
+  useScreenRefresh(refreshChecks);
   const change=next=>confirmOwner(modal,next==='PAUSED'?'Dừng các thao tác mới?':'Cho phép vận hành trở lại?',
     'Quyết định ghi vào state local và được các skill gates kiểm tra. Không tự chạy bất kỳ task nào.',
     async()=>{
@@ -237,10 +243,16 @@ export function OwnerSettings({data,mutate,onReload}) {
   const p=data?.workspace_policy||{},ap=data?.autopilot_policy||{};
   const [form]=Form.useForm(),[auto]=Form.useForm();
   useEffect(()=>{
-    form.setFieldsValue({max_estimated_model_calls:p.max_estimated_model_calls??1,
+    if(!form.isFieldsTouched()){
+      form.setFieldsValue({max_estimated_model_calls:p.max_estimated_model_calls??1,
       website_enabled:p.website_enabled!==false,
       storyboard_enabled:p.storyboard_enabled!==false});
-    auto.setFieldsValue({enabled:ap.enabled===true,daily_cap:ap.daily_cap??0});
+      form.setFields(['max_estimated_model_calls','website_enabled','storyboard_enabled'].map(name=>({name,touched:false})));
+    }
+    if(!auto.isFieldsTouched()){
+      auto.setFieldsValue({enabled:ap.enabled===true,daily_cap:ap.daily_cap??0});
+      auto.setFields(['enabled','daily_cap'].map(name=>({name,touched:false})));
+    }
   },[data,form,auto]);
   const save=values=>confirmOwner(modal,'Thay đổi policy prompt?',
     'Chỉ giới hạn các Goal mới tạo từ prompt. Không thay quyền S1 hoặc giới hạn hóa đơn model thực tế.',
@@ -295,8 +307,14 @@ export function OwnerMemory({mutate}) {
   const {message,modal}=AntApp.useApp();
   const [rows,setRows]=useState(null);
   const [form]=Form.useForm();
-  const refresh=useCallback(()=>api('/api/memory').then(setRows).catch(err=>message.error(err.message)),[message]);
+  const beginRead=useReadSequence();
+  const refresh=useCallback(async()=>{
+    const current=beginRead();
+    try{const next=await api('/api/memory');if(current())setRows(next);}
+    catch(err){if(current())message.error(err.message);}
+  },[message,beginRead]);
   useEffect(()=>{refresh();},[refresh]);
+  useScreenRefresh(refresh);
   const save=v=>confirmOwner(modal,'Ghi ghi chú owner?',
     'Ghi chú chỉ lưu local, không tự trở thành fact xác minh hoặc prompt hệ thống.',
     async()=>{
