@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CATEGORIES, PRODUCTS, SHOP } from './catalog.js';
 import { cartTotals, changeCart, currency, listProducts, removeFromCart } from './store.js';
 
@@ -33,6 +33,7 @@ export default function App() {
   const [cartOpen,setCartOpen]=useState(false);
   const [selected,setSelected]=useState(null);
   const [toast,setToast]=useState('');
+  const dialogRef=useRef(null);
   const visible=useMemo(()=>listProducts(PRODUCTS,{search,category,sort}),[search,category,sort]);
   const totals=useMemo(()=>cartTotals(cart,PRODUCTS),[cart]);
   const cartProducts=PRODUCTS.filter(p=>cart[p.id]>0);
@@ -46,12 +47,42 @@ export default function App() {
     return ()=>clearTimeout(handle);
   },[toast]);
   useEffect(()=>{
+    if(!selected&&!cartOpen)return;
+    const dialog=dialogRef.current;
+    if(!dialog)return;
+    const trigger=document.activeElement;
+    // Only the active dialog is interactive; do not let Tab or pointer
+    // navigation reach the storefront while aria-modal is true.
+    const background=[...document.querySelector('.app-shell').children].filter(
+      node=>!node.classList.contains('overlay')&&!node.classList.contains('toast'));
+    const previous=background.map(node=>[node,node.inert]);
+    background.forEach(node=>{node.inert=true;});
+    const focusables=()=>[...dialog.querySelectorAll(
+      'button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])')];
+    (focusables()[0]||dialog).focus();
     const handler=e=>{
-      if(e.key==='Escape'){setSelected(null);setCartOpen(false);}
+      if(e.key==='Escape'){
+        e.preventDefault();
+        setSelected(null);
+        setCartOpen(false);
+      }else if(e.key==='Tab'){
+        const items=focusables();
+        if(!items.length){e.preventDefault();dialog.focus();return;}
+        const first=items[0],last=items[items.length-1];
+        if(e.shiftKey&&(document.activeElement===first||!dialog.contains(document.activeElement))){
+          e.preventDefault();last.focus();
+        }else if(!e.shiftKey&&(document.activeElement===last||!dialog.contains(document.activeElement))){
+          e.preventDefault();first.focus();
+        }
+      }
     };
     document.addEventListener('keydown',handler);
-    return ()=>document.removeEventListener('keydown',handler);
-  },[]);
+    return ()=>{
+      document.removeEventListener('keydown',handler);
+      previous.forEach(([node,wasInert])=>{node.inert=wasInert;});
+      if(trigger?.isConnected)trigger.focus();
+    };
+  },[selected,cartOpen]);
   const reset=()=>{setSearch('');setCategory('all');setSort('featured');};
   const selectCategory=id=>{
     setCategory(id);
@@ -161,7 +192,7 @@ export default function App() {
       <p>Dữ liệu giả lập · Không có đơn hàng thật · Hoạt động offline sau khi build</p></div></footer>
     {toast&&<div className="toast" role="status">{toast}</div>}
     {selected&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null);}}>
-      <section className="detail-dialog" role="dialog" aria-modal="true" aria-label={'Chi tiết '+selected.name}>
+      <section className="detail-dialog" role="dialog" aria-modal="true" ref={dialogRef} tabIndex={-1} aria-label={'Chi tiết '+selected.name}>
         <button className="close-button" onClick={()=>setSelected(null)} aria-label="Đóng chi tiết">×</button>
         <div className="detail-image">{display(selected)}</div>
         <div className="detail-copy"><span className="section-eyebrow">SẢN PHẨM MINH HỌA</span>
@@ -172,7 +203,7 @@ export default function App() {
             + Thêm vào giỏ demo</button></div>
       </section></div>}
     {cartOpen&&<div className="overlay drawer-overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setCartOpen(false);}}>
-      <aside className="cart-drawer" role="dialog" aria-modal="true" aria-label="Giỏ hàng demo">
+      <aside className="cart-drawer" role="dialog" aria-modal="true" ref={dialogRef} tabIndex={-1} aria-label="Giỏ hàng demo">
         <div className="drawer-header"><div><span className="section-eyebrow">{SHOP.brand.toLocaleUpperCase('vi-VN')} CART</span><h2>Giỏ hàng của bạn</h2>
           <p>{totals.items} sản phẩm demo</p></div>
           <button className="close-button" onClick={()=>setCartOpen(false)} aria-label="Đóng giỏ hàng">×</button></div>
