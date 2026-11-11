@@ -7,6 +7,7 @@ import {
   SafetyCertificateOutlined, SettingOutlined, SunOutlined, TeamOutlined,
 } from '@ant-design/icons';
 import { api } from './api.js';
+import { actionWithRefresh } from './action_receipt.js';
 import { useThemeMode } from './theme.jsx';
 import { badge, clip, PageHeader } from './components/shared.jsx';
 import { Workspace, GoalDrawer } from './features/Workspace.jsx';
@@ -170,17 +171,10 @@ export default function App() {
   const runAction=async(fn,{refreshData=true}={})=>{
     setBusy(true);setError(null);
     try{
-      // A successful mutation has already committed on the server. A failed
-      // follow-up GET must never erase the receipt or invite a second POST.
-      const result=await fn();
-      if(refreshData){
-        try{await refresh();}
-        catch(e){
-          if(e.status===401){setLoginNeeded(true);setData(null);setCsrf(null);}
-          else{setError(e);message.warning('Thao tác đã thành công nhưng chưa làm mới được dữ liệu. Không bấm thực hiện lại; hãy tải lại trang.');}
-        }
-      }
-      return result;
+      return await actionWithRefresh(fn,refreshData?refresh:null,e=>{
+        if(e.status===401){setLoginNeeded(true);setData(null);setCsrf(null);}
+        else{setError(e);message.warning('Thao tác đã thành công nhưng chưa làm mới được dữ liệu. Không bấm thực hiện lại; hãy tải lại trang.');}
+      });
     }catch(e){authError(e);return null;}
     finally{setBusy(false);}
   };
