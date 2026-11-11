@@ -13,6 +13,7 @@ import http.client
 import json
 import os
 import re
+import time
 from pathlib import Path
 from uuid import uuid4
 
@@ -76,6 +77,38 @@ def dispatch_telegram(notice_id, *, confirmed=False, db_path=None, sender=None):
         acknowledged = False
     return service.finish_notice(
         notice_id, confirmed_delivered=acknowledged, db_path=db_path)
+
+
+def dispatch_pending(*, confirmed=False, recipient_tested=False,
+                     limit=5, db_path=None, sender=None):
+    """One bounded outbox poll, only when Owner approved the recipient and channel.
+
+    Works in a foreground loop while this PC is running. PENDING notices are
+    claimed atomically; any ambiguous provider result is never resent.
+    """
+    if confirmed is not True or recipient_tested is not True:
+        raise PermissionError("Owner approval and tested Telegram recipient required")
+    if sender is None and (not BOT_TOKEN.fullmatch(os.environ.get(
+            "AGENTFORGE_MATTRESS_TELEGRAM_BOT_TOKEN", "")) or
+            not CHAT_ID.fullmatch(os.environ.get(
+                "AGENTFORGE_MATTRESS_TELEGRAM_CHAT_ID", ""))):
+        raise ValueError("Telegram credentials are not configured")
+    records = service.pending_notices(db_path=db_path, limit=limit)
+    statuses = {"sent": 0, "needs_review": 0, "skipped_concurrent": 0}
+    for record in records:
+        try:
+            result = dispatch_telegram(
+                record["notice_id"], confirmed=True,
+                db_path=db_path, sender=sender)
+        except service.MattressError:
+            # Another foreground worker may already have claimed the entry.
+            statuses["skipped_concurrent"] += 1
+            continue
+        if result["status"] == "SENT":
+            statuses["sent"] += 1
+        else:
+            statuses["needs_review"] += 1
+    return statuses
 
 
 def _import_payloads(path):
@@ -161,6 +194,11 @@ def main(argv=None):
     notify.add_argument("--notice-id", required=True)
     notify.add_argument("--confirm-external-send", action="store_true")
 
+    watch = sub.add_parser("notify-watch", help="Foreground auto-notify while PC runs")
+    watch.add_argument("--confirm-auto-send", action="store_true")
+    watch.add_argument("--confirm-recipient-tested", action="store_true")
+    watch.add_argument("--interval", type=int, default=30)
+
     args = parser.parse_args(argv)
     try:
         if args.command == "summary":
@@ -185,9 +223,30 @@ def main(argv=None):
             settings = json.loads(location.read_text(encoding="utf-8"))
             result = site.export(settings, confirmed=args.confirm_export,
                                  replace_sha=args.replace_sha)
-        else:
+        elif args.command == "notify-telegram":
             result = dispatch_telegram(args.notice_id,
                                        confirmed=args.confirm_external_send)
+        else:
+            if (not args.confirm_auto_send or not args.confirm_recipient_tested
+                    or not 10 <= args.interval <= 600):
+                raise PermissionError("Foreground auto-notify needs Owner approvals")
+            # Fail before entering the loop if private bot/chat configuration
+            # is missing. No background daemon or system task is installed.
+            if (not BOT_TOKEN.fullmatch(os.environ.get(
+                    "AGENTFORGE_MATTRESS_TELEGRAM_BOT_TOKEN", "")) or
+                    not CHAT_ID.fullmatch(os.environ.get(
+                        "AGENTFORGE_MATTRESS_TELEGRAM_CHAT_ID", ""))):
+                raise ValueError("Telegram credentials are not configured")
+            print("Telegram foreground notice watcher is active (Ctrl+C to stop).",
+                  flush=True)
+            try:
+                while True:
+                    status = dispatch_pending(confirmed=True,recipient_tested=True)
+                    # No PII, bot token or notification payload is logged.
+                    print(json.dumps(status), flush=True)
+                    time.sleep(args.interval)
+            except KeyboardInterrupt:
+                result = {"status": "STOPPED_BY_OWNER", "automatic_replay": False}
     except (ValueError, KeyError, PermissionError, OSError):
         parser.exit(2, "Operation blocked. Check local Owner state; no automatic retry.\n")
     print(json.dumps(result, ensure_ascii=False, indent=2))
