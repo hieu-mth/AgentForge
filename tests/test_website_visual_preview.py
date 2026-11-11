@@ -99,10 +99,10 @@ class WebsiteVisualPreviewTests(unittest.TestCase):
         other_status, _, _ = self.request("/api/proposals/" + "c" * 32 + "/preview", cookie)
         self.assertEqual(404, other_status)
 
-    def test_valid_large_production_proposal_can_be_pre reviewed(self):
+    def test_valid_large_production_proposal_can_be_previewed(self):
         # A valid Designer-sized document may exceed the old 32 KiB preview
         # ceiling while remaining within the product builder's 48 KiB file cap.
-        paragraphs = '<p>Mô tả nệm mẫu, chưa xác minh thông tin. </p>' * 710
+        paragraphs = '<p>Mô tả nệm mẫu, chưa xác minh thông tin. </p>' * 610
         large = GOOD.replace('</main>', paragraphs + '</main>')
         self.assertGreater(len(large.encode('utf-8')), 32000)
         self.assertLess(len(large.encode('utf-8')), b.MAX_FILE_BYTES)
