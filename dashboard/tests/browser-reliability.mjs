@@ -61,6 +61,60 @@ try {
     catch(error){await page.screenshot({path:path.join(output,'failure-'+results.length+'.png')});throw new Error(name+': '+error.message);}
     finally{await page.close();}
   }
+  for(const [width,height] of [[1920,1080],[1366,768],[375,667]]){
+    for(const theme of ['dark','light'])for(const hasImages of [false,true]){
+      await scenario(`Storyboard visual panel ${width}px ${theme} ${hasImages?'ready':'missing'}`,async({page,state,requests,open})=>{
+        await page.setViewportSize({width,height});
+        await page.addInitScript(mode=>localStorage.setItem('agentforge.theme',mode),theme);
+        const completed={...goal,status:'SUCCEEDED',template:'creative.storyboard',step_runs:[{
+          step_index:0,skill_id:'media.copy_draft',status:'SUCCEEDED',child_task_id:id}]};
+        const scenes=Array.from({length:5},(_,index)=>({headline:'Cảnh '+(index+1)+' — Không gian thư giãn với ánh sáng tự nhiên và chi tiết sản phẩm',
+          caption:'Nội dung synthetic cho kiểm tra bố cục.',duration_seconds:5}));
+        const images=hasImages?Array.from({length:5},(_,index)=>({job_id:String(index+1).repeat(32),source:'synthetic-image-'+(index+1)})):[];
+        state.overrides['/api/bootstrap']={...bootstrap,goals:[completed]};
+        state.overrides['/api/goals/'+id]=completed;
+        state.overrides['/api/tasks/'+id]={task_id:id,skill_id:'media.copy_draft',status:'SUCCEEDED',storyboard_source_sha:sha,
+          report:{kind:'storyboard',title:'Storyboard synthetic cho panel ảnh',scenes}};
+        state.overrides['/api/media/studio-images']={images};
+        for(const image of images)state.handlers['/api/image/'+image.job_id+'/preview']=route=>route.fulfill({status:200,contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect width="120" height="120" fill="#a5b4fc"/><circle cx="60" cy="60" r="25" fill="#6366f1"/></svg>'});
+        await open('workspace');await page.getByRole('textbox',{name:'Mô tả công việc'}).fill('Mô tả synthetic kiểm tra panel chọn ảnh');
+        await page.getByRole('button',{name:'Xem kế hoạch',exact:true}).click();
+        await page.getByRole('button',{name:'Xem kết quả công việc',exact:true}).click();
+        await page.getByRole('button',{name:/^Bước 2A — Chọn hình ảnh/}).click();
+        const panel=page.locator('.storyboard-visual-modal');await panel.waitFor();await page.waitForTimeout(350);
+        const submit=panel.getByRole('button',{name:'Tạo tư liệu từ ảnh đã duyệt',exact:true});
+        assert.ok(await submit.isDisabled());
+        assert.equal(await panel.locator('.ant-alert').count(),hasImages?0:1);
+        const footer=await panel.locator('.visual-picker-footer').boundingBox();
+        assert.ok(footer.y>=0&&footer.y+footer.height<=height,'Footer must stay in viewport');
+        assert.ok((await panel.boundingBox()).width<=width,'Panel must fit viewport');
+        if(hasImages){
+          for(let index=0;index<5;index++){
+            await panel.getByRole('combobox',{name:'Chọn ảnh cảnh '+(index+1),exact:true}).click();
+            await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').last().getByText(images[index].source+' · '+images[index].job_id.slice(0,8),{exact:true}).click();
+          }
+          assert.equal(await submit.isDisabled(),false);
+          await page.waitForTimeout(250);
+          await page.screenshot({path:path.join(output,`visual-panel-${width}-${theme}-ready.png`)});
+          let posted;
+          state.post=(endpoint,body)=>{assert.equal(endpoint,'/api/media/prepare-from-task');posted=body;return {production_id:id,storyboard_sha:sha};};
+          await submit.evaluate(button=>{button.click();button.click();});await panel.waitFor({state:'detached'});
+          assert.deepEqual(posted,{ack:'PREPARE_REVIEWED_STORYBOARD',task_id:id,source_sha:sha,
+            visual_plan:{mode:'studio',motion:'static',image_job_ids:images.map(image=>image.job_id)}});
+          assert.equal(requests.filter(request=>request.method==='POST').length,1);
+        }else{
+          await panel.locator('.visual-picker-body').evaluate(body=>body.scrollTop=body.scrollHeight);
+          const afterScroll=await panel.locator('.visual-picker-footer').boundingBox();
+          assert.equal(Math.round(afterScroll.y),Math.round(footer.y));
+          await panel.locator('.visual-picker-body').evaluate(body=>body.scrollTop=0);
+          await page.screenshot({path:path.join(output,`visual-panel-${width}-${theme}-missing.png`)});
+          await panel.getByRole('button',{name:'Quay lại tạo ảnh',exact:true}).click();
+          await panel.waitFor({state:'detached'});
+          assert.ok(requests.every(request=>request.method==='GET'));
+        }
+      });
+    }
+  }
   for(const width of [1920,390]){
     await scenario('Goal result replaces plan Drawer at '+width+'px',async({page,state,requests,open})=>{
       await page.setViewportSize({width,height:900});

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { App as AntApp, Alert, Button, Card, Collapse, Descriptions, Drawer, Form, Grid, Input,
-  Image, Layout, Menu, Select, Space, Spin, Table, Tabs, Tooltip, Typography } from 'antd';
+  Image, Layout, Menu, Space, Spin, Table, Tabs, Tooltip, Typography } from 'antd';
 import {
   BarChartOutlined, DashboardOutlined, FolderOpenOutlined,
   LeftOutlined, MenuOutlined, MoonOutlined, ReloadOutlined, RobotOutlined,
@@ -13,6 +13,7 @@ import { useThemeMode } from './theme.jsx';
 import { badge, clip, PageHeader } from './components/shared.jsx';
 import { Workspace, GoalDrawer } from './features/Workspace.jsx';
 import { AutoVisuals } from './features/Visuals.jsx';
+import { StoryboardVisualModal } from './features/StoryboardVisuals.jsx';
 import { modelCallsForPrompt } from './workspace_quota.js';
 import { Websites, ProposalDrawer } from './features/Websites.jsx';
 import { WebappProposalDrawer } from './features/Webapps.jsx';
@@ -77,55 +78,6 @@ function Login({onLogin, busy}) {
   </div>;
 }
 
-function VisualPicker({images, scenes, plan}) {
-  const available=images.length>=scenes.length && scenes.length>0;
-  const [motion,setMotion]=useState('static');
-  const [ids,setIds]=useState(plan.image_job_ids||[]);
-  const change=(values)=>{
-    Object.assign(plan,values);
-  };
-  // Initial plan is also created by the parent (the modal controls never
-  // execute a GPU job or mutate an already prepared production).
-  const setMotionMode=value=>{
-    setMotion(value);change({motion:value});
-  };
-  const setShot=(index,value)=>{
-    const next=[...ids];next[index]=value;setIds(next);
-    change({image_job_ids:next});
-  };
-  return <Space orientation="vertical" size={12} style={{width:'100%',maxHeight:430,overflowY:'auto'}}>
-    <Alert type="info" showIcon
-      message="Standard V2 — ảnh tĩnh, không phải footage quảng cáo"
-      description="Chế độ này dựng video từ ảnh tĩnh. Zoom/Pan chỉ mô phỏng camera, không tạo chuyển động thực trong cảnh. Muốn video quảng cáo có chuyển động thực cần shot clip từ Film Studio hoặc video model."/>
-    <Text strong>Hình ảnh cho mỗi cảnh</Text>
-    <Alert type={available?'success':'error'} showIcon
-      message={available?'Đã đủ ảnh nguồn để chọn cho từng cảnh':'Chưa đủ hình ảnh thực tế để dựng video'}
-      description="AgentForge không tạo video chỉ có nền màu và chữ. Phải chọn thủ công ảnh AI đúng sản phẩm cho từng shot trước khi tạo production."/>
-    {!available&&<Alert type="warning" showIcon
-      message={`Chỉ có ${images.length} ảnh AI sẵn có, cần ${scenes.length} ảnh riêng`}
-      description="Image Studio hiện hỗ trợ nhập ảnh đã tạo từ ComfyUI. Hãy chuẩn bị đủ ảnh nguồn cho các cảnh và mở lại storyboard. Tác vụ này không tự gọi model tạo ảnh."/>}
-    {available&&scenes.map((scene,index)=><div key={index}>
-      <Text>Shot {index+1}: {scene.headline}</Text>
-      <Select value={ids[index]} style={{width:'100%',marginTop:6}}
-        onChange={value=>setShot(index,value)}
-        options={images.map(img=>({value:img.job_id,
-          label:img.source+' · '+img.job_id.slice(0,8)}))}/>
-      {ids[index]&&<Image preview={false} width={108}
-        alt={'Ảnh AI đã kiểm chứng cho cảnh '+(index+1)}
-        style={{marginTop:6,borderRadius:8}}
-        src={'/api/image/'+ids[index]+'/preview'}/>}
-    </div>)}
-    <Text strong>Chuyển động camera khi render FFmpeg</Text>
-    <Select value={motion} style={{width:'100%'}} onChange={setMotionMode}
-      options={[
-        {value:'slow_zoom',label:'Slow zoom — chỉ ảnh nền chuyển động, chữ đứng yên'},
-        {value:'slow_pan',label:'Slow pan — chỉ ảnh nền chuyển động, chữ đứng yên'},
-        {value:'static',label:'Static (khuyên dùng khi chưa có footage)'},
-      ]}/>
-    <Text type="secondary" style={{fontSize:12}}>Ảnh AI và lựa chọn chuyển động được ghi vào manifest của production. MP4 vẫn cần Owner duyệt render riêng.</Text>
-  </Space>;
-}
-
 export default function App() {
   const {message,modal} = AntApp.useApp();
   const [csrf,setCsrf]=useState(null);
@@ -140,9 +92,10 @@ export default function App() {
   const [task,setTask]=useState(null);
   const [mediaPrepared,setMediaPrepared]=useState(null);
   const [generatedVisuals,setGeneratedVisuals]=useState(null);
+  const [visualDraft,setVisualDraft]=useState(null);
   // A prepared production is bound to the currently inspected storyboard.
   // Never carry it into an unrelated task drawer.
-  useEffect(()=>{setMediaPrepared(null);setGeneratedVisuals(null);},[task?.task_id]);
+  useEffect(()=>{setMediaPrepared(null);setGeneratedVisuals(null);setVisualDraft(null);},[task?.task_id]);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState(null);
   const [connecting,setConnecting]=useState(true);
@@ -157,6 +110,7 @@ export default function App() {
     setLoginNeeded(true);setData(null);setCsrf(null);
     setGoal(null);setProposal(null);setWebapp(null);setTask(null);
     setMediaPrepared(null);setGeneratedVisuals(null);setNavOpen(false);
+    setVisualDraft(null);
     modal.destroyAll?.();message.destroy();
   },[modal,message]);
   useEffect(()=>onAuthExpired(expireSession),[expireSession]);
@@ -296,40 +250,21 @@ export default function App() {
       const catalog=await api('/api/media/studio-images');
       images=catalog.images||[];
     }catch(e){authError(e);return;}
-    const count=selected.report?.scenes?.length||0;
-    const enough=images.length>=count && count>0;
-    const plan={
-      mode:'studio',motion:'static',
-      image_job_ids:generatedVisuals?.task_id===selected.task_id
-        ?generatedVisuals.job_ids:[],
-    };
-    modal.confirm({
-      title:'Bước 2A — Chọn visual và tạo tư liệu',
-      content:<Space orientation="vertical" style={{width:'100%'}}>
-        <Paragraph>Ảnh AI có thể được tạo tự động theo storyboard ở bên dưới kết quả. Nếu đã chọn bộ ảnh AI vừa tạo, các cảnh sẽ dùng chính các ảnh đó; bạn có thể đổi thủ công trước khi duyệt. Không tự lấy ảnh ngẫu nhiên từ gallery.</Paragraph>
-        <VisualPicker images={images} scenes={selected.report.scenes||[]} plan={plan}/>
-        {!enough&&<Alert type="error" showIcon message="Không thể tạo video từ template rỗng"
-          description="Chưa có đủ ảnh nệm/khung cảnh. AgentForge sẽ không tạo production cho đến khi bạn cung cấp hoặc tạo đủ ảnh trong Image Studio."/>}
-        <Text code>{selected.storyboard_source_sha}</Text>
-      </Space>,
-      okText:'Tạo tư liệu từ ảnh đã duyệt',
-      okButtonProps:{disabled:!enough},
-      onOk:async()=>{
-        if(!enough || (plan.image_job_ids.length!==count
-            ||new Set(plan.image_job_ids).size!==count)){
-          message.error('Chưa đủ ảnh AI độc lập cho mọi cảnh. Dừng tạo video để tránh slideshow chữ.');
-          throw new Error('VIDEO_VISUALS_REQUIRED');
-        }
-        const result=await runAction(()=>post('/api/media/prepare-from-task',{
-          ack:'PREPARE_REVIEWED_STORYBOARD',task_id:selected.task_id,
-          source_sha:selected.storyboard_source_sha,visual_plan:plan,
-        }));
-        if(result){
-          setMediaPrepared(result);
-          message.success('Tư liệu đã sẵn sàng. Bước tiếp theo: render MP4');
-        }
-      },
-    });
+    setVisualDraft({task:selected,images,initialIds:generatedVisuals?.task_id===selected.task_id
+      ?generatedVisuals.job_ids:[]});
+  };
+  const confirmVisuals=async plan=>{
+    if(!visualDraft)return null;
+    const selected=visualDraft.task;
+    const result=await runAction(()=>post('/api/media/prepare-from-task',{
+      ack:'PREPARE_REVIEWED_STORYBOARD',task_id:selected.task_id,
+      source_sha:selected.storyboard_source_sha,visual_plan:plan,
+    }));
+    if(result){
+      setMediaPrepared(result);setVisualDraft(null);
+      message.success('Tư liệu đã sẵn sàng. Bước tiếp theo: render MP4');
+    }
+    return result;
   };
   const renderPreparedVideo=production=>ask('Bước 2B — chạy FFmpeg tạo MP4?',
     <Space orientation="vertical">
@@ -549,6 +484,8 @@ export default function App() {
         </div>
       </Content>
     </Layout>
+    {visualDraft&&<StoryboardVisualModal key={visualDraft.task.task_id} {...visualDraft}
+      onClose={()=>setVisualDraft(null)} onConfirm={confirmVisuals}/>}
     <GoalDrawer goal={goal} onClose={()=>setGoal(null)} onApprove={approve}
       onExecute={execute} onRetry={retryFailed} onViewResult={openGoalResult} busy={busy} externalEnabled={!!data.external_actions_enabled}/>
     <ProposalDrawer proposal={proposal} onClose={()=>setProposal(null)} onDecide={(p,d)=>decideArtifact(p,d,'proposals')} onValidate={p=>validateArtifact(p,'proposals')}
