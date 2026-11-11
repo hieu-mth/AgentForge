@@ -418,7 +418,7 @@ def mark_notified(notice_id, *, ack, db_path=None):
                              (notice_id,)).fetchone()
             if row is None:
                 raise KeyError("Notification does not exist")
-            if row["status"] not in ("PENDING", "NEEDS_REVIEW"):
+            if row["status"] not in ("PENDING", "NEEDS_REVIEW", "DISPATCHING"):
                 raise MattressError("Cannot mark notification in this state")
             db.execute("UPDATE notices SET status='SENT_MANUAL',updated_at=? "
                        "WHERE notice_id=?", (_utc(), notice_id))
