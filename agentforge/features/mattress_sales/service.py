@@ -268,6 +268,20 @@ def list_notices(*, db_path=None, limit=100):
             (limit,))]
 
 
+def pending_notices(*, db_path=None, limit=5):
+    """Exact oldest-first outbox scan; recent-notice UI pagination is not a queue."""
+    if type(limit) is not int or not 1 <= limit <= 20:
+        raise MattressError("Invalid dispatch batch")
+    db = _connect(db_path)
+    if db is None:
+        return []
+    with closing(db):
+        return [dict(row) for row in db.execute(
+            "SELECT notice_id,lead_id,kind,status,created_at,updated_at "
+            "FROM notices WHERE status='PENDING' "
+            "ORDER BY created_at,notice_id LIMIT ?", (limit,))]
+
+
 def _transition(db, row, desired, action):
     if desired not in NEXT[row["status"]]:
         raise MattressError("Invalid sale status transition")
