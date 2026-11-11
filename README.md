@@ -25,6 +25,21 @@ Mở **http://127.0.0.1:8780/** (chuyển đến `/dashboard/`), sau đó sử d
 
 Nếu báo không tìm thấy `.venv\Scripts\python.exe`, chạy `py -0p` để kiểm tra phiên bản Python trước khi tạo lại môi trường. Không bắt buộc Docker cho việc phát triển thông thường.
 
+## Nghiệm thu runtime thực tế — Đợt 5
+
+Sau CI, trên **chính máy Windows có GPU/model**, chạy preflight (mặc định
+không inference hoặc khởi tạo Docker container):
+
+~~~powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\agentforge_runtime_certify_windows.ps1 -SaveReport
+~~~
+
+Khi Owner cho phép, dùng riêng các cặp `-RunFFmpeg -ConfirmLocalExec`,
+`-RunOllama -ConfirmInference`, `-RunDocker -ConfirmDockerRun`.
+Chúng kiểm tra **runtime thật trong phạm vi nhỏ**, không auto tạo GPU clip
+hoặc biến CI PASS thành production GO. Quy trình từng bước tại
+[Owner Runtime Certification](docs/verification/runtime_2026_11/README.md).
+
 ## Hiện có những gì?
 
 | Mảng | Khả năng đang có | Giới hạn quan trọng |
