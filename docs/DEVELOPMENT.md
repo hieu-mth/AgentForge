@@ -30,6 +30,25 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\agentforge_accepta
 
 Các lệnh này kiểm tra local readiness và chạy **trusted fixture tests**; không chứng minh model/GPU thật. Sau khi Owner đồng ý và có database cần backup, tùy chọn `-CreateBackup -StageRestore` (ZIP và staging **không mã hóa**, giữ lại để Owner đối chiếu, không tự ghi đè dữ liệu). Xem [checklist nghiệm thu thực tế](verification/base_v1/README.md).
 
+## 0c. Đợt 5 mới — nghiệm thu trên runtime Owner
+
+Lệnh bên dưới là **read-only preflight**, khác milestone lịch sử
+Wave 5 Base V1 fixture. Có thể ghi một receipt JSON riêng khi thêm `-SaveReport`:
+
+~~~powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\agentforge_runtime_certify_windows.ps1 -SaveReport
+~~~
+
+Muốn chạy encode/decode MP4 **thực** trong thư mục tạm, Owner xác nhận:
+
+~~~powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\agentforge_runtime_certify_windows.ps1 -RunFFmpeg -ConfirmLocalExec -SaveReport
+~~~
+
+Có các bước opt-in Ollama và Docker riêng; GPU video/backup thực tiếp tục
+yêu cầu Owner làm thủ công. Không chạy inference/cloud/ComfyUI GPU theo
+mặc định. Xem [checklist và diễn giải status](verification/runtime_2026_11/README.md).
+
 ## 1. Chuẩn bị
 
 - Python **3.13+**: chạy `py -0p` để xác minh.
