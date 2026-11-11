@@ -20,6 +20,7 @@ import { Publishing } from './features/Publishing.jsx';
 import { Projects } from './features/Projects.jsx';
 import { ModelHub } from './features/Models.jsx';
 import { Retention } from './features/Retention.jsx';
+import { MattressSales } from './features/MattressSales.jsx';
 import { Reviews } from './features/Reviews.jsx';
 import { Schedules, OperationsControl, Intelligence, Growth, OwnerSettings, OwnerMemory } from './features/Management.jsx';
 import { NAV_GROUPS, groupFor, labelFor, defaultSection, parseSection, hashFor, tabsFor } from './navigation.js';
@@ -509,6 +510,7 @@ export default function App() {
           {section==='operations'&&<OperationsControl data={data} mutate={mutate} onReload={refresh}/>}
           {section==='intelligence'&&<Intelligence data={data}/>}
           {section==='growth'&&<Growth data={data} mutate={mutate} onReload={refresh}/>}
+          {section==='mattress'&&<MattressSales mutate={mutate}/>}
           {section==='settings'&&<OwnerSettings data={data} mutate={mutate} onReload={refresh}/>}
           {section==='models'&&<ModelHub mutate={mutate}/>}
           {section==='memory'&&<OwnerMemory mutate={mutate}/>}
