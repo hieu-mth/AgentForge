@@ -1,4 +1,4 @@
-:root{--accent:#ff633b;font-family:"Segoe UI",Tahoma,Arial,sans-serif;color:#202126;background:#fffefc;
+:root{--accent:#ff633b;--accent-ink:#a6381c;--accent-fill:#a83b21;font-family:"Segoe UI",Tahoma,Arial,sans-serif;color:#202126;background:#fffefc;
   font-synthesis:none;-webkit-font-smoothing:antialiased;scroll-behavior:smooth}
 *,*:before,*:after{box-sizing:border-box}
 body{margin:0;min-width:320px}button,input,select{font:inherit}
