@@ -60,9 +60,11 @@ class LocalProbeTests(unittest.TestCase):
         self.port = server.server_port
         self.thread = threading.Thread(target=server.serve_forever, daemon=True)
         self.thread.start()
-        self.addCleanup(server.server_close)
-        self.addCleanup(server.shutdown)
-        self.addCleanup(lambda: self.thread.join(timeout=3))
+        def stop():
+            server.shutdown()
+            self.thread.join(timeout=3)
+            server.server_close()
+        self.addCleanup(stop)
         self.profile = ("127.0.0.1", self.port, "test-local:latest")
 
     def test_loopback_tag_probe_is_no_inference_and_no_redirect(self):
@@ -71,7 +73,7 @@ class LocalProbeTests(unittest.TestCase):
         self.assertEqual(result["status"], "READY_FOR_INFERENCE")
         self.assertFalse(result["inference_invoked"])
         self.assertEqual(self.server.requests, [("GET", "/api/tags")])
-        with self.assertRaisesRegex(RuntimeError, "HTTP 200"):
+        with self.assertRaisesRegex(ValueError, "Unapproved local route"):
             rc._http_json("127.0.0.1", self.port, "/unexpected")
         self.assertEqual(self.server.requests, [("GET", "/api/tags")])
         for url in ("https://outside.example", "http://169.254.1.1:11434",
