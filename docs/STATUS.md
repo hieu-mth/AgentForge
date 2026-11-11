@@ -1,5 +1,18 @@
 # AgentForge — Trạng thái thực tế
 
+## Post-audit Đợt 6 — MVP bán nệm gia đình (code/CI; Owner business PENDING)
+
+Đã bổ sung module features/mattress_sales: lead có customer consent và
+SQLite riêng, báo giá Owner, kiểm tra carrier trước khi chốt đơn, trạng thái
+đặt/giao, outbox gửi tin qua Zalo/SMS thủ công hoặc Telegram CLI foreground
+**chỉ khi Owner xác nhận**. Dashboard Kinh doanh → Bán nệm và static contact
+website liên hệ trực tiếp được nối. **Chưa có public form receiver 24/7,
+Zalo OA, giá/tồn kho/số liên hệ/khu vực giao được Owner xác minh hoặc
+production deployment.** Đây là đợt 6 của roadmap *post-audit*, khác
+"Đợt 6 — AI React revision" lịch sử. Xem
+[hướng dẫn MVP bán nệm](milestones/WAVE6_MATTRESS_BUSINESS_MVP.md).
+
+
 ## Đợt 10 — Publishing & Business Operations (code/CI; YouTube Owner PENDING)
 
 Đã có release ledger `agentforge/features/film_studio/publishing.py`: SHA/receipt phim Wave 9, Owner watched/rights/disclosure, metadata, lịch dự kiến local, Owner-attested Studio status và manual view/watch snapshots, tiếp tục dùng Growth ledger VND. Optional `agentforge/integrations/youtube_private.py` là CLI OAuth Desktop **private-only** có checkpoint one-shot, không auto publish/monetize. Dashboard Kênh xuất bản được nối với release workflow. **Chưa kiểm chứng Google OAuth, video YouTube thật, public schedule, platform analytics hoặc ngân hàng.** [Wave 10 acceptance](verification/wave10/README.md).
