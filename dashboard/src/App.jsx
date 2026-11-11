@@ -169,8 +169,19 @@ export default function App() {
   };
   const runAction=async(fn,{refreshData=true}={})=>{
     setBusy(true);setError(null);
-    try{const result=await fn();if(refreshData)await refresh();return result;}
-    catch(e){authError(e);return null;}
+    try{
+      // A successful mutation has already committed on the server. A failed
+      // follow-up GET must never erase the receipt or invite a second POST.
+      const result=await fn();
+      if(refreshData){
+        try{await refresh();}
+        catch(e){
+          if(e.status===401){setLoginNeeded(true);setData(null);setCsrf(null);}
+          else{setError(e);message.warning('Thao tác đã thành công nhưng chưa làm mới được dữ liệu. Không bấm thực hiện lại; hãy tải lại trang.');}
+        }
+      }
+      return result;
+    }catch(e){authError(e);return null;}
     finally{setBusy(false);}
   };
   const post=(path,body)=>api(path,{method:'POST',body,csrf});
