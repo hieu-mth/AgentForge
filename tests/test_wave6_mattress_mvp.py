@@ -227,6 +227,31 @@ class MattressStoreTests(unittest.TestCase):
             cli.dispatch_telegram(notice, confirmed=True, sender=lambda _: True,
                                   db_path=self.db)
 
+    def test_foreground_dispatch_requires_owner_and_does_not_replay_unknown(self):
+        self.new()
+        self.new()
+        calls = []
+        def sender(message):
+            calls.append(message)
+            if len(calls) == 1:
+                raise TimeoutError("Unknown whether delivered")
+            return True
+        with self.assertRaises(PermissionError):
+            cli.dispatch_pending(sender=sender, confirmed=True, db_path=self.db)
+        self.assertEqual(calls, [])
+        result = cli.dispatch_pending(
+            confirmed=True, recipient_tested=True, db_path=self.db,
+            sender=sender, limit=5)
+        self.assertEqual(result["sent"], 1)
+        self.assertEqual(result["needs_review"], 1)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(service.pending_notices(db_path=self.db), [])
+        again = cli.dispatch_pending(
+            confirmed=True, recipient_tested=True, db_path=self.db,
+            sender=sender, limit=5)
+        self.assertEqual(again["sent"], 0)
+        self.assertEqual(len(calls), 2)
+
     def test_prevalidated_csv_import_and_idempotent_replay(self):
         csvpath = self.root / "hosted-form.csv"
         rows = [
