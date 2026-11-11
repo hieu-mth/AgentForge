@@ -78,14 +78,23 @@ def _prompt(topic, scene, index, purpose):
         raise ValueError("Visual scene must be 1-300 characters")
     # Subject is grounded in the user's brief. The image model is responsible
     # for pixels; no unverified brand/logo or health/price claims.
-    value = (
-        "Commercial editorial photography, realistic product and environment, "
-        "excellent lighting and composition. "
-        f"Product/subject: {topic.strip()}. Shot {index+1}: {scene.strip()}. "
-        "No text, logos, watermark, price, medical claims or UI. "
-        "Full scene, clearly visible subject."
-    )
-    return value[:450]
+    # Reserve space for each scene and the immutable safety suffix first.
+    # A verbose shared topic must never erase a shot's distinguishing brief.
+    prefix = ("Commercial editorial photography, realistic product and environment, "
+              "excellent lighting and composition. ")
+    suffix = (" No text, logos, watermark, price, medical claims or UI. "
+              "Full scene, clearly visible subject.")
+    shot = f". Shot {index+1}: "
+    scene_text = scene.strip()[:210]
+    fixed = prefix + "Product/subject: " + shot + scene_text + "." + suffix
+    topic_budget = 450 - len(fixed)
+    if topic_budget < 1:
+        raise ValueError("Visual prompt cannot fit required scene/safety content")
+    value = (prefix + "Product/subject: " + topic.strip()[:topic_budget]
+             + shot + scene_text + "." + suffix)
+    if len(value) > 450:
+        raise ValueError("Visual prompt exceeds limit")
+    return value
 
 
 def submit(purpose, topic, scenes, checkpoint, *, confirm_generation=False,
