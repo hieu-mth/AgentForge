@@ -252,6 +252,45 @@ class MattressStoreTests(unittest.TestCase):
         self.assertEqual(again["sent"], 0)
         self.assertEqual(len(calls), 2)
 
+    def test_telegram_transport_is_single_https_request_and_no_redirect(self):
+        requests = []
+        class Response:
+            status = 200
+            def read(self, size):
+                return b'{"ok":true}'
+        class Fake:
+            def __init__(self, host, timeout):
+                requests.append(("connect", host, timeout))
+            def request(self, method, path, body, headers):
+                requests.append(("request", method, path,
+                                 json.loads(body.decode())["chat_id"]))
+            def getresponse(self):
+                return Response()
+            def close(self):
+                requests.append(("closed",))
+        with patch.dict("os.environ", {
+                "AGENTFORGE_MATTRESS_TELEGRAM_BOT_TOKEN":
+                    "1234567:" + "x" * 35,
+                "AGENTFORGE_MATTRESS_TELEGRAM_CHAT_ID": "123456789"}), \
+             patch.object(cli.http.client, "HTTPSConnection", Fake):
+            self.assertTrue(cli._telegram("Synthetic Owner test"))
+        self.assertEqual(requests[0], ("connect", "api.telegram.org", 10))
+        self.assertEqual(requests[1][1], "POST")
+        self.assertEqual(requests[1][3], "123456789")
+        self.assertEqual(requests[-1], ("closed",))
+
+        class Redirect(Response):
+            status = 302
+        with patch.dict("os.environ", {
+                "AGENTFORGE_MATTRESS_TELEGRAM_BOT_TOKEN":
+                    "1234567:" + "x" * 35,
+                "AGENTFORGE_MATTRESS_TELEGRAM_CHAT_ID": "123456789"}), \
+             patch.object(cli.http.client, "HTTPSConnection", Fake) as factory:
+            with patch.object(Fake, "getresponse", return_value=Redirect()):
+                with self.assertRaises(RuntimeError):
+                    cli._telegram("Synthetic Owner test")
+            factory.assert_called_once()
+
     def test_prevalidated_csv_import_and_idempotent_replay(self):
         csvpath = self.root / "hosted-form.csv"
         rows = [
