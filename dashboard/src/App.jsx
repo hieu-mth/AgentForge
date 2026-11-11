@@ -241,6 +241,7 @@ export default function App() {
       }else{
         setMediaPrepared(null);
         setGeneratedVisuals(null);
+        setGoal(null);
         setTask(detail);
       }
     }catch(e){authError(e);}

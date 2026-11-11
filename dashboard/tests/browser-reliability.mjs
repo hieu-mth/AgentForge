@@ -43,6 +43,7 @@ let browser;
 try {
   browser=await chromium.launch({channel:'msedge',headless:true});
   async function scenario(name,run){
+    if(process.env.UI1A_SCENARIO&&!name.includes(process.env.UI1A_SCENARIO))return;
     const page=await browser.newPage({viewport:{width:1366,height:900}});
     const requests=[];const state={status:{},overrides:{},post:()=>({}),handlers:{}};
     page.on('pageerror',e=>errors.push({name,message:e.message}));
@@ -59,6 +60,36 @@ try {
     try{await run({page,state,requests,open,header});results.push({name,status:'PASS'});console.log('PASS '+name);}
     catch(error){await page.screenshot({path:path.join(output,'failure-'+results.length+'.png')});throw new Error(name+': '+error.message);}
     finally{await page.close();}
+  }
+  for(const width of [1920,390]){
+    await scenario('Goal result replaces plan Drawer at '+width+'px',async({page,state,requests,open})=>{
+      await page.setViewportSize({width,height:900});
+      const completed={...goal,status:'SUCCEEDED',template:'creative.storyboard',step_runs:[{
+        step_index:0,skill_id:'media.copy_draft',status:'SUCCEEDED',child_task_id:id}]};
+      state.overrides['/api/bootstrap']={...bootstrap,goals:[completed]};
+      state.overrides['/api/goals/'+id]=completed;
+      state.overrides['/api/tasks/'+id]={task_id:id,skill_id:'media.copy_draft',status:'SUCCEEDED',
+        report:{kind:'storyboard',title:'Storyboard synthetic kiểm tra Drawer',scenes:[{
+          headline:'Cảnh synthetic',caption:'Nội dung kiểm thử, không gọi AI.',duration_seconds:5}]}};
+      await open('workspace');await page.getByRole('button',{name:'Xem kế hoạch',exact:true}).click();
+      await page.getByRole('button',{name:'Xem kết quả công việc',exact:true}).waitFor();
+      // A failed GET must leave the plan available for a deliberate retry.
+      state.status['/api/tasks/'+id]=503;
+      await page.getByRole('button',{name:'Xem kết quả công việc',exact:true}).click();
+      await page.getByText('synthetic_503',{exact:true}).first().waitFor();
+      assert.equal(await page.locator('.ant-drawer-open').count(),1);
+      assert.ok(await page.getByRole('button',{name:'Xem kết quả công việc',exact:true}).isVisible());
+      delete state.status['/api/tasks/'+id];
+      await page.getByRole('button',{name:'Xem kết quả công việc',exact:true}).click();
+      await page.getByText('Storyboard synthetic kiểm tra Drawer',{exact:true}).waitFor();
+      await page.waitForTimeout(400); // Allow the outgoing Drawer animation to finish.
+      assert.equal(await page.locator('.ant-drawer-open').count(),1);
+      assert.equal(await page.getByRole('button',{name:'Xem kết quả công việc',exact:true}).count(),0);
+      await page.screenshot({path:path.join(output,'goal-result-'+width+'.png'),fullPage:true});
+      await page.keyboard.press('Escape');await page.waitForTimeout(400);
+      assert.equal(await page.locator('.ant-drawer-open').count(),0);
+      assert.ok(requests.every(r=>r.method==='GET'));
+    });
   }
   await scenario('bootstrap 503 / offline -> GET-only recovery',async({page,state,requests,open})=>{
     state.status['/api/bootstrap']=503;await open('overview');
