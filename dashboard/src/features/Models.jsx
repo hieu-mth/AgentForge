@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { App as AntApp, Alert, Button, Card, Col, Empty, Form, Input,
   Modal, Row, Select, Space, Switch, Table, Tag, Tooltip, Typography } from 'antd';
 import { api } from '../api.js';
+import {useResource, ResourceStatus} from '../use_resource.jsx';
+import {useScreenRefresh} from '../refresh_scope.jsx';
 import { compatibleProfiles, exposureFor, KIND_LABELS, profilePayload,
   PROVIDERS, STATUS_LABELS } from '../model_hub_ui.js';
 
@@ -17,16 +19,21 @@ function stateTag(status) {
 
 export function ModelHub({mutate}) {
   const {message,modal}=AntApp.useApp();
-  const [hub,setHub]=useState(null);
-  const [loading,setLoading]=useState(true);
-  const [error,setError]=useState(null);
+  const hubResource=useResource('/api/model-hub');
+  const motionResource=useResource('/api/film/motion');
+  const productionResource=useResource('/api/film/productions');
+  const setHub=hubResource.setData;
+  const hub=hubResource.data;
+  const loading=hubResource.loading;
+  const [actionError,setError]=useState(null);
+  const error=actionError;
   const [drafts,setDrafts]=useState({});
   const [checked,setChecked]=useState({});
-  const [motion,setMotion]=useState(null);
-  const [motionBusy,setMotionBusy]=useState(false);
+  const motion=motionResource.data;
+  const motionBusy=motionResource.loading;
   const [motionFilename,setMotionFilename]=useState({});
-  const [productions,setProductions]=useState([]);
-  const [productionBusy,setProductionBusy]=useState(false);
+  const productions=productionResource.data?.episodes||[];
+  const productionBusy=productionResource.loading;
   const [voiceEngine,setVoiceEngine]=useState('windows');
   const [voiceName,setVoiceName]=useState('');
   const [editorOpen,setEditorOpen]=useState(false);
@@ -35,28 +42,12 @@ export function ModelHub({mutate}) {
   const provider=Form.useWatch('provider',form);
 
   const reload=useCallback(async()=>{
-    setLoading(true);
-    try {
-      const next=await api('/api/model-hub');
-      setHub(next);setDrafts({});setError(null);
-    }catch(err){setError(err.message||'Không đọc được Model Hub');}
-    finally{setLoading(false);}
-  },[]);
-  useEffect(()=>{reload();},[reload]);
-  const reloadMotion=useCallback(async()=>{
-    setMotionBusy(true);
-    try{setMotion(await api('/api/film/motion'));}
-    catch(err){message.warning('Film Studio local: '+(err.message||'Không thể kiểm tra'));}
-    finally{setMotionBusy(false);}
-  },[message]);
-  useEffect(()=>{reloadMotion();},[reloadMotion]);
-  const reloadProductions=useCallback(async()=>{
-    setProductionBusy(true);
-    try{const next=await api('/api/film/productions');setProductions(next.episodes||[]);}
-    catch(err){message.warning('Film production local: '+(err.message||'Không đọc được'));}
-    finally{setProductionBusy(false);}
-  },[message]);
-  useEffect(()=>{reloadProductions();},[reloadProductions]);
+    const next=await hubResource.reload();
+    if(next)setError(null);
+  },[hubResource.reload]);
+  const reloadMotion=motionResource.reload;
+  const reloadProductions=productionResource.reload;
+  useScreenRefresh(()=>Promise.all([reload(),reloadMotion(),reloadProductions()]));
   const filmProductionAction=(episode,action)=>{
     modal.confirm({
       title:action==='render'?'Kiểm tra và dựng MP4 local bằng FFmpeg?':'Tạo thoại offline bằng engine đã cài?',
@@ -212,6 +203,7 @@ export function ModelHub({mutate}) {
         <Button onClick={reload}>Làm mới</Button>
         <Button type="primary" onClick={()=>editProfile(null)}>+ Đăng ký model</Button>
       </Space>}>
+      <ResourceStatus resource={hubResource} label="Model Hub"/>
       <Table size="middle" rowKey="id" dataSource={profiles} scroll={{x:820}}
         pagination={{pageSize:8,hideOnSinglePage:true}} locale={{emptyText:<Empty description="Chưa có model"/>}}
         columns={[
@@ -280,6 +272,7 @@ export function ModelHub({mutate}) {
     </Card>
     <Card title="Film Studio · Motion pilot 4 giây" extra={
       <Button onClick={reloadMotion} loading={motionBusy}>Làm mới GPU / Jobs</Button>}>
+      <ResourceStatus resource={motionResource} label="motion jobs"/>
       <Alert type="warning" showIcon style={{marginBottom:12}}
         message="Wan 2.2 5B chạy bằng CLI do Owner kiểm soát"
         description="Model Hub video vẫn CONFIG_ONLY; phải tự cài ComfyUI/checkpoint và duyệt workflow SHA, không có auto-download/gọi GPU. QA kỹ thuật không phải duyệt chất lượng phim."/>
@@ -314,6 +307,7 @@ export function ModelHub({mutate}) {
     </Card>
     <Card title="Film Studio · Đợt 9 (Continuity & Dựng phim)"
       extra={<Button loading={productionBusy} onClick={reloadProductions}>Làm mới Episodes</Button>}>
+      <ResourceStatus resource={productionResource} label="episodes"/>
       <Alert type="warning" showIcon style={{marginBottom:14}}
         message="Chỉ ghép clip Wave 8 đã có MP4 kỹ thuật"
         description="Tạo episode-plan bằng CLI từ receipt clip thật; mỗi cảnh cần ghi identity/reference/costume/location/action/camera/caption. Không tự render GPU. 3–5 shot xem continuity (~12–20s), 15–22 shot làm pilot 60–90s. Các kiểm tra metadata KHÔNG thay thế quan sát nhân vật bằng mắt."/>

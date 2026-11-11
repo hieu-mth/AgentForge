@@ -77,6 +77,10 @@ jobs:
         working-directory: dashboard
         run: npm run test:browser
 
+      - name: Adversarial Dashboard reliability fixtures in Microsoft Edge
+        working-directory: dashboard
+        run: npm run test:reliability
+
       - name: Validate built dashboard routing and assets
         run: python -m unittest tests.test_react_dashboard_v27 -v
 

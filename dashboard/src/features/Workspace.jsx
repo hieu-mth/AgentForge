@@ -7,6 +7,7 @@ import { BulbOutlined, CheckCircleOutlined, FolderOpenOutlined, SafetyCertificat
 import { badge, clip, fallback, StatTile } from '../components/shared.jsx';
 import { PERMISSIONS, WORKERS, SKILLS, requiredPermissions, permissionsKnown, executionConsent } from '../permissions.js';
 import { isVideoRequest, quotaForPrompt } from '../workspace_quota.js';
+import { promptValidation } from '../prompt_validation.js';
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 
@@ -37,9 +38,10 @@ export function Workspace({data, onPlan, openGoal, onOpenSettings, prompt, setPr
   const goals = data?.goals || [];
   const waiting = goals.filter(g => ['PLANNED', 'WAITING_APPROVAL'].includes(g.status)).length;
   const done = goals.filter(g => g.status === 'SUCCEEDED').length;
-  const length = prompt.trim().length;
+  const validation=promptValidation(prompt);
+  const length = validation.characters;
   const submit = () => {
-    if (length >= MIN_PROMPT && !loading && !limits.blocked) {
+    if (!validation.error && !loading && !limits.blocked) {
       onPlan(prompt).then(ok => { if (ok) setPrompt(''); });
     }
   };
@@ -50,18 +52,20 @@ export function Workspace({data, onPlan, openGoal, onOpenSettings, prompt, setPr
       <h1 className="hero-title">Hôm nay, bạn muốn <em>rèn</em> điều gì?</h1>
       <p className="hero-caption">Mô tả mục tiêu bằng lời của bạn. AgentForge lập kế hoạch và dừng lại chờ bạn duyệt — không tự gọi AI, không tự chi tiền.</p>
       <div className="prompt-composer">
-        <TextArea aria-label="Mô tả công việc" autoSize={{minRows:4, maxRows:10}} maxLength={6000}
+        <TextArea aria-label="Mô tả công việc" autoSize={{minRows:4, maxRows:10}}
           value={prompt} variant="borderless" onChange={e => setPrompt(e.target.value)}
           onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') submit(); }}
           placeholder="Ví dụ: Thiết kế landing page nệm ngủ cao cấp cho ba tôi, tạo hình ảnh đẹp, tối ưu trên điện thoại và có nút gọi 0879547988..."/>
         <div className="composer-footer">
           <span className="composer-hint"><SafetyCertificateOutlined/> Lập kế hoạch miễn phí · Ctrl+Enter để gửi
             {length > 0 && length < MIN_PROMPT && <b> · cần thêm {MIN_PROMPT - length} ký tự</b>}</span>
-          <span className="composer-count" aria-live="off">{prompt.length.toLocaleString('vi-VN')}/6.000 ký tự</span>
+          <span className="composer-count" aria-live="polite">{length.toLocaleString('vi-VN')}/6.000 ký tự · {validation.bytes.toLocaleString('vi-VN')} byte UTF-8</span>
           <Button type="primary" size="large" icon={<SendOutlined/>} loading={loading}
-            disabled={length < MIN_PROMPT || limits.blocked} onClick={submit}>Tạo kế hoạch</Button>
+            disabled={!!validation.error || limits.blocked} onClick={submit}>Tạo kế hoạch</Button>
         </div>
       </div>
+      <Text type="secondary">Không tự cắt yêu cầu. Kế hoạch còn có giới hạn lưu trữ 8 KiB; V5 lặp brief ở nhiều bước nên có thể cần mô tả ngắn hơn. Backend kiểm tra trước khi lưu.</Text>
+      {length>0&&validation.error&&<Alert type="warning" showIcon message={validation.error}/>}
       {length >= MIN_PROMPT && videoIntent && <Alert type="info" showIcon style={{marginTop:14}}
         message="Video — giai đoạn đầu: lập storyboard"
         description="AgentForge sẽ tạo kịch bản để bạn duyệt, chưa xuất MP4 trong bước này. Sau khi duyệt storyboard, bạn cần thực hiện bước tạo tư liệu và render video local riêng (cấp quyền chạy FFmpeg). Video hoàn thành xem tại Đánh giá → Video local."/>}

@@ -3,6 +3,8 @@ import { App as AntApp, Alert, Button, Card, Descriptions, Empty,
   Modal, Space, Table, Tag, Typography } from 'antd';
 import { ReloadOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { api } from '../api.js';
+import {useScreenRefresh} from '../refresh_scope.jsx';
+import {useReadSequence} from '../use_resource.jsx';
 import { badge, clip } from '../components/shared.jsx';
 const { Paragraph, Text, Title } = Typography;
 
@@ -15,16 +17,19 @@ export function Retention({data,mutate}) {
   const [busy,setBusy]=useState(false);
   const paused=data?.operations?.mode==='PAUSED';
 
+  const beginRead=useReadSequence();
   const refresh=useCallback(async()=>{
+    const current=beginRead();
     setBusy(true);
     try {
       const [items,snapshots]=await Promise.all([
         api('/api/retention/inventory'),api('/api/retention/backups')]);
-      setInventory(items);setBackups(snapshots);
-    } catch(err) {message.error(err.message);}
-    finally {setBusy(false);}
-  },[message]);
+      if(current()){setInventory(items);setBackups(snapshots);}
+    } catch(err) {if(current())message.error(err.message);}
+    finally {if(current())setBusy(false);}
+  },[message,beginRead]);
   useEffect(()=>{refresh();},[refresh]);
+  useScreenRefresh(refresh);
   const key=(item)=>item.kind+':'+item.id;
 
   const inspect=async item=>{
