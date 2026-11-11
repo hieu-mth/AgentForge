@@ -285,7 +285,7 @@ class MattressStoreTests(unittest.TestCase):
                 "AGENTFORGE_MATTRESS_TELEGRAM_BOT_TOKEN":
                     "1234567:" + "x" * 35,
                 "AGENTFORGE_MATTRESS_TELEGRAM_CHAT_ID": "123456789"}), \
-             patch.object(cli.http.client, "HTTPSConnection", Fake) as factory:
+             patch.object(cli.http.client, "HTTPSConnection", side_effect=Fake) as factory:
             with patch.object(Fake, "getresponse", return_value=Redirect()):
                 with self.assertRaises(RuntimeError):
                     cli._telegram("Synthetic Owner test")
