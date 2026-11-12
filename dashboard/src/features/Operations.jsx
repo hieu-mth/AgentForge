@@ -57,7 +57,7 @@ export function Overview({data, onNavigate, onRefresh}) {
       </Card>
     </div>
     <div className="overview-full-panels">
-      <Card className="panel" title="Sức khỏe & giới hạn hệ thống">
+      <Card className="panel" title="Trạng thái hệ thống">
         <Descriptions size="small" column={1} items={[
           {key:'daemon',label:'Daemon lịch',children:daemon.fresh?badge(daemon.status||'ACTIVE'):badge('NOT_RUNNING')},
           {key:'autopilot',label:'Autopilot (cấu hình)',children:badge(autopilot.enabled?'ACTIVE':'OFF')},
