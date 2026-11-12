@@ -308,5 +308,10 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .overview-bar-good{background:#319c76}
 .overview-bar-bad{background:#df705e}
 .overview-legend{font-size:12px;opacity:.75;margin-top:10px}
-.overview-shortcuts{display:flex;flex-wrap:wrap;gap:10px}
-@media(max-width:600px){.overview-shortcuts>.ant-btn{flex:1 1 42%}.overview-issue,.overview-activity-row{align-items:flex-start}}
+@media(max-width:600px){.overview-issue,.overview-activity-row{align-items:flex-start}}
+
+/* Vertical rhythm for Overview only: keep existing layout behavior elsewhere. */
+.overview-command-center{display:flex;flex-direction:column;gap:24px}
+.overview-command-center>.ant-alert{margin-bottom:0!important}
+.overview-command-center>.stat-grid,.overview-command-center>.two-cols{margin-block:0}
+@media(max-width:650px){.overview-command-center{gap:18px}}

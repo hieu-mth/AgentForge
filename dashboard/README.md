@@ -52,3 +52,5 @@ Eight primary destinations: Tổng quan, Giao việc, AI Media Studio, Nhân v�
 ## Owner Command Center (Tổng quan)
 
 The overview combines the existing authenticated bootstrap snapshot (recent tasks, goals, attention, pending reviews and local video receipts). KPI counts are **sample-scoped**: bootstrap exposes at most 40 task summaries, 60 goals, 15 review items and 15 video receipts. They are not historical totals. Seven-day charts use UTC update dates from the same bounded sample, not an analytics warehouse. The health panel uses the existing authenticated `/api/film/motion` ComfyUI/GPU probe; detecting a GPU does not verify video generation. Runtime model availability and verified AI billing remain explicitly unknown. No new persistent database or automated actions are added. Run `npm run test:navigation --prefix dashboard` and `npm run build --prefix dashboard` before accepting the UI.
+
+The Overview uses a dedicated 24px vertical panel rhythm (18px on narrow screens). Redundant quick-access shortcuts were removed because the primary sidebar already provides navigation.
