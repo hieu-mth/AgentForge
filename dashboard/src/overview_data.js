@@ -18,7 +18,9 @@ export function buildOverview(data, now=new Date()) {
     ...attention.map(x=>({id:'attention:'+x.kind+':'+x.id,kind:x.kind,
       title:x.title||'Cần kiểm tra',status:x.status,priority:x.priority,
       section:x.kind==='goal'?'goals':x.kind==='schedules'?'schedules':'tasks'})),
-    ...tasks.filter(x=>x.status==='FAILED').map(x=>({id:'attention:task:'+x.task_id,\n      kind:'task',title:x.skill_id||'Tác vụ lỗi',status:'FAILED',priority:'REVIEW',section:'tasks'})),\n    ...waitingReviews.map(x=>({id:'review:'+x.job_id,kind:'review',
+    ...tasks.filter(x=>x.status==='FAILED').map(x=>({id:'attention:task:'+x.task_id,
+      kind:'task',title:x.skill_id||'Tác vụ lỗi',status:'FAILED',priority:'REVIEW',section:'tasks'})),
+    ...waitingReviews.map(x=>({id:'review:'+x.job_id,kind:'review',
       title:'Bản nháp AI chờ duyệt',status:'PENDING',priority:'HIGH',section:'reviews'})),
     ...waitingVideos.map(x=>({id:'video:'+x.production_id,kind:'video',
       title:'Video chờ Owner xem',status:'VIDEO_READY',priority:'HIGH',section:'reviews'})),
@@ -29,7 +31,7 @@ export function buildOverview(data, now=new Date()) {
   const recent=[...tasks].sort((a,b)=>String(b.updated_at||b.created_at||'').localeCompare(
     String(a.updated_at||a.created_at||''))).slice(0,8);
   const dayKeys=Array.from({length:7},(_,i)=>{
-    const d=new Date(now);d.setDate(d.getDate()-(6-i));return dateKey(d.toISOString());
+    const d=new Date(now);d.setUTCDate(d.getUTCDate()-(6-i));return dateKey(d.toISOString());
   });
   const trend=dayKeys.map(day=>({day,
     succeeded:tasks.filter(t=>dateKey(t.updated_at||t.created_at)===day&&t.status==='SUCCEEDED').length,
