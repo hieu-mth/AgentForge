@@ -3,7 +3,7 @@ const VALID_DATE = /^\d{4}-\d{2}-\d{2}/;
 export function dateKey(value) {
   if (typeof value !== 'string' || !VALID_DATE.test(value)) return null;
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString('en-CA');
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0,10);
 }
 export function buildOverview(data, now=new Date()) {
   const tasks=Array.isArray(data?.tasks)?data.tasks:[];
