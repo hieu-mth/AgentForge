@@ -300,14 +300,16 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .overview-issue>div,.overview-activity-row>div{min-width:0;overflow-wrap:anywhere}
 .overview-issue strong,.overview-activity-row strong{font-size:13px}
 .overview-muted{font-size:12px;opacity:.72;overflow-wrap:anywhere}
-.overview-chart{height:180px;display:flex;align-items:stretch;gap:8px;padding-top:12px}
+.overview-chart{height:210px;display:flex;align-items:stretch;gap:12px;padding-top:12px}
 .overview-chart-day{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:6px}
 .overview-chart-day small{font-size:10px;opacity:.75}
-.overview-chart-bars{height:140px;width:100%;display:flex;align-items:end;justify-content:center;gap:4px;border-bottom:1px solid rgba(128,128,128,.3)}
-.overview-bar{display:block;width:22%;min-width:4px;max-width:18px;border-radius:4px 4px 0 0}
+.overview-chart-bars{height:170px;width:100%;display:flex;align-items:end;justify-content:center;gap:clamp(4px,1vw,12px);border-bottom:1px solid rgba(128,128,128,.3)}
+.overview-bar{display:block;flex:0 1 34%;min-width:6px;max-width:58px;border-radius:5px 5px 0 0}
 .overview-bar-good{background:#319c76}
 .overview-bar-bad{background:#df705e}
-.overview-legend{font-size:12px;opacity:.75;margin-top:10px}
+.overview-legend{display:flex;flex-wrap:wrap;gap:8px 22px;align-items:center;font-size:12px;margin-top:14px}
+.overview-legend-item{display:inline-flex;align-items:center;gap:8px}
+.overview-legend-swatch{display:inline-block;width:12px;height:12px;border-radius:3px;flex:none}
 @media(max-width:600px){.overview-issue,.overview-activity-row{align-items:flex-start}}
 
 /* Vertical rhythm for Overview only: keep existing layout behavior elsewhere. */
@@ -326,3 +328,5 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .overview-full-panels>.panel{min-width:0}
 @media(max-width:900px){.overview-balanced-row{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:650px){.overview-balanced-row{gap:18px}.overview-full-panels{gap:18px}}
+
+@media(max-width:650px){.overview-chart{gap:4px}.overview-chart-bars{gap:3px}.overview-bar{min-width:3px;flex-basis:38%}}
