@@ -7,9 +7,9 @@ const originalScreens=[
   'workspace','overview','media-studio','characters','goals','tasks','reviews','websites','projects','retention',
   'team','intelligence','growth','mattress','schedules','operations','channels','finance','settings','memory','models',
 ];
-test('sidebar contains exactly six business-facing groups',()=>{
+test('sidebar contains eight owner workflow groups',()=>{
   assert.deepEqual(NAV_GROUPS.map(x=>x.label),[
-    'Tổng quan','Giao việc','Dự án & Thành phẩm','Kinh doanh','Đội ngũ AI','Cài đặt'
+    'Tổng quan','Giao việc','AI Media Studio','Nhân vật','Sản phẩm','Kinh doanh','Đội ngũ AI','Cài đặt'
   ]);
 });
 test('every original screen is present once; no accidental deletion',()=>{
@@ -33,13 +33,15 @@ test('deep links preserve each feature and recover from invalid input',()=>{
   }
 });
 test('business and owner tools remain reachable in expected groups',()=>{
-  assert.equal(groupFor('media-studio'),'projects');
-  assert.equal(groupFor('characters'),'projects');
+  assert.equal(groupFor('media-studio'),'studio');
+  assert.equal(groupFor('characters'),'characters');
   assert.equal(parseSection('#/characters'),'characters');
-  assert.equal(defaultSection('projects'),'media-studio');
-  assert.equal(groupFor('websites'),'projects');
-  assert.equal(groupFor('reviews'),'projects');
-  assert.equal(groupFor('retention'),'projects');
+  assert.equal(defaultSection('studio'),'media-studio');
+  assert.equal(defaultSection('characters'),'characters');
+  assert.equal(defaultSection('products'),'websites');
+  assert.equal(groupFor('websites'),'products');
+  assert.equal(groupFor('reviews'),'products');
+  assert.equal(groupFor('retention'),'settings');
   assert.equal(groupFor('growth'),'business');
   assert.equal(groupFor('mattress'),'business');
   assert.equal(parseSection('#/mattress'),'mattress');
