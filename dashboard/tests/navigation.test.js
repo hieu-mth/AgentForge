@@ -4,7 +4,7 @@ import { NAV_GROUPS, DEFAULT_TAB, groupFor, defaultSection,
   tabsFor, parseSection, hashFor, labelFor } from '../src/navigation.js';
 
 const originalScreens=[
-  'workspace','overview','goals','tasks','reviews','websites','projects','retention',
+  'workspace','overview','media-studio','goals','tasks','reviews','websites','projects','retention',
   'team','intelligence','growth','mattress','schedules','operations','channels','finance','settings','memory','models',
 ];
 test('sidebar contains exactly six business-facing groups',()=>{
@@ -33,6 +33,8 @@ test('deep links preserve each feature and recover from invalid input',()=>{
   }
 });
 test('business and owner tools remain reachable in expected groups',()=>{
+  assert.equal(groupFor('media-studio'),'projects');
+  assert.equal(defaultSection('projects'),'media-studio');
   assert.equal(groupFor('websites'),'projects');
   assert.equal(groupFor('reviews'),'projects');
   assert.equal(groupFor('retention'),'projects');

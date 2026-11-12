@@ -1,10 +1,10 @@
-// A single declarative route map; Owner-only mattress workflow lives inside Business.
+// A single declarative route map; experimental media workflow lives under Projects.
 // No API permissions are changed by client-side navigation.
 export const NAV_GROUPS = Object.freeze([
   {key:'overview',label:'Tổng quan',tabs:[['overview','Tổng quan']]},
   {key:'workspace',label:'Giao việc',tabs:[['workspace','Giao việc']]},
   {key:'projects',label:'Dự án & Thành phẩm',tabs:[
-    ['websites','Websites'],['projects','Kho thành phẩm & Ảnh AI'],
+    ['media-studio','AI Media Studio'],['websites','Websites'],['projects','Kho thành phẩm & Ảnh AI'],
     ['reviews','Duyệt AI & Video'],['retention','Sao lưu & Cleanup']]},
   {key:'business',label:'Kinh doanh',tabs:[
     ['mattress','Bán nệm'],['growth','Growth & Revenue'],['finance','Finance'],
@@ -16,7 +16,7 @@ export const NAV_GROUPS = Object.freeze([
     ['operations','Vận hành'],['memory','Owner Memory']]},
 ]);
 export const DEFAULT_TAB = Object.freeze({
-  overview:'overview',workspace:'workspace',projects:'websites',
+  overview:'overview',workspace:'workspace',projects:'media-studio',
   business:'growth',team:'team',settings:'settings',
 });
 const ROUTES = Object.fromEntries(NAV_GROUPS.flatMap(group=>
