@@ -81,7 +81,10 @@ export function Overview({data, onNavigate, onRefresh}) {
             <small>{point.day?.slice(5)||'—'}</small>
           </div>)}
         </div>
-        <div className="overview-legend">■ Hoàn thành &nbsp; · &nbsp; Lỗi / gián đoạn</div>
+        <div className="overview-legend" aria-label="Chú thích biểu đồ">
+          <span className="overview-legend-item"><i className="overview-legend-swatch overview-bar-good" aria-hidden="true"/>Hoàn thành</span>
+          <span className="overview-legend-item"><i className="overview-legend-swatch overview-bar-bad" aria-hidden="true"/>Lỗi / gián đoạn</span>
+        </div>
       </Card>
     </div>
   </div>;
