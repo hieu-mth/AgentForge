@@ -3,6 +3,7 @@ import { AuditOutlined, BankOutlined, ClockCircleOutlined, FireOutlined,
   PlayCircleOutlined, TeamOutlined } from '@ant-design/icons';
 import { badge, fallback, StatTile } from '../components/shared.jsx';
 import { buildOverview } from '../overview_data.js';
+import { formatVietnamDateTime } from '../date_format.js';
 import { useResource } from '../use_resource.jsx';
 import { useScreenRefresh } from '../refresh_scope.jsx';
 
@@ -46,7 +47,7 @@ export function Overview({data, onNavigate, onRefresh}) {
           <div className="overview-activity">{recent.map(task=>
             <div className="overview-activity-row" key={task.task_id}>
               <div><strong>{task.skill_id||task.kind||'Tác vụ'}</strong>
-                <div className="overview-muted">{task.updated_at||task.created_at||'Chưa có thời gian'}</div></div>
+                <div className="overview-muted">{formatVietnamDateTime(task.updated_at||task.created_at)}</div></div>
               {badge(task.status)}
             </div>)}</div>:fallback('Chưa có hoạt động')}
       </Card>
