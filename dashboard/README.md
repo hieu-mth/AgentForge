@@ -40,3 +40,7 @@ isolation and QA are available.
 Open `#/media-studio` or **Dự án & Thành phẩm → AI Media Studio**. The shell contains channel, character, production, library and model sections. It intentionally does **not** claim video rendering, character persistence or uploads are implemented. Disabled actions must remain disabled until real local APIs, approvals and end-to-end MP4 verification exist.
 
 The existing Projects, Reviews, Models and other Owner screens remain available. No user data, artifacts or historical evidence is deleted as part of this UI cleanup. The next phase must validate image-to-video on the actual RTX 5070 before connecting render actions.
+
+## Character Library
+
+The independent `#/characters` screen lives under Projects and holds the intended UI for reusable character profiles, reference images, model/LoRA metadata and version history. It is a **UI-only scaffold**: no persistent character API, upload, training, or generation is implemented yet. Counts remain zero until a verified backend exists. Existing routes are preserved.
