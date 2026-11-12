@@ -2,36 +2,88 @@ import { Alert, Button, Card, Descriptions, Table } from 'antd';
 import { AuditOutlined, BankOutlined, ClockCircleOutlined, FireOutlined,
   PlayCircleOutlined, TeamOutlined } from '@ant-design/icons';
 import { badge, fallback, StatTile } from '../components/shared.jsx';
+import { buildOverview } from '../overview_data.js';
 
-export function Overview({data, onNavigate}) {
-  const company=data?.company_v2||{}, biz=company.business||{}, content=company.content||{};
-  const pending=content.pending_ai_reviews??0, videos=content.videos_waiting_for_owner??0;
-  const actions=company.next_owner_actions||[];
-  return <>
+export function Overview({data, onNavigate, onRefresh}) {
+  const summary=buildOverview(data);
+  const {counts,issues,recent,trend,scope}=summary;
+  const ready=Boolean(data);
+  const daemon=data?.daemon||{};
+  const autopilot=data?.autopilot_policy||{};
+  const shortcuts=[
+    ['Giao việc','workspace'],['AI Media Studio','media-studio'],
+    ['Nhân vật','characters'],['Sản phẩm','websites'],
+  ];
+  const tiles=[
+    ['Đang thực hiện',counts.running,<PlayCircleOutlined/>,'info'],
+    ['Chờ Owner duyệt',counts.waiting,<AuditOutlined/>,counts.waiting?'warn':'good'],
+    ['Hoàn thành hôm nay',counts.doneToday,<ClockCircleOutlined/>,'good'],
+    ['Lỗi trong mẫu',counts.problems,<FireOutlined/>,counts.problems?'bad':'info'],
+  ];
+  const max=Math.max(1,...trend.map(d=>d.succeeded+d.failed));
+  return <div className="overview-command-center">
+    <Alert type="info" showIcon style={{marginBottom:16}}
+      message="Bảng điều hành dựa trên dữ liệu local"
+      description={ready?`KPI tác vụ dựa trên ${scope.tasks} tác vụ gần nhất trong bootstrap; không phải tổng lịch sử. Mục chờ duyệt và lỗi được tổng hợp từ các nguồn riêng, có thể không bao phủ toàn bộ dữ liệu cũ.`:'Chưa tải được dữ liệu bootstrap. Không hiển thị số liệu giả.'}/>
     <div className="stat-grid">
-      <StatTile label="AI đang chờ duyệt" value={pending} icon={<AuditOutlined/>} tone={pending?'warn':'good'}
-        hint={pending?'Cần bạn xem xét':'Đã xử lý hết'}/>
-      <StatTile label="Video cần xem" value={videos} icon={<PlayCircleOutlined/>} tone={videos?'warn':'good'}/>
-      <StatTile label="Chiến dịch thật" value={biz.real_campaigns??0} icon={<FireOutlined/>} tone="info"/>
-      <StatTile label="Lead owner ghi nhận" value={biz.owner_recorded_leads??0} icon={<TeamOutlined/>} tone="info"/>
+      {tiles.map(([label,value,icon,tone])=><StatTile key={label} label={label}
+        value={ready?value:'—'} icon={icon} tone={tone}/>)}
     </div>
     <div className="two-cols">
-      <Card title="Tình trạng hệ thống" className="panel">
-        <Descriptions column={1} size="small" items={[
-          {key:'1',label:'Operations',children:badge(company.operations)},
-          {key:'2',label:'Autopilot',children:badge(company.autopilot?.enabled?'ACTIVE':'OFF')},
-          {key:'3',label:'Website public',children:biz.public_website_deployment_verified?'Đã xác minh':'Chưa xác minh'},
-          {key:'4',label:'Lợi nhuận bank-verified',children:'Chưa có đối soát'},
-        ]}/>
+      <Card className="panel" title="Cần bạn xử lý"
+        extra={<Button size="small" onClick={onRefresh}>Làm mới</Button>}>
+        {!ready?fallback('Chưa có dữ liệu'):issues.length?
+          <div className="overview-issues">{issues.slice(0,8).map(item=>
+            <div className="overview-issue" key={item.id}>
+              <div><strong>{item.title}</strong><div>{badge(item.status)}</div></div>
+              <Button size="small" onClick={()=>onNavigate(item.section)}>Mở</Button>
+            </div>)}</div>:fallback('Không có mục cần xử lý trong dữ liệu hiện tại')}
+        {ready&&issues.length>8&&<p>Còn {issues.length-8} mục. Mở các trang duyệt và lịch sử để xem thêm.</p>}
       </Card>
-      <Card title="Cần làm tiếp" className="panel"
-        extra={<Button size="small" type="primary" ghost onClick={()=>onNavigate('workspace')}>Giao việc</Button>}>
-        {actions.length ?
-          <ul className="todo-list">{actions.map(x=><li key={x}><ClockCircleOutlined/> {x}</li>)}</ul> :
-          fallback('Không có hành động mới')}
+      <Card className="panel" title="Hoạt động gần đây"
+        extra={<Button size="small" onClick={()=>onNavigate('tasks')}>Lịch sử</Button>}>
+        {!ready?fallback('Chưa có dữ liệu'):recent.length?
+          <div className="overview-activity">{recent.map(task=>
+            <div className="overview-activity-row" key={task.task_id}>
+              <div><strong>{task.skill_id||task.kind||'Tác vụ'}</strong>
+                <div className="overview-muted">{task.updated_at||task.created_at||'Chưa có thời gian'}</div></div>
+              {badge(task.status)}
+            </div>)}</div>:fallback('Chưa có hoạt động')}
       </Card>
     </div>
-  </>;
+    <div className="two-cols">
+      <Card className="panel" title="Sức khỏe & giới hạn hệ thống">
+        <Descriptions size="small" column={1} items={[
+          {key:'daemon',label:'Daemon lịch',children:daemon.fresh?badge(daemon.status||'ACTIVE'):badge('NOT_RUNNING')},
+          {key:'autopilot',label:'Autopilot (cấu hình)',children:badge(autopilot.enabled?'ACTIVE':'OFF')},
+          {key:'model',label:'Model đang phục vụ',children:'Chưa kiểm tra runtime'},
+          {key:'comfy',label:'ComfyUI / GPU',children:'Chưa kiểm tra runtime'},
+          {key:'cost',label:'Chi phí AI đã xác minh',children:'Chưa có dữ liệu đối soát'},
+        ]}/>
+        <Alert style={{marginTop:12}} type="warning" showIcon
+          message="Cấu hình bật không đồng nghĩa worker/model đang hoạt động."/>
+        <Button style={{marginTop:12}} onClick={()=>onNavigate('operations')}>Xem vận hành</Button>
+      </Card>
+      <Card className="panel" title="Hiệu suất tác vụ · 7 ngày gần nhất">
+        <p className="overview-muted">Số tác vụ trong mẫu hiện tại, tính theo ngày cập nhật. Không phải thống kê lịch sử đầy đủ.</p>
+        <div className="overview-chart" role="img" aria-label="Biểu đồ tác vụ hoàn thành và lỗi trong 7 ngày">
+          {trend.map(point=><div className="overview-chart-day" key={point.day}>
+            <div className="overview-chart-bars">
+              <span className="overview-bar overview-bar-good" style={{height:`${100*point.succeeded/max}%`}} title={`Hoàn thành: ${point.succeeded}`}/>
+              <span className="overview-bar overview-bar-bad" style={{height:`${100*point.failed/max}%`}} title={`Lỗi: ${point.failed}`}/>
+            </div>
+            <small>{point.day?.slice(5)||'—'}</small>
+          </div>)}
+        </div>
+        <div className="overview-legend">■ Hoàn thành &nbsp; · &nbsp; Lỗi / gián đoạn</div>
+      </Card>
+    </div>
+    <Card className="panel" title="Truy cập nhanh">
+      <div className="overview-shortcuts">
+        {shortcuts.map(([label,route])=><Button key={route} onClick={()=>onNavigate(route)}>{label}</Button>)}
+      </div>
+    </Card>
+  </div>;
 }
 
 export function ReadOnlyPage({section,data}) {
