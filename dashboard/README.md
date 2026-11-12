@@ -43,4 +43,4 @@ The existing Projects, Reviews, Models and other Owner screens remain available.
 
 ## Character Library
 
-The independent `#/characters` screen lives under Projects and holds the intended UI for reusable character profiles, reference images, model/LoRA metadata and version history. It is a **UI-only scaffold**: no persistent character API, upload, training, or generation is implemented yet. Counts remain zero until a verified backend exists. Existing routes are preserved.
+The independent `#/characters` screen lives under Projects and holds the intended UI for reusable character profiles, reference images, model/LoRA metadata and version history. The Character Registry now supports creating and editing metadata via authenticated Owner API backed by local SQLite (`data/characters.sqlite3` by default; configurable with `AGENTFORGE_CHARACTER_DB`). Optimistic version checks reject stale edits. Photo upload, training, generation, storyboard references and media previews are **not yet implemented**. Existing routes are preserved.
