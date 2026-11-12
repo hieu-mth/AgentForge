@@ -457,7 +457,7 @@ export default function App() {
           {section==='workspace'&&<Workspace data={data} onPlan={plan} openGoal={openGoal}
               prompt={workspacePrompt} setPrompt={setWorkspacePrompt}
               onOpenSettings={()=>navigate('settings')} loading={busy}/>} 
-          {section==='overview'&&<Overview data={data} onNavigate={navigate}/>}
+          {section==='overview'&&<Overview data={data} onNavigate={navigate} onRefresh={refreshCurrent}/>}
           {section==='goals'&&<Card><Table dataSource={goals} rowKey="goal_id"
             pagination={{pageSize:10,hideOnSinglePage:true}} scroll={{x:'max-content'}}
             locale={{emptyText:'Chưa có kế hoạch nào'}}
