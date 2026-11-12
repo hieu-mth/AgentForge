@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Alert, Button, Card, Descriptions, Table } from 'antd';
 import { AuditOutlined, BankOutlined, ClockCircleOutlined, FireOutlined,
   PlayCircleOutlined, TeamOutlined } from '@ant-design/icons';
@@ -8,6 +9,8 @@ import { useResource } from '../use_resource.jsx';
 import { useScreenRefresh } from '../refresh_scope.jsx';
 
 export function Overview({data, onNavigate, onRefresh}) {
+  const [showAllIssues,setShowAllIssues]=useState(false);
+  const [showAllActivity,setShowAllActivity]=useState(false);
   const motion=useResource('/api/film/motion');
   useScreenRefresh(motion.reload);
   const summary=buildOverview(data);
@@ -30,29 +33,30 @@ export function Overview({data, onNavigate, onRefresh}) {
       {tiles.map(([label,value,icon,tone])=><StatTile key={label} label={label}
         value={ready?value:'—'} icon={icon} tone={tone}/>)}
     </div>
-    <div className="two-cols">
-      <Card className="panel" title="Cần bạn xử lý"
+    <div className="overview-balanced-row">
+      <Card className="panel overview-balanced-card" title="Cần bạn xử lý"
         extra={<Button size="small" onClick={onRefresh}>Làm mới</Button>}>
         {!ready?fallback('Chưa có dữ liệu'):issues.length?
-          <div className="overview-issues">{issues.slice(0,8).map(item=>
+          <div className="overview-issues">{issues.slice(0,showAllIssues?issues.length:5).map(item=>
             <div className="overview-issue" key={item.id}>
               <div><strong>{item.title}</strong><div>{badge(item.status)}</div></div>
               <Button size="small" onClick={()=>onNavigate(item.section)}>Mở</Button>
             </div>)}</div>:fallback('Không có mục cần xử lý trong dữ liệu hiện tại')}
-        {ready&&issues.length>8&&<p>Còn {issues.length-8} mục. Mở các trang duyệt và lịch sử để xem thêm.</p>}
+        {ready&&issues.length>5&&<Button className="overview-more" type="link" onClick={()=>setShowAllIssues(v=>!v)}>{showAllIssues?'Thu gọn':`Xem thêm ${issues.length-5} mục`}</Button>}
       </Card>
-      <Card className="panel" title="Hoạt động gần đây"
+      <Card className="panel overview-balanced-card" title="Hoạt động gần đây"
         extra={<Button size="small" onClick={()=>onNavigate('tasks')}>Lịch sử</Button>}>
         {!ready?fallback('Chưa có dữ liệu'):recent.length?
-          <div className="overview-activity">{recent.map(task=>
+          <div className="overview-activity">{recent.slice(0,showAllActivity?recent.length:5).map(task=>
             <div className="overview-activity-row" key={task.task_id}>
               <div><strong>{task.skill_id||task.kind||'Tác vụ'}</strong>
                 <div className="overview-muted">{formatVietnamDateTime(task.updated_at||task.created_at)}</div></div>
               {badge(task.status)}
             </div>)}</div>:fallback('Chưa có hoạt động')}
+        {ready&&recent.length>5&&<Button className="overview-more" type="link" onClick={()=>setShowAllActivity(v=>!v)}>{showAllActivity?'Thu gọn':`Xem thêm ${recent.length-5} hoạt động`}</Button>}
       </Card>
     </div>
-    <div className="two-cols">
+    <div className="overview-full-panels">
       <Card className="panel" title="Sức khỏe & giới hạn hệ thống">
         <Descriptions size="small" column={1} items={[
           {key:'daemon',label:'Daemon lịch',children:daemon.fresh?badge(daemon.status||'ACTIVE'):badge('NOT_RUNNING')},
