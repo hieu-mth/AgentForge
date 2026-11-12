@@ -6,6 +6,9 @@ from agentforge.api.routes.bootstrap import _public_task, _summary
 
 
 def dispatch(self, route):
+    if route == "/api/characters":
+        from agentforge.features.film_studio.characters import list_characters
+        return self._reply(200, list_characters())
     if route == "/api/session":
         session = self._session()
         return self._reply(200, {
