@@ -4,7 +4,7 @@ export const NAV_GROUPS = Object.freeze([
   {key:'overview',label:'Tổng quan',tabs:[['overview','Tổng quan']]},
   {key:'workspace',label:'Giao việc',tabs:[['workspace','Giao việc']]},
   {key:'projects',label:'Dự án & Thành phẩm',tabs:[
-    ['media-studio','AI Media Studio'],['websites','Websites'],['projects','Kho thành phẩm & Ảnh AI'],
+    ['media-studio','AI Media Studio'],['characters','Nhân vật'],['websites','Websites'],['projects','Kho thành phẩm & Ảnh AI'],
     ['reviews','Duyệt AI & Video'],['retention','Sao lưu & Cleanup']]},
   {key:'business',label:'Kinh doanh',tabs:[
     ['mattress','Bán nệm'],['growth','Growth & Revenue'],['finance','Finance'],
