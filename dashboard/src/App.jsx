@@ -472,7 +472,7 @@ export default function App() {
           {section==='websites'&&<Websites data={data} showProposal={openProposal}/>}
           {section==='projects'&&<Projects mutate={mutate}/>}
           {section==='media-studio'&&<MediaStudio onNavigate={navigate}/>}
-          {section==='characters'&&<CharacterLibrary onNavigate={navigate}/>}
+          {section==='characters'&&<CharacterLibrary mutate={mutate} onNavigate={navigate}/>}
           {section==='retention'&&<Retention data={data} mutate={mutate}/>}
           {section==='reviews'&&<Reviews data={data} mutate={mutate} onReload={reloadBootstrap}/>}
           {section==='schedules'&&<Schedules data={data} mutate={mutate} onReload={reloadBootstrap}/>}
