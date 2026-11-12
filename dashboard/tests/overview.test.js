@@ -20,7 +20,7 @@ test('owner inbox combines distinct sources and routes to real pages',()=>{
   assert.equal(s.counts.running,1);
   assert.equal(s.counts.waiting,3);
   assert.equal(s.counts.problems,1);
-  assert.deepEqual(s.issues.map(x=>x.section),['goals','reviews','reviews']);
+  assert.deepEqual(s.issues.map(x=>x.section),['goals','reviews','reviews','tasks']);
   assert.equal(s.trend.length,7);
   assert.equal(s.recent[0].task_id,'t1');
 });
