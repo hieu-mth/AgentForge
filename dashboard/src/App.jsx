@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { App as AntApp, Alert, Button, Card, Collapse, Descriptions, Drawer, Form, Grid, Input,
   Image, Layout, Menu, Space, Spin, Table, Tabs, Tooltip, Typography } from 'antd';
 import {
-  BarChartOutlined, DashboardOutlined, FolderOpenOutlined,
+  BarChartOutlined, DashboardOutlined, FolderOpenOutlined, VideoCameraOutlined, UserOutlined,
   LeftOutlined, MenuOutlined, MoonOutlined, ReloadOutlined, RobotOutlined,
   SafetyCertificateOutlined, SettingOutlined, SunOutlined, TeamOutlined,
 } from '@ant-design/icons';
@@ -36,7 +36,8 @@ const { Title, Text, Paragraph } = Typography;
 
 const GROUP_ICONS = {
   workspace: <RobotOutlined/>, overview: <DashboardOutlined/>,
-  projects: <FolderOpenOutlined/>, business: <BarChartOutlined/>,
+  studio: <VideoCameraOutlined/>, characters: <UserOutlined/>,
+  products: <FolderOpenOutlined/>, business: <BarChartOutlined/>,
   team: <TeamOutlined/>, settings: <SettingOutlined/>,
 };
 const MENU_ITEMS = NAV_GROUPS.map(item => ({key: item.key, icon: GROUP_ICONS[item.key], label: item.label}));

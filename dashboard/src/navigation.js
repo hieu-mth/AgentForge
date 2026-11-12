@@ -1,23 +1,26 @@
-// A single declarative route map; experimental media workflow lives under Projects.
+// Owner navigation: primary workflows have independent sidebar entries.
 // No API permissions are changed by client-side navigation.
 export const NAV_GROUPS = Object.freeze([
   {key:'overview',label:'Tổng quan',tabs:[['overview','Tổng quan']]},
   {key:'workspace',label:'Giao việc',tabs:[['workspace','Giao việc']]},
-  {key:'projects',label:'Dự án & Thành phẩm',tabs:[
-    ['media-studio','AI Media Studio'],['characters','Nhân vật'],['websites','Websites'],['projects','Kho thành phẩm & Ảnh AI'],
-    ['reviews','Duyệt AI & Video'],['retention','Sao lưu & Cleanup']]},
+  {key:'studio',label:'AI Media Studio',tabs:[['media-studio','Sản xuất video']]},
+  {key:'characters',label:'Nhân vật',tabs:[['characters','Thư viện nhân vật']]},
+  {key:'products',label:'Sản phẩm',tabs:[
+    ['websites','Website'],['projects','Kho thành phẩm & Ảnh AI'],
+    ['reviews','Duyệt AI & Video']]},
   {key:'business',label:'Kinh doanh',tabs:[
-    ['mattress','Bán nệm'],['growth','Growth & Revenue'],['finance','Finance'],
-    ['channels','Channels'],['intelligence','Intelligence']]},
+    ['mattress','Bán nệm'],['growth','Tăng trưởng & Doanh thu'],['finance','Tài chính'],
+    ['channels','Kênh phân phối'],['intelligence','Phân tích']]},
   {key:'team',label:'Đội ngũ AI',tabs:[
-    ['team','Team & Roles'],['goals','Kế hoạch & Duyệt'],['tasks','Task History']]},
+    ['team','Đội ngũ & Vai trò'],['goals','Kế hoạch & Duyệt'],['tasks','Lịch sử tác vụ']]},
   {key:'settings',label:'Cài đặt',tabs:[
-    ['settings','Cấu hình'],['models','AI Models & Routing'],['schedules','Lịch chạy'],
-    ['operations','Vận hành'],['memory','Owner Memory']]},
+    ['settings','Cấu hình'],['models','Model AI & Điều phối'],['schedules','Lịch chạy'],
+    ['operations','Vận hành'],['memory','Bộ nhớ Owner'],['retention','Sao lưu & Dọn dẹp']]},
 ]);
 export const DEFAULT_TAB = Object.freeze({
-  overview:'overview',workspace:'workspace',projects:'media-studio',
-  business:'growth',team:'team',settings:'settings',
+  overview:'overview',workspace:'workspace',studio:'media-studio',
+  characters:'characters',products:'websites',business:'mattress',
+  team:'team',settings:'settings',
 });
 const ROUTES = Object.fromEntries(NAV_GROUPS.flatMap(group=>
   group.tabs.map(([key,label])=>[key,{group:group.key,label}])

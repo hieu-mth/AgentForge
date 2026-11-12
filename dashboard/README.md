@@ -37,10 +37,14 @@ isolation and QA are available.
 
 ## AI Media Studio (UI scaffold)
 
-Open `#/media-studio` or **Dự án & Thành phẩm → AI Media Studio**. The shell contains channel, character, production, library and model sections. It intentionally does **not** claim video rendering, character persistence or uploads are implemented. Disabled actions must remain disabled until real local APIs, approvals and end-to-end MP4 verification exist.
+Open `#/media-studio` from the dedicated **AI Media Studio** sidebar item. The shell contains channel, character, production, library and model sections. It intentionally does **not** claim video rendering, character persistence or uploads are implemented. Disabled actions must remain disabled until real local APIs, approvals and end-to-end MP4 verification exist.
 
-The existing Projects, Reviews, Models and other Owner screens remain available. No user data, artifacts or historical evidence is deleted as part of this UI cleanup. The next phase must validate image-to-video on the actual RTX 5070 before connecting render actions.
+The existing Websites, Projects, Reviews, Models and other Owner screens remain available. No user data, artifacts or historical evidence is deleted as part of this UI cleanup. The next phase must validate image-to-video on the actual RTX 5070 before connecting render actions.
 
 ## Character Library
 
-The independent `#/characters` screen lives under Projects and holds the intended UI for reusable character profiles, reference images, model/LoRA metadata and version history. The Character Registry now supports creating and editing metadata via authenticated Owner API backed by local SQLite (`data/characters.sqlite3` by default; configurable with `AGENTFORGE_CHARACTER_DB`). Optimistic version checks reject stale edits. Photo upload, training, generation, storyboard references and media previews are **not yet implemented**. Existing routes are preserved.
+The independent `#/characters` screen lives as a dedicated sidebar destination and holds the intended UI for reusable character profiles, reference images, model/LoRA metadata and version history. The Character Registry now supports creating and editing metadata via authenticated Owner API backed by local SQLite (`data/characters.sqlite3` by default; configurable with `AGENTFORGE_CHARACTER_DB`). Optimistic version checks reject stale edits. Photo upload, training, generation, storyboard references and media previews are **not yet implemented**. Existing routes are preserved.
+
+## Sidebar organization
+
+Eight primary destinations: Tổng quan, Giao việc, AI Media Studio, Nhân vật, Sản phẩm, Kinh doanh, Đội ngũ AI, Cài đặt. Media Studio and Characters are independent; Websites, Artifacts and Reviews live in Sản phẩm; Retention/Cleanup is under Cài đặt. Legacy hash routes are unchanged.
