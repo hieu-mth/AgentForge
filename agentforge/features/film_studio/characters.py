@@ -3,6 +3,7 @@ import json
 import os
 import re
 import sqlite3
+from contextlib import contextmanager
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -12,6 +13,7 @@ _LOCK = threading.RLock()
 _ID = re.compile(r"^[a-f0-9]{32}$")
 _DEFAULT_DB = Path(os.environ.get("AGENTFORGE_CHARACTER_DB", "data/characters.sqlite3"))
 
+@contextmanager
 def _db(path=None):
     target = Path(path) if path is not None else _DEFAULT_DB
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -25,7 +27,11 @@ def _db(path=None):
         reference_notes TEXT NOT NULL, version INTEGER NOT NULL,
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     )""")
-    return conn
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 def _clean(value, limit=2000):
     if not isinstance(value, str) or len(value) > limit:
