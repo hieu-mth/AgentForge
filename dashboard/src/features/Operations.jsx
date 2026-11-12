@@ -14,10 +14,6 @@ export function Overview({data, onNavigate, onRefresh}) {
   const ready=Boolean(data);
   const daemon=data?.daemon||{};
   const autopilot=data?.autopilot_policy||{};
-  const shortcuts=[
-    ['Giao việc','workspace'],['AI Media Studio','media-studio'],
-    ['Nhân vật','characters'],['Sản phẩm','websites'],
-  ];
   const tiles=[
     ['Đang thực hiện',counts.running,<PlayCircleOutlined/>,'info'],
     ['Chờ Owner duyệt',counts.waiting,<AuditOutlined/>,counts.waiting?'warn':'good'],
@@ -83,11 +79,6 @@ export function Overview({data, onNavigate, onRefresh}) {
         <div className="overview-legend">■ Hoàn thành &nbsp; · &nbsp; Lỗi / gián đoạn</div>
       </Card>
     </div>
-    <Card className="panel" title="Truy cập nhanh">
-      <div className="overview-shortcuts">
-        {shortcuts.map(([label,route])=><Button key={route} onClick={()=>onNavigate(route)}>{label}</Button>)}
-      </div>
-    </Card>
   </div>;
 }
 
