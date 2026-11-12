@@ -292,3 +292,21 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
   .visual-picker-footer{flex-direction:column;align-items:stretch;gap:10px}
   .visual-picker-footer>div{justify-content:space-between}.visual-picker-footer .ant-btn{height:auto;min-height:38px;white-space:normal}
 }
+
+
+/* Owner command center: compact, accessible and responsive. */
+.overview-issues,.overview-activity{display:flex;flex-direction:column;gap:10px}
+.overview-issue,.overview-activity-row{display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid var(--border-color,rgba(128,128,128,.16));padding:8px 0;min-width:0}
+.overview-issue>div,.overview-activity-row>div{min-width:0;overflow-wrap:anywhere}
+.overview-issue strong,.overview-activity-row strong{font-size:13px}
+.overview-muted{font-size:12px;opacity:.72;overflow-wrap:anywhere}
+.overview-chart{height:180px;display:flex;align-items:stretch;gap:8px;padding-top:12px}
+.overview-chart-day{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:6px}
+.overview-chart-day small{font-size:10px;opacity:.75}
+.overview-chart-bars{height:140px;width:100%;display:flex;align-items:end;justify-content:center;gap:4px;border-bottom:1px solid rgba(128,128,128,.3)}
+.overview-bar{display:block;width:22%;min-width:4px;max-width:18px;border-radius:4px 4px 0 0}
+.overview-bar-good{background:#319c76}
+.overview-bar-bad{background:#df705e}
+.overview-legend{font-size:12px;opacity:.75;margin-top:10px}
+.overview-shortcuts{display:flex;flex-wrap:wrap;gap:10px}
+@media(max-width:600px){.overview-shortcuts>.ant-btn{flex:1 1 42%}.overview-issue,.overview-activity-row{align-items:flex-start}}
