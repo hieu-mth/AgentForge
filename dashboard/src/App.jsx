@@ -20,6 +20,7 @@ import { WebappProposalDrawer } from './features/Webapps.jsx';
 import { Overview, ReadOnlyPage } from './features/Operations.jsx';
 import { Publishing } from './features/Publishing.jsx';
 import { Projects } from './features/Projects.jsx';
+import { MediaStudio } from './features/MediaStudio.jsx';
 import { ModelHub } from './features/Models.jsx';
 import { Retention } from './features/Retention.jsx';
 import { MattressSales } from './features/MattressSales.jsx';
@@ -469,6 +470,7 @@ export default function App() {
               {title:'Hành động',render:(_,t)=><Button onClick={()=>api('/api/tasks/'+t.task_id).then(setTask).catch(authError)}>Chi tiết</Button>}]}/></Card>}
           {section==='websites'&&<Websites data={data} showProposal={openProposal}/>}
           {section==='projects'&&<Projects mutate={mutate}/>}
+          {section==='media-studio'&&<MediaStudio onNavigate={navigate}/>}
           {section==='retention'&&<Retention data={data} mutate={mutate}/>}
           {section==='reviews'&&<Reviews data={data} mutate={mutate} onReload={reloadBootstrap}/>}
           {section==='schedules'&&<Schedules data={data} mutate={mutate} onReload={reloadBootstrap}/>}
