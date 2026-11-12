@@ -3,8 +3,12 @@ import { AuditOutlined, BankOutlined, ClockCircleOutlined, FireOutlined,
   PlayCircleOutlined, TeamOutlined } from '@ant-design/icons';
 import { badge, fallback, StatTile } from '../components/shared.jsx';
 import { buildOverview } from '../overview_data.js';
+import { useResource } from '../use_resource.jsx';
+import { useScreenRefresh } from '../refresh_scope.jsx';
 
 export function Overview({data, onNavigate, onRefresh}) {
+  const motion=useResource('/api/film/motion');
+  useScreenRefresh(motion.reload);
   const summary=buildOverview(data);
   const {counts,issues,recent,trend,scope}=summary;
   const ready=Boolean(data);
@@ -57,11 +61,12 @@ export function Overview({data, onNavigate, onRefresh}) {
           {key:'daemon',label:'Daemon lịch',children:daemon.fresh?badge(daemon.status||'ACTIVE'):badge('NOT_RUNNING')},
           {key:'autopilot',label:'Autopilot (cấu hình)',children:badge(autopilot.enabled?'ACTIVE':'OFF')},
           {key:'model',label:'Model đang phục vụ',children:'Chưa kiểm tra runtime'},
-          {key:'comfy',label:'ComfyUI / GPU',children:'Chưa kiểm tra runtime'},
+          {key:'comfy',label:'ComfyUI / GPU',children:motion.loading?'Đang kiểm tra':motion.error?'Không kiểm tra được':badge(motion.data?.gpu?.status||'UNKNOWN')},
+          {key:'vram',label:'VRAM trống (ảnh chụp)',children:typeof motion.data?.gpu?.vram_free_snapshot_gib==='number'?motion.data.gpu.vram_free_snapshot_gib+' GiB':'Chưa có dữ liệu'},
           {key:'cost',label:'Chi phí AI đã xác minh',children:'Chưa có dữ liệu đối soát'},
         ]}/>
         <Alert style={{marginTop:12}} type="warning" showIcon
-          message="Cấu hình bật không đồng nghĩa worker/model đang hoạt động."/>
+          message="ComfyUI chỉ kiểm tra kết nối/GPU; không xác nhận khả năng render video hoặc hiệu năng model."/>
         <Button style={{marginTop:12}} onClick={()=>onNavigate('operations')}>Xem vận hành</Button>
       </Card>
       <Card className="panel" title="Hiệu suất tác vụ · 7 ngày gần nhất">
