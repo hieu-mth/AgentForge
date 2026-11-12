@@ -18,7 +18,7 @@ export function buildOverview(data, now=new Date()) {
     ...attention.map(x=>({id:'attention:'+x.kind+':'+x.id,kind:x.kind,
       title:x.title||'Cần kiểm tra',status:x.status,priority:x.priority,
       section:x.kind==='goal'?'goals':x.kind==='schedules'?'schedules':'tasks'})),
-    ...waitingReviews.map(x=>({id:'review:'+x.job_id,kind:'review',
+    ...tasks.filter(x=>x.status==='FAILED').map(x=>({id:'attention:task:'+x.task_id,\n      kind:'task',title:x.skill_id||'Tác vụ lỗi',status:'FAILED',priority:'REVIEW',section:'tasks'})),\n    ...waitingReviews.map(x=>({id:'review:'+x.job_id,kind:'review',
       title:'Bản nháp AI chờ duyệt',status:'PENDING',priority:'HIGH',section:'reviews'})),
     ...waitingVideos.map(x=>({id:'video:'+x.production_id,kind:'video',
       title:'Video chờ Owner xem',status:'VIDEO_READY',priority:'HIGH',section:'reviews'})),
