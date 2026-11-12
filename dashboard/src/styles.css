@@ -315,3 +315,14 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .overview-command-center>.ant-alert{margin-bottom:0!important}
 .overview-command-center>.stat-grid,.overview-command-center>.two-cols{margin-block:0}
 @media(max-width:650px){.overview-command-center{gap:18px}}
+
+
+/* Overview layout only: equal-height paired cards, full-width lower sections. */
+.overview-balanced-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:stretch}
+.overview-balanced-card{height:100%;min-width:0}
+.overview-balanced-card>.ant-card-body{display:flex;flex-direction:column;min-height:0}
+.overview-more{align-self:flex-start;margin-top:auto;padding-inline:0}
+.overview-full-panels{display:grid;grid-template-columns:minmax(0,1fr);gap:24px}
+.overview-full-panels>.panel{min-width:0}
+@media(max-width:900px){.overview-balanced-row{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:650px){.overview-balanced-row{gap:18px}.overview-full-panels{gap:18px}}
