@@ -22,6 +22,7 @@ import { Publishing } from './features/Publishing.jsx';
 import { Projects } from './features/Projects.jsx';
 import { MediaStudio } from './features/MediaStudio.jsx';
 import { CharacterLibrary } from './features/CharacterLibrary.jsx';
+import { Environment } from './features/Environment.jsx';
 import { ModelHub } from './features/Models.jsx';
 import { Retention } from './features/Retention.jsx';
 import { MattressSales } from './features/MattressSales.jsx';
@@ -489,6 +490,7 @@ export default function App() {
           {section==='growth'&&<Growth data={data} mutate={mutate} onReload={reloadBootstrap}/>}
           {section==='mattress'&&<MattressSales mutate={mutate}/>}
           {section==='settings'&&<OwnerSettings data={data} mutate={mutate} onReload={reloadBootstrap}/>}
+          {section==='environment'&&<Environment onNavigate={navigate}/>}
           {section==='models'&&<ModelHub mutate={mutate}/>}
           {section==='memory'&&<OwnerMemory mutate={mutate}/>}
           {section==='channels'&&<Publishing data={data} mutate={mutate}/>}

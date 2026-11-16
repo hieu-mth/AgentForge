@@ -295,6 +295,7 @@
 | File hiện tại dưới `agentforge/` | Vai trò |
 | --- | --- |
 | `ops/__init__.py` | Package operational helpers. |
+| `ops/discovery.py` | Live bounded hardware, software and local model catalog snapshot. |
 | `ops/preflight.py` | Read-only local environment preflight; no subprocess/network/model invocation. |
 | `ops/base_acceptance.py` | Wave 5 status gate: setup/health/model routing summary, Owner acceptance always UNVERIFIED until independently checked. |
 | `ops/runtime_certification.py` | Đợt 5 sau audit: Owner-side live localhost/model/GPU preflight; optional confirmed Ollama/FFmpeg/Docker probes, privacy-safe evidence; never automatic production GO. |
