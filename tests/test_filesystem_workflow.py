@@ -44,7 +44,25 @@ class FilesystemWorkflowTests(unittest.TestCase):
                 self.assertEqual(task["report"]["report_path"], "workspace/e2e-test/report.md")
                 self.assertEqual(task["report"]["sha256"], hashlib.sha256(raw).hexdigest())
                 self.assertEqual(task["report"]["status"], "VERIFIED")
-                self.assertIsNone(final["artifact_acceptance"])
+                self.assertEqual(final["artifact_acceptance"]["status"], "READY_FOR_REVIEW")
+                acceptance = final["artifact_acceptance"]
+                decision = {"ack": "ACCEPT_ARTIFACT", "sha256": acceptance["source_sha"],
+                            "expected_revision": acceptance["revision"],
+                            "evidence_sha": acceptance["evidence_sha"]}
+                report_path = "/api/artifacts/reports/" + step["child_task_id"]
+                self.assertEqual(test.req("POST", report_path + "/decision", decision)[0], 400)
+                code, reviewed, _ = test.req("GET", report_path)
+                self.assertEqual(code, 200, reviewed)
+                self.assertEqual(reviewed["content"], raw.decode())
+                file = workspace / "e2e-test" / "report.md"
+                file.write_bytes(b"changed")
+                self.assertEqual(test.req("POST", report_path + "/decision", decision)[0], 400)
+                self.assertEqual(test.req("GET", path)[1]["artifact_acceptance"]["status"],
+                                 "NEEDS_VALIDATION")
+                file.write_bytes(raw)
+                code, accepted, _ = test.req("POST", report_path + "/decision", decision)
+                self.assertEqual((code, accepted["status"]), (200, "ACCEPTED"))
+                self.assertEqual(test.req("GET", path)[1]["artifact_acceptance"]["status"], "ACCEPTED")
         finally:
             test.tearDown()
 

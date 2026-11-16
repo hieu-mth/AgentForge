@@ -18,12 +18,13 @@ def handle(server, path, request, session=None):
         return artifact_acceptance.validate_source(pid, request["sha256"], namespace, db_path=server.task_db_path)
     if path.startswith("/api/artifacts/") and path.endswith("/decision"):
         parts = path.split("/")
-        if (len(parts) != 6 or parts[3] not in {"webapps", "proposals"}
+        if (len(parts) != 6 or parts[3] not in {"webapps", "proposals", "reports"}
                 or set(request) != {"ack", "sha256", "expected_revision", "evidence_sha"}):
             raise ValueError("Invalid artifact decision")
         namespace, pid = parts[3:5]
         decision = {"ACCEPT_ARTIFACT": "ACCEPTED", "REJECT_ARTIFACT": "REJECTED"}.get(request["ack"])
-        reviewed = "reviewed_webapps" if namespace == "webapps" else "reviewed_proposals"
+        reviewed = {"webapps": "reviewed_webapps", "proposals": "reviewed_proposals",
+                    "reports": "reviewed_reports"}[namespace]
         if (decision is None or session is None
                 or session.get(reviewed, {}).get(pid) != request["sha256"]):
             raise PermissionError("Inspect the exact source before deciding acceptance")

@@ -113,7 +113,7 @@ export default function App() {
   const {mode,toggle:toggleTheme}=useThemeMode();
   const expireSession=useCallback(()=>{
     setLoginNeeded(true);setData(null);setCsrf(null);
-    setGoal(null);setProposal(null);setWebapp(null);setTask(null);
+    setGoal(null);setProposal(null);setWebapp(null);setTask(null);setReviewedReport(null);
     setMediaPrepared(null);setGeneratedVisuals(null);setNavOpen(false);
     setVisualDraft(null);
     modal.destroyAll?.();message.destroy();
@@ -309,6 +309,15 @@ export default function App() {
       return true;
     }catch(e){authError(e);return false;}
   };
+  const [reviewedReport,setReviewedReport]=useState(null);
+  const readReport=async(taskId)=>{
+    try{
+      const revision=sessionRevision();
+      const report=await api('/api/artifacts/reports/'+taskId);
+      if(revision===sessionRevision())setReviewedReport(report);
+    }
+    catch(e){authError(e);}
+  };
   const decideArtifact=(p,decision,namespace='webapps')=>ask(
     decision==='ACCEPTED'?'Owner chấp nhận sản phẩm?':'Từ chối sản phẩm?',
     'Quyết định chỉ áp dụng cho đúng phiên bản mã nguồn và bằng chứng QA đã xem. Không tự xuất bản.',
@@ -318,7 +327,12 @@ export default function App() {
         ack:decision==='ACCEPTED'?'ACCEPT_ARTIFACT':'REJECT_ARTIFACT', sha256:p.sha256,
         expected_revision:acceptance.revision, evidence_sha:acceptance.evidence_sha,
       }));
-      if(out){if(namespace==='webapps')await openWebapp(p.proposal_id);else await openProposal(p.proposal_id);}
+      if(out){
+        if(namespace==='webapps')await openWebapp(p.proposal_id);
+        else if(namespace==='reports')setReviewedReport(current=>
+          current?.proposal_id===p.proposal_id ? {...current, artifact_acceptance:out} : current);
+        else await openProposal(p.proposal_id);
+      }
     });
   const validateArtifact=async(p,namespace='webapps')=>{
     const out=await runAction(()=>post('/api/artifacts/'+namespace+'/'+p.proposal_id+'/syntax',
@@ -509,7 +523,8 @@ export default function App() {
     <WebappProposalDrawer proposal={webapp} onClose={()=>setWebapp(null)} onDecide={decideArtifact} onValidate={validateArtifact}
       onRevise={reviseWebapp} onApply={applyWebapp} onRollback={rollbackWebapp}
       onVerify={verifyWebapp} onBrowserQA={browserQAWebapp} busy={busy}/>
-    <Drawer title="Chi tiết tác vụ" size={720} open={!!task} onClose={()=>setTask(null)}>
+    <Drawer title="Chi tiết tác vụ" size={720} open={!!task}
+      onClose={()=>{setTask(null);setReviewedReport(null);}}>
       {task && <><Descriptions bordered column={1} size="small" items={[
         {key:'1',label:'Task ID',children:<code>{task.task_id}</code>},
         {key:'2',label:'Skill',children:task.skill_id},
@@ -570,6 +585,16 @@ export default function App() {
           {key:'source',label:'Nguồn',children:task.report.source_mount},
           {key:'checks',label:'Kiểm thử',children:(task.report.checks||[]).join(', ')},
         ]}/>
+      </Card>}
+      {task.report?.kind==='filesystem_report'&&<Card title="Báo cáo Markdown" style={{marginTop:18}}>
+        <Paragraph><Text code copyable>{task.report.report_path}</Text></Paragraph>
+        <Paragraph>SHA <Text code copyable>{task.report.sha256}</Text></Paragraph>
+        <Button onClick={()=>readReport(task.task_id)}>Đọc bản đã xác minh</Button>
+        {reviewedReport?.proposal_id===task.task_id&&<>
+          <pre className="source-text">{reviewedReport.content}</pre>
+          <AcceptanceStatus acceptance={reviewedReport.artifact_acceptance}
+            onDecide={decision=>decideArtifact(reviewedReport,decision,'reports')} busy={busy}/>
+        </>}
       </Card>}
       {task.report?.kind==='storyboard'&&<Card title={task.report.title||'Kịch bản video'}
         style={{marginTop:18}} extra={<Button onClick={()=>navigator.clipboard?.writeText(
