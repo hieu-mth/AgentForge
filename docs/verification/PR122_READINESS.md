@@ -18,7 +18,7 @@
 ## Bằng chứng kiểm thử
 
 - Baseline Python 3.13 cài đủ dependency chạy 1.042 test. Suite ghi 2 lỗi kiểm kê module và 1 lỗi đường dẫn Windows trên Linux. GitHub Actions #805 ở đầu PR cũ dừng tại Edge smoke vì test tìm nhãn nghiệm thu tách rời của Workspace cũ.
-- Sau sửa, Python 3.13 chạy 1.045 test, OK. Dashboard Node tests 40/40, NovaMart 7/7. Vite build cả hai thành công. Chromium Headless Shell chạy Dashboard smoke, 31 kịch bản reliability và NovaMart smoke. Các suite fixture không gọi model hay AI provider.
+- Sau sửa, Python 3.13 chạy 1.045 test, OK. Dashboard Node tests 40/40, NovaMart 7/7. Vite build cả hai thành công. Chromium Headless Shell chạy Dashboard smoke, 31 kịch bản reliability và NovaMart smoke. Các suite fixture không gọi model hay AI provider. CI Windows #806 phát hiện phép đo footer lệch 1 px. Bài kiểm thử dùng tọa độ thực với sai số tối đa một CSS pixel và kiểm tra thêm vùng nội dung cuộn độc lập.
 - Browser với API localhost thật mở 21 route ở hai kích thước 1366 px và 390 px. Probe đăng nhập Owner, lập kế hoạch, duyệt SHA và kiểm tra khóa model khi backend chưa bật external tools. Không có API fixture trong lượt này.
 - Wheel có entrypoint AgentForge và loại trừ frontend/test source. Kiểm tra link tài liệu, source hygiene và 22 compatibility aliases đạt. FFmpeg encode/decode fixture xác minh cả audio lẫn video.
 

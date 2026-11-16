@@ -108,9 +108,16 @@ try {
             visual_plan:{mode:'studio',motion:'static',image_job_ids:images.map(image=>image.job_id)}});
           assert.equal(requests.filter(request=>request.method==='POST').length,1);
         }else{
-          await panel.locator('.visual-picker-body').evaluate(body=>body.scrollTop=body.scrollHeight);
+          const scroll=await panel.locator('.visual-picker-body').evaluate(body=>{
+            body.scrollTop=body.scrollHeight;
+            return {offset:body.scrollTop,max:body.scrollHeight-body.clientHeight};
+          });
+          if(scroll.max>1)assert.ok(scroll.offset>0,'Storyboard body must scroll independently');
           const afterScroll=await panel.locator('.visual-picker-footer').boundingBox();
-          assert.equal(Math.round(afterScroll.y),Math.round(footer.y));
+          // Edge may snap fractional modal coordinates to adjacent CSS pixels.
+          assert.ok(Math.abs(afterScroll.y-footer.y)<=1,'Footer moved with the scrollable body');
+          assert.ok(afterScroll.y>=0&&afterScroll.y+afterScroll.height<=height,
+            'Footer must stay in viewport after scrolling');
           await panel.locator('.visual-picker-body').evaluate(body=>body.scrollTop=0);
           await page.screenshot({path:path.join(output,`visual-panel-${width}-${theme}-missing.png`)});
           await panel.getByRole('button',{name:'Quay lại tạo ảnh',exact:true}).click();
