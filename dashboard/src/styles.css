@@ -334,8 +334,8 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 
 /* Inline explanations for system status: mouse, keyboard and touch. */
 .overview-system-label{display:inline-flex;align-items:center;flex-wrap:wrap;gap:7px}
-.overview-help-button{display:inline-grid;place-items:center;width:24px;height:24px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--muted);cursor:pointer;font-size:15px}
-.overview-help-button:hover,.overview-help-button:focus-visible{background:var(--primary-soft);color:var(--primary);outline-offset:2px}
+.overview-help-button.ant-btn{flex:none;width:26px;height:26px;min-width:26px;color:var(--muted);font-size:15px;vertical-align:middle}
+.overview-help-button.ant-btn:hover,.overview-help-button.ant-btn:focus-visible{background:var(--primary-soft);color:var(--primary)}
 .overview-system-help{max-width:min(340px,calc(100vw - 64px));line-height:1.6;white-space:normal}
 .overview-system-help p{margin:0 0 9px}
 .overview-system-help p:last-child{margin-bottom:0}
