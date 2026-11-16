@@ -35,7 +35,7 @@ từ CI fixture. [Runbook nệm](milestones/WAVE6_MATTRESS_BUSINESS_MVP.md).
 | Track | Mục tiêu kinh doanh | Tình trạng |
 | --- | --- | --- |
 | **AI Film Studio** | Tạo phim AI chuyển động nguyên bản, đủ chất lượng để phát triển kênh YouTube | Planner + adapter ComfyUI đã merge, GPU/runtime chưa xác minh |
-| **AI Product Builder** | Tạo **và sửa** website/React app theo feedback, có preview và version | Website/catalog revision có; React AI source revision chưa có |
+| **AI Product Builder** | Tạo **và sửa** website/React app theo feedback, có preview và version | Website/catalog revision và React source revision đã có; real-model/browser QA còn chờ |
 
 Không mở rộng thêm agent/worker hoặc microservice khi hai vòng lặp này chưa hoạt động đầy đủ.
 
