@@ -376,3 +376,31 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
   .workspace-recent-row>.ant-btn{align-self:flex-start}
   .workspace-recent-count{display:none}
 }
+
+
+/* GoalDrawer: Owner-facing summary, progress, scoped approval, and outcomes. */
+.goal-owner-drawer .ant-drawer-body{padding:20px 24px}
+.goal-owner-drawer .ant-drawer-footer{padding:14px 24px;border-top:1px solid var(--line);background:var(--surface)}
+.goal-owner-body{display:flex;flex-direction:column;gap:22px}
+.goal-owner-section{display:flex;flex-direction:column;gap:12px;min-width:0}
+.goal-owner-section h3{font-size:15px;font-weight:700;margin:0;color:var(--text)}
+.goal-owner-title.ant-typography{margin:0;overflow-wrap:anywhere}
+.goal-owner-summary{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.goal-owner-progress{display:flex;gap:6px}
+.goal-owner-progress-bar{flex:1;height:7px;border-radius:10px;background:var(--line)}
+.goal-owner-progress-bar.done{background:var(--good)}
+.goal-owner-progress-bar.active{background:var(--primary)}
+.goal-owner-steps{display:flex;flex-direction:column;gap:8px}
+.goal-owner-step{display:flex;align-items:flex-start;gap:12px;border:1px solid var(--line);border-radius:12px;padding:12px}
+.goal-owner-step.current{border-color:var(--primary);background:var(--primary-soft)}
+.goal-owner-step-number{display:grid;place-items:center;flex:none;width:26px;height:26px;border-radius:50%;background:var(--line-soft);color:var(--text);font-size:12px;font-weight:700}
+.goal-owner-step-content{min-width:0;display:flex;flex-direction:column;gap:4px}
+.goal-owner-step-content strong{font-size:13px;overflow-wrap:anywhere}
+.goal-owner-step-content span,.goal-owner-step-content small{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.goal-owner-technical{border-top:1px solid var(--line);padding-top:8px}
+.goal-owner-technical-content{display:flex;flex-direction:column;gap:10px;min-width:0}
+.goal-owner-technical-content .digest,.goal-owner-technical-content .source-text{overflow-wrap:anywhere;max-width:100%;overflow-x:auto}
+.goal-owner-footer{display:flex;flex-direction:column;gap:8px}
+.goal-owner-footer-hint{font-size:12px;color:var(--muted)}
+.goal-owner-footer .ant-btn{white-space:normal;height:auto;min-height:40px}
+@media(max-width:650px){.goal-owner-drawer .ant-drawer-body{padding:16px}.goal-owner-drawer .ant-drawer-footer{padding:12px 16px}}
