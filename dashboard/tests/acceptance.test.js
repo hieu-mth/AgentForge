@@ -17,7 +17,6 @@ test('all artifact states have distinct Owner labels and UI exposes both statuse
   assert.match(workspace,/GOAL_STATUS\[g.status\]/);
   assert.match(workspace,/SUCCEEDED:'Đã thực thi'/);
   assert.match(workspace,/acceptanceLabel\(g.artifact_acceptance.status\)/);
-  assert.match(workspace,/acceptanceLabel\(g.artifact_acceptance.status\)/);
   const shared=readFileSync(new URL('../src/components/shared.jsx',import.meta.url),'utf8');
   assert.doesNotMatch(shared,/const GOOD = \['SUCCEEDED'/);
 });
