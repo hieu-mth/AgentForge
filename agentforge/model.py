@@ -215,7 +215,7 @@ def _read_stream_event(response, deadline, max_bytes):
 
 
 
-def _ollama_chat(runtime, prompt, schema, *, worker_id=None):
+def _ollama_chat(runtime, prompt, schema, *, worker_id=None, opener=None):
     stream_developer = worker_id == "webapp_developer" and schema is not None
     payload = {
         "model": runtime["model"],
@@ -238,7 +238,7 @@ def _ollama_chat(runtime, prompt, schema, *, worker_id=None):
     )
     timeout = _request_timeout(worker_id)
     deadline = time.monotonic() + timeout
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with (opener or urllib.request.urlopen)(request, timeout=timeout) as response:
         _remaining(deadline)
         if stream_developer:
             parts = []

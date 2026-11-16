@@ -64,6 +64,7 @@ export const SKILLS = Object.freeze({
   'web.quality_check': 'Kiểm tra chất lượng website',
   'web.browser_test': 'Kiểm thử website trên trình duyệt',
   'research.opportunity': 'Nghiên cứu cơ hội kinh doanh',
+  'research.report': 'Nghiên cứu tài liệu và bàn giao báo cáo',
   'research.source_review': 'Kiểm tra và đối chiếu nguồn thông tin',
   'media.compose': 'Tạo hình ảnh và tư liệu video',
   'media.copy_draft': 'Soạn kịch bản video nháp',

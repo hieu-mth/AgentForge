@@ -88,7 +88,21 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
     if wants_website and wants_video:
         return {"status": "NEEDS_CLARIFICATION",
                 "message": "Yêu cầu đang gồm cả website và video. Hãy tách thành hai công việc độc lập để bạn duyệt từng sản phẩm."}
-    if wants_company:
+    wants_research_report = ("markdown" in normalized and "bao cao" in normalized
+                             and any(term in normalized for term in (
+                                 "tra cuu", "nghien cuu", "nguon cong khai", "tim them nguon")))
+    if wants_research_report:
+        scope = re.search(r"\bworkspace/([a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_-]+)*)(?=[\s,;.!?`\)]|$)", text)
+        if not scope:
+            return {"status": "NEEDS_CLARIFICATION",
+                    "message": "Hãy ghi thư mục tài liệu đã cấp quyền, ví dụ workspace/docs-local."}
+        if max_model_calls != 3:
+            raise ValueError("Nghiên cứu và tổng hợp cần ngân sách 3 lượt model local.")
+        template = "research.report"
+        inputs = {"prompt": text, "directory": scope[1],
+                  "path": "research-reports/report-" + uuid4().hex + ".md"}
+        title = "Nghiên cứu và tổng hợp báo cáo Markdown"
+    elif wants_company:
         slug = "company-" + uuid4().hex[:12]
         template = "webapp.company"
         inputs = {"slug": slug, "brief": text}

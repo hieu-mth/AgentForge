@@ -68,6 +68,13 @@ def missing_grants(skill_id, granted=(), *, confirm_model_call=False,
 
 def _safe_failure(skill_id, exc):
     """Stable, deliberately allowlisted errors; never serialize arbitrary exceptions."""
+    if skill_id == "research.report" and str(exc) in {
+        "RESEARCH_LOCAL_MODEL_REQUIRED", "RESEARCH_LOCAL_MODEL_NOT_INSTALLED",
+        "RESEARCH_INVALID_TOOL_CHOICE", "RESEARCH_NO_MARKDOWN_IN_SCOPE",
+        "RESEARCH_INVALID_SEARCH_QUERY", "RESEARCH_NO_APPROVED_PUBLIC_SOURCE",
+        "RESEARCH_CITATIONS_REQUIRED", "RESEARCH_UNVERIFIED_URL",
+    }:
+        return str(exc)
     from agentforge.domains.webapps.syntax import SourceSyntaxError
     if isinstance(exc, SourceSyntaxError):
         # Typed parser diagnostics only; never expose generated source snippets.

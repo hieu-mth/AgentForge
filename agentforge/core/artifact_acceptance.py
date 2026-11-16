@@ -157,14 +157,14 @@ def source(pid, sha, namespace, *, db_path=None):
         from agentforge import gateway
         task = task_history.get_task(pid, db_path=db_path)
         receipt = task["result"]
-        if (task["skill_id"] != "filesystem.report" or task["status"] != "SUCCEEDED"
+        if (task["skill_id"] not in {"filesystem.report", "research.report"} or task["status"] != "SUCCEEDED"
                 or not isinstance(receipt, dict) or receipt.get("sha256") != sha
                 or receipt.get("status") != "VERIFIED"):
             raise PermissionError("ACCEPTANCE_SOURCE_STALE")
         path = task["request"]["path"]
         if receipt.get("report_path") != "workspace/" + path:
             raise PermissionError("ACCEPTANCE_SOURCE_STALE")
-        gateway.validate_report(path, task["request"]["content"])
+        gateway.validate_report(path, task["request"].get("content", "verified report"))
         target = gateway.safe_path(path)
         if not target.is_file():
             raise FileNotFoundError("Report missing")
@@ -294,7 +294,7 @@ def observe(skill_id, result, *, db_path=None):
 
 def for_task(task, *, db_path=None):
     result = task.get("result")
-    if task.get("skill_id") == "filesystem.report" and task.get("status") == "SUCCEEDED":
+    if task.get("skill_id") in {"filesystem.report", "research.report"} and task.get("status") == "SUCCEEDED":
         try:
             return inspect(task["task_id"], result["sha256"], "reports", db_path=db_path)
         except (ValueError, KeyError, OSError, TypeError):

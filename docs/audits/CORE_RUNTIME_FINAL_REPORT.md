@@ -92,3 +92,31 @@ can be closed. P1 items in the baseline audit remain open in those areas.
 **Final verdict:** the host/workforce views and the two named local
 operations are reviewable. The full requested system remains NO-GO for
 production certification.
+
+## Follow-up from PR review
+
+`research.report` joins a scoped Markdown inventory, public search, allowlisted
+HTTPS retrieval and SHA-based handoff under the existing Goal approval. The
+Owner supplies a natural-language research brief and an existing
+`workspace/<directory>` scope. For example:
+
+> Đọc tài liệu Markdown trong workspace/docs-local về AgentForge Runtime,
+> tra cứu thêm một nguồn công khai rồi tổng hợp báo cáo cho tôi duyệt.
+
+Set the existing Workspace model budget to three. Approve the exact Goal
+and its search, network-read, model and workspace-write permissions.
+A model-selected query derived from the Owner's brief goes to the search
+provider. The program does not include local file contents in that query.
+The model chooses one direct-child Markdown file and one search result by
+index. Trusted handlers constrain inputs, select approved HTTPS hosts and
+write only to `workspace/research-reports/`. A local Ollama catalog match
+is required before search. Catalog presence alone still does not establish
+loadability. The implementation uses the configured worker route and does
+not escalate to a cloud provider.
+
+The HTTP integration test exercises the real permission gates, Markdown
+creation, readback, SHA and acceptance with model/search/HTTPS fixtures.
+This verifies orchestration with deterministic provider boundaries.
+A live model/search run on the Owner workstation is still NOT VERIFIED.
+General browser actions, model fallback, concurrent path mutation hardening
+and readiness latency measurement remain open.
