@@ -11,6 +11,7 @@ const { Title, Text } = Typography;
 const { TextArea } = Input;
 
 const IDEAS = [
+  {label:"Lưu báo cáo Markdown",prompt:"Tạo báo cáo workspace/e2e-test/report.md với nội dung: # Kiểm tra báo cáo local"},
   {label:'Tạo website',prompt:'Tạo website bán nệm hiện đại, tối ưu điện thoại, có danh mục sản phẩm, hình ảnh AI và nút liên hệ đặt hàng.'},
   {label:'Xây ứng dụng',prompt:'Tạo ứng dụng React tùy biến quản lý đơn hàng với danh sách sản phẩm, khách hàng, trạng thái đơn và tìm kiếm.'},
   {label:'Tạo video',prompt:'Làm video quảng cáo 30 giây cho cửa hàng nệm, bắt đầu bằng storyboard có thể duyệt và chỉnh sửa.'},

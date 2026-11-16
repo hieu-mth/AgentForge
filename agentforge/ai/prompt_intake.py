@@ -28,6 +28,16 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
     if type(max_external_runs) is not int or max_external_runs != 0:
         raise PermissionError("Prompt intake không cấp quyền chạy tiến trình ngoài.")
     text = prompt.strip()
+    local_report = re.fullmatch(r"Tạo báo cáo workspace/([^\s]+)\s+với nội dung:\s*(.+)",
+                                text, flags=re.IGNORECASE | re.DOTALL)
+    if local_report:
+        path, content = local_report.groups()
+        goal = brain_planner.propose(
+            "Tạo và xác minh báo cáo Markdown", "filesystem.report",
+            {"path": path, "content": content}, db_path=brain_db_path)
+        return {"status": "PLAN_CREATED", "goal_id": goal["goal_id"],
+                "template": "filesystem.report", "model_dispatched": False,
+                "requires_owner_approval": True, "published": False}
     normalized = _fold(text)
     wants_website = any(k in normalized for k in (
         "website", "landing page", "trang web", "web ban", "web gioi thieu",

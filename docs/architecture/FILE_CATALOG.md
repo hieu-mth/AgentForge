@@ -158,6 +158,7 @@
 | `core/skill_registry.py` | Đọc skill contracts TOML và kiểm tra schema. |
 | `core/skill_runner.py` | Permission checks, task persistence và gọi trusted domain adapters. |
 | `core/skill_adapters/__init__.py` | Allowlisted domain adapter map, fail closed với unknown skill. |
+| `core/skill_adapters/filesystem.py` | Owner-gated workspace Markdown creation and exact-byte verification. |
 | `core/skill_adapters/web.py` | Policy + handlers cho website và React webapp. |
 | `core/skill_adapters/research.py` | Policy + handlers cho research, capture stdout. |
 | `core/skill_adapters/media.py` | Policy + handlers cho media với external-run approvals. |

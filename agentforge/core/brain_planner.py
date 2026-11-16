@@ -7,6 +7,7 @@ import json
 from agentforge import brain_store, skill_registry, skill_runner
 
 TEMPLATES = {
+    "filesystem.report": ("path", "content"),
     "campaign.review": ("dataset",),
     "website.campaign": ("slug", "dataset"),
     "website.draft": ("slug", "brief"),
@@ -64,7 +65,11 @@ def _steps(template, inputs):
         {"photo_name", "rights_confirmed"} if template == "media.produce" else set())
     if set(inputs) - allowed:
         raise brain_store.BrainError("Unexpected goal input fields")
-    if template == "campaign.review":
+    if template == "filesystem.report":
+        from agentforge.gateway import validate_report
+        validate_report(inputs["path"], inputs["content"])
+        steps = [("filesystem.report", dict(inputs))]
+    elif template == "campaign.review":
         payload = {"dataset": inputs["dataset"]}
         if "campaign" in inputs:
             payload["campaign"] = inputs["campaign"]

@@ -51,6 +51,7 @@ export const WORKERS = Object.freeze({
   growth_operator: 'AI hỗ trợ kinh doanh',
 });
 export const SKILLS = Object.freeze({
+  "filesystem.report": "Ghi và xác minh báo cáo Markdown",
   'web.create': 'AI thiết kế website theo yêu cầu',
   'webapp.create': 'AI tạo mã nguồn marketplace React demo',
   'webapp.develop': 'AI Developer tạo React JSX/CSS tùy biến (thử nghiệm)',

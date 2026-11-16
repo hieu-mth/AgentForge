@@ -25,6 +25,7 @@ export function isVideoRequest(prompt) {
 }
 
 export function modelCallsForPrompt(prompt) {
+  if (/^Tạo báo cáo workspace\/[^\s]+\s+với nội dung:\s*.+/is.test(String(prompt ?? '').trim())) return 0;
   return isCompanyRequest(prompt) ? 3 : 1;
 }
 
