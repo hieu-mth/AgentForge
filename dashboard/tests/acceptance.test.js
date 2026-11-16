@@ -20,3 +20,16 @@ test('all artifact states have distinct Owner labels and UI exposes both statuse
   const shared=readFileSync(new URL('../src/components/shared.jsx',import.meta.url),'utf8');
   assert.doesNotMatch(shared,/const GOOD = \['SUCCEEDED'/);
 });
+
+test('GoalDrawer keeps per-step consent and backend gating in the redesigned footer',()=>{
+  const workspace=readFileSync(new URL('../src/features/Workspace.jsx',import.meta.url),'utf8');
+  assert.match(workspace,/requiredPermissions\(activeStep\?\[activeStep\]:\[\]\)/);
+  assert.match(workspace,/executionConsent\(required,grants\)/);
+  assert.match(workspace,/required\.every\(permission=>grants\.includes\(permission\)\)/);
+  assert.match(workspace,/sensitive\|\|externalEnabled/);
+  assert.match(workspace,/onExecute\(goal,consent\)/);
+  assert.match(workspace,/onApprove\(goal\)/);
+  assert.match(workspace,/onRetry\(goal,failedStep\)/);
+  assert.match(workspace,/goal\.plan_sha256/);
+  assert.match(workspace,/goal-owner-footer/);
+});
