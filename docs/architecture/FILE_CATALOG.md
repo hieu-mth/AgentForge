@@ -142,6 +142,7 @@
 | `ai/model_registry.py` | Load model profiles từ models.toml, không chứa credentials. |
 | `ai/prompt_intake.py` | Định tuyến natural language request vào template allowlisted. |
 | `ai/role_routing.py` | Định tuyến worker-to-model có cấu hình được duyệt. |
+| `ai/workforce.py` | Owner read-only dependency projection of existing manifests and model routes. |
 | `ai/worker_registry.py` | Đọc và validate worker manifests. |
 
 ## **Core: `core/`**

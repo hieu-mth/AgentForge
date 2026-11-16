@@ -22,6 +22,7 @@ import { Publishing } from './features/Publishing.jsx';
 import { Projects } from './features/Projects.jsx';
 import { MediaStudio } from './features/MediaStudio.jsx';
 import { CharacterLibrary } from './features/CharacterLibrary.jsx';
+import { Workforce } from './features/Workforce.jsx';
 import { Environment } from './features/Environment.jsx';
 import { ModelHub } from './features/Models.jsx';
 import { Retention } from './features/Retention.jsx';
@@ -494,7 +495,8 @@ export default function App() {
           {section==='models'&&<ModelHub mutate={mutate}/>}
           {section==='memory'&&<OwnerMemory mutate={mutate}/>}
           {section==='channels'&&<Publishing data={data} mutate={mutate}/>}
-          {['finance','team'].includes(section)&&<ReadOnlyPage section={section} data={data}/>}
+          {section==='team'&&<Workforce onNavigate={navigate}/>}
+          {section==='finance'&&<ReadOnlyPage section={section} data={data}/>}
         </div>
       </Content>
     </Layout>

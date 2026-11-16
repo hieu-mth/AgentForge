@@ -143,6 +143,10 @@ def dispatch(self, route):
     if route == "/api/artifacts":
         from agentforge.artifact_catalog import report
         return self._reply(200, report())
+    if route == "/api/workforce":
+        from agentforge.ai.workforce import inspect
+        return self._reply(200, inspect(brain_db_path=self.server.brain_db_path,
+                                        task_db_path=self.server.task_db_path))
     if route == "/api/ops/discovery":
         from agentforge.ops.discovery import inspect
         return self._reply(200, inspect())
