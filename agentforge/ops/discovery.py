@@ -195,7 +195,7 @@ def inspect():
         ("node", shutil.which("node"), "--version"),
         ("git", shutil.which("git"), "--version"),
         ("docker", shutil.which("docker"), "--version"),
-        
+
         ("ffmpeg", ffmpeg, "-version"),
     ]
     with ThreadPoolExecutor(max_workers=10) as pool:
