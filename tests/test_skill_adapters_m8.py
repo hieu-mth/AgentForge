@@ -6,15 +6,15 @@ from unittest.mock import patch
 
 from agentforge import skill_registry, skill_runner
 from agentforge.core import skill_adapters
-from agentforge.core.skill_adapters import analytics, growth, media, research, web
+from agentforge.core.skill_adapters import analytics, filesystem, growth, media, research, web
 
 
 class DomainSkillAdapterTests(unittest.TestCase):
     def test_all_manifests_have_exactly_one_reviewed_code_policy(self):
         registry = skill_registry.load_registry()
         self.assertEqual(set(registry), set(skill_adapters.POLICY))
-        modules = (web, research, media, analytics, growth)
-        self.assertEqual(sum(len(module.POLICY) for module in modules), 31)
+        modules = (web, research, media, analytics, growth, filesystem)
+        self.assertEqual(sum(len(module.POLICY) for module in modules), len(registry))
         for skill_id, contract in registry.items():
             with self.subTest(skill_id=skill_id):
                 worker, mode, permissions = skill_adapters.POLICY[skill_id]

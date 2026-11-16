@@ -107,9 +107,9 @@ def run(prompt, directory, path):
                          "use both, do not add URLs. Note missing evidence.",
                          "brief": prompt, "[1]": excerpt, "[2]": page},
                 {"markdown": {"type": "string"}})["markdown"]
-    if not isinstance(body, str) or not all(ref in body for ref in ("[1]", "[2]")):
+    if not isinstance(body, str) or set(re.findall(r"\[(\d+)\]", body)) != {"1", "2"}:
         raise ValueError("RESEARCH_CITATIONS_REQUIRED")
-    if "://" in body or "www." in body.lower():
+    if "://" in body or "www." in body.lower() or re.search(r"\]\s*\(", body):
         raise ValueError("RESEARCH_UNVERIFIED_URL")
     report = body.strip() + f"\n\n## Nguồn đã đọc\n\n[1] File workspace: {relative}\n\n[2] <{url}>\n"
     return {**gateway.write_verified_report(path, report), "source_url": url,
