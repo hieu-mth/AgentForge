@@ -111,105 +111,133 @@ export function Workspace({data, onPlan, openGoal, onOpenSettings, prompt, setPr
   </div>;
 }
 
+const STEP_STATUS={SUCCEEDED:'Hoàn thành',FAILED:'Thất bại',RUNNING:'Đang chạy',WAITING_APPROVAL:'Chờ duyệt',APPROVED:'Đã duyệt',PLANNED:'Chưa chạy',INTERRUPTED:'Gián đoạn'};
 export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, onRetry, busy, externalEnabled}) {
-  const [grants, setGrants] = useState([]);
+  const [grants,setGrants]=useState([]);
   useEffect(()=>{setGrants([]);},[goal?.goal_id,goal?.current_step]);
-  if (!goal) return null;
-  const activeIndex = Number.isInteger(goal.current_step) ? goal.current_step : 0;
-  const activeStep = goal.plan?.[activeIndex];
-  // Explicit consent is scoped to the upcoming stage, not the entire Goal.
-  const required = requiredPermissions(activeStep ? [activeStep] : []);
-  const known = permissionsKnown(required);
-  const consent = executionConsent(required, grants);
-  const complete = known && required.every(permission=>grants.includes(permission));
-  const sensitive = consent.sensitive;
-  const runnable = ['APPROVED','WAITING_APPROVAL'].includes(goal.status);
-  const runs = goal.step_runs||[];
-  const failedStep = goal.status==='FAILED'
-    ? runs.find(step=>step.step_index===activeIndex && step.status==='FAILED' && step.child_task_id)
-    : null;
-  const developerReady = runs.some(step=>step.skill_id==='webapp.develop' && step.status==='SUCCEEDED');
+  if(!goal)return null;
+  const steps=goal.plan||[];
+  const activeIndex=Number.isInteger(goal.current_step)?goal.current_step:0;
+  const activeStep=steps[activeIndex];
+  const runs=goal.step_runs||[];
+  const required=requiredPermissions(activeStep?[activeStep]:[]);
+  const known=permissionsKnown(required);
+  const consent=executionConsent(required,grants);
+  const complete=known&&required.every(permission=>grants.includes(permission));
+  const sensitive=consent.sensitive;
+  const runnable=['APPROVED','WAITING_APPROVAL'].includes(goal.status);
+  const failedStep=goal.status==='FAILED'
+    ?runs.find(step=>step.step_index===activeIndex&&step.status==='FAILED'&&step.child_task_id):null;
+  const developerReady=runs.some(step=>step.skill_id==='webapp.develop'&&step.status==='SUCCEEDED');
+  const reviewerReady=runs.some(step=>step.skill_id==='webapp.review'&&step.status==='SUCCEEDED');
+  const canRun=complete&&(!sensitive||externalEnabled);
+  const statusFor=(step,i)=>{
+    const run=runs.find(item=>item.step_index===i);
+    return STEP_STATUS[run?.status]|| (i===activeIndex&&runnable?'Cần bạn duyệt':i<activeIndex?'Đã qua bước':'Chưa thực hiện');
+  };
+  const action=goal.status==='PLANNED'
+    ?<Button type="primary" block loading={busy} onClick={()=>onApprove(goal)}>Duyệt kế hoạch · chưa chạy AI</Button>
+    :runnable?<Button type="primary" block loading={busy} disabled={!canRun}
+      onClick={()=>onExecute(goal,consent)}>
+      {goal.status==='APPROVED'?'Chạy':'Tiếp tục'} bước {activeIndex+1}: {SKILLS[activeStep?.skill_id]||activeStep?.skill_id}
+    </Button>
+    :failedStep?<Button block loading={busy} onClick={()=>onRetry(goal,failedStep)}>Chuẩn bị chạy lại bước {activeIndex+1}</Button>
+    :null;
   return <Drawer title="Kế hoạch & phê duyệt" open={!!goal} onClose={onClose}
-    size="min(640px, 96vw)" destroyOnHidden extra={badge(goal.status)}>
-    <Title level={4}>{goal.title}</Title>
-    <AcceptanceStatus acceptance={goal.artifact_acceptance}/>
-    <Text type="secondary">{goal.template} · {goal.goal_id}</Text>
-    <Divider/>
-    {['FAILED','INTERRUPTED'].includes(goal.status) && <Alert type="error" showIcon
-      style={{marginBottom:16}} message="Thực thi chưa thành công"
-      description={goal.execution_error||goal.error||'Xem Task History để kiểm tra nguyên nhân.'}/>}
-    <Alert type="info" showIcon message="SHA-256 kế hoạch" description={<code className="digest">{goal.plan_sha256}</code>}/>
-    <div className="plan-steps">{(goal.plan||[]).map((step,i)=>
-      <div className="plan-step" key={i}>
-        <span className="step-number">{i+1}</span>
-        <div><strong>{SKILLS[step.skill_id]||step.skill_id}</strong>
-        <div className="subtle">{runs.find(run=>run.step_index===i)?.status|| (i===activeIndex?'Chờ chạy':'Chưa tới bước')}{i===activeIndex&&runnable?' · BƯỚC ĐANG CHỜ BẠN DUYỆT':''}</div>
-        <div className="subtle">{WORKERS[step.worker_id]||step.worker_id}</div>
-        <Text type="secondary">{(step.required_permissions||[]).map(p=>PERMISSIONS[p]?.title||p).join(' · ')||'Chỉ đọc dữ liệu'}</Text>
-        <Collapse ghost size="small" items={[{key:'technical',label:'Thông tin kỹ thuật',
-          children:<Text code>{step.skill_id} · {step.worker_id}</Text>}]}/></div>
-      </div>)}</div>
-    <Collapse ghost items={[{key:'1',label:'Xem chi tiết dữ liệu và plan (nâng cao)',
-      children:<pre className="source-text">{JSON.stringify({inputs:goal.inputs,plan:goal.plan},null,2)}</pre>}]}/>
-    <Divider/>
-    {developerReady&&<Button type="primary" block onClick={()=>onViewResult(goal)}>
-      Xem source sản phẩm ngay (Developer đã tạo xong)
-    </Button>}
-    {runs.some(step=>step.skill_id==='webapp.review'&&step.status==='SUCCEEDED')&&
-      <Button block onClick={()=>onViewResult(goal,'review')}>Xem báo cáo AI Reviewer</Button>}
-    {goal.status==='SUCCEEDED'&&!developerReady&&<Button type="primary" block
-      onClick={()=>onViewResult(goal)}>Xem kết quả công việc</Button>}
-    {failedStep&&<Alert type="warning" showIcon style={{marginTop:12}}
-      message={`Bước ${activeIndex+1} thất bại: ${SKILLS[activeStep?.skill_id]||activeStep?.skill_id}`}
-      description={<Space orientation="vertical">
-        <Text>Chỉ bước thất bại được chạy lại. Các bước đã thành công được giữ nguyên. Lần gọi model tiếp theo vẫn cần cấp quyền riêng.</Text>
-        <Button loading={busy} onClick={()=>onRetry(goal,failedStep)}>Chuẩn bị chạy lại bước {activeIndex+1}</Button>
-      </Space>}/>}
-    {goal.status==='PLANNED' && <Button type="primary" block loading={busy}
-      onClick={()=>onApprove(goal)}>Duyệt SHA · chưa chạy AI</Button>}
-    {runnable && <>
-      <Title level={5}>Đang duyệt bước {activeIndex+1}/{goal.plan?.length}: {SKILLS[activeStep?.skill_id]||activeStep?.skill_id}</Title>
-      <Alert type="info" showIcon
-        message={activeStep?.estimated_model_calls ? 'Bước này có gọi model AI' : 'Bước này không yêu cầu lượt model'}
-        description={`Chỉ cấp quyền cho bước ${activeIndex+1}. Không duyệt thay các bước tiếp theo.`}/>
-      <Alert type="info" showIcon message="Chỉ yêu cầu quyền có trong kế hoạch đã duyệt"
-        description="Các quyền chỉ có hiệu lực trong lượt chạy này. Bạn có thể bỏ chọn để chưa chạy."/>
-      {!known && <Alert type="error" showIcon style={{marginTop:12}}
-        message="Có quyền mới chưa được giải thích — không thể thực thi"
-        description="Cần cập nhật giao diện để hiển thị đầy đủ quyền trước khi duyệt."/>}
-      <div className="permission-list">
-        {required.length===0 && <Text type="secondary">Công việc này chỉ đọc dữ liệu, không cần cấp thêm quyền.</Text>}
-        {required.map(permission=>{
-          const info=PERMISSIONS[permission];
-          return <div className="permission-item" key={permission}>
-            <Checkbox checked={grants.includes(permission)} disabled={!info}
-              onChange={e=>setGrants(previous=>e.target.checked
-                ? [...new Set([...previous,permission])]
-                : previous.filter(value=>value!==permission))}/>
-            <span className="permission-copy">
-              <strong>{info?.title||'Quyền chưa xác định'}</strong>
-              <span>{info?.description||'Không thể cho phép khi chưa rõ tác động.'}</span>
-              <small>{info?.impact||'Cần xác minh'} · <code>{permission}</code></small>
-            </span>
-          </div>;
-        })}
-      </div>
-      {goal.template==='webapp.company'&&<Alert type="warning" showIcon
-        message="V5: duyệt từng lượt model riêng"
-        description="Quy trình có 3 lượt model được tính vào kế hoạch; mỗi lần nhấn Chạy/Tiếp tục chỉ xác nhận tối đa 1 lượt. QA ở bước 3 chỉ kiểm tra tĩnh, không build hoặc chạy trình duyệt."/>}
-      {required.includes('model.invoke')&&<Alert type="warning" showIcon
-        message="AI local hay cloud?"
-        description="AgentForge dùng model đang cấu hình trong backend. Nếu cấu hình cloud, nội dung gửi tới nhà cung cấp có thể có chi phí; việc tick quyền này cũng là xác nhận gọi model cho lượt chạy."/>}
-      {sensitive && !externalEnabled && <Alert type="error" showIcon style={{marginTop:16}}
-        message="Server đang khóa công cụ ngoài"
-        description="Cần bật quyền ở backend trước khi thực thi. Không thể mở khóa bằng cách tick checkbox."/>}
-      <Button type="primary" block style={{marginTop:20}} loading={busy}
-        disabled={!complete||(sensitive&&!externalEnabled)}
-        onClick={()=>onExecute(goal,consent)}>
-        {goal.status==='APPROVED'?'Chạy bước '+(activeIndex+1)+': ':'Tiếp tục bước '+(activeIndex+1)+': '}{SKILLS[activeStep?.skill_id]||activeStep?.skill_id}
-      </Button>
-      {!complete && known && required.length>0 &&
-        <Text type="secondary" className="subtle">Hãy đọc và chọn đủ {required.length} quyền được yêu cầu trước khi chạy.</Text>}
-    </>}
+    size="min(680px, 100vw)" destroyOnHidden className="goal-owner-drawer"
+    extra={badge(goal.status)}
+    footer={action&&<div className="goal-owner-footer">
+      <div className="goal-owner-footer-hint">{goal.status==='PLANNED'
+        ?'Duyệt SHA kế hoạch; chưa cấp quyền thực thi.'
+        :runnable?'Chỉ cấp quyền cho bước hiện tại. Mỗi bước cần được xác nhận riêng.'
+        :'Chỉ chuẩn bị chạy lại bước thất bại.'}</div>
+      {action}
+      {runnable&&!canRun&&<Text type="secondary" className="subtle">
+        {!known?'Có quyền chưa được nhận diện. Không thể thực thi.'
+          :sensitive&&!externalEnabled?'Backend đang khóa công cụ ngoài.'
+          :'Hãy chọn đủ quyền được yêu cầu trước khi chạy.'}</Text>}
+    </div>}>
+    <div className="goal-owner-body">
+      <section className="goal-owner-section">
+        <Title level={4} className="goal-owner-title">{goal.title}</Title>
+        <div className="goal-owner-summary">
+          {badge(goal.status)}
+          <Text type="secondary">Bước {Math.min(activeIndex+1,steps.length)}/{steps.length}</Text>
+        </div>
+        <AcceptanceStatus acceptance={goal.artifact_acceptance}/>
+        {['FAILED','INTERRUPTED'].includes(goal.status)&&<Alert type="error" showIcon
+          message="Thực thi chưa thành công"
+          description={goal.execution_error||goal.error||'Xem Lịch sử tác vụ để kiểm tra nguyên nhân.'}/>}
+      </section>
+      <section className="goal-owner-section">
+        <h3>Tiến độ thực hiện</h3>
+        <div className="goal-owner-progress" role="list" aria-label="Tiến độ kế hoạch">
+          {steps.map((step,i)=><span key={i} role="listitem"
+            className={'goal-owner-progress-bar '+(runs.some(run=>run.step_index===i&&run.status==='SUCCEEDED')?'done':i===activeIndex?'active':'')}
+            title={`Bước ${i+1}: ${statusFor(step,i)}`}/>)}
+        </div>
+        <div className="goal-owner-steps">
+          {steps.map((step,i)=><div className={'goal-owner-step '+(i===activeIndex?'current':'')} key={i}>
+            <span className="goal-owner-step-number">{i+1}</span>
+            <div className="goal-owner-step-content">
+              <strong>{SKILLS[step.skill_id]||step.skill_id}</strong>
+              <span>{statusFor(step,i)} · {WORKERS[step.worker_id]||step.worker_id}</span>
+              {i===activeIndex&&<small>{(step.required_permissions||[]).map(p=>PERMISSIONS[p]?.title||p).join(' · ')||'Chỉ đọc dữ liệu'}</small>}
+            </div>
+          </div>)}
+        </div>
+      </section>
+      {(goal.status==='PLANNED'||runnable||failedStep)&&<section className="goal-owner-section">
+        <h3>{goal.status==='PLANNED'?'Phê duyệt kế hoạch':failedStep?'Xử lý bước thất bại':'Phê duyệt bước hiện tại'}</h3>
+        {goal.status==='PLANNED'&&<Text type="secondary">Duyệt bản kế hoạch theo SHA trước khi thực hiện. Sau đó, từng bước vẫn cần cấp quyền riêng.</Text>}
+        {failedStep&&<Alert type="warning" showIcon message={`Bước ${activeIndex+1} thất bại`}
+          description="Chỉ chuẩn bị chạy lại bước thất bại; các bước thành công được giữ nguyên. Lần gọi AI tiếp theo vẫn cần duyệt riêng."/>}
+        {runnable&&<>
+          <Text type="secondary">Bước {activeIndex+1}: {SKILLS[activeStep?.skill_id]||activeStep?.skill_id}. {activeStep?.estimated_model_calls?'Có sử dụng lượt model AI.':'Không yêu cầu lượt model.'}</Text>
+          {!known&&<Alert type="error" showIcon message="Có quyền chưa được giải thích — không thể thực thi"/>}
+          <div className="permission-list">
+            {required.length===0&&<Text type="secondary">Chỉ đọc dữ liệu; không cần cấp thêm quyền.</Text>}
+            {required.map(permission=>{
+              const info=PERMISSIONS[permission];
+              return <div className="permission-item" key={permission}>
+                <Checkbox checked={grants.includes(permission)} disabled={!info}
+                  onChange={e=>setGrants(previous=>e.target.checked
+                    ?[...new Set([...previous,permission])]
+                    :previous.filter(value=>value!==permission))}/>
+                <span className="permission-copy">
+                  <strong>{info?.title||'Quyền chưa xác định'}</strong>
+                  <span>{info?.description||'Không thể cho phép khi chưa rõ tác động.'}</span>
+                  <small>{info?.impact||'Cần xác minh'} · <code>{permission}</code></small>
+                </span>
+              </div>;
+            })}
+          </div>
+          {goal.template==='webapp.company'&&<Alert type="warning" showIcon
+            message="V5: mỗi lượt model cần duyệt riêng"
+            description="Quy trình dự kiến 3 lượt model: Architect, Developer và Reviewer. Mỗi lần Chạy/Tiếp tục chỉ duyệt tối đa một lượt; QA tĩnh không build hoặc chạy trình duyệt."/>}
+          {required.includes('model.invoke')&&<Alert type="warning" showIcon
+            message="Model local hoặc cloud"
+            description="Backend quyết định model theo cấu hình. Nếu dùng cloud, dữ liệu có thể được gửi tới nhà cung cấp và phát sinh chi phí; chọn quyền này đồng thời xác nhận gọi model cho lượt chạy."/>}
+          {sensitive&&!externalEnabled&&<Alert type="error" showIcon
+            message="Backend đang khóa công cụ ngoài"
+            description="Không thể mở khóa bằng checkbox; cần bật quyền tại backend."/>}
+        </>}
+      </section>}
+      {(developerReady||reviewerReady||(goal.status==='SUCCEEDED'&&!developerReady))&&<section className="goal-owner-section">
+        <h3>Kết quả & báo cáo</h3>
+        <Space wrap>
+          {developerReady&&<Button onClick={()=>onViewResult(goal)}>Xem source sản phẩm</Button>}
+          {reviewerReady&&<Button onClick={()=>onViewResult(goal,'review')}>Xem báo cáo Reviewer</Button>}
+          {goal.status==='SUCCEEDED'&&!developerReady&&<Button onClick={()=>onViewResult(goal)}>Xem kết quả công việc</Button>}
+        </Space>
+      </section>}
+      <Collapse ghost className="goal-owner-technical" items={[{key:'technical',label:'Thông tin kỹ thuật · SHA, ID và dữ liệu kế hoạch',
+        children:<div className="goal-owner-technical-content">
+          <Text type="secondary">SHA-256 kế hoạch</Text>
+          <code className="digest">{goal.plan_sha256}</code>
+          <Text type="secondary">Template: {goal.template} · Goal ID: {goal.goal_id}</Text>
+          <pre className="source-text">{JSON.stringify({inputs:goal.inputs,plan:goal.plan},null,2)}</pre>
+        </div>}]}/>
+    </div>
   </Drawer>;
 }
