@@ -1,12 +1,76 @@
 import { useState } from 'react';
-import { Alert, Button, Card, Descriptions, Table } from 'antd';
+import { Alert, Button, Card, Descriptions, Popover, Table } from 'antd';
 import { AuditOutlined, BankOutlined, ClockCircleOutlined, FireOutlined,
-  PlayCircleOutlined, TeamOutlined } from '@ant-design/icons';
+  PlayCircleOutlined, QuestionCircleOutlined, TeamOutlined } from '@ant-design/icons';
 import { badge, fallback, StatTile } from '../components/shared.jsx';
 import { buildOverview } from '../overview_data.js';
 import { formatVietnamDateTime } from '../date_format.js';
 import { useResource } from '../use_resource.jsx';
 import { useScreenRefresh } from '../refresh_scope.jsx';
+
+const SYSTEM_HELP={
+  daemon:{
+    title:'Bộ chạy tác vụ theo lịch',
+    purpose:'Theo dõi lịch và kích hoạt công việc tự động khi đến giờ, nếu tiến trình nền đang chạy.',
+    impact:'Nếu không có tín hiệu hoạt động mới, tác vụ theo lịch có thể không được kích hoạt. Công việc chạy thủ công không nhất thiết bị ảnh hưởng.',
+    note:'Trạng thái được suy ra từ tín hiệu gần nhất; không phải phép kiểm tra trực tiếp tiến trình.',
+  },
+  autopilot:{
+    title:'Chế độ tự động',
+    purpose:'Cho phép AgentForge chủ động thực hiện những công việc thuộc phạm vi và giới hạn đã cấu hình.',
+    impact:'Khi tắt, các luồng tự động phụ thuộc chế độ này sẽ không được tự khởi chạy. Khi bật, vẫn cần bộ chạy và các điều kiện khác hoạt động.',
+    note:'Đã bật chỉ phản ánh cấu hình, không xác nhận có tác vụ đang chạy.',
+  },
+  model:{
+    title:'Model AI',
+    purpose:'Model AI xử lý các yêu cầu như phân tích, viết nội dung và hỗ trợ tạo sản phẩm.',
+    impact:'Nếu model không sẵn sàng, những công việc cần AI có thể thất bại hoặc chờ xử lý.',
+    note:'Dashboard chưa có phép kiểm tra model đang phục vụ theo thời gian thực.',
+  },
+  comfy:{
+    title:'Hệ thống tạo ảnh / video',
+    purpose:'ComfyUI là dịch vụ xử lý các quy trình tạo hình ảnh và một số quy trình video bằng AI.',
+    impact:'Khi không kết nối được ComfyUI, các bước tạo ảnh/video phụ thuộc dịch vụ này có thể không chạy; các chức năng khác vẫn có thể hoạt động.',
+    note:'Kết nối thành công không đồng nghĩa model, workflow hay khả năng render đã sẵn sàng.',
+  },
+  vram:{
+    title:'Bộ nhớ GPU còn trống',
+    purpose:'VRAM là bộ nhớ của card đồ họa dùng để tải và chạy model AI trên máy.',
+    impact:'VRAM không đủ có thể khiến tác vụ tạo ảnh/video hoặc chạy model bị lỗi, chậm hoặc không khởi động.',
+    note:'Đây chỉ là ảnh chụp tại thời điểm kiểm tra, không phải dung lượng được đảm bảo cho tác vụ tiếp theo.',
+  },
+  cost:{
+    title:'Chi phí sử dụng AI',
+    purpose:'Theo dõi chi phí gọi dịch vụ/model AI để kiểm soát ngân sách vận hành.',
+    impact:'Nếu chưa đối soát, bạn không thể dùng số liệu ở đây để xác nhận tổng chi phí thực tế.',
+    note:'Chưa có dữ liệu không có nghĩa chi phí bằng 0.',
+  },
+};
+function SystemHelpLabel({item}) {
+  const info=SYSTEM_HELP[item];
+  return <span className="overview-system-label">
+    <span>{info.title}</span>
+    <Popover trigger={['hover','click']} placement="right" title={info.title}
+      content={<div className="overview-system-help">
+        <p><strong>Chức năng:</strong> {info.purpose}</p>
+        <p><strong>Ảnh hưởng:</strong> {info.impact}</p>
+        <p><strong>Lưu ý:</strong> {info.note}</p>
+      </div>}>
+      <button type="button" className="overview-help-button" aria-label={`Giải thích: ${info.title}`}>
+        <QuestionCircleOutlined/>
+      </button>
+    </Popover>
+  </span>;
+}
+function systemState(value) {
+  return <span className="overview-system-value">{value}</span>;
+}
+function comfyState(status) {
+  if (status==='COMFYUI_UNAVAILABLE') return 'Không kết nối được';
+  if (status==='ACTIVE'||status==='READY'||status==='AVAILABLE') return 'Có phản hồi';
+  if (!status||status==='UNKNOWN') return 'Chưa xác định';
+  return 'Chưa xác định';
+}
 
 export function Overview({data, onNavigate, onRefresh}) {
   const [showAllIssues,setShowAllIssues]=useState(false);
@@ -59,12 +123,12 @@ export function Overview({data, onNavigate, onRefresh}) {
     <div className="overview-full-panels">
       <Card className="panel" title="Trạng thái hệ thống">
         <Descriptions size="small" column={1} items={[
-          {key:'daemon',label:'Daemon lịch',children:daemon.fresh?badge(daemon.status||'ACTIVE'):badge('NOT_RUNNING')},
-          {key:'autopilot',label:'Autopilot (cấu hình)',children:badge(autopilot.enabled?'ACTIVE':'OFF')},
-          {key:'model',label:'Model đang phục vụ',children:'Chưa kiểm tra runtime'},
-          {key:'comfy',label:'ComfyUI / GPU',children:motion.loading?'Đang kiểm tra':motion.error?'Không kiểm tra được':badge(motion.data?.gpu?.status||'UNKNOWN')},
-          {key:'vram',label:'VRAM trống (ảnh chụp)',children:typeof motion.data?.gpu?.vram_free_snapshot_gib==='number'?motion.data.gpu.vram_free_snapshot_gib+' GiB':'Chưa có dữ liệu'},
-          {key:'cost',label:'Chi phí AI đã xác minh',children:'Chưa có dữ liệu đối soát'},
+          {key:'daemon',label:<SystemHelpLabel item="daemon"/>,children:systemState(!ready?'Chưa có dữ liệu':daemon.fresh?'Có tín hiệu hoạt động':'Chưa ghi nhận hoạt động gần đây')},
+          {key:'autopilot',label:<SystemHelpLabel item="autopilot"/>,children:systemState(!ready?'Chưa có dữ liệu':autopilot.enabled?'Đã bật':'Đã tắt')},
+          {key:'model',label:<SystemHelpLabel item="model"/>,children:systemState('Chưa kiểm tra')},
+          {key:'comfy',label:<SystemHelpLabel item="comfy"/>,children:systemState(motion.loading?'Đang kiểm tra':motion.error?'Không kiểm tra được':comfyState(motion.data?.gpu?.status))},
+          {key:'vram',label:<SystemHelpLabel item="vram"/>,children:systemState(typeof motion.data?.gpu?.vram_free_snapshot_gib==='number'?motion.data.gpu.vram_free_snapshot_gib+' GiB':'Chưa có dữ liệu')},
+          {key:'cost',label:<SystemHelpLabel item="cost"/>,children:systemState('Chưa có dữ liệu đối soát')},
         ]}/>
         <Alert style={{marginTop:12}} type="warning" showIcon
           message="ComfyUI chỉ kiểm tra kết nối/GPU; không xác nhận khả năng render video hoặc hiệu năng model."/>
