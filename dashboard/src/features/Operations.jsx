@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Alert, Button, Card, Descriptions, Popover, Table } from 'antd';
 import { AuditOutlined, BankOutlined, ClockCircleOutlined, FireOutlined,
-  PlayCircleOutlined, QuestionCircleOutlined, TeamOutlined } from '@ant-design/icons';
+  PlayCircleOutlined, InfoCircleOutlined, TeamOutlined } from '@ant-design/icons';
 import { badge, fallback, StatTile } from '../components/shared.jsx';
 import { buildOverview } from '../overview_data.js';
 import { formatVietnamDateTime } from '../date_format.js';
@@ -56,9 +56,7 @@ function SystemHelpLabel({item}) {
         <p><strong>Ảnh hưởng:</strong> {info.impact}</p>
         <p><strong>Lưu ý:</strong> {info.note}</p>
       </div>}>
-      <button type="button" className="overview-help-button" aria-label={`Giải thích: ${info.title}`}>
-        <QuestionCircleOutlined/>
-      </button>
+      <Button type="text" shape="circle" size="small" className="overview-help-button" icon={<InfoCircleOutlined/>} aria-label={`Giải thích: ${info.title}`}/>
     </Popover>
   </span>;
 }
