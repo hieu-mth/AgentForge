@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { acceptanceLabel } from '../acceptance.js';
 import { AcceptanceStatus } from '../components/AcceptanceStatus.jsx';
-import { Alert, Button, Card, Checkbox, Collapse, Divider, Drawer, Input, Space, Typography } from 'antd';
+import { Alert, Button, Card, Checkbox, Collapse, Drawer, Input, Space, Typography } from 'antd';
 import { SendOutlined } from '@ant-design/icons';
 import { badge, fallback } from '../components/shared.jsx';
 import { PERMISSIONS, WORKERS, SKILLS, requiredPermissions, permissionsKnown, executionConsent } from '../permissions.js';
@@ -12,10 +12,8 @@ const { TextArea } = Input;
 
 const IDEAS = [
   {label:'Tạo website',prompt:'Tạo website bán nệm hiện đại, tối ưu điện thoại, có danh mục sản phẩm, hình ảnh AI và nút liên hệ đặt hàng.'},
-  {label:'Xây ứng dụng',prompt:'Tạo ứng dụng React quản lý đơn hàng với danh sách sản phẩm, khách hàng, trạng thái đơn và tìm kiếm.'},
+  {label:'Xây ứng dụng',prompt:'Tạo ứng dụng React tùy biến quản lý đơn hàng với danh sách sản phẩm, khách hàng, trạng thái đơn và tìm kiếm.'},
   {label:'Tạo video',prompt:'Làm video quảng cáo 30 giây cho cửa hàng nệm, bắt đầu bằng storyboard có thể duyệt và chỉnh sửa.'},
-  {label:'Tạo hình ảnh',prompt:'Tạo bộ hình ảnh quảng cáo nệm phong cách hiện đại, phù hợp đăng website và mạng xã hội.'},
-  {label:'Phân tích',prompt:'Phân tích kế hoạch kinh doanh bán nệm, đề xuất cách tăng đơn hàng và các chỉ số cần theo dõi.'},
 ];
 const MIN_PROMPT=20;
 const GOAL_STATUS={
@@ -24,8 +22,9 @@ const GOAL_STATUS={
   SUCCEEDED:'Đã thực thi',FAILED:'Thực hiện thất bại',
   INTERRUPTED:'Bị gián đoạn',REJECTED:'Đã từ chối',
 };
-function goalAction(status) {
-  if (['PLANNED','WAITING_APPROVAL'].includes(status)) return 'Duyệt kế hoạch';
+export function goalAction(status) {
+  if (status==='PLANNED') return 'Duyệt kế hoạch';
+  if (status==='WAITING_APPROVAL') return 'Duyệt bước tiếp theo';
   if (status==='APPROVED') return 'Tiếp tục thực hiện';
   if (status==='FAILED'||status==='INTERRUPTED') return 'Xem lỗi';
   if (status==='SUCCEEDED') return 'Xem kết quả';
@@ -42,7 +41,7 @@ export function Workspace({data, onPlan, openGoal, onOpenSettings, prompt, setPr
   const [showGuide,setShowGuide]=useState(false);
   const submit=()=>{
     if(!validation.error&&!loading&&!limits.blocked) {
-      onPlan(prompt).then(ok=>{if(ok)setPrompt('');});
+      onPlan(prompt).then(ok=>{if(ok)setPrompt(current=>current===prompt?'':current);});
     }
   };
   const countLabel=length.toLocaleString('vi-VN')+'/6.000 ký tự';
@@ -114,7 +113,7 @@ export function Workspace({data, onPlan, openGoal, onOpenSettings, prompt, setPr
 const STEP_STATUS={SUCCEEDED:'Hoàn thành',FAILED:'Thất bại',RUNNING:'Đang chạy',WAITING_APPROVAL:'Chờ duyệt',APPROVED:'Đã duyệt',PLANNED:'Chưa chạy',INTERRUPTED:'Gián đoạn'};
 export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, onRetry, busy, externalEnabled}) {
   const [grants,setGrants]=useState([]);
-  useEffect(()=>{setGrants([]);},[goal?.goal_id,goal?.current_step]);
+  useEffect(()=>{setGrants([]);},[goal?.goal_id,goal?.updated_at]);
   if(!goal)return null;
   const steps=goal.plan||[];
   const activeIndex=Number.isInteger(goal.current_step)?goal.current_step:0;
@@ -124,13 +123,13 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, o
   const known=permissionsKnown(required);
   const consent=executionConsent(required,grants);
   const complete=known&&required.every(permission=>grants.includes(permission));
-  const sensitive=consent.sensitive;
+  const sensitive=executionConsent(required,required).sensitive;
   const runnable=['APPROVED','WAITING_APPROVAL'].includes(goal.status);
-  const failedStep=goal.status==='FAILED'
+  const failedStep=goal.status==='FAILED'&&['webapp.company','creative.storyboard'].includes(goal.template)
     ?runs.find(step=>step.step_index===activeIndex&&step.status==='FAILED'&&step.child_task_id):null;
   const developerReady=runs.some(step=>step.skill_id==='webapp.develop'&&step.status==='SUCCEEDED');
   const reviewerReady=runs.some(step=>step.skill_id==='webapp.review'&&step.status==='SUCCEEDED');
-  const canRun=complete&&(!sensitive||externalEnabled);
+  const canRun=Boolean(activeStep&&goal.updated_at)&&complete&&(!sensitive||externalEnabled);
   const statusFor=(step,i)=>{
     const run=runs.find(item=>item.step_index===i);
     return STEP_STATUS[run?.status]|| (i===activeIndex&&runnable?'Cần bạn duyệt':i<activeIndex?'Đã qua bước':'Chưa thực hiện');
@@ -153,7 +152,8 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, o
         :'Chỉ chuẩn bị chạy lại bước thất bại.'}</div>
       {action}
       {runnable&&!canRun&&<Text type="secondary" className="subtle">
-        {!known?'Có quyền chưa được nhận diện. Không thể thực thi.'
+        {!activeStep||!goal.updated_at?'Chưa tải được thông tin bước. Hãy mở lại kế hoạch.'
+          :!known?'Có quyền chưa được nhận diện. Không thể thực thi.'
           :sensitive&&!externalEnabled?'Backend đang khóa công cụ ngoài.'
           :'Hãy chọn đủ quyền được yêu cầu trước khi chạy.'}</Text>}
     </div>}>
@@ -200,7 +200,7 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, o
             {required.map(permission=>{
               const info=PERMISSIONS[permission];
               return <div className="permission-item" key={permission}>
-                <Checkbox checked={grants.includes(permission)} disabled={!info}
+                <Checkbox aria-label={info?.title||permission} checked={grants.includes(permission)} disabled={!info}
                   onChange={e=>setGrants(previous=>e.target.checked
                     ?[...new Set([...previous,permission])]
                     :previous.filter(value=>value!==permission))}/>

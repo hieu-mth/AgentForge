@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+﻿from pathlib import Path, PureWindowsPath
 
 from agentforge.paths import REPOSITORY_ROOT
 
@@ -13,7 +13,7 @@ def safe_path(path: str) -> Path:
 
     given = Path(path)
 
-    if given.is_absolute():
+    if given.is_absolute() or PureWindowsPath(path).anchor:
         raise PermissionError("Absolute paths are forbidden")
 
     target = (WORKSPACE / given).resolve()

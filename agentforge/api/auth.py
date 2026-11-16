@@ -40,7 +40,8 @@ def login(self, data):
             at for at in self.server.failed_logins if now - at < 60]
         if len(self.server.failed_logins) >= 5:
             return self._blocked(429, "login_rate_limited")
-        if not hmac.compare_digest(code, self.server.owner_code):
+        if not hmac.compare_digest(code.encode("utf-8", "surrogatepass"),
+                                   self.server.owner_code.encode("utf-8", "surrogatepass")):
             self.server.failed_logins.append(now)
             return self._blocked(401, "invalid_credentials")
         session_id = secrets.token_urlsafe(32)

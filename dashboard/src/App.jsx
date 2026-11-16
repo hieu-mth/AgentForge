@@ -11,7 +11,7 @@ import { useRefreshScreen } from './refresh_scope.jsx';
 import { actionWithRefresh } from './action_receipt.js';
 import { useThemeMode } from './theme.jsx';
 import { badge, clip, PageHeader } from './components/shared.jsx';
-import { Workspace, GoalDrawer } from './features/Workspace.jsx';
+import { Workspace, GoalDrawer, goalAction } from './features/Workspace.jsx';
 import { AutoVisuals } from './features/Visuals.jsx';
 import { StoryboardVisualModal } from './features/StoryboardVisuals.jsx';
 import { modelCallsForPrompt } from './workspace_quota.js';
@@ -164,7 +164,10 @@ export default function App() {
     if(failed)throw failed.reason;
   },{refreshData:false});
   const ask=(title,content,onOk)=>modal.confirm({title,content,okText:'Xác nhận',cancelText:'Hủy',onOk});
+  const goalRead=useRef(0);
   const openGoal=async id => {
+    const read=++goalRead.current;
+    const revision=sessionRevision();
     try{
       const detail=await api('/api/goals/'+encodeURIComponent(id));
       const failedStep=(detail.step_runs||[]).find(s=>s.status==='FAILED'&&s.child_task_id);
@@ -174,8 +177,8 @@ export default function App() {
           detail.execution_error=taskDetail.error||detail.error;
         }catch{detail.execution_error=detail.error;}
       }
-      setGoal(detail);
-    }catch(e){authError(e);}
+      if(read===goalRead.current&&revision===sessionRevision())setGoal(detail);
+    }catch(e){if(read===goalRead.current&&revision===sessionRevision())authError(e);}
   };
   const openGoalResult=async (selectedGoal,prefer='developer')=>{
     const ordered=(selectedGoal.step_runs||[]).filter(step=>step.status==='SUCCEEDED'&&step.child_task_id);
@@ -190,11 +193,9 @@ export default function App() {
       if(detail.web_proposal?.proposal_id){
         // A successful web.create produces a reviewable *proposal*, not a
         // completed live website. Open the existing sandboxed visual preview.
-        await openProposal(detail.web_proposal.proposal_id);
-        setGoal(null);
+        if(await openProposal(detail.web_proposal.proposal_id))setGoal(null);
       }else if(detail.report?.kind==='webapp'&&detail.report.proposal_id){
-        await openWebapp(detail.report.proposal_id);
-        setGoal(null);
+        if(await openWebapp(detail.report.proposal_id))setGoal(null);
       }else{
         setMediaPrepared(null);
         setGeneratedVisuals(null);
@@ -228,6 +229,7 @@ export default function App() {
         description="Chỉ xác nhận nếu bạn đồng ý với các tác động được mô tả. Lượt chạy vẫn phải tuân theo chính sách backend."/>}</>,
     async()=>{const action=goal.status==='APPROVED'?'run':'resume';
       const payload={ack:action.toUpperCase(),plan_sha256:goal.plan_sha256,
+        goal_updated_at:goal.updated_at,
         grants:permissions.grants,confirm_model_call:permissions.confirmModel,
         confirm_browser_run:permissions.confirmBrowser,confirm_external_run:permissions.confirmProcess,
         ack_external:permissions.sensitive?'AUTHORIZE_EXTERNAL_TOOLS':''};
@@ -285,10 +287,11 @@ export default function App() {
       }
     });
   const openProposal=async id => {
-    try{setProposal(await api('/api/proposals/'+encodeURIComponent(id)));}
-    catch(e){authError(e);}
+    try{setProposal(await api('/api/proposals/'+encodeURIComponent(id)));return true;}
+    catch(e){authError(e);return false;}
   };
   const openWebapp=async id => {
+    const revision=sessionRevision();
     try{
       const detail=await api('/api/webapps/'+encodeURIComponent(id));
       // The proposal GET establishes exact-SHA review in this Owner session.
@@ -297,8 +300,10 @@ export default function App() {
       try{
         previewEvidence=await api('/api/webapps/'+encodeURIComponent(id)+'/preview-evidence');
       }catch{ /* No screenshot evidence does not hide the source proposal. */ }
+      if(revision!==sessionRevision())return false;
       setWebapp({...detail,previewEvidence});
-    }catch(e){authError(e);}
+      return true;
+    }catch(e){authError(e);return false;}
   };
   const decideArtifact=(p,decision,namespace='webapps')=>ask(
     decision==='ACCEPTED'?'Owner chấp nhận sản phẩm?':'Từ chối sản phẩm?',
@@ -463,7 +468,7 @@ export default function App() {
             locale={{emptyText:'Chưa có kế hoạch nào'}}
             columns={[{title:'Mục tiêu',dataIndex:'title'}, {title:'Workflow',dataIndex:'template'},
               {title:'Trạng thái',dataIndex:'status',render:badge},
-              {title:'Hành động',render:(_,g)=><Button onClick={()=>openGoal(g.goal_id)}>Xem & duyệt</Button>}]}/></Card>}
+              {title:'Hành động',render:(_,g)=><Button onClick={()=>openGoal(g.goal_id)}>{goalAction(g.status)}</Button>}]}/></Card>}
           {section==='tasks'&&<Card><Table dataSource={tasks} rowKey="task_id"
             pagination={{pageSize:10,hideOnSinglePage:true}} scroll={{x:'max-content'}}
             locale={{emptyText:'Chưa có tác vụ nào'}}
@@ -491,7 +496,7 @@ export default function App() {
     </Layout>
     {visualDraft&&<StoryboardVisualModal key={visualDraft.task.task_id} {...visualDraft}
       onClose={()=>setVisualDraft(null)} onConfirm={confirmVisuals}/>}
-    <GoalDrawer goal={goal} onClose={()=>setGoal(null)} onApprove={approve}
+    <GoalDrawer goal={goal} onClose={()=>{goalRead.current++;setGoal(null);}} onApprove={approve}
       onExecute={execute} onRetry={retryFailed} onViewResult={openGoalResult} busy={busy} externalEnabled={!!data.external_actions_enabled}/>
     <ProposalDrawer proposal={proposal} onClose={()=>setProposal(null)} onDecide={(p,d)=>decideArtifact(p,d,'proposals')} onValidate={p=>validateArtifact(p,'proposals')}
       onRevise={revise} onApply={apply} busy={busy}/>

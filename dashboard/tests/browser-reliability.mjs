@@ -41,7 +41,12 @@ const fixtures={'/api/session':{csrf:'synthetic-only'},'/api/bootstrap':bootstra
 const results=[], errors=[];
 let browser;
 try {
-  browser=await chromium.launch({channel:'msedge',headless:true});
+  browser=await chromium.launch({
+    ...(process.env.AGENTFORGE_BROWSER_EXECUTABLE
+      ? {executablePath:process.env.AGENTFORGE_BROWSER_EXECUTABLE}
+      : {channel:'msedge'}),
+    headless:true,
+  });
   async function scenario(name,run){
     if(process.env.UI1A_SCENARIO&&!name.includes(process.env.UI1A_SCENARIO))return;
     const page=await browser.newPage({viewport:{width:1366,height:900}});
@@ -78,7 +83,7 @@ try {
         state.overrides['/api/media/studio-images']={images};
         for(const image of images)state.handlers['/api/image/'+image.job_id+'/preview']=route=>route.fulfill({status:200,contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120"><rect width="120" height="120" fill="#a5b4fc"/><circle cx="60" cy="60" r="25" fill="#6366f1"/></svg>'});
         await open('workspace');await page.getByRole('textbox',{name:'Mô tả công việc'}).fill('Mô tả synthetic kiểm tra panel chọn ảnh');
-        await page.getByRole('button',{name:'Xem kế hoạch',exact:true}).click();
+        await page.getByRole('button',{name:'Xem kết quả',exact:true}).click();
         await page.getByRole('button',{name:'Xem kết quả công việc',exact:true}).click();
         await page.getByRole('button',{name:/^Bước 2A — Chọn hình ảnh/}).click();
         const panel=page.locator('.storyboard-visual-modal');await panel.waitFor();await page.waitForTimeout(350);
@@ -125,7 +130,7 @@ try {
       state.overrides['/api/tasks/'+id]={task_id:id,skill_id:'media.copy_draft',status:'SUCCEEDED',
         report:{kind:'storyboard',title:'Storyboard synthetic kiểm tra Drawer',scenes:[{
           headline:'Cảnh synthetic',caption:'Nội dung kiểm thử, không gọi AI.',duration_seconds:5}]}};
-      await open('workspace');await page.getByRole('button',{name:'Xem kế hoạch',exact:true}).click();
+      await open('workspace');await page.getByRole('button',{name:'Xem kết quả',exact:true}).click();
       await page.getByRole('button',{name:'Xem kết quả công việc',exact:true}).waitFor();
       // A failed GET must leave the plan available for a deliberate retry.
       state.status['/api/tasks/'+id]=503;
@@ -233,7 +238,7 @@ try {
   await scenario('committed POST survives failed refresh with exactly one POST',async({page,state,requests,open})=>{
     await open('workspace');state.post=()=>{state.status['/api/bootstrap']=503;return {status:'PLAN_CREATED',goal_id:id};};
     await page.getByRole('textbox',{name:'Mô tả công việc'}).fill('Tạo website synthetic kiểm tra receipt');
-    await page.getByRole('button',{name:/Tạo kế hoạch/}).click();await page.getByRole('dialog').waitFor();
+    await page.getByRole('button',{name:/Lập kế hoạch/}).click();await page.getByRole('dialog').waitFor();
     await page.getByText(/Thao tác đã thành công nhưng chưa làm mới/).waitFor();
     assert.equal(requests.filter(r=>r.method==='POST').length,1);
     assert.ok(await page.getByText('Synthetic reliability plan',{exact:true}).isVisible());
@@ -242,7 +247,7 @@ try {
     await open('workspace');const field=page.getByRole('textbox',{name:'Mô tả công việc'});
     await field.fill('😀'.repeat(6000));assert.equal([...(await field.inputValue())].length,6000);
     await field.fill('a'.repeat(6001));assert.equal((await field.inputValue()).length,6001);
-    assert.ok(await page.getByRole('button',{name:/Tạo kế hoạch/}).isDisabled());
+    assert.ok(await page.getByRole('button',{name:/Lập kế hoạch/}).isDisabled());
   });
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({status:'PASS',scenarios:results,evidence:output},null,2));
