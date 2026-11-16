@@ -1,12 +1,15 @@
 """Approved workspace file creation and byte-for-byte artifact verification."""
 
 POLICY = {
+    "terminal.check": ("product_builder", "owner_gated", frozenset({"process.run"})),
     "filesystem.report": ("product_builder", "owner_gated", frozenset({"workspace.write"})),
 }
 
 
 def dispatch(skill_id, payload):
-    if skill_id != "filesystem.report":
-        raise PermissionError("Unknown filesystem skill")
-    from agentforge.gateway import write_verified_report
-    return write_verified_report(payload["path"], payload["content"])
+    from agentforge import gateway
+    if skill_id == "filesystem.report":
+        return gateway.write_verified_report(payload["path"], payload["content"])
+    if skill_id == "terminal.check":
+        return gateway.run_terminal_recipe(payload["recipe"], payload["directory"])
+    raise PermissionError("Unknown workspace skill")

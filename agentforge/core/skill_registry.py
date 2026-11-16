@@ -31,7 +31,7 @@ PERMISSIONS = {
     "process.run",
 }
 TOOLS = {"filesystem", "model", "search", "https_reader", "browser",
-         "raster", "audio", "ffmpeg", "tts_engine", "sqlite"}
+         "raster", "audio", "ffmpeg", "tts_engine", "sqlite", "terminal"}
 FIELD_TYPES = {"string", "integer", "number", "boolean", "array", "object"}
 MAX_MANIFEST_BYTES = 12_000
 

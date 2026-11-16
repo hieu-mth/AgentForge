@@ -5,6 +5,7 @@ from agentforge.core.skill_adapters import POLICY
 
 TOOL_DEPENDENCIES = {
     "filesystem": ["workspace"],
+    "terminal": ["active Python interpreter", "workspace"],
     "sqlite": ["python.sqlite3"],
     "model": ["configured model provider"],
     "search": ["network", "DDGS"],

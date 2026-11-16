@@ -89,3 +89,57 @@ class FilesystemWorkflowTests(unittest.TestCase):
                 with self.assertRaises(PermissionError):
                     gateway.write_verified_report("linked/output.md", "Unsafe")
                 self.assertFalse(list(victim.iterdir()))
+
+    def test_approved_terminal_runs_real_process_in_workspace(self):
+        test = test_control_center_v1.TestControlCenterV1()
+        test.setUp()
+        try:
+            test.login()
+            workspace = test.root / "workspace"
+            (workspace / "e2e-test").mkdir(parents=True)
+            with patch.object(gateway, "WORKSPACE", workspace):
+                request = {"ack": "PROPOSE", "title": "Check local Python",
+                           "template": "terminal.check", "max_external_runs": 1,
+                           "inputs": {"recipe": "python-version", "directory": "e2e-test"}}
+                path = "/api/goals/propose"
+                unsafe = {**request, "inputs": {**request["inputs"], "recipe": "python -c ..."}}
+                self.assertEqual(test.req("POST", path, unsafe)[0], 400)
+                code, goal, _ = test.req("POST", path, request)
+                self.assertEqual((code, goal["status"]), (200, "PLANNED"))
+                path = "/api/goals/" + goal["goal_id"]
+                auth = {"plan_sha256": goal["plan_sha256"]}
+                self.assertEqual(test.req("POST", path + "/approve", {**auth, "ack": "APPROVE"})[0], 200)
+                execution = {**auth, "ack": "RUN", "grants": ["process.run"],
+                             "ack_external": "AUTHORIZE_EXTERNAL_TOOLS", "confirm_external_run": True}
+                self.assertEqual(test.req("POST", path + "/run", execution)[0], 400)
+                test.server.allow_external_actions = True
+                code, outcome, _ = test.req("POST", path + "/run", execution)
+                self.assertEqual((code, outcome["status"]), (200, "SUCCEEDED"))
+                child = test.req("GET", path)[1]["step_runs"][0]["child_task_id"]
+                receipt = test.req("GET", "/api/tasks/" + child)[1]["report"]
+                self.assertEqual((receipt["recipe"], receipt["exit_code"], receipt["stderr"]),
+                                 ("python-version", 0, ""))
+                self.assertTrue(receipt["stdout"].startswith("Python "))
+        finally:
+            test.tearDown()
+
+    def test_timeout_has_failed_receipt_and_bounded_output(self):
+        import subprocess
+        import tempfile
+        from pathlib import Path
+        from agentforge import skill_runner, task_history
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            workspace = root / "workspace"
+            (workspace / "test").mkdir(parents=True)
+            database = root / "tasks.db"
+            with patch.object(gateway, "WORKSPACE", workspace), patch.object(
+                    gateway.subprocess, "run",
+                    side_effect=subprocess.TimeoutExpired("test", 5, output=b"a" * 4096)):
+                result = skill_runner.invoke("terminal.check",
+                    {"recipe": "python-version", "directory": "test", "confirm_external_run": True},
+                    grants=["process.run"], confirm_external_run=True, db_path=database)
+            self.assertEqual(result["status"], "FAILED")
+            task = task_history.get_task(result["task_id"], db_path=database)
+            self.assertEqual(task["error"], "TERMINAL_TIMEOUT")
+            self.assertEqual(len(task["result"]["stdout"]), 2048)

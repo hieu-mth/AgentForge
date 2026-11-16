@@ -31,7 +31,7 @@ class GoalCapabilityCheckTests(TestCase):
         with patch("agentforge.features.websites.image_studio.health", return_value={
             "status": "UNAVAILABLE", "checkpoints": [],
         }), patch.object(prompt_intake.brain_planner, "propose") as propose:
-            result = prompt_intake.plan_request("Tạo hình ảnh quảng cáo cho cửa hàng nệm")
+            result = prompt_intake.plan_request("Tạo hình ảnh quảng cáo cho website cửa hàng nệm")
         propose.assert_not_called()
         self.assertEqual(result["status"], "CAPABILITY_BLOCKED")
         self.assertFalse(result["model_dispatched"])

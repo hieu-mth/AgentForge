@@ -1,6 +1,8 @@
 import hashlib
 import os
 import re
+import subprocess
+import sys
 import tempfile
 from pathlib import Path, PureWindowsPath
 
@@ -112,6 +114,35 @@ def write_verified_report(path, content):
         Path(temporary).unlink(missing_ok=True)
     return {"status": "VERIFIED", "report_path": "workspace/" + path,
             "sha256": hashlib.sha256(verified).hexdigest(), "size_bytes": len(verified)}
+
+
+def validate_terminal_recipe(recipe, directory):
+    if recipe != "python-version":
+        raise PermissionError("Unknown terminal recipe")
+    if not isinstance(directory, str) or not re.fullmatch(
+            r"(?:[a-zA-Z0-9_-]{1,48}/){0,3}[a-zA-Z0-9_-]{1,48}", directory):
+        raise ValueError("Choose a relative workspace directory")
+    if not safe_path(directory).is_dir():
+        raise FileNotFoundError("Workspace directory must exist")
+
+
+def run_terminal_recipe(recipe, directory):
+    validate_terminal_recipe(recipe, directory)
+    # Absolute interpreter, fixed arguments, clean environment, no shell or child scripts.
+    env = {key: os.environ[key] for key in ("SystemRoot",) if key in os.environ}
+    try:
+        proc = subprocess.run([sys.executable, "-I", "-S", "--version"],
+                              cwd=safe_path(directory), env=env, stdin=subprocess.DEVNULL,
+                              capture_output=True, check=False, timeout=5)
+    except subprocess.TimeoutExpired as exc:
+        return {"status": "TIMEOUT", "recipe": recipe, "exit_code": -1,
+                "stdout": (exc.stdout or b"")[:2048].decode("utf-8", errors="replace"),
+                "stderr": (exc.stderr or b"")[:2048].decode("utf-8", errors="replace")}
+    return {"status": "EXECUTED" if proc.returncode == 0 else "FAIL",
+            "recipe": recipe, "exit_code": proc.returncode,
+            "stdout": proc.stdout[:2048].decode("utf-8", errors="replace"),
+            "stderr": proc.stderr[:2048].decode("utf-8", errors="replace")}
+
 
 
 TOOLS = {

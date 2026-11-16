@@ -70,8 +70,7 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
         "shopee", "marketplace", "san thuong mai dien tu",
         "thuong mai dien tu", "gio hang", "web app", "webapp",
         "ung dung mua sam", "ecommerce"))
-    if not (wants_website or wants_video or wants_webapp or wants_advanced or wants_company) and re.match(
-            r"(?:tao|sinh|ve|thiet ke)\s+(?:(?:mot|1)\s+)?(?:anh|hinh anh)\b", normalized):
+    if re.match(r"(?:tao|sinh|ve|thiet ke)\s+(?:(?:mot|1)\s+)?(?:anh|hinh anh)\b", normalized):
         from agentforge.features.websites import image_studio
         health = image_studio.health()
         available = bool(health["checkpoints"])

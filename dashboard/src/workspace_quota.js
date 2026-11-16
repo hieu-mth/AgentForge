@@ -24,7 +24,12 @@ export function isVideoRequest(prompt) {
     || /\b(?:video|clip)\s+(?:quang cao|gioi thieu|tiktok|reels|shorts)\b/.test(text);
 }
 
+export function terminalDirectoryForPrompt(prompt) {
+  return /^Kiểm tra Python trong workspace\/([a-z0-9_/-]+)$/i.exec(String(prompt ?? '').trim())?.[1] ?? null;
+}
+
 export function modelCallsForPrompt(prompt) {
+  if (terminalDirectoryForPrompt(prompt)) return 0;
   if (/^Tạo báo cáo workspace\/[^\s]+\s+với nội dung:\s*.+/is.test(String(prompt ?? '').trim())) return 0;
   return isCompanyRequest(prompt) ? 3 : 1;
 }

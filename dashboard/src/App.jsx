@@ -14,7 +14,7 @@ import { badge, clip, PageHeader } from './components/shared.jsx';
 import { Workspace, GoalDrawer, goalAction } from './features/Workspace.jsx';
 import { AutoVisuals } from './features/Visuals.jsx';
 import { StoryboardVisualModal } from './features/StoryboardVisuals.jsx';
-import { modelCallsForPrompt } from './workspace_quota.js';
+import { modelCallsForPrompt, terminalDirectoryForPrompt } from './workspace_quota.js';
 import { Websites, ProposalDrawer } from './features/Websites.jsx';
 import { WebappProposalDrawer } from './features/Webapps.jsx';
 import { Overview, ReadOnlyPage } from './features/Operations.jsx';
@@ -209,11 +209,18 @@ export default function App() {
     }catch(e){authError(e);}
   };
   const plan=async prompt => {
-    const outcome=await runAction(()=>post('/api/workspace/request',
-      {ack:'PLAN_ONLY',prompt,
-       max_model_calls:modelCallsForPrompt(prompt)}));
+    const directory=terminalDirectoryForPrompt(prompt);
+    const outcome=await runAction(()=>directory
+      ? post('/api/goals/propose',{ack:'PROPOSE',title:'Kiểm tra phiên bản Python',
+          template:'terminal.check',inputs:{recipe:'python-version',directory},
+          max_model_calls:0,max_external_runs:1})
+      : post('/api/workspace/request',{ack:'PLAN_ONLY',prompt,
+          max_model_calls:modelCallsForPrompt(prompt)}));
     if(!outcome)return false;
-    if(outcome.status!=='PLAN_CREATED'){message.warning(outcome.message||'Chưa lập được kế hoạch.');return false;}
+    if(outcome.status!==(directory?'PLANNED':'PLAN_CREATED')){
+      message.warning(outcome.message||'Chưa lập được kế hoạch.');
+      return false;
+    }
     message.success('Đã lập kế hoạch, chưa gọi model');await openGoal(outcome.goal_id);return true;
   };
   const approve=goal=>ask('Duyệt SHA kế hoạch?',

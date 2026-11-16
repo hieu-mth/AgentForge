@@ -370,6 +370,11 @@ def _execute(task_id, skill_id, payload, *, grants, confirm_model_call,
     try:
         result = _dispatch(skill_id, payload)
         registry.validate_payload(registry.load_skill(skill_id), result, direction="output")
+        if skill_id == "terminal.check" and result["status"] != "EXECUTED":
+            error = "TERMINAL_TIMEOUT" if result["status"] == "TIMEOUT" else "TERMINAL_NONZERO_EXIT"
+            history.transition(task_id, "FAILED", result=result, error=error, db_path=db_path)
+            return {"task_id": task_id, "skill_id": skill_id, "status": "FAILED",
+                    "executed": True, "error": error}
         from agentforge.core import artifact_acceptance
         try:
             artifact_acceptance.observe(skill_id, result, db_path=db_path)

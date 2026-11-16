@@ -8,6 +8,7 @@ from agentforge import brain_store, skill_registry, skill_runner
 
 TEMPLATES = {
     "filesystem.report": ("path", "content"),
+    "terminal.check": ("recipe", "directory"),
     "campaign.review": ("dataset",),
     "website.campaign": ("slug", "dataset"),
     "website.draft": ("slug", "brief"),
@@ -69,6 +70,10 @@ def _steps(template, inputs):
         from agentforge.gateway import validate_report
         validate_report(inputs["path"], inputs["content"])
         steps = [("filesystem.report", dict(inputs))]
+    elif template == "terminal.check":
+        from agentforge.gateway import validate_terminal_recipe
+        validate_terminal_recipe(inputs["recipe"], inputs["directory"])
+        steps = [("terminal.check", {**inputs, "confirm_external_run": True})]
     elif template == "campaign.review":
         payload = {"dataset": inputs["dataset"]}
         if "campaign" in inputs:
