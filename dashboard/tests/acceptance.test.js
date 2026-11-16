@@ -14,7 +14,8 @@ test('execution success is never counted as product acceptance',()=>{
 test('all artifact states have distinct Owner labels and UI exposes both statuses',()=>{
   assert.notEqual(acceptanceLabel('NEEDS_REVISION'),acceptanceLabel('NEEDS_VALIDATION'));
   const workspace=readFileSync(new URL('../src/features/Workspace.jsx',import.meta.url),'utf8');
-  assert.match(workspace,/badge\(g.status\)/);
+  assert.match(workspace,/GOAL_STATUS\[g.status\]/);
+  assert.match(workspace,/SUCCEEDED:'Đã thực thi'/);
   assert.match(workspace,/acceptanceLabel\(g.artifact_acceptance.status\)/);
   const shared=readFileSync(new URL('../src/components/shared.jsx',import.meta.url),'utf8');
   assert.doesNotMatch(shared,/const GOOD = \['SUCCEEDED'/);
