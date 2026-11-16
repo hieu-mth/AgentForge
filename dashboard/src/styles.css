@@ -342,3 +342,37 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .overview-system-help p{margin:0 0 9px}
 .overview-system-help p:last-child{margin-bottom:0}
 .overview-system-value{overflow-wrap:anywhere}
+
+
+/* Owner-first Workspace: compact intake, readable follow-up actions. */
+.workspace-owner{display:flex;flex-direction:column;gap:22px}
+.workspace-owner-hero{margin-bottom:0;padding:clamp(22px,3vw,36px);overflow:visible}
+.workspace-owner-hero::after{pointer-events:none}
+.workspace-owner-hero .hero-title{font-size:clamp(28px,3vw,40px);margin:10px 0 8px}
+.workspace-owner-hero .hero-caption{margin-bottom:20px;max-width:740px}
+.workspace-owner-hero .prompt-composer{max-width:none;box-shadow:none}
+.workspace-prompt-label{display:block;font-size:14px;font-weight:650;color:var(--text);margin:0 0 10px}
+.workspace-owner-hero .prompt-composer textarea{min-height:125px}
+.workspace-owner-hero .idea-row{max-width:none;margin-top:16px}
+.workspace-owner-hero .idea-chip{white-space:normal}
+.workspace-help-note{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;color:var(--muted);font-size:12px;flex-wrap:wrap}
+.workspace-help-note .ant-btn{padding-inline:0}
+.workspace-guide{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px}
+.workspace-guide>div{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--surface);display:flex;flex-direction:column;gap:5px}
+.workspace-guide span{color:var(--muted);font-size:12px;line-height:1.5}
+.workspace-recent .ant-card-body{padding-top:8px}
+.workspace-recent-count{font-size:12px;color:var(--muted);font-weight:400}
+.workspace-recent-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--line-soft)}
+.workspace-recent-row:last-of-type{border-bottom:0}
+.workspace-recent-main{min-width:0;display:flex;flex-direction:column;gap:5px}
+.workspace-recent-main strong{font-size:14px;overflow-wrap:anywhere}
+.workspace-recent-main span{font-size:12px;color:var(--muted)}
+.workspace-recent-row>.ant-btn{flex:none}
+.workspace-show-more{padding-inline:0;margin-top:8px}
+@media(max-width:650px){
+  .workspace-owner-hero{padding:20px 16px}
+  .workspace-guide{grid-template-columns:1fr}
+  .workspace-recent-row{align-items:flex-start;flex-direction:column;gap:9px}
+  .workspace-recent-row>.ant-btn{align-self:flex-start}
+  .workspace-recent-count{display:none}
+}
