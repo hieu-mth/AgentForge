@@ -27,9 +27,12 @@ def safe_path(path: str) -> Path:
                                    for p in windows_path.parts)):
         raise PermissionError("Unsafe workspace path")
 
+    # Windows resolve expands 8.3 names (for example RUNNER~1). Normalize
+    # both operands only after checking the original ancestry for links.
     target = ensure_local_root(WORKSPACE / given).resolve()
+    root = WORKSPACE.resolve()
 
-    if target == WORKSPACE or not target.is_relative_to(WORKSPACE):
+    if target == root or not target.is_relative_to(root):
         raise PermissionError("Access outside workspace denied")
 
     return target
