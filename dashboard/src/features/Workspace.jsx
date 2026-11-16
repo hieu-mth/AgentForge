@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
-import { acceptedCount, acceptanceLabel } from '../acceptance.js';
+import { acceptanceLabel } from '../acceptance.js';
 import { AcceptanceStatus } from '../components/AcceptanceStatus.jsx';
 import { Alert, Button, Card, Checkbox, Collapse, Divider, Drawer, Input, Space, Typography } from 'antd';
-import { BulbOutlined, CheckCircleOutlined, FolderOpenOutlined, SafetyCertificateOutlined,
-  SendOutlined, ThunderboltOutlined } from '@ant-design/icons';
-import { badge, clip, fallback, StatTile } from '../components/shared.jsx';
+import { SendOutlined } from '@ant-design/icons';
+import { badge, fallback } from '../components/shared.jsx';
 import { PERMISSIONS, WORKERS, SKILLS, requiredPermissions, permissionsKnown, executionConsent } from '../permissions.js';
 import { isVideoRequest, quotaForPrompt } from '../workspace_quota.js';
 import { promptValidation } from '../prompt_validation.js';
