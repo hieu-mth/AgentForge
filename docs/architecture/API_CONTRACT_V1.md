@@ -58,3 +58,17 @@ M3 must **not** implement a new HTTP framework, alter task semantics or modify a
 - Owner merges to `main` only after Windows CI PASS.
 
 Source layout and migration progress: [current structure](REPOSITORY_STRUCTURE.md), [migration plan](MIGRATION_PLAN.md), [target](TARGET_STRUCTURE.md).
+
+
+## Quyền thực thi Goal qua HTTP
+
+Duyệt kế hoạch bằng SHA trước khi gửi `RUN`. Gửi `goal_updated_at` từ
+`GET /api/goals/{id}` để chạy đúng phiên bản vừa xem. `RESUME` và
+`RUN` sau khi rearm luôn yêu cầu phiên bản mới. `RUN` đầu tiên vẫn nhận
+request cũ nếu chưa có lần dispatch.
+
+Gửi quyền cần thiết của bước hiện hành. API từ chối quyền vượt phạm vi
+trước khi dispatch. Sau khi bước đó hoàn tất, runner xóa quyền và cờ xác nhận
+của request. Các bước chỉ cần quyền đọc mặc định có thể chạy tiếp. Nếu bước
+sau cần ghi, model, trình duyệt hoặc tiến trình, Goal dừng ở
+`WAITING_APPROVAL` và Owner đọc lại phiên bản trước khi xác nhận tiếp.

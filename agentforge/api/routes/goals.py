@@ -72,17 +72,17 @@ def handle(server, path, request, session=None):
                                    for event in goal["events"]))
             if revision != goal["updated_at"] and not (revision is None and fresh_start):
                 raise PermissionError("Goal changed; reload the current step before authorizing")
-            external = set(grants) & SENSITIVE_GRANTS
-            # Only authorize tools required by the *current* step.
-            # Future model calls must be approved in their own turn.
             current = goal["current_step"]
-            uses_external = (current < len(goal["plan"]) and bool(
-                set(goal["plan"][current]["required_permissions"]) & SENSITIVE_GRANTS))
-            if (external or uses_external) and not server.allow_external_actions:
-                raise PermissionError("External tools are disabled in this Control Center")
-            if (external or uses_external) and request.get(
-                    "ack_external") != "AUTHORIZE_EXTERNAL_TOOLS":
-                raise PermissionError("Separate external tool approval required")
+            if not 0 <= current < len(goal["plan"]):
+                raise PermissionError("No executable step in the reviewed goal")
+            needed = set(goal["plan"][current]["required_permissions"])
+            if set(grants) - (needed | {"workspace.read"}):
+                raise PermissionError("Only grants for the current step are allowed")
+            if needed & SENSITIVE_GRANTS:
+                if not server.allow_external_actions:
+                    raise PermissionError("External tools are disabled in this Control Center")
+                if request.get("ack_external") != "AUTHORIZE_EXTERNAL_TOOLS":
+                    raise PermissionError("Separate external tool approval required")
             flags = {}
             for key in ("confirm_model_call", "confirm_browser_run",
                         "confirm_external_run"):
@@ -94,7 +94,7 @@ def handle(server, path, request, session=None):
             return brain_runner.execute(
                 ident, grants=grants, brain_db_path=server.brain_db_path,
                 task_db_path=server.task_db_path, expected_updated_at=goal["updated_at"],
-                **flags)
+                scope_to_current_step=True, **flags)
         raise ValueError("Unknown goal operation")
     if path == "/api/schedules/create":
         if request.get("ack") != "SCHEDULE":

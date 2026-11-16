@@ -63,7 +63,7 @@ Các nhãn được dùng thống nhất:
 | AI Film planner nhiều giờ | IMPLEMENTED (planning) | `agentforge/features/film_studio/long_form.py` | 900 shot được **lập kế hoạch**, chưa render 900 clip |
 | ComfyUI motion adapter + MP4 runtime | IMPLEMENTED (code/CI), UNVERIFIED (Owner GPU) | `agentforge/features/film_studio/motion_comfy.py` | Đã có import/QA kỹ thuật MP4 và hash; model/GPU 12 GB thật chưa kiểm chứng |
 | Phim AI động 1–3 giờ | NOT IMPLEMENTED | Xem [roadmap](ROADMAP.md) | Chưa có pipeline multi-shot dựng phim dài thực |
-| YouTube upload & analytics thật | NOT IMPLEMENTED | `agentforge/growth_pipeline.py` chỉ manual handoff | Không có OAuth/publish API hay doanh thu verified |
+| YouTube upload & analytics thật | PARTIAL, Owner runtime UNVERIFIED | `agentforge/integrations/youtube_private.py` hỗ trợ OAuth Desktop và upload private theo xác nhận | Analytics nhập thủ công; chưa có tự công khai video hoặc dữ liệu doanh thu xác minh |
 | TTS offline | PARTIAL | `agentforge/features/media/render.py` | Cần Piper/voice hoặc Windows SAPI phù hợp |
 | ComfyUI image adapter | PARTIAL | `agentforge/features/websites/image_studio.py` | Cần ComfyUI/checkpoint local, không có model cài sẵn |
 

@@ -5,7 +5,8 @@ import sqlite3
 import tempfile
 import threading
 import unittest
-from contextlib import closing
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack, closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -224,6 +225,104 @@ class TestControlCenterV1(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertEqual(task["status"], "SUCCEEDED")
         self.assertNotIn("request", task)
+
+    def test_http_grants_cannot_authorize_later_steps(self):
+        self.login()
+        self.server.allow_external_actions = True
+        code, goal, _ = self.req("POST", "/api/goals/propose", {
+            "ack": "PROPOSE", "title": "Make a video", "template": "media.produce",
+            "inputs": {"slug": "nem-s2", "title": "Tu van nem", "scenes": [
+                {"headline": "Nệm phù hợp", "caption": "Tư vấn theo nhu cầu.", "duration_seconds": 3},
+                {"headline": "Liên hệ", "caption": "Trao đổi với cửa hàng.", "duration_seconds": 3},
+            ]},
+            "max_external_runs": 1,
+        })
+        self.assertEqual(code, 200)
+        path = "/api/goals/" + goal["goal_id"]
+        approval = {"plan_sha256": goal["plan_sha256"]}
+        self.assertEqual(self.req("POST", path + "/approve", {**approval, "ack": "APPROVE"})[0], 200)
+        external = {"ack_external": "AUTHORIZE_EXTERNAL_TOOLS", "confirm_external_run": True}
+        with ExitStack() as stack:
+            compose = stack.enter_context(patch("agentforge.media_assets.make_assets", return_value={
+                "run_id": "a" * 32, "project_slug": "nem-s2",
+                "status": "ASSETS_READY", "video_rendered": False,
+            }))
+            stack.enter_context(patch("agentforge.media_quality.check", return_value={
+                "run_id": "a" * 32, "status": "ASSETS_PASS",
+                "failures": 0, "warnings": 0, "findings": [],
+            }))
+            render = stack.enter_context(patch("agentforge.media_render.render_video", return_value={
+                "run_id": "a" * 32, "status": "VIDEO_RENDERED",
+                "video_path": "offline.mp4", "quality_status": "VIDEO_PASS",
+            }))
+            code, denied, _ = self.req("POST", path + "/run", {
+                **approval, **external, "ack": "RUN", "grants": ["workspace.write", "process.run"],
+            })
+            self.assertEqual(code, 400)
+            self.assertIn("current step", denied["message"])
+            compose.assert_not_called()
+            self.assertFalse(self.taskdb.exists())
+            code, waiting, _ = self.req("POST", path + "/run", {
+                **approval, "ack": "RUN", "grants": ["workspace.write"],
+            })
+            self.assertEqual((code, waiting["status"], waiting["waiting_step"]),
+                             (200, "WAITING_APPROVAL", 2))
+            self.assertIn("workspace.write", waiting["missing"])
+            render.assert_not_called()
+            detail = self.req("GET", path)[1]
+            code, final, _ = self.req("POST", path + "/resume", {
+                **approval, **external, "ack": "RESUME", "goal_updated_at": detail["updated_at"],
+                "grants": ["workspace.write", "process.run"],
+            })
+            self.assertEqual((code, final["status"]), (200, "SUCCEEDED"))
+            render.assert_called_once_with("a" * 32, confirm_external_run=True)
+
+    def test_concurrent_initial_run_creates_only_one_parent(self):
+        self.login()
+        self.assertEqual(self.campaign()[0], 200)
+        code, goal, _ = self.req("POST", "/api/goals/propose", {
+            "ack": "PROPOSE", "title": "Review growth", "template": "growth.review",
+            "inputs": {"campaign": "nem-pilot"},
+        })
+        self.assertEqual(code, 200)
+        path = "/api/goals/" + goal["goal_id"]
+        approval = {"plan_sha256": goal["plan_sha256"]}
+        self.assertEqual(self.req("POST", path + "/approve", {**approval, "ack": "APPROVE"})[0], 200)
+        barrier = threading.Barrier(2)
+        change_state = brain_store.change_state
+
+        def synchronized_claim(*args, **kwargs):
+            if kwargs.get("expected") == "APPROVED":
+                barrier.wait(4)
+            return change_state(*args, **kwargs)
+
+        with patch.object(brain_store, "change_state", side_effect=synchronized_claim):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                jobs = [pool.submit(self.req, "POST", path + "/run", {**approval, "ack": "RUN"})
+                        for _ in range(2)]
+                self.assertEqual(sorted(job.result()[0] for job in jobs), [200, 400])
+        parents = [row for row in task_history.list_tasks(db_path=self.taskdb)
+                   if row["kind"] == "workflow"]
+        self.assertEqual(len(parents), 1)
+        self.assertEqual(parents[0]["status"], "SUCCEEDED")
+        self.assertEqual(self.req("GET", path)[1]["parent_task_id"], parents[0]["task_id"])
+
+    def test_task_database_start_failure_interrupts_goal(self):
+        self.login()
+        self.assertEqual(self.campaign()[0], 200)
+        code, goal, _ = self.req("POST", "/api/goals/propose", {
+            "ack": "PROPOSE", "title": "Review growth", "template": "growth.review",
+            "inputs": {"campaign": "nem-pilot"},
+        })
+        self.assertEqual(code, 200)
+        path = "/api/goals/" + goal["goal_id"]
+        approval = {"plan_sha256": goal["plan_sha256"]}
+        self.assertEqual(self.req("POST", path + "/approve", {**approval, "ack": "APPROVE"})[0], 200)
+        with patch.object(task_history, "create_task", side_effect=OSError("disk unavailable")):
+            self.assertEqual(self.req("POST", path + "/run", {**approval, "ack": "RUN"})[0], 400)
+        self.assertEqual(self.req("GET", path)[1]["status"], "INTERRUPTED")
+        self.assertEqual(self.req("POST", path + "/run", {**approval, "ack": "RUN"})[0], 400)
+        self.assertFalse(self.taskdb.exists())
 
     def test_resume_requires_current_inspected_revision_and_rejects_replay(self):
         self.login()

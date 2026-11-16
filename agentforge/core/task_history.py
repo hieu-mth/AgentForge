@@ -82,7 +82,8 @@ def _id(value):
     return value
 
 
-def create_task(kind, skill_id, request, *, parent_id=None, db_path=None):
+def create_task(kind, skill_id, request, *, parent_id=None, db_path=None,
+                task_id=None, start_running=False):
     if kind not in KINDS or not isinstance(skill_id, str) or not 3 <= len(skill_id) <= 80:
         raise ValueError("Invalid task kind or skill")
     if parent_id is not None:
@@ -90,13 +91,18 @@ def create_task(kind, skill_id, request, *, parent_id=None, db_path=None):
     if not isinstance(request, dict):
         raise ValueError("Task input must be an object")
     raw_request = _json(request, limit=8192)
-    task_id, now = uuid4().hex, _now()
+    task_id = uuid4().hex if task_id is None else _id(task_id)
+    now = _now()
+    status = "RUNNING" if start_running else "QUEUED"
     with closing(_connect(db_path, create=True)) as conn, conn:
         conn.execute("INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?)",
-                     (task_id, kind, skill_id, parent_id, "QUEUED",
+                     (task_id, kind, skill_id, parent_id, status,
                       raw_request, None, None, now, now))
         conn.execute("INSERT INTO events(task_id,at,name,detail_json) VALUES(?,?,?,?)",
                      (task_id, now, "CREATED", "{}"))
+        if start_running:
+            conn.execute("INSERT INTO events(task_id,at,name,detail_json) VALUES(?,?,?,?)",
+                         (task_id, now, "RUNNING", "{}"))
     return task_id
 
 

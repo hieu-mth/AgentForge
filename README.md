@@ -66,6 +66,8 @@ Chi tiết và định nghĩa trạng thái: **[Current Status](docs/STATUS.md)*
 
 ## Điều hướng tài liệu
 
+- **[Nghiệm thu vận hành trên máy Owner](docs/verification/OWNER_PRODUCTION_GATE.md)** — bằng chứng cần có cho từng luồng trước khi đưa vào sử dụng.
+
 - **[Kiểm toán cuối trước runtime](docs/verification/final_pre_runtime/README.md)** — bằng chứng CI, mức sẵn sàng và blocker Owner.
 - **[Trung tâm tài liệu](docs/README.md)** — bắt đầu từ đây, phân biệt docs hiện hành và lịch sử.
 - **[Hướng dẫn Windows & kiểm thử](docs/DEVELOPMENT.md)** — setup, build, chạy Dashboard và các giới hạn an toàn.

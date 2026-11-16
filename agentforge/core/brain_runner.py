@@ -6,6 +6,7 @@ per invocation; approval of a plan is NOT blanket tool authorization.
 """
 import hashlib
 import json
+from uuid import uuid4
 from agentforge import brain_planner as planner
 from agentforge import brain_store as store
 from agentforge import skill_runner, task_history
@@ -70,7 +71,7 @@ def _pause(goal_id, parent_id, step_index, response, *, brain_db_path, task_db_p
 
 def _run_steps(goal_id, *, grants, confirm_model_call,
                confirm_browser_run, confirm_external_run,
-               brain_db_path, task_db_path):
+               brain_db_path, task_db_path, scope_to_current_step=False):
     goal = store.get_goal(goal_id, db_path=brain_db_path)
     parent = goal["parent_task_id"]
     # Each execute()/resume call can authorize AT MOST ONE model invocation
@@ -120,6 +121,10 @@ def _run_steps(goal_id, *, grants, confirm_model_call,
                 # DISPATCHING / terminal markers must NEVER cause a second invoke.
                 raise store.BrainError("Previously dispatched step cannot be replayed")
             if receipt["status"] == "SUCCEEDED":
+                if scope_to_current_step:
+                    # A later step may proceed only with the implicit read permission.
+                    grants = ()
+                    confirm_model_call = confirm_browser_run = confirm_external_run = False
                 if "model.invoke" in step["required_permissions"]:
                     model_used = True
                 if "process.run" in step["required_permissions"]:
@@ -157,7 +162,8 @@ def _run_steps(goal_id, *, grants, confirm_model_call,
 
 def execute(goal_id, *, grants=(), confirm_model_call=False,
             confirm_browser_run=False, confirm_external_run=False,
-            brain_db_path=None, task_db_path=None, expected_updated_at=None):
+            brain_db_path=None, task_db_path=None, expected_updated_at=None,
+            scope_to_current_step=False):
     """Start or resume approved goal; only new explicit ephemeral tool grants."""
     from agentforge.ops_control import require_active
     require_active()
@@ -167,28 +173,34 @@ def execute(goal_id, *, grants=(), confirm_model_call=False,
     if expected_updated_at is not None and goal["updated_at"] != expected_updated_at:
         raise store.BrainError("Goal changed; inspect the current step before authorizing")
     _verify(goal)
-    if goal["status"] == "APPROVED":
-        parent = task_history.create_task(
-            "workflow", "brain.goal",
-            {"goal_id": goal_id, "plan_sha256": goal["plan_sha256"],
-             "template": goal["template"]},
-            db_path=task_db_path)
-        store.change_state(goal_id, "RUNNING", expected="APPROVED",
-                           parent_task_id=parent, expected_updated_at=goal["updated_at"],
-                           db_path=brain_db_path)
-        task_history.transition(parent, "RUNNING", db_path=task_db_path)
-    else:
-        parent = goal["parent_task_id"]
-        if not isinstance(parent, str):
-            raise store.BrainError("Awaiting goal has no parent task")
-        store.change_state(goal_id, "RUNNING", expected="WAITING_APPROVAL",
-                           expected_updated_at=goal["updated_at"], db_path=brain_db_path)
-        task_history.transition(parent, "RUNNING", db_path=task_db_path)
+    starting = goal["status"] == "APPROVED"
+    parent = uuid4().hex if starting else goal["parent_task_id"]
+    if not isinstance(parent, str):
+        raise store.BrainError("Awaiting goal has no parent task")
+    # Claim first so a losing RUN cannot leave an unlinked task in the other DB.
+    store.change_state(goal_id, "RUNNING", expected=goal["status"],
+                       parent_task_id=parent, expected_updated_at=goal["updated_at"],
+                       db_path=brain_db_path)
+    try:
+        if starting:
+            task_history.create_task(
+                "workflow", "brain.goal",
+                {"goal_id": goal_id, "plan_sha256": goal["plan_sha256"],
+                 "template": goal["template"]},
+                task_id=parent, start_running=True, db_path=task_db_path)
+        else:
+            task_history.transition(parent, "RUNNING", db_path=task_db_path)
+    except Exception as exc:
+        # A task DB failure after claiming cannot trigger a replay.
+        store.change_state(goal_id, "INTERRUPTED", expected="RUNNING",
+                           error=_safe_error(exc), db_path=brain_db_path)
+        raise store.BrainError("Could not start task history; inspect the interrupted goal") from exc
     return _run_steps(
         goal_id, grants=grants, confirm_model_call=confirm_model_call,
         confirm_browser_run=confirm_browser_run,
         confirm_external_run=confirm_external_run,
-        brain_db_path=brain_db_path, task_db_path=task_db_path)
+        brain_db_path=brain_db_path, task_db_path=task_db_path,
+        scope_to_current_step=scope_to_current_step)
 
 
 
