@@ -257,6 +257,41 @@ try {
     await field.fill('a'.repeat(6001));assert.equal((await field.inputValue()).length,6001);
     assert.ok(await page.getByRole('button',{name:/Lập kế hoạch/}).isDisabled());
   });
+  await scenario('Environment renders API statuses and rescans without a model POST',async({page,state,requests,open})=>{
+    const path='/api/ops/discovery';
+    state.overrides[path]={
+      checked_at:'2026-11-16T00:00:00Z',hardware:{os:'Fixture OS',os_release:'1',cpu:'Fixture CPU',
+        logical_cpu_count:4,memory:{available_bytes:1024,total_bytes:2048},
+        disk:{free_bytes:1024,total_bytes:2048},gpu:{devices:[]}},
+      software:[],services:[{id:'ollama',endpoint:'http://127.0.0.1:11434',status:'STOPPED'}],
+      models:[],configured_models:[],browser_qa:{status:'UNKNOWN'},
+    };
+    await open('environment');
+    await page.getByText('Fixture OS 1',{exact:true}).waitFor();
+    await page.getByText('STOPPED',{exact:true}).waitFor();
+    assert.ok(await page.getByText('Không có model trong các endpoint đã quét',{exact:true}).isVisible());
+    const before=requests.filter(r=>r.path===path).length;
+    await page.getByRole('button',{name:'Quét lại',exact:true}).click();
+    await page.waitForFunction(()=>!document.querySelector('.ant-btn-loading'));
+    assert.equal(requests.filter(r=>r.path===path).length,before+1);
+    assert.ok(requests.every(r=>r.method==='GET'));
+  });
+  await scenario('Workforce skill dependencies expose manifest and saved workflows',async({page,state,open})=>{
+    state.overrides['/api/workforce']={
+      agents:[],models:[],rules:[],tools:[],skills:[{
+        id:'filesystem.report',worker_id:'product_builder',adapter_status:'REGISTERED',
+        manifest:'skills/filesystem.report/skill.toml',model_ref:null,required_tools:['filesystem'],
+        required_permissions:['workspace.write'],quality_checks:['readback_sha256'],
+        input_schema:{required:['path','content']},output_schema:{required:['sha256']},
+        observed_workflows:['filesystem.report'],
+      }],
+    };
+    await open('team');
+    await page.getByRole('tab',{name:'Skills & phụ thuộc'}).click();
+    await page.getByRole('row').filter({hasText:'product_builder'}).locator('button[aria-expanded=false]').click();
+    await page.getByText('skills/filesystem.report/skill.toml',{exact:true}).waitFor();
+    await page.getByText('readback_sha256',{exact:false}).waitFor();
+  });
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({status:'PASS',scenarios:results,evidence:output},null,2));
 } finally {
