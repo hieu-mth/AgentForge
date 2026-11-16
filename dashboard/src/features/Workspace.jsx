@@ -13,107 +13,103 @@ const { TextArea } = Input;
 
 const MIN_PROMPT = 20;
 const IDEAS = [
-  'AI Company V5: Tạo ứng dụng quản lý bán hàng React local với bảng sản phẩm, tìm kiếm, lọc và giỏ demo; yêu cầu Architect, Developer, QA và Reviewer phân tích độc lập.',
-  'Thiết kế landing page nệm ngủ cao cấp, tối ưu điện thoại và có nút gọi nhanh.',
-  'Làm video quảng cáo 30 giây giới thiệu cửa hàng cà phê (bắt đầu bằng storyboard để duyệt).',
-  'Tạo website portfolio tối giản cho nhiếp ảnh gia, tông màu ấm và nhiều khoảng trắng.',
+  {label:'Tạo website',prompt:'Tạo website bán nệm hiện đại, tối ưu điện thoại, có danh mục sản phẩm, hình ảnh AI và nút liên hệ đặt hàng.'},
+  {label:'Xây ứng dụng',prompt:'Tạo ứng dụng React quản lý đơn hàng với danh sách sản phẩm, khách hàng, trạng thái đơn và tìm kiếm.'},
+  {label:'Tạo video',prompt:'Làm video quảng cáo 30 giây cho cửa hàng nệm, bắt đầu bằng storyboard có thể duyệt và chỉnh sửa.'},
+  {label:'Tạo hình ảnh',prompt:'Tạo bộ hình ảnh quảng cáo nệm phong cách hiện đại, phù hợp đăng website và mạng xã hội.'},
+  {label:'Phân tích',prompt:'Phân tích kế hoạch kinh doanh bán nệm, đề xuất cách tăng đơn hàng và các chỉ số cần theo dõi.'},
 ];
-const STEPS = [
-  [<BulbOutlined key="1"/>, 'Bạn mô tả', 'Nói mục tiêu bằng ngôn ngữ tự nhiên.'],
-  [<SafetyCertificateOutlined key="2"/>, 'Bạn duyệt', 'Xem kế hoạch, SHA và quyền cần cấp.'],
-  [<ThunderboltOutlined key="3"/>, 'AI thực thi', 'Chỉ chạy sau khi bạn gật đầu.'],
-];
-
-function greeting() {
-  const h = new Date().getHours();
-  if (h < 11) return 'Chào buổi sáng';
-  if (h < 14) return 'Chào buổi trưa';
-  if (h < 18) return 'Chào buổi chiều';
-  return 'Chào buổi tối';
+const MIN_PROMPT=20;
+const GOAL_STATUS={
+  PLANNED:'Chờ duyệt kế hoạch',WAITING_APPROVAL:'Cần bạn duyệt',
+  APPROVED:'Sẵn sàng thực hiện',RUNNING:'Đang thực hiện',
+  SUCCEEDED:'Đã thực thi',FAILED:'Thực hiện thất bại',
+  INTERRUPTED:'Bị gián đoạn',REJECTED:'Đã từ chối',
+};
+function goalAction(status) {
+  if (['PLANNED','WAITING_APPROVAL'].includes(status)) return 'Duyệt kế hoạch';
+  if (status==='APPROVED') return 'Tiếp tục thực hiện';
+  if (status==='FAILED'||status==='INTERRUPTED') return 'Xem lỗi';
+  if (status==='SUCCEEDED') return 'Xem kết quả';
+  return 'Xem chi tiết';
 }
 
 export function Workspace({data, onPlan, openGoal, onOpenSettings, prompt, setPrompt, loading}) {
-  const limits = quotaForPrompt(prompt, data?.workspace_policy);
-  const videoIntent = isVideoRequest(prompt);
-  const goals = data?.goals || [];
-  const waiting = goals.filter(g => ['PLANNED', 'WAITING_APPROVAL'].includes(g.status)).length;
-  const done = goals.filter(g => g.status === 'SUCCEEDED').length;
+  const limits=quotaForPrompt(prompt,data?.workspace_policy);
+  const videoIntent=isVideoRequest(prompt);
+  const goals=data?.goals||[];
   const validation=promptValidation(prompt);
-  const length = validation.characters;
-  const submit = () => {
-    if (!validation.error && !loading && !limits.blocked) {
-      onPlan(prompt).then(ok => { if (ok) setPrompt(''); });
+  const length=validation.characters;
+  const [showAll,setShowAll]=useState(false);
+  const [showGuide,setShowGuide]=useState(false);
+  const submit=()=>{
+    if(!validation.error&&!loading&&!limits.blocked) {
+      onPlan(prompt).then(ok=>{if(ok)setPrompt('');});
     }
   };
-  return <div className="workspace-page">
-    <section className="hero">
-      <div className="hero-glow" aria-hidden="true"/>
-      <div className="eyebrow"><span className="live-dot"/> {greeting().toUpperCase()}, OWNER</div>
-      <h1 className="hero-title">Hôm nay, bạn muốn <em>rèn</em> điều gì?</h1>
-      <p className="hero-caption">Mô tả mục tiêu bằng lời của bạn. AgentForge lập kế hoạch và dừng lại chờ bạn duyệt — không tự gọi AI, không tự chi tiền.</p>
+  const countLabel=length.toLocaleString('vi-VN')+'/6.000 ký tự';
+  return <div className="workspace-page workspace-owner">
+    <section className="hero workspace-owner-hero">
+      <div className="eyebrow">WORKSPACE · AGENTFORGE</div>
+      <h1 className="hero-title">Giao việc cho <em>đội ngũ AI</em></h1>
+      <p className="hero-caption">Mô tả kết quả bạn muốn nhận. AgentForge lập kế hoạch trước, chỉ thực hiện sau khi bạn duyệt.</p>
       <div className="prompt-composer">
-        <TextArea aria-label="Mô tả công việc" autoSize={{minRows:4, maxRows:10}}
-          value={prompt} variant="borderless" onChange={e => setPrompt(e.target.value)}
-          onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') submit(); }}
-          placeholder="Ví dụ: Thiết kế landing page nệm ngủ cao cấp cho ba tôi, tạo hình ảnh đẹp, tối ưu trên điện thoại và có nút gọi 0879547988..."/>
+        <label className="workspace-prompt-label" htmlFor="workspace-prompt">Bạn muốn AgentForge làm gì?</label>
+        <TextArea id="workspace-prompt" aria-label="Mô tả công việc"
+          autoSize={{minRows:6,maxRows:14}} value={prompt} variant="borderless"
+          onChange={e=>setPrompt(e.target.value)}
+          onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();submit();}}}
+          placeholder="Ví dụ: Tạo website bán nệm cho gia đình tôi, có ảnh AI, danh sách sản phẩm, nút đặt hàng và giao diện đẹp trên điện thoại..."/>
         <div className="composer-footer">
-          <span className="composer-hint"><SafetyCertificateOutlined/> Lập kế hoạch miễn phí · Ctrl+Enter để gửi
-            {length > 0 && length < MIN_PROMPT && <b> · cần thêm {MIN_PROMPT - length} ký tự</b>}</span>
-          <span className="composer-count" aria-live="polite">{length.toLocaleString('vi-VN')}/6.000 ký tự · {validation.bytes.toLocaleString('vi-VN')} byte UTF-8</span>
+          <span className="composer-hint">Ctrl + Enter để gửi · Chưa gọi AI ở bước lập kế hoạch</span>
+          <span className="composer-count" aria-live="polite">{countLabel}</span>
           <Button type="primary" size="large" icon={<SendOutlined/>} loading={loading}
-            disabled={!!validation.error || limits.blocked} onClick={submit}>Tạo kế hoạch</Button>
+            disabled={!!validation.error||limits.blocked} onClick={submit}>Lập kế hoạch</Button>
         </div>
       </div>
-      <Text type="secondary">Không tự cắt yêu cầu. Kế hoạch còn có giới hạn lưu trữ 8 KiB; V5 lặp brief ở nhiều bước nên có thể cần mô tả ngắn hơn. Backend kiểm tra trước khi lưu.</Text>
-      {length>0&&validation.error&&<Alert type="warning" showIcon message={validation.error}/>}
-      {length >= MIN_PROMPT && videoIntent && <Alert type="info" showIcon style={{marginTop:14}}
-        message="Video — giai đoạn đầu: lập storyboard"
-        description="AgentForge sẽ tạo kịch bản để bạn duyệt, chưa xuất MP4 trong bước này. Sau khi duyệt storyboard, bạn cần thực hiện bước tạo tư liệu và render video local riêng (cấp quyền chạy FFmpeg). Video hoàn thành xem tại Đánh giá → Video local."/>}
-      {length >= MIN_PROMPT && limits.blocked && <Alert
-        type="warning" showIcon style={{marginTop:14}}
-        message={`Giới hạn Workspace hiện là ${limits.allowed} lượt model/Goal, nhưng yêu cầu cần ${limits.required} lượt`}
-        description={<Space direction="vertical" size={8}>
-          <Text>{limits.isCompany
-            ? 'AI Company V5 cần 3 lượt model: Architect, Developer và Reviewer. QA tĩnh không gọi model.'
-            : 'Hãy chỉnh giới hạn cho phép lập kế hoạch trước khi gửi công việc.'}
-            {' '}Không có AI nào được gọi; không tự thay đổi chính sách Owner.</Text>
-          <Button size="small" onClick={onOpenSettings}>
-            Mở Cài đặt → Prompt Workspace
-          </Button>
-        </Space>}
-      />}
-      <div className="idea-row" role="group" aria-label="Gợi ý nhanh">
-        <span className="idea-label">Thử nhanh</span>
-        {IDEAS.map(text => <button type="button" key={text} className="idea-chip"
-          onClick={() => setPrompt(text)}>{text}</button>)}
+      {length>0&&validation.error&&<Alert style={{marginTop:12}} type="warning" showIcon message={validation.error}/>}
+      {length>0&&!validation.error&&limits.blocked&&<Alert style={{marginTop:12}} type="warning" showIcon
+        message="Cần điều chỉnh giới hạn lượt AI"
+        description={<Space orientation="vertical" size={8}>
+          <Text>Yêu cầu này dự kiến cần {limits.required} lượt model, nhưng cấu hình hiện cho phép {limits.allowed} lượt. Chưa có model nào được gọi.</Text>
+          <Button size="small" onClick={onOpenSettings}>Mở cài đặt giới hạn</Button>
+        </Space>}/>}
+      {length>=MIN_PROMPT&&videoIntent&&<Alert style={{marginTop:12}} type="info" showIcon
+        message="Video sẽ bắt đầu bằng storyboard"
+        description="Bạn duyệt kịch bản trước; tạo tư liệu và xuất MP4 là những bước riêng có yêu cầu cấp quyền."/>}
+      <div className="idea-row" role="group" aria-label="Mẫu yêu cầu">
+        <span className="idea-label">Bắt đầu nhanh</span>
+        {IDEAS.map(idea=><button type="button" key={idea.label} className="idea-chip"
+          onClick={()=>setPrompt(idea.prompt)} title={idea.prompt}>{idea.label}</button>)}
       </div>
+      <div className="workspace-help-note">
+        <span>Yêu cầu dài được giữ nguyên; kế hoạch lưu trữ có giới hạn riêng và sẽ được backend kiểm tra.</span>
+        <Button type="link" size="small" onClick={()=>setShowGuide(v=>!v)}>
+          {showGuide?'Ẩn hướng dẫn':'AgentForge hoạt động thế nào?'}
+        </Button>
+      </div>
+      {showGuide&&<div className="workspace-guide">
+        <div><strong>1. Bạn mô tả</strong><span>Nêu mục tiêu và tiêu chí thành công.</span></div>
+        <div><strong>2. Bạn duyệt</strong><span>Xem kế hoạch, quyền cần cấp và phạm vi tác động.</span></div>
+        <div><strong>3. AI thực hiện</strong><span>Chạy từng bước được cho phép; kết quả lưu tại máy local.</span></div>
+      </div>}
     </section>
-
-    <div className="stat-grid compact">
-      <StatTile label="Kế hoạch" value={goals.length} tone="info" hint="Tổng số mục tiêu"/>
-      <StatTile label="Chờ duyệt" value={waiting} tone={waiting ? 'warn' : 'good'} hint={waiting ? 'Cần bạn xem xét' : 'Không có gì tồn đọng'}/>
-      <StatTile label="Đã thực thi" value={done} tone="info" hint="Workflow chạy xong; chưa phải nghiệm thu"/>
-      <StatTile label="Đã nghiệm thu" value={acceptedCount(goals)} tone="good" hint="Owner đã chấp nhận sản phẩm"/>
-    </div>
-
-    <div className="two-cols">
-      <Card title="Kế hoạch gần đây" className="panel">
-        {goals.length ? goals.slice(0, 8).map(g =>
-          <div className="list-line" key={g.goal_id}>
-            <div className="list-main"><strong>{g.title}</strong><div className="subtle">{g.template} · {clip(g.goal_id)}</div></div>
-            <Space wrap>{badge(g.status)}{g.artifact_acceptance&&<span>{acceptanceLabel(g.artifact_acceptance.status)}</span>}<Button size="small" onClick={() => openGoal(g.goal_id)}>Xem kế hoạch</Button></Space>
-          </div>) : fallback('Chưa có kế hoạch nào — hãy bắt đầu bằng ô phía trên')}
-      </Card>
-      <Card title="Cách AgentForge làm việc" className="panel">
-        <ol className="steps">{STEPS.map(([icon, title, desc], i) =>
-          <li key={i}><span className="step-icon">{icon}</span>
-            <div><strong>{title}</strong><div className="subtle">{desc}</div></div></li>)}</ol>
-        <Divider style={{margin:'14px 0'}}/>
-        <div className="feature-row"><CheckCircleOutlined/> Duyệt SHA kế hoạch trước khi gọi model</div>
-        <div className="feature-row"><FolderOpenOutlined/> Thành phẩm lưu tại workspace local</div>
-        <Text type="secondary" className="subtle">Hiện hỗ trợ website, marketplace React demo, AI Developer tùy biến và AI Company V5 (3 lượt model riêng, cần tăng hạn mức ở Cài đặt). Không tự chạy mã AI. Workflow chuyên sâu nằm trong các mục Dự án, Kinh doanh và Cài đặt.</Text>
-      </Card>
-    </div>
+    <Card className="panel workspace-recent" title="Công việc gần đây"
+      extra={<span className="workspace-recent-count">{goals.length} kế hoạch trong dữ liệu hiện tại</span>}>
+      {goals.length?<>
+        {goals.slice(0,showAll?goals.length:5).map(g=><div className="workspace-recent-row" key={g.goal_id}>
+          <div className="workspace-recent-main">
+            <strong>{g.title||'Công việc chưa có tên'}</strong>
+            <span>{GOAL_STATUS[g.status]||'Đang cập nhật trạng thái'}{g.artifact_acceptance?' · '+acceptanceLabel(g.artifact_acceptance.status):''}</span>
+          </div>
+          <Button size="small" type={['PLANNED','WAITING_APPROVAL'].includes(g.status)?'primary':'default'}
+            onClick={()=>openGoal(g.goal_id)}>{goalAction(g.status)}</Button>
+        </div>)}
+        {goals.length>5&&<Button type="link" className="workspace-show-more" onClick={()=>setShowAll(v=>!v)}>
+          {showAll?'Thu gọn':`Xem thêm ${goals.length-5} công việc`}
+        </Button>}
+      </>:fallback('Chưa có công việc nào. Hãy mô tả mục tiêu ở ô phía trên.')}
+    </Card>
   </div>;
 }
 
