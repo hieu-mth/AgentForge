@@ -330,3 +330,13 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 @media(max-width:650px){.overview-balanced-row{gap:18px}.overview-full-panels{gap:18px}}
 
 @media(max-width:650px){.overview-chart{gap:4px}.overview-chart-bars{gap:3px}.overview-bar{min-width:3px;flex-basis:38%}}
+
+
+/* Inline explanations for system status: mouse, keyboard and touch. */
+.overview-system-label{display:inline-flex;align-items:center;flex-wrap:wrap;gap:7px}
+.overview-help-button{display:inline-grid;place-items:center;width:24px;height:24px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--muted);cursor:pointer;font-size:15px}
+.overview-help-button:hover,.overview-help-button:focus-visible{background:var(--primary-soft);color:var(--primary);outline-offset:2px}
+.overview-system-help{max-width:min(340px,calc(100vw - 64px));line-height:1.6;white-space:normal}
+.overview-system-help p{margin:0 0 9px}
+.overview-system-help p:last-child{margin-bottom:0}
+.overview-system-value{overflow-wrap:anywhere}
