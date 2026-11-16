@@ -10,7 +10,6 @@ import { promptValidation } from '../prompt_validation.js';
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 
-const MIN_PROMPT = 20;
 const IDEAS = [
   {label:'Tạo website',prompt:'Tạo website bán nệm hiện đại, tối ưu điện thoại, có danh mục sản phẩm, hình ảnh AI và nút liên hệ đặt hàng.'},
   {label:'Xây ứng dụng',prompt:'Tạo ứng dụng React quản lý đơn hàng với danh sách sản phẩm, khách hàng, trạng thái đơn và tìm kiếm.'},
