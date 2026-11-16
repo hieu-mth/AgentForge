@@ -68,3 +68,32 @@ def check(*, resolve=None, opener=None):
         return {"status": "UNAVAILABLE", "ready": False, "generation_invoked": False}
     except (ValueError, TypeError, UnicodeError):
         return {"status": "INVALID_RESPONSE", "ready": False, "generation_invoked": False}
+
+
+def inspect_goal_step(goal):
+    """Check metadata for the selected step, using the same model resolution as execution."""
+    from agentforge.core import skill_registry
+    from agentforge.model import resolve_runtime
+
+    index = goal["current_step"]
+    if not 0 <= index < len(goal["plan"]):
+        return {"status": "NO_PENDING_STEP", "inference_invoked": False}
+    step = goal["plan"][index]
+    contract = skill_registry.load_skill(step["skill_id"])
+    result = {"skill_id": step["skill_id"], "worker_id": step["worker_id"],
+              "tools": contract["required_tools"], "permissions": step["required_permissions"],
+              "inference_invoked": False}
+    if "model.invoke" not in step["required_permissions"]:
+        return {**result, "status": "MODEL_NOT_REQUIRED"}
+    try:
+        runtime = resolve_runtime(step["worker_id"], "Owner readiness metadata")
+    except PermissionError:
+        return {**result, "status": "CONSENT_REQUIRED"}
+    except (ValueError, OSError, KeyError, NotImplementedError):
+        return {**result, "status": "CONFIG_ERROR"}
+    result.update(provider=runtime["provider"], model=runtime["model"], model_ref=runtime["model_ref"])
+    if runtime["provider"] != "ollama":
+        return {**result, "status": "CLOUD_NOT_PROBED"}
+    metadata = check(resolve=lambda *_: runtime)
+    return {**result, "status": "CATALOG_PRESENT" if metadata["status"] == "READY"
+            else metadata["status"], "loadability": "UNKNOWN"}

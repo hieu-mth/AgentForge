@@ -6,6 +6,8 @@ import { SendOutlined } from '@ant-design/icons';
 import { badge, fallback } from '../components/shared.jsx';
 import { PERMISSIONS, WORKERS, SKILLS, requiredPermissions, permissionsKnown, executionConsent } from '../permissions.js';
 import { isVideoRequest, quotaForPrompt } from '../workspace_quota.js';
+import {api} from '../api.js';
+import {useReadSequence} from '../use_resource.jsx';
 import { promptValidation } from '../prompt_validation.js';
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -111,6 +113,31 @@ export function Workspace({data, onPlan, openGoal, onOpenSettings, prompt, setPr
   </div>;
 }
 
+function StepCapabilities({goalId}) {
+  const [status,setStatus]=useState(null);
+  const [loading,setLoading]=useState(false);
+  const begin=useReadSequence();
+  const check=async()=>{
+    const current=begin();
+    setLoading(true);
+    setStatus(null);
+    try {
+      const result=await api('/api/goals/'+goalId+'/capabilities');
+      if(current())setStatus(result);
+    } catch {
+      if(current())setStatus({status:'ERROR'});
+    } finally {
+      if(current())setLoading(false);
+    }
+  };
+  return <Space wrap>
+    <Button onClick={check} loading={loading}>Kiểm tra năng lực bước hiện tại</Button>
+    {status&&<Text type="secondary">
+      {badge(status.status)} {status.model} {status.loadability&&'· Chưa thử nạp model'}
+    </Text>}
+  </Space>;
+}
+
 const STEP_STATUS={SUCCEEDED:'Hoàn thành',FAILED:'Thất bại',RUNNING:'Đang chạy',WAITING_APPROVAL:'Chờ duyệt',APPROVED:'Đã duyệt',PLANNED:'Chưa chạy',INTERRUPTED:'Gián đoạn'};
 export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, onRetry, busy, externalEnabled}) {
   const [grants,setGrants]=useState([]);
@@ -166,6 +193,7 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, o
           <Text type="secondary">Bước {Math.min(activeIndex+1,steps.length)}/{steps.length}</Text>
         </div>
         <AcceptanceStatus acceptance={goal.artifact_acceptance}/>
+        {activeStep&&<StepCapabilities key={goal.goal_id+goal.updated_at} goalId={goal.goal_id}/>}
         {['FAILED','INTERRUPTED'].includes(goal.status)&&<Alert type="error" showIcon
           message="Thực thi chưa thành công"
           description={goal.execution_error||goal.error||'Xem Lịch sử tác vụ để kiểm tra nguyên nhân.'}/>}

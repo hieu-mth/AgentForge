@@ -482,6 +482,11 @@ def dispatch(self, route):
             "quality": found["quality"], "decision": found["decision"],
             "task": _public_task(task),
             "storyboard": result})
+    if route.startswith("/api/goals/") and route.endswith("/capabilities"):
+        from agentforge.ai.model_health import inspect_goal_step
+        ident = route.removeprefix("/api/goals/").removesuffix("/capabilities")
+        goal = brain_store.get_goal(ident, db_path=self.server.brain_db_path)
+        return self._reply(200, inspect_goal_step(goal))
     if route.startswith("/api/goals/"):
         ident = route.removeprefix("/api/goals/")
         return self._reply(200, brain_runner.inspect(

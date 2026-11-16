@@ -213,7 +213,7 @@ export default function App() {
       {ack:'PLAN_ONLY',prompt,
        max_model_calls:modelCallsForPrompt(prompt)}));
     if(!outcome)return false;
-    if(outcome.status==='NEEDS_CLARIFICATION'){message.warning(outcome.message);return false;}
+    if(outcome.status!=='PLAN_CREATED'){message.warning(outcome.message||'Chưa lập được kế hoạch.');return false;}
     message.success('Đã lập kế hoạch, chưa gọi model');await openGoal(outcome.goal_id);return true;
   };
   const approve=goal=>ask('Duyệt SHA kế hoạch?',

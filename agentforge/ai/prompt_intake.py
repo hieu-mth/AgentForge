@@ -70,6 +70,22 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
         "shopee", "marketplace", "san thuong mai dien tu",
         "thuong mai dien tu", "gio hang", "web app", "webapp",
         "ung dung mua sam", "ecommerce"))
+    if not (wants_website or wants_video or wants_webapp or wants_advanced or wants_company) and re.match(
+            r"(?:tao|sinh|ve|thiet ke)\s+(?:(?:mot|1)\s+)?(?:anh|hinh anh)\b", normalized):
+        from agentforge.features.websites import image_studio
+        health = image_studio.health()
+        available = bool(health["checkpoints"])
+        return {
+            "status": "OPEN_IMAGE_STUDIO" if available else "CAPABILITY_BLOCKED",
+            "capability": "image.generate",
+            "runtime_status": "CATALOG_PRESENT" if available else health["status"],
+            "model_dispatched": False,
+            "message": (
+                "Có checkpoint local. Mở Sản phẩm → Kho thành phẩm & Ảnh AI để chọn model và cấp quyền."
+                if available else
+                "Chưa tìm được checkpoint tạo ảnh từ ComfyUI. Mở Môi trường & Tài nguyên để kiểm tra."
+            ),
+        }
     if wants_website and wants_video:
         return {"status": "NEEDS_CLARIFICATION",
                 "message": "Yêu cầu đang gồm cả website và video. Hãy tách thành hai công việc độc lập để bạn duyệt từng sản phẩm."}
