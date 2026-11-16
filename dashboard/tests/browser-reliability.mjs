@@ -143,6 +143,7 @@ try {
       await page.getByText('Storyboard synthetic kiểm tra Drawer',{exact:true}).waitFor();
       await page.waitForTimeout(400); // Allow the outgoing Drawer animation to finish.
       assert.equal(await page.locator('.ant-drawer-open').count(),1);
+      assert.equal(await page.getByText('synthetic_503',{exact:true}).count(),0);
       assert.equal(await page.getByRole('button',{name:'Xem kết quả công việc',exact:true}).count(),0);
       await page.screenshot({path:path.join(output,'goal-result-'+width+'.png'),fullPage:true});
       await page.keyboard.press('Escape');await page.waitForTimeout(400);

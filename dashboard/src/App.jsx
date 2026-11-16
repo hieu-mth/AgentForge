@@ -119,7 +119,7 @@ export default function App() {
   useEffect(()=>onAuthExpired(expireSession),[expireSession]);
   const authError = err => {
     if (err.status===401) expireSession();
-    else {setError(err);message.error(err.message || 'API error');}
+    else {setError(err);message.error({key:'api-error',content:err.message || 'API error'});}
   };
   const refresh=useCallback(()=>{
     if(bootstrapPending.current)return bootstrapPending.current;
@@ -188,6 +188,8 @@ export default function App() {
           : ordered.find(step=>step.skill_id==='webapp.develop'))||ordered[0]
       : ordered[0];
     if(!completed){message.warning('Không tìm thấy thành phẩm của kế hoạch này');return;}
+    setError(null);
+    message.destroy('api-error');
     try{
       const detail=await api('/api/tasks/'+encodeURIComponent(completed.child_task_id));
       if(detail.web_proposal?.proposal_id){
@@ -508,7 +510,8 @@ export default function App() {
         {key:'1',label:'Task ID',children:<code>{task.task_id}</code>},
         {key:'2',label:'Skill',children:task.skill_id},
         {key:'3',label:'Thực thi',children:badge(task.status)},
-        {key:'acceptance',label:'Nghiệm thu sản phẩm',children:<AcceptanceStatus acceptance={task.artifact_acceptance}/>},
+        ...(task.artifact_acceptance ? [{key:'acceptance',label:'Nghiệm thu sản phẩm',
+          children:<AcceptanceStatus acceptance={task.artifact_acceptance}/>}] : []),
         {key:'4',label:'Error',children:task.error||'Không có'},
       ]}/>
       {task.report?.kind==='v5_review'&&<Card title="V5 — AI Reviewer (chưa duyệt sản phẩm)" style={{marginTop:18}}>
