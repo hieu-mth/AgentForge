@@ -123,6 +123,7 @@
 | `api/routes/mutations.py` | Small static allowlisted dispatcher; never executes arbitrary model-supplied paths. |
 | `api/routes/artifacts.py` | SHA-bound artifact acceptance and reversible retention actions. |
 | `api/routes/publishing.py` | Owner session/CSRF/SHA gated local release, attestation and manual metrics mutations. |
+| `api/routes/characters.py` | Owner-gated character records and reviewed reference images. |
 | `api/routes/media.py` | Explicit image generation/import, storyboard/video and draft decisions. |
 | `api/routes/workspace.py` | Workspace prompt/policy and bounded Autopilot configuration. |
 | `api/routes/operations.py` | Explicit Owner pause/resume operations. |
@@ -203,6 +204,7 @@
 | `features/media/render.py` | Canonical `media` implementation cho `render`. |
 | `features/media/workflow.py` | Canonical `media` implementation cho `workflow`. |
 | `features/media/visual_jobs.py` | Canonical V3 GPU image jobs dùng chung video/ảnh/website, SQLite và SHA receipts, không cần website có sẵn. |
+| `features/film_studio/characters.py` | Local character records, reference validation and revision history. |
 | `features/film_studio/long_form.py` | Canonical `film_studio` implementation cho `long_form`. |
 | `features/film_studio/publishing.py` | Wave 10 SHA-bound local release ledger, Owner disclosures, manual publishing and observation states. |
 | `features/film_studio/production.py` | Wave 9 continuity metadata, versioned episode edits, owner local TTS, SRT/FFmpeg assembly and SHA receipts. |

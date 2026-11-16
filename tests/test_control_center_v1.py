@@ -225,6 +225,54 @@ class TestControlCenterV1(unittest.TestCase):
         self.assertEqual(task["status"], "SUCCEEDED")
         self.assertNotIn("request", task)
 
+    def test_resume_requires_current_inspected_revision_and_rejects_replay(self):
+        self.login()
+        self.server.allow_external_actions = True
+        code, goal, _ = self.req("POST", "/api/workspace/request", {
+            "ack": "PLAN_ONLY", "prompt": "Tạo storyboard video quảng cáo cửa hàng nệm",
+            "max_model_calls": 1,
+        })
+        self.assertEqual(code, 200)
+        path = "/api/goals/" + goal["goal_id"]
+        code, detail, _ = self.req("GET", path)
+        self.assertEqual(code, 200)
+        approval = {"plan_sha256": detail["plan_sha256"]}
+        code, _, _ = self.req("POST", path + "/approve", {**approval, "ack": "APPROVE"})
+        self.assertEqual(code, 200)
+        # Withhold model permission to reach WAITING_APPROVAL without inference.
+        code, waiting, _ = self.req("POST", path + "/run", {
+            **approval, "ack": "RUN", "ack_external": "AUTHORIZE_EXTERNAL_TOOLS",
+        })
+        self.assertEqual(code, 200)
+        self.assertEqual(waiting["status"], "WAITING_APPROVAL")
+        code, inspected, _ = self.req("GET", path)
+        self.assertEqual(code, 200)
+        resume = {**approval, "ack": "RESUME", "ack_external": "AUTHORIZE_EXTERNAL_TOOLS"}
+        self.assertEqual(self.req("POST", path + "/resume", resume)[0], 400)
+        resume["goal_updated_at"] = inspected["updated_at"]
+        self.assertEqual(self.req("POST", path + "/resume", resume)[1]["status"],
+                         "WAITING_APPROVAL")
+        code, rejection, _ = self.req("POST", path + "/resume", resume)
+        self.assertEqual(code, 400)
+        self.assertIn("Goal changed", rejection["message"])
+        self.assertEqual(self.req("GET", path)[1]["current_step"], 0)
+
+    def test_dashboard_read_routes_return_authenticated_json(self):
+        self.login()
+        for path, shape in (
+            ("/api/image/jobs", dict), ("/api/ops/health", dict), ("/api/memory", list),
+        ):
+            with self.subTest(path=path):
+                code, output, _ = self.req("GET", path)
+                self.assertEqual(code, 200)
+                self.assertIsInstance(output, shape)
+
+    def test_non_ascii_auth_inputs_are_rejected_cleanly(self):
+        self.assertEqual(self.req("POST", "/api/login", {"code": "mã sai"})[0], 401)
+        self.login()
+        self.csrf = "é"
+        self.assertEqual(self.req("POST", "/api/logout")[0], 403)
+
     def test_external_actions_disabled_even_when_owner_grants(self):
         self.login()
         code, output, _ = self.req("POST", "/api/goals/propose", {

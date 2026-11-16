@@ -179,7 +179,7 @@ def list_goals(*, db_path=None, limit=30):
 
 
 def change_state(goal_id, status, *, expected, error=None,
-                 parent_task_id=None, db_path=None):
+                 parent_task_id=None, expected_updated_at=None, db_path=None):
     _id(goal_id)
     if status not in STATES or expected not in STATES or status not in TRANSITIONS[expected]:
         raise BrainError("Forbidden goal transition")
@@ -190,8 +190,9 @@ def change_state(goal_id, status, *, expected, error=None,
         updated = db.execute(
             "UPDATE goals SET status=?,updated_at=?,"
             "error=?,parent_task_id=COALESCE(?,parent_task_id) "
-            "WHERE goal_id=? AND status=?",
-            (status, now, error[:160] if error else None, parent_task_id, goal_id, expected))
+            "WHERE goal_id=? AND status=? AND (? IS NULL OR updated_at=?)",
+            (status, now, error[:160] if error else None, parent_task_id, goal_id, expected,
+             expected_updated_at, expected_updated_at))
         if updated.rowcount != 1:
             raise BrainError("Goal state changed concurrently or is not eligible")
         db.execute("INSERT INTO goal_events(goal_id,at,name,detail_json)"

@@ -174,7 +174,7 @@ class _Handler(BaseHTTPRequestHandler):
         if session is None:
             return self._blocked(401, "authentication_required")
         header = self.headers.get("X-CSRF-Token", "")
-        if not hmac.compare_digest(header, session["csrf"]):
+        if not hmac.compare_digest(header.encode("latin-1"), session["csrf"].encode("ascii")):
             return self._blocked(403, "invalid_csrf")
         if path == "/api/logout":
             return auth.logout(self)

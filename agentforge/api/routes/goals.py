@@ -65,6 +65,13 @@ def handle(server, path, request, session=None):
                     len(set(grants)) != len(grants) or
                     not set(grants).issubset(skill_registry.PERMISSIONS)):
                 raise ValueError("Invalid tool grants")
+            revision = request.get("goal_updated_at")
+            # Legacy initial RUN remains supported only before any dispatch or retry.
+            fresh_start = (action == "run" and goal["current_step"] == 0
+                           and all(event["name"] in {"PLANNED", "APPROVED"}
+                                   for event in goal["events"]))
+            if revision != goal["updated_at"] and not (revision is None and fresh_start):
+                raise PermissionError("Goal changed; reload the current step before authorizing")
             external = set(grants) & SENSITIVE_GRANTS
             # Only authorize tools required by the *current* step.
             # Future model calls must be approved in their own turn.
@@ -86,7 +93,8 @@ def handle(server, path, request, session=None):
             # No implicit or persistent grants. The S1 runner enforces each step.
             return brain_runner.execute(
                 ident, grants=grants, brain_db_path=server.brain_db_path,
-                task_db_path=server.task_db_path, **flags)
+                task_db_path=server.task_db_path, expected_updated_at=goal["updated_at"],
+                **flags)
         raise ValueError("Unknown goal operation")
     if path == "/api/schedules/create":
         if request.get("ack") != "SCHEDULE":

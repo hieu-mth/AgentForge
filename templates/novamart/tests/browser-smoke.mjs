@@ -18,7 +18,12 @@ try{
     await sleep(300);
   }
   if(!ready)throw new Error('NovaMart preview did not start');
-  browser=await chromium.launch({channel:'msedge',headless:true});
+  browser=await chromium.launch({
+    ...(process.env.AGENTFORGE_BROWSER_EXECUTABLE
+      ? {executablePath:process.env.AGENTFORGE_BROWSER_EXECUTABLE}
+      : {channel:'msedge'}),
+    headless:true,
+  });
   const page=await browser.newPage({viewport:{width:1280,height:900}});
   const errors=[],outside=[];
   page.on('pageerror',e=>errors.push(e.message));

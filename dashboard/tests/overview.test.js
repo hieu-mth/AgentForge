@@ -30,3 +30,18 @@ test('sample scope never implies full historical totals',()=>{
   assert.equal(s.scope.tasks,1);
   assert.equal(s.counts.doneToday,1);
 });
+
+test('Vietnam midnight rolls over daily counts and inbox includes newly planned goals',()=>{
+  const s=buildOverview({
+    tasks:[
+      {task_id:'yesterday',status:'SUCCEEDED',updated_at:'2026-11-12T16:59:00Z'},
+      {task_id:'today',status:'SUCCEEDED',updated_at:'2026-11-13T00:01:00+07:00'},
+    ],
+    goals:[{goal_id:'new',title:'Kế hoạch mới',status:'PLANNED'}],
+  },new Date('2026-11-12T17:30:00Z'));
+  assert.equal(s.trend.at(-1).day,'2026-11-13');
+  assert.equal(s.trend.at(-2).succeeded,1);
+  assert.equal(s.counts.doneToday,1);
+  assert.equal(s.counts.waiting,1);
+  assert.equal(s.issues[0].status,'PLANNED');
+});

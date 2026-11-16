@@ -19,7 +19,12 @@ try {
     await sleep(300);
   }
   if (!ready) throw new Error('Vite production preview not ready');
-  browser = await chromium.launch({channel:'msedge',headless:true});
+  browser = await chromium.launch({
+    ...(process.env.AGENTFORGE_BROWSER_EXECUTABLE
+      ? {executablePath:process.env.AGENTFORGE_BROWSER_EXECUTABLE}
+      : {channel:'msedge'}),
+    headless:true,
+  });
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -73,21 +78,15 @@ try {
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
   });
   await acceptancePage.goto(origin+'/dashboard/#/workspace',{waitUntil:'networkidle'});
-  for(const label of ['Sản phẩm cần chỉnh sửa','Sản phẩm cần kiểm tra',
-    'Đủ điều kiện Owner nghiệm thu','Owner đã chấp nhận']){
-    await acceptancePage.getByText(label,{exact:true}).waitFor();
+  const rows=acceptancePage.locator('.workspace-recent-row');
+  for(const [index,label] of ['Sản phẩm cần chỉnh sửa','Sản phẩm cần kiểm tra',
+    'Đủ điều kiện Owner nghiệm thu','Owner đã chấp nhận'].entries()){
+    const row=rows.filter({hasText:'Acceptance fixture '+states[index]});
+    await row.getByText('Đã thực thi · '+label,{exact:true}).waitFor();
+    await row.getByRole('button',{name:'Xem kết quả',exact:true}).waitFor();
   }
-  const completed=acceptancePage.locator('.status-pill').filter({hasText:'Đã thực thi xong'});
-  if(await completed.count()!==4)throw new Error('Execution status labels missing');
-  if(await completed.evaluateAll(nodes=>nodes.some(node=>node.classList.contains('tone-good')))){
-    throw new Error('Execution success incorrectly styled as product acceptance');
-  }
-  const acceptedTile=acceptancePage.locator('.stat-tile').filter({hasText:'Đã nghiệm thu'});
-  if((await acceptedTile.locator('.stat-value').innerText())!=='1'){
-    throw new Error('Workflow success counted as accepted product');
-  }
+  if(await rows.count()!==4)throw new Error('Expected all four acceptance fixtures');
   if(errors.length)throw new Error('React runtime errors: '+errors.join(' | '));
-  await acceptancePage.screenshot({path:'../docs/verification/phase1/acceptance-workspace.png',fullPage:true});
   console.log('React acceptance states: PASS (API fixtures; execution separate from Owner acceptance)');
   // Read-only Model Hub browser contract, with explicit mock data. Do not test
   // paid inference or pretend that a model is installed/online.

@@ -157,13 +157,15 @@ def _run_steps(goal_id, *, grants, confirm_model_call,
 
 def execute(goal_id, *, grants=(), confirm_model_call=False,
             confirm_browser_run=False, confirm_external_run=False,
-            brain_db_path=None, task_db_path=None):
+            brain_db_path=None, task_db_path=None, expected_updated_at=None):
     """Start or resume approved goal; only new explicit ephemeral tool grants."""
     from agentforge.ops_control import require_active
     require_active()
     goal = store.get_goal(goal_id, db_path=brain_db_path)
     if goal["status"] not in {"APPROVED", "WAITING_APPROVAL"}:
         raise store.BrainError("Goal must be approved or waiting for owner")
+    if expected_updated_at is not None and goal["updated_at"] != expected_updated_at:
+        raise store.BrainError("Goal changed; inspect the current step before authorizing")
     _verify(goal)
     if goal["status"] == "APPROVED":
         parent = task_history.create_task(
@@ -172,14 +174,15 @@ def execute(goal_id, *, grants=(), confirm_model_call=False,
              "template": goal["template"]},
             db_path=task_db_path)
         store.change_state(goal_id, "RUNNING", expected="APPROVED",
-                           parent_task_id=parent, db_path=brain_db_path)
+                           parent_task_id=parent, expected_updated_at=goal["updated_at"],
+                           db_path=brain_db_path)
         task_history.transition(parent, "RUNNING", db_path=task_db_path)
     else:
         parent = goal["parent_task_id"]
         if not isinstance(parent, str):
             raise store.BrainError("Awaiting goal has no parent task")
         store.change_state(goal_id, "RUNNING", expected="WAITING_APPROVAL",
-                           db_path=brain_db_path)
+                           expected_updated_at=goal["updated_at"], db_path=brain_db_path)
         task_history.transition(parent, "RUNNING", db_path=task_db_path)
     return _run_steps(
         goal_id, grants=grants, confirm_model_call=confirm_model_call,
@@ -231,7 +234,7 @@ def inspect(goal_id, *, brain_db_path=None, task_db_path=None):
     from agentforge.core import artifact_acceptance
     return {
         "goal_id": goal_id, "status": goal["status"],
-        "current_step": goal["current_step"],
+        "current_step": goal["current_step"], "updated_at": goal["updated_at"],
         "artifact_acceptance": artifact_acceptance.for_goal(goal, task_db_path=task_db_path),
         "title": goal["title"], "template": goal["template"],
         "plan_sha256": goal["plan_sha256"],

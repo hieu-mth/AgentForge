@@ -2,6 +2,7 @@
 from agentforge import analytics_store, brain_runner, brain_store, growth_reports
 from agentforge import growth_store, task_history
 from agentforge.core import artifact_acceptance
+from agentforge.features.websites import image_studio
 from agentforge.api.routes.bootstrap import _public_task, _summary
 
 
@@ -31,11 +32,9 @@ def dispatch(self, route):
         content, image_type = image_for_job(job_id)
         return self._reply(200, content, mime=image_type)
     if route == "/api/image/health":
-        from agentforge.image_studio_v24 import health
-        return self._reply(200, health())
+        return self._reply(200, image_studio.health())
     if route == "/api/image/jobs":
-        from agentforge.image_studio_v24 import report
-        return self._reply(200, report())
+        return self._reply(200, image_studio.report())
     if route == "/api/publishing":
         from agentforge.features.film_studio.publishing import summary
         return self._reply(200, summary())
@@ -385,8 +384,7 @@ def dispatch(self, route):
     if route == "/api/media/studio-images":
         # Reuse already collected ComfyUI assets; no GPU invocation or remote
         # fetch. Each selected job is SHA-verified again before composition.
-        from agentforge import image_studio_v24
-        rows = image_studio_v24.report()["jobs"]
+        rows = image_studio.report()["jobs"]
         images = [{
             "job_id": row["job_id"], "source": row["slug"],
             "sha256": row["asset_sha"],
@@ -454,7 +452,6 @@ def dispatch(self, route):
     if route.startswith("/api/drafts/"):
         from agentforge import quality_v14
         ident = route.removeprefix("/api/drafts/")
-        from agentforge import brain_store
         brain_store._id(ident)
         found = next((item for item in quality_v14.inbox()["reviews"]
                       if item["job_id"] == ident), None)
