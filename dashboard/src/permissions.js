@@ -51,6 +51,8 @@ export const WORKERS = Object.freeze({
   growth_operator: 'AI hỗ trợ kinh doanh',
 });
 export const SKILLS = Object.freeze({
+  "terminal.check": "Kiểm tra phiên bản Python bằng terminal",
+  "filesystem.report": "Ghi và xác minh báo cáo Markdown",
   'web.create': 'AI thiết kế website theo yêu cầu',
   'webapp.create': 'AI tạo mã nguồn marketplace React demo',
   'webapp.develop': 'AI Developer tạo React JSX/CSS tùy biến (thử nghiệm)',
@@ -62,6 +64,7 @@ export const SKILLS = Object.freeze({
   'web.quality_check': 'Kiểm tra chất lượng website',
   'web.browser_test': 'Kiểm thử website trên trình duyệt',
   'research.opportunity': 'Nghiên cứu cơ hội kinh doanh',
+  'research.report': 'Nghiên cứu tài liệu và bàn giao báo cáo',
   'research.source_review': 'Kiểm tra và đối chiếu nguồn thông tin',
   'media.compose': 'Tạo hình ảnh và tư liệu video',
   'media.copy_draft': 'Soạn kịch bản video nháp',

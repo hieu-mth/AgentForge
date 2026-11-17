@@ -1,0 +1,39 @@
+schema_version = 1
+id = "research.report"
+version = "0.1.0"
+description = "Research scoped Markdown and one public source using a bounded, Owner-approved model loop."
+worker_id = "opportunity_researcher"
+execution_mode = "owner_gated"
+required_permissions = ["workspace.read", "workspace.write", "network.search", "network.read", "model.invoke"]
+required_tools = ["filesystem", "model", "search", "https_reader"]
+artifact_types = ["markdown_report"]
+quality_checks = ["workspace_bounds", "readback_sha256"]
+
+[limits]
+timeout_seconds = 300
+estimated_model_calls = 3
+
+[input_schema]
+type = "object"
+required = ["path", "prompt", "directory"]
+additional_properties = false
+
+[input_schema.properties]
+path = "string"
+prompt = "string"
+directory = "string"
+
+[output_schema]
+type = "object"
+required = ["status", "report_path", "sha256", "size_bytes", "source_url", "local_source", "model", "tools"]
+additional_properties = false
+
+[output_schema.properties]
+status = "string"
+report_path = "string"
+sha256 = "string"
+size_bytes = "integer"
+source_url = "string"
+local_source = "string"
+model = "string"
+tools = "array"

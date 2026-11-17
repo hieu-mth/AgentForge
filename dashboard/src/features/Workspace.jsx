@@ -6,11 +6,16 @@ import { SendOutlined } from '@ant-design/icons';
 import { badge, fallback } from '../components/shared.jsx';
 import { PERMISSIONS, WORKERS, SKILLS, requiredPermissions, permissionsKnown, executionConsent } from '../permissions.js';
 import { isVideoRequest, quotaForPrompt } from '../workspace_quota.js';
+import {api} from '../api.js';
+import {useReadSequence} from '../use_resource.jsx';
 import { promptValidation } from '../prompt_validation.js';
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 
 const IDEAS = [
+  {label:"Kiểm tra Python",prompt:"Kiểm tra Python trong workspace/e2e-test"},
+  {label:"Nghiên cứu tài liệu",prompt:"Đọc tài liệu Markdown trong workspace/docs-local về AgentForge Runtime, tra cứu thêm một nguồn công khai rồi tổng hợp báo cáo cho tôi duyệt."},
+  {label:"Lưu báo cáo Markdown",prompt:"Tạo báo cáo workspace/e2e-test/report.md với nội dung: # Kiểm tra báo cáo local"},
   {label:'Tạo website',prompt:'Tạo website bán nệm hiện đại, tối ưu điện thoại, có danh mục sản phẩm, hình ảnh AI và nút liên hệ đặt hàng.'},
   {label:'Xây ứng dụng',prompt:'Tạo ứng dụng React tùy biến quản lý đơn hàng với danh sách sản phẩm, khách hàng, trạng thái đơn và tìm kiếm.'},
   {label:'Tạo video',prompt:'Làm video quảng cáo 30 giây cho cửa hàng nệm, bắt đầu bằng storyboard có thể duyệt và chỉnh sửa.'},
@@ -110,6 +115,31 @@ export function Workspace({data, onPlan, openGoal, onOpenSettings, prompt, setPr
   </div>;
 }
 
+function StepCapabilities({goalId}) {
+  const [status,setStatus]=useState(null);
+  const [loading,setLoading]=useState(false);
+  const begin=useReadSequence();
+  const check=async()=>{
+    const current=begin();
+    setLoading(true);
+    setStatus(null);
+    try {
+      const result=await api('/api/goals/'+goalId+'/capabilities');
+      if(current())setStatus(result);
+    } catch {
+      if(current())setStatus({status:'ERROR'});
+    } finally {
+      if(current())setLoading(false);
+    }
+  };
+  return <Space wrap>
+    <Button onClick={check} loading={loading}>Kiểm tra năng lực bước hiện tại</Button>
+    {status&&<Text type="secondary">
+      {badge(status.status)} {status.model} {status.loadability&&'· Chưa thử nạp model'}
+    </Text>}
+  </Space>;
+}
+
 const STEP_STATUS={SUCCEEDED:'Hoàn thành',FAILED:'Thất bại',RUNNING:'Đang chạy',WAITING_APPROVAL:'Chờ duyệt',APPROVED:'Đã duyệt',PLANNED:'Chưa chạy',INTERRUPTED:'Gián đoạn'};
 export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, onRetry, busy, externalEnabled}) {
   const [grants,setGrants]=useState([]);
@@ -165,6 +195,7 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, o
           <Text type="secondary">Bước {Math.min(activeIndex+1,steps.length)}/{steps.length}</Text>
         </div>
         <AcceptanceStatus acceptance={goal.artifact_acceptance}/>
+        {activeStep&&<StepCapabilities key={goal.goal_id+goal.updated_at} goalId={goal.goal_id}/>}
         {['FAILED','INTERRUPTED'].includes(goal.status)&&<Alert type="error" showIcon
           message="Thực thi chưa thành công"
           description={goal.execution_error||goal.error||'Xem Lịch sử tác vụ để kiểm tra nguyên nhân.'}/>}
@@ -217,7 +248,9 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, o
             description="Quy trình dự kiến 3 lượt model: Architect, Developer và Reviewer. Mỗi lần Chạy/Tiếp tục chỉ duyệt tối đa một lượt; QA tĩnh không build hoặc chạy trình duyệt."/>}
           {required.includes('model.invoke')&&<Alert type="warning" showIcon
             message="Model local hoặc cloud"
-            description="Backend quyết định model theo cấu hình. Nếu dùng cloud, dữ liệu có thể được gửi tới nhà cung cấp và phát sinh chi phí; chọn quyền này đồng thời xác nhận gọi model cho lượt chạy."/>}
+            description={goal.template==='research.report'
+              ? "Tác vụ gọi model tối đa 3 lần. Với cloud, nhà cung cấp nhận brief, tên file, tối đa 5.000 ký tự từ file Markdown được chọn và trích đoạn nguồn công khai. Có thể phát sinh chi phí. Backend yêu cầu Owner bật quyền cloud riêng."
+              : "Backend quyết định model theo cấu hình. Nếu dùng cloud, dữ liệu có thể được gửi tới nhà cung cấp và phát sinh chi phí; chọn quyền này đồng thời xác nhận gọi model cho lượt chạy."}/>}
           {sensitive&&!externalEnabled&&<Alert type="error" showIcon
             message="Backend đang khóa công cụ ngoài"
             description="Không thể mở khóa bằng checkbox; cần bật quyền tại backend."/>}

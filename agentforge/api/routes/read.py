@@ -7,6 +7,18 @@ from agentforge.api.routes.bootstrap import _public_task, _summary
 
 
 def dispatch(self, route):
+    if route.startswith("/api/artifacts/reports/"):
+        ident = route.removeprefix("/api/artifacts/reports/")
+        task = task_history.get_task(ident, db_path=self.server.task_db_path)
+        result = task["result"]
+        if not isinstance(result, dict):
+            raise ValueError("Report receipt unavailable")
+        sha = result.get("sha256")
+        doc, _ = artifact_acceptance.source(ident, sha, "reports", db_path=self.server.task_db_path)
+        acceptance = artifact_acceptance.inspect(ident, sha, "reports", db_path=self.server.task_db_path)
+        self._session().setdefault("reviewed_reports", {})[ident] = sha
+        return self._reply(200, {**doc, "proposal_id": ident,
+                                 "artifact_acceptance": acceptance})
     if route == "/api/characters":
         from agentforge.features.film_studio.characters import list_characters
         return self._reply(200, list_characters())
@@ -143,6 +155,13 @@ def dispatch(self, route):
     if route == "/api/artifacts":
         from agentforge.artifact_catalog import report
         return self._reply(200, report())
+    if route == "/api/workforce":
+        from agentforge.ai.workforce import inspect
+        return self._reply(200, inspect(brain_db_path=self.server.brain_db_path,
+                                        task_db_path=self.server.task_db_path))
+    if route == "/api/ops/discovery":
+        from agentforge.ops.discovery import inspect
+        return self._reply(200, inspect())
     if route == "/api/ops/preflight":
         from agentforge.ops.preflight import inspect
         return self._reply(200, inspect())
@@ -475,6 +494,11 @@ def dispatch(self, route):
             "quality": found["quality"], "decision": found["decision"],
             "task": _public_task(task),
             "storyboard": result})
+    if route.startswith("/api/goals/") and route.endswith("/capabilities"):
+        from agentforge.ai.model_health import inspect_goal_step
+        ident = route.removeprefix("/api/goals/").removesuffix("/capabilities")
+        goal = brain_store.get_goal(ident, db_path=self.server.brain_db_path)
+        return self._reply(200, inspect_goal_step(goal))
     if route.startswith("/api/goals/"):
         ident = route.removeprefix("/api/goals/")
         return self._reply(200, brain_runner.inspect(

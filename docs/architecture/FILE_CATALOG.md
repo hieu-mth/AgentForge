@@ -78,6 +78,7 @@
 | `product_revision.py` | COMPAT | Alias sang features/websites/revision.py. |
 | `prompt_intake.py` | COMPAT | Wrapper sang ai/prompt_intake.py. |
 | `quality_v14.py` | LOGIC | Business profile, conservative QA và Owner review inbox. |
+| `research_report.py` | LOGIC | Bounded local-agent research and verified Markdown handoff. |
 | `research.py` | CLI | Research LangGraph, checkpoints và local reports. |
 | `result_view.py` | COMPAT | Wrapper sang core/result_view.py. |
 | `review_handoff.py` | LOGIC | Chuyển observations thành Owner review candidates. |
@@ -142,6 +143,7 @@
 | `ai/model_registry.py` | Load model profiles từ models.toml, không chứa credentials. |
 | `ai/prompt_intake.py` | Định tuyến natural language request vào template allowlisted. |
 | `ai/role_routing.py` | Định tuyến worker-to-model có cấu hình được duyệt. |
+| `ai/workforce.py` | Owner read-only dependency projection of existing manifests and model routes. |
 | `ai/worker_registry.py` | Đọc và validate worker manifests. |
 
 ## **Core: `core/`**
@@ -158,6 +160,7 @@
 | `core/skill_registry.py` | Đọc skill contracts TOML và kiểm tra schema. |
 | `core/skill_runner.py` | Permission checks, task persistence và gọi trusted domain adapters. |
 | `core/skill_adapters/__init__.py` | Allowlisted domain adapter map, fail closed với unknown skill. |
+| `core/skill_adapters/filesystem.py` | Owner-gated workspace Markdown creation and exact-byte verification. |
 | `core/skill_adapters/web.py` | Policy + handlers cho website và React webapp. |
 | `core/skill_adapters/research.py` | Policy + handlers cho research, capture stdout. |
 | `core/skill_adapters/media.py` | Policy + handlers cho media với external-run approvals. |
@@ -295,6 +298,7 @@
 | File hiện tại dưới `agentforge/` | Vai trò |
 | --- | --- |
 | `ops/__init__.py` | Package operational helpers. |
+| `ops/discovery.py` | Live bounded hardware, software and local model catalog snapshot. |
 | `ops/preflight.py` | Read-only local environment preflight; no subprocess/network/model invocation. |
 | `ops/base_acceptance.py` | Wave 5 status gate: setup/health/model routing summary, Owner acceptance always UNVERIFIED until independently checked. |
 | `ops/runtime_certification.py` | Đợt 5 sau audit: Owner-side live localhost/model/GPU preflight; optional confirmed Ollama/FFmpeg/Docker probes, privacy-safe evidence; never automatic production GO. |

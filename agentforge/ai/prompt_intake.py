@@ -28,6 +28,16 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
     if type(max_external_runs) is not int or max_external_runs != 0:
         raise PermissionError("Prompt intake không cấp quyền chạy tiến trình ngoài.")
     text = prompt.strip()
+    local_report = re.fullmatch(r"Tạo báo cáo workspace/([^\s]+)\s+với nội dung:\s*(.+)",
+                                text, flags=re.IGNORECASE | re.DOTALL)
+    if local_report:
+        path, content = local_report.groups()
+        goal = brain_planner.propose(
+            "Tạo và xác minh báo cáo Markdown", "filesystem.report",
+            {"path": path, "content": content}, db_path=brain_db_path)
+        return {"status": "PLAN_CREATED", "goal_id": goal["goal_id"],
+                "template": "filesystem.report", "model_dispatched": False,
+                "requires_owner_approval": True, "published": False}
     normalized = _fold(text)
     wants_website = any(k in normalized for k in (
         "website", "landing page", "trang web", "web ban", "web gioi thieu",
@@ -60,10 +70,39 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
         "shopee", "marketplace", "san thuong mai dien tu",
         "thuong mai dien tu", "gio hang", "web app", "webapp",
         "ung dung mua sam", "ecommerce"))
+    if re.match(r"(?:tao|sinh|ve|thiet ke)\s+(?:(?:mot|1)\s+)?(?:anh|hinh anh)\b", normalized):
+        from agentforge.features.websites import image_studio
+        health = image_studio.health()
+        available = bool(health["checkpoints"])
+        return {
+            "status": "OPEN_IMAGE_STUDIO" if available else "CAPABILITY_BLOCKED",
+            "capability": "image.generate",
+            "runtime_status": "CATALOG_PRESENT" if available else health["status"],
+            "model_dispatched": False,
+            "message": (
+                "Có checkpoint local. Mở Sản phẩm → Kho thành phẩm & Ảnh AI để chọn model và cấp quyền."
+                if available else
+                "Chưa tìm được checkpoint tạo ảnh từ ComfyUI. Mở Môi trường & Tài nguyên để kiểm tra."
+            ),
+        }
     if wants_website and wants_video:
         return {"status": "NEEDS_CLARIFICATION",
                 "message": "Yêu cầu đang gồm cả website và video. Hãy tách thành hai công việc độc lập để bạn duyệt từng sản phẩm."}
-    if wants_company:
+    wants_research_report = ("markdown" in normalized and "bao cao" in normalized
+                             and any(term in normalized for term in (
+                                 "tra cuu", "nghien cuu", "nguon cong khai", "tim them nguon")))
+    if wants_research_report:
+        scope = re.search(r"\bworkspace/([a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_-]+)*)(?=[\s,;.!?`\)]|$)", text)
+        if not scope:
+            return {"status": "NEEDS_CLARIFICATION",
+                    "message": "Hãy ghi thư mục tài liệu đã cấp quyền, ví dụ workspace/docs-local."}
+        if max_model_calls != 3:
+            raise ValueError("Nghiên cứu và tổng hợp cần ngân sách 3 lượt model local.")
+        template = "research.report"
+        inputs = {"prompt": text, "directory": scope[1],
+                  "path": "research-reports/report-" + uuid4().hex + ".md"}
+        title = "Nghiên cứu và tổng hợp báo cáo Markdown"
+    elif wants_company:
         slug = "company-" + uuid4().hex[:12]
         template = "webapp.company"
         inputs = {"slug": slug, "brief": text}

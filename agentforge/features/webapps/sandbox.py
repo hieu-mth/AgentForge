@@ -69,11 +69,11 @@ def _env():
     return {key: os.environ[key] for key in allowed if key in os.environ}
 
 
-def _image_ready(docker, host, image):
+def _image_ready(docker, host, image, *, timeout=15):
     try:
         r = subprocess.run(
             [docker, "-H", host, "image", "inspect", "--format", "{{.Os}}", image],
-            stdin=subprocess.DEVNULL, capture_output=True, timeout=15,
+            stdin=subprocess.DEVNULL, capture_output=True, timeout=timeout,
             text=True, encoding="utf-8", errors="replace", env=_env(),
             check=False)
     except (OSError, subprocess.TimeoutExpired) as exc:

@@ -11,6 +11,9 @@ from urllib.parse import parse_qs, urlsplit
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8188
 MAX_RESPONSE_BYTES = 131_072
+MODEL_CATEGORIES = ("checkpoints", "diffusion_models", "loras", "vae",
+                    "text_encoders", "clip")
+MODEL_ROUTES = frozenset("/models/" + category for category in MODEL_CATEGORIES)
 ROUTE = re.compile(r"/(?:system_stats|prompt|history/[0-9a-f-]{36})\Z")
 
 
@@ -63,7 +66,7 @@ def validate_image_route(path, *, has_body=False):
         if path != "/prompt":
             raise ComfyUITransportError("Invalid image POST route")
         return
-    if path in ("/models/checkpoints",) or IMAGE_HISTORY.fullmatch(path):
+    if path in MODEL_ROUTES or IMAGE_HISTORY.fullmatch(path):
         return
     parsed = urlsplit(path)
     if parsed.path != "/view" or parsed.scheme or parsed.netloc or parsed.fragment:

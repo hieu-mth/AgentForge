@@ -5,7 +5,7 @@ import { NAV_GROUPS, DEFAULT_TAB, groupFor, defaultSection,
 
 const originalScreens=[
   'workspace','overview','media-studio','characters','goals','tasks','reviews','websites','projects','retention',
-  'team','intelligence','growth','mattress','schedules','operations','channels','finance','settings','memory','models',
+  'team','intelligence','growth','mattress','schedules','operations','channels','finance','settings','memory','models','environment',
 ];
 test('sidebar contains eight owner workflow groups',()=>{
   assert.deepEqual(NAV_GROUPS.map(x=>x.label),[

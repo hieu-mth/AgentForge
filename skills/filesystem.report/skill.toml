@@ -1,0 +1,34 @@
+schema_version = 1
+id = "filesystem.report"
+version = "0.1.0"
+description = "Create a bounded Markdown report under workspace and verify its exact bytes and digest."
+worker_id = "product_builder"
+execution_mode = "owner_gated"
+required_permissions = ["workspace.write"]
+required_tools = ["filesystem"]
+artifact_types = ["markdown_report"]
+quality_checks = ["workspace_bounds", "readback_sha256"]
+
+[limits]
+timeout_seconds = 15
+estimated_model_calls = 0
+
+[input_schema]
+type = "object"
+required = ["path", "content"]
+additional_properties = false
+
+[input_schema.properties]
+path = "string"
+content = "string"
+
+[output_schema]
+type = "object"
+required = ["status", "report_path", "sha256", "size_bytes"]
+additional_properties = false
+
+[output_schema.properties]
+status = "string"
+report_path = "string"
+sha256 = "string"
+size_bytes = "integer"

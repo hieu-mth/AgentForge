@@ -81,7 +81,7 @@ DEFAULT_JSON_SYSTEM = (
 )
 
 
-def resolve_runtime(worker_id, default_system):
+def resolve_runtime(worker_id, default_system, *, require_cloud_consent=False):
     # Process environment takes precedence over the local, gitignored .env.
     load_dotenv(DOTENV_PATH, override=False)
     from agentforge.ai.role_routing import ROLE_WORKERS, require_worker_model
@@ -119,7 +119,7 @@ def resolve_runtime(worker_id, default_system):
         raise ModelConfigError(f"Model is disabled: {model_ref}")
 
     provider = selected["provider"]
-    if (owner_routed and not env_ref and provider != "ollama"
+    if (provider != "ollama" and (require_cloud_consent or (owner_routed and not env_ref))
             and os.getenv("AGENTFORGE_CLOUD_MODEL_CONSENT") != "YES"):
         raise PermissionError("CLOUD_MODEL_CONSENT_REQUIRED")
     if provider == "ollama":
@@ -215,7 +215,7 @@ def _read_stream_event(response, deadline, max_bytes):
 
 
 
-def _ollama_chat(runtime, prompt, schema, *, worker_id=None):
+def _ollama_chat(runtime, prompt, schema, *, worker_id=None, opener=None):
     stream_developer = worker_id == "webapp_developer" and schema is not None
     payload = {
         "model": runtime["model"],
@@ -238,7 +238,7 @@ def _ollama_chat(runtime, prompt, schema, *, worker_id=None):
     )
     timeout = _request_timeout(worker_id)
     deadline = time.monotonic() + timeout
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with (opener or urllib.request.urlopen)(request, timeout=timeout) as response:
         _remaining(deadline)
         if stream_developer:
             parts = []

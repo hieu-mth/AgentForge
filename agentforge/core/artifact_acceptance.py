@@ -13,6 +13,7 @@ from agentforge import task_history
 STATES = frozenset({"DRAFT", "NEEDS_VALIDATION", "NEEDS_REVISION",
                     "READY_FOR_REVIEW", "ACCEPTED", "REJECTED"})
 POLICIES = {
+    "markdown_report": ("READBACK_SHA",),
     "static_website": ("CONTRACT_VALID",),
     "interactive_website": ("CONTRACT_VALID", "SYNTAX_VALID", "BROWSER_VALID"),
     "react_template": ("CONTRACT_VALID", "TOOLCHAIN_CURRENT", "SYNTAX_VALID", "BUILD_VALID", "BROWSER_VALID"),
@@ -114,6 +115,10 @@ def _view(db, pid, sha, artifact_type):
         "SELECT kind,outcome,evidence_id FROM artifact_validations WHERE proposal_id=? AND source_sha=? ORDER BY seq",
         (pid, sha))]
     latest = {report["kind"]: report for report in reports}
+    if artifact_type == "markdown_report":
+        # All report reads and decisions verify live bytes against the successful receipt.
+        latest["READBACK_SHA"] = {"kind": "READBACK_SHA", "outcome": "PASS",
+                                 "evidence_id": "report:" + sha}
     # Failed build tasks from the trusted runner also invalidate earlier evidence.
     # A successful later build replaces that failure only when recorded explicitly.
     failed_build = None
@@ -146,8 +151,28 @@ def _view(db, pid, sha, artifact_type):
             "interactive_preview_enabled": False}
 
 
-def source(pid, sha, namespace):
+def source(pid, sha, namespace, *, db_path=None):
     _identity(pid, sha)
+    if namespace == "reports":
+        from agentforge import gateway
+        task = task_history.get_task(pid, db_path=db_path)
+        receipt = task["result"]
+        if (task["skill_id"] not in {"filesystem.report", "research.report"} or task["status"] != "SUCCEEDED"
+                or not isinstance(receipt, dict) or receipt.get("sha256") != sha
+                or receipt.get("status") != "VERIFIED"):
+            raise PermissionError("ACCEPTANCE_SOURCE_STALE")
+        path = task["request"]["path"]
+        if receipt.get("report_path") != "workspace/" + path:
+            raise PermissionError("ACCEPTANCE_SOURCE_STALE")
+        gateway.validate_report(path, task["request"].get("content", "verified report"))
+        target = gateway.safe_path(path)
+        if not target.is_file():
+            raise FileNotFoundError("Report missing")
+        with target.open("rb") as stream:
+            raw = stream.read(6001)
+        if len(raw) != receipt.get("size_bytes") or hashlib.sha256(raw).hexdigest() != sha:
+            raise PermissionError("ACCEPTANCE_SOURCE_STALE")
+        return {"sha256": sha, "content": raw.decode("utf-8")}, "markdown_report"
     if namespace == "webapps":
         from agentforge import webapp_developer as dev
         provider = dev.provider(pid)
@@ -168,7 +193,7 @@ def source(pid, sha, namespace):
 
 
 def inspect(pid, sha, namespace="webapps", *, db_path=None):
-    _, artifact_type = source(pid, sha, namespace)
+    _, artifact_type = source(pid, sha, namespace, db_path=db_path)
     db = _connect(db_path)
     try:
         return _view(db, pid, sha, artifact_type)
@@ -209,7 +234,7 @@ def validate_source(pid, sha, namespace="webapps", *, db_path=None):
 def decide(pid, sha, namespace, decision, *, expected_revision, evidence_sha, confirm=False, db_path=None):
     if confirm is not True or decision not in {"ACCEPTED", "REJECTED"}:
         raise PermissionError("ACCEPTANCE_OWNER_CONFIRMATION_REQUIRED")
-    _, artifact_type = source(pid, sha, namespace)
+    _, artifact_type = source(pid, sha, namespace, db_path=db_path)
     if type(expected_revision) is not int or expected_revision < 0:
         raise ValueError("ACCEPTANCE_INVALID_REVISION")
     with closing(_connect(db_path, write=True)) as db, db:
@@ -269,6 +294,12 @@ def observe(skill_id, result, *, db_path=None):
 
 def for_task(task, *, db_path=None):
     result = task.get("result")
+    if task.get("skill_id") in {"filesystem.report", "research.report"} and task.get("status") == "SUCCEEDED":
+        try:
+            return inspect(task["task_id"], result["sha256"], "reports", db_path=db_path)
+        except (ValueError, KeyError, OSError, TypeError):
+            return {"status": "NEEDS_VALIDATION", "owner_accepted": False,
+                    "reason": "SOURCE_UNAVAILABLE_OR_STALE"}
     if not isinstance(result, dict) or not result.get("proposal_id") or not result.get("sha256"):
         return None
     namespace = "proposals" if task.get("skill_id") == "web.create" else "webapps"

@@ -53,6 +53,13 @@ def _picked(data, names):
 
 def present(skill_id, result):
     """Return only preapproved owner-visible statistics; no raw result fallback."""
+    if skill_id == "terminal.check" and isinstance(result, dict):
+        return {"kind": "terminal_receipt", **_picked(result, {"status", "recipe", "exit_code", "stdout", "stderr"})}
+    if skill_id == "research.report" and isinstance(result, dict):
+        return {"kind": "filesystem_report", **_picked(result, {"status", "report_path", "sha256", "size_bytes", "model"}),
+                "tools": result.get("tools", [])[:8]}
+    if skill_id == "filesystem.report" and isinstance(result, dict):
+        return {"kind": "filesystem_report", **_picked(result, {"status", "report_path", "sha256", "size_bytes"})}
     if skill_id in {"webapp.architect","webapp.audit","webapp.review"}:
         import re
         if not isinstance(result,dict):

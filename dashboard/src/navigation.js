@@ -14,7 +14,7 @@ export const NAV_GROUPS = Object.freeze([
   {key:'team',label:'Đội ngũ AI',tabs:[
     ['team','Đội ngũ & Vai trò'],['goals','Kế hoạch & Duyệt'],['tasks','Lịch sử tác vụ']]},
   {key:'settings',label:'Cài đặt',tabs:[
-    ['settings','Cấu hình'],['models','Model AI & Điều phối'],['schedules','Lịch chạy'],
+    ['settings','Cấu hình'],['environment','Môi trường & Tài nguyên'],['models','Model AI & Điều phối'],['schedules','Lịch chạy'],
     ['operations','Vận hành'],['memory','Bộ nhớ Owner'],['retention','Sao lưu & Dọn dẹp']]},
 ]);
 export const DEFAULT_TAB = Object.freeze({

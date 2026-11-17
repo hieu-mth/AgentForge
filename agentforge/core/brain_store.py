@@ -178,6 +178,20 @@ def list_goals(*, db_path=None, limit=30):
             "ORDER BY updated_at DESC,rowid DESC LIMIT ?", (limit,))]
 
 
+def recent_skill_templates(*, db_path=None):
+    """Observed dependency edges from the 30 most recently updated saved plans."""
+    db = _connect(db_path)
+    if db is None:
+        return {}
+    reverse = {}
+    with closing(db):
+        for row in db.execute("SELECT template,plan_json FROM goals "
+                              "ORDER BY updated_at DESC,rowid DESC LIMIT 30"):
+            for step in json.loads(row["plan_json"]):
+                reverse.setdefault(step["skill_id"], set()).add(row["template"])
+    return {skill: sorted(templates) for skill, templates in reverse.items()}
+
+
 def change_state(goal_id, status, *, expected, error=None,
                  parent_task_id=None, expected_updated_at=None, db_path=None):
     _id(goal_id)

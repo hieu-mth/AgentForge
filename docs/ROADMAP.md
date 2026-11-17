@@ -1,6 +1,22 @@
 # AgentForge — Roadmap thực thi
 
-**Cập nhật:** 11/11/2026. Đây là roadmap **hiện hành**, thay cho các bản V4/C8 trong tài liệu lịch sử. Chỉ đánh dấu DONE khi đạt tiêu chí kiểm chứng; mocked tests không thay thế real-model testing.
+**Cập nhật:** 16/11/2026. Đây là roadmap **hiện hành**, thay cho các bản V4/C8 trong tài liệu lịch sử. Chỉ đánh dấu DONE khi đạt tiêu chí kiểm chứng; mocked tests không thay thế real-model testing.
+
+## Core Runtime — thứ tự chốt sau review PR #124
+
+1. **Chốt phạm vi PR.** Discovery, Workforce, hai tác vụ local có giới hạn và
+   `research.report` được đánh giá theo contract và CI của chính PR. Xem
+   [phạm vi và bằng chứng](STATUS.md#core-runtime--phạm-vi-pr-124).
+2. **Nghiệm thu trên Windows của Owner.** Chạy workflow nghiên cứu với một thư mục
+   Markdown được cấp quyền, Ollama và một nguồn HTTPS được phép. Ghi commit, model,
+   thời gian, nguồn đã dùng, SHA, đường dẫn artifact và quyết định Owner. Ghi nhận
+   ComfyUI/GPU và Docker theo từng luồng thực tế.
+3. **Mở rộng vòng lặp công cụ có giới hạn.** Tái sử dụng skill, adapter, quyền
+   và task history. Nghiệm thu chuỗi chọn và dùng nhiều tool dựa trên kết quả.
+4. **Bổ sung routing theo readiness.** Kiểm chứng khả năng nạp và chạy model,
+   tài nguyên, chi phí và quyền Owner cho mỗi lựa chọn và fallback.
+5. **Nghiệm thu một sản phẩm.** Website/React cần đối chiếu brief và hành vi
+   trên browser. Film cần đánh giá chất lượng chuyển động bên cạnh kiểm tra MP4.
 
 ## Post-audit Đợt 6 — MVP nệm theo kênh người quen
 

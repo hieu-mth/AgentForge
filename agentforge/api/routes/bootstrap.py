@@ -11,7 +11,8 @@ def _public_task(task, *, db_path=None):
     output["artifact_acceptance"] = artifact_acceptance.for_task(task, db_path=db_path)
     output["artifacts"] = _artifact_names(task.get("result"))
     output["report"] = result_view.present(task.get("skill_id"), task.get("result")) if (
-        task.get("status") == "SUCCEEDED") else None
+        task.get("status") == "SUCCEEDED" or
+        (task.get("skill_id") == "terminal.check" and task.get("status") == "FAILED")) else None
     if (task.get("skill_id") == "web.create" and task.get("status") == "SUCCEEDED"
             and isinstance(task.get("result"), dict)):
         result = task["result"]
