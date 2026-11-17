@@ -208,7 +208,10 @@ class WorkflowCompositionTests(unittest.TestCase):
                 "inputs": {"steps": [
                     {"template": "terminal.check",
                      "inputs": {"recipe": "python-version", "directory": "notes"}},
-                    report("reports/after-check.md"),
+                    {"template": "filesystem.report", "inputs": {
+                        "path": "reports/after-check.md",
+                        "content": {"from_step": 0, "field": "stdout"},
+                    }},
                 ]},
             })
             self.assertEqual(code, 200, draft)
@@ -233,4 +236,4 @@ class WorkflowCompositionTests(unittest.TestCase):
                 "grants": ["workspace.write"],
             })
             self.assertEqual((code, done["status"]), (200, "SUCCEEDED"), done)
-            self.assertEqual((workspace / "reports/after-check.md").read_text(), "Evidence")
+            self.assertEqual((workspace / "reports/after-check.md").read_bytes().decode("utf-8"), receipt["stdout"])
