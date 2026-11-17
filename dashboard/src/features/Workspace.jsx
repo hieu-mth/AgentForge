@@ -248,7 +248,9 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, o
             description="Quy trình dự kiến 3 lượt model: Architect, Developer và Reviewer. Mỗi lần Chạy/Tiếp tục chỉ duyệt tối đa một lượt; QA tĩnh không build hoặc chạy trình duyệt."/>}
           {required.includes('model.invoke')&&<Alert type="warning" showIcon
             message="Model local hoặc cloud"
-            description="Backend quyết định model theo cấu hình. Nếu dùng cloud, dữ liệu có thể được gửi tới nhà cung cấp và phát sinh chi phí; chọn quyền này đồng thời xác nhận gọi model cho lượt chạy."/>}
+            description={goal.template==='research.report'
+              ? "Tác vụ gọi model tối đa 3 lần. Với cloud, nhà cung cấp nhận brief, tên file, tối đa 5.000 ký tự từ file Markdown được chọn và trích đoạn nguồn công khai. Có thể phát sinh chi phí. Backend yêu cầu Owner bật quyền cloud riêng."
+              : "Backend quyết định model theo cấu hình. Nếu dùng cloud, dữ liệu có thể được gửi tới nhà cung cấp và phát sinh chi phí; chọn quyền này đồng thời xác nhận gọi model cho lượt chạy."}/>}
           {sensitive&&!externalEnabled&&<Alert type="error" showIcon
             message="Backend đang khóa công cụ ngoài"
             description="Không thể mở khóa bằng checkbox; cần bật quyền tại backend."/>}

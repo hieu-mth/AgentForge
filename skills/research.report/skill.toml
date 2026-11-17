@@ -1,7 +1,7 @@
 schema_version = 1
 id = "research.report"
 version = "0.1.0"
-description = "Research scoped Markdown and one public source using a bounded local model loop."
+description = "Research scoped Markdown and one public source using a bounded, Owner-approved model loop."
 worker_id = "opportunity_researcher"
 execution_mode = "owner_gated"
 required_permissions = ["workspace.read", "workspace.write", "network.search", "network.read", "model.invoke"]

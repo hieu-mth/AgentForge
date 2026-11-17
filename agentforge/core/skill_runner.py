@@ -69,7 +69,8 @@ def missing_grants(skill_id, granted=(), *, confirm_model_call=False,
 def _safe_failure(skill_id, exc):
     """Stable, deliberately allowlisted errors; never serialize arbitrary exceptions."""
     if skill_id == "research.report" and str(exc) in {
-        "RESEARCH_LOCAL_MODEL_REQUIRED", "RESEARCH_LOCAL_MODEL_NOT_INSTALLED",
+        "CLOUD_MODEL_CONSENT_REQUIRED", "RESEARCH_LOCAL_MODEL_REQUIRED",
+        "RESEARCH_LOCAL_MODEL_NOT_INSTALLED",
         "RESEARCH_INVALID_TOOL_CHOICE", "RESEARCH_NO_MARKDOWN_IN_SCOPE",
         "RESEARCH_INVALID_SEARCH_QUERY", "RESEARCH_NO_APPROVED_PUBLIC_SOURCE",
         "RESEARCH_CITATIONS_REQUIRED", "RESEARCH_UNVERIFIED_URL",

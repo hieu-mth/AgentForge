@@ -4,13 +4,13 @@
 
 Baseline đối chiếu là `main` tại `df8c90b`. [PR #124](https://github.com/hieu-mth/AgentForge/pull/124)
 bổ sung discovery, Workforce, tác vụ Markdown có nghiệm thu SHA và một chẩn đoán
-terminal cố định. Workflow `research.report` dùng tối đa ba lượt model Ollama local
+terminal cố định. Workflow `research.report` dùng tối đa ba lượt model qua Ollama local hoặc Anthropic được Owner cho phép
 để chọn truy vấn, một file Markdown trong thư mục Owner chỉ định và một nguồn HTTPS
 được phép. Báo cáo được lưu vào `workspace/research-reports/` để đọc lại và nghiệm thu.
 
 **Code/CI:** đã kiểm tra đường đi HTTP, quyền thực thi, file thật, SHA và quyết định Owner.
 Model, tìm kiếm và tải trang dùng fixture trong bài test. **Owner runtime chưa xác minh**
-với Ollama và nguồn Internet thật. Browser tool tổng quát, vòng lặp công cụ linh hoạt,
+với Ollama, Claude và nguồn Internet thật. Browser tool tổng quát, vòng lặp công cụ linh hoạt,
 routing theo readiness và kiểm thử tranh chấp symlink/junction còn mở.
 
 Xem [audit và hướng dẫn nghiệm thu](audits/CORE_RUNTIME_FINAL_REPORT.md#follow-up-from-pr-review).

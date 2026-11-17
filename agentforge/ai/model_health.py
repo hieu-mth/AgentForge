@@ -86,7 +86,8 @@ def inspect_goal_step(goal):
     if "model.invoke" not in step["required_permissions"]:
         return {**result, "status": "MODEL_NOT_REQUIRED"}
     try:
-        runtime = resolve_runtime(step["worker_id"], "Owner readiness metadata")
+        options = {"require_cloud_consent": True} if step["skill_id"] == "research.report" else {}
+        runtime = resolve_runtime(step["worker_id"], "Owner readiness metadata", **options)
     except PermissionError:
         return {**result, "status": "CONSENT_REQUIRED"}
     except (ValueError, OSError, KeyError, NotImplementedError):

@@ -109,10 +109,21 @@ A model-selected query derived from the Owner's brief goes to the search
 provider. The program does not include local file contents in that query.
 The model chooses one direct-child Markdown file and one search result by
 index. Trusted handlers constrain inputs, select approved HTTPS hosts and
-write only to `workspace/research-reports/`. A local Ollama catalog match
-is required before search. Catalog presence alone still does not establish
-loadability. The implementation uses the configured worker route and does
-not escalate to a cloud provider.
+write only to `workspace/research-reports/`. The local Ollama route requires
+a local catalog match before search. Catalog presence leaves loadability unknown.
+An explicitly configured Anthropic route requires both
+`AGENTFORGE_CLOUD_MODEL_CONSENT=YES` on the backend process and the existing
+Goal permissions and model confirmation. Routing has no automatic fallback.
+
+For Windows cloud acceptance, configure `cloud_primary` for
+`opportunity_researcher` in Model Hub, provide the approved HTTPS gateway via
+`ANTHROPIC_BASE_URL` and its credential via `ANTHROPIC_AUTH_TOKEN`, then set
+`$env:AGENTFORGE_CLOUD_MODEL_CONSENT = "YES"` in the PowerShell session before
+starting the backend. If `AGENTFORGE_MODEL_REF` is set in the process or
+`.env`, it overrides the worker assignment. The gateway must accept the
+configured model ID. When running with cloud, the provider receives the brief,
+candidate filenames, public-result URLs and, on the last call, up to 5,000
+characters from each selected source. Use a directory approved for this transfer.
 
 The HTTP integration test exercises the real permission gates, Markdown
 creation, readback, SHA and acceptance with model/search/HTTPS fixtures.
