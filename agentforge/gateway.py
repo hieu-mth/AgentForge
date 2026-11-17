@@ -129,6 +129,39 @@ def validate_report(path, content):
     safe_path(path)
 
 
+def read_report_bytes(path):
+    """Read exact bounded bytes for acceptance and immutable revisions."""
+    validate_report(path, "verified report")
+    target = safe_path(path)
+    if _has_anchored_open():
+        with _workspace_parent(target) as (parent, name):
+            raw = _read_at(parent, name, 6001)
+    else:
+        if not target.is_file():
+            raise FileNotFoundError("Report missing")
+        with target.open("rb") as source:
+            raw = source.read(6001)
+    if len(raw) > 6000:
+        raise ValueError("Report exceeds size limit")
+    return raw
+
+
+def revise_report(path, content, source_path, source_sha256, source_task_id):
+    if (not re.fullmatch(r"[a-f0-9]{32}", source_task_id)
+            or not re.fullmatch(r"[a-f0-9]{64}", source_sha256)
+            or not re.fullmatch(r"report-revisions/[a-f0-9]{32}\.md", path)
+            or path.casefold() == source_path.casefold()):
+        raise ValueError("Invalid report revision scope")
+    validate_report(path, content)
+    raw = read_report_bytes(source_path)
+    if hashlib.sha256(raw).hexdigest() != source_sha256:
+        raise PermissionError("REPORT_REVISION_SOURCE_STALE")
+    if raw == content.encode("utf-8"):
+        raise ValueError("REPORT_REVISION_UNCHANGED")
+    return {**write_verified_report(path, content), "source_task_id": source_task_id,
+            "source_sha256": source_sha256}
+
+
 def _write_report_at(path, target, raw):
     with _workspace_parent(target, create=True) as (parent, name):
         temporary = ".agentforge-" + secrets.token_hex(16) + ".tmp"

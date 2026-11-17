@@ -19,15 +19,15 @@ ID = re.compile(r"[a-f0-9]{32}\Z")
 KEY = re.compile(r"[a-z][a-z0-9_.-]{2,63}\Z")
 SHA = re.compile(r"[a-f0-9]{64}\Z")
 STATES = {"PLANNED", "APPROVED", "RUNNING", "WAITING_APPROVAL",
-          "SUCCEEDED", "FAILED", "INTERRUPTED"}
+          "SUCCEEDED", "FAILED", "INTERRUPTED", "CANCELLED"}
 TRANSITIONS = {
-    "PLANNED": {"APPROVED"},
-    "APPROVED": {"RUNNING", "INTERRUPTED"},
+    "PLANNED": {"APPROVED", "CANCELLED"},
+    "APPROVED": {"RUNNING", "INTERRUPTED", "CANCELLED"},
     "RUNNING": {"WAITING_APPROVAL", "SUCCEEDED", "FAILED", "INTERRUPTED"},
-    "WAITING_APPROVAL": {"RUNNING", "INTERRUPTED"},
-    "SUCCEEDED": set(), "FAILED": set(), "INTERRUPTED": set(),
+    "WAITING_APPROVAL": {"RUNNING", "INTERRUPTED", "CANCELLED"},
+    "SUCCEEDED": set(), "FAILED": set(), "INTERRUPTED": set(), "CANCELLED": set(),
 }
-STEP_STATES = {"DISPATCHING", "WAITING_APPROVAL", "SUCCEEDED", "FAILED"}
+STEP_STATES = {"DISPATCHING", "WAITING_APPROVAL", "SUCCEEDED", "FAILED", "CANCELLED"}
 MAX_PLAN_BYTES = 8192
 
 
@@ -211,6 +211,27 @@ def change_state(goal_id, status, *, expected, error=None,
             raise BrainError("Goal state changed concurrently or is not eligible")
         db.execute("INSERT INTO goal_events(goal_id,at,name,detail_json)"
                    " VALUES(?,?,?,?)", (goal_id, now, status, "{}"))
+
+
+def cancel_waiting(goal_id, expected_updated_at, *, db_path=None):
+    """Cancel only before dispatch or while a child is awaiting permission."""
+    _id(goal_id)
+    if not isinstance(expected_updated_at, str):
+        raise BrainError("Inspect the current goal revision before cancellation")
+    now = _now()
+    with closing(_connect(db_path, create=True)) as db, db:
+        updated = db.execute(
+            "UPDATE goals SET status='CANCELLED',updated_at=? WHERE goal_id=? "
+            "AND updated_at=? AND status IN ('PLANNED','APPROVED','WAITING_APPROVAL')",
+            (now, goal_id, expected_updated_at))
+        if updated.rowcount != 1:
+            raise BrainError("Goal changed or is currently executing")
+        db.execute(
+            "UPDATE step_runs SET status='CANCELLED',updated_at=? WHERE goal_id=? "
+            "AND status='WAITING_APPROVAL'", (now, goal_id))
+        db.execute("INSERT INTO goal_events(goal_id,at,name,detail_json) VALUES(?,?,?,?)",
+                   (goal_id, now, "CANCELLED", "{}"))
+    return get_goal(goal_id, db_path=db_path)
 
 
 def approve_goal(goal_id, sha256, *, db_path=None):
@@ -419,6 +440,21 @@ def interrupted_task_ids(*, db_path=None):
             ) WHERE task_id IS NOT NULL ORDER BY task_id
         """)]
 
+
+
+def cancelled_task_ids(*, db_path=None):
+    """Find history links after a crash between Goal and task-store cancellation."""
+    db = _connect(db_path)
+    if db is None:
+        return []
+    with closing(db):
+        return [row[0] for row in db.execute("""
+            SELECT task_id FROM (
+                SELECT parent_task_id AS task_id FROM goals WHERE status='CANCELLED'
+                UNION
+                SELECT child_task_id AS task_id FROM step_runs WHERE status='CANCELLED'
+            ) WHERE task_id IS NOT NULL ORDER BY task_id
+        """)]
 
 
 def set_memory(key, note, evidence_ref, *, confirm_write=False, db_path=None):

@@ -109,7 +109,7 @@ def _run_steps(goal_id, *, grants, confirm_model_call,
                                   db_path=brain_db_path)
             elif previous["status"] == "WAITING_APPROVAL":
                 receipt = skill_runner.resume_waiting(
-                    previous["child_task_id"], grants=grants,
+                    previous["child_task_id"], parent_id=parent, grants=grants,
                     confirm_model_call=confirm_model_call and not model_used,
                     confirm_browser_run=confirm_browser_run,
                     confirm_external_run=confirm_external_run and not process_used,
@@ -121,7 +121,7 @@ def _run_steps(goal_id, *, grants, confirm_model_call,
                 # DISPATCHING / terminal markers must NEVER cause a second invoke.
                 raise store.BrainError("Previously dispatched step cannot be replayed")
             if receipt["status"] == "SUCCEEDED":
-                if scope_to_current_step:
+                if scope_to_current_step or goal["template"] == "workflow.compose":
                     # A later step may proceed only with the implicit read permission.
                     grants = ()
                     confirm_model_call = confirm_browser_run = confirm_external_run = False
@@ -204,6 +204,17 @@ def execute(goal_id, *, grants=(), confirm_model_call=False,
 
 
 
+def cancel_waiting(goal_id, expected_updated_at, *, brain_db_path=None, task_db_path=None):
+    goal = store.cancel_waiting(goal_id, expected_updated_at, db_path=brain_db_path)
+    linked = [step["child_task_id"] for step in goal["steps"]
+              if step["status"] == "CANCELLED"]
+    if goal["parent_task_id"] is not None:
+        linked.append(goal["parent_task_id"])
+    for task_id in linked:
+        task_history.transition(task_id, "CANCELLED", db_path=task_db_path)
+    return {"goal_id": goal_id, "status": "CANCELLED", "updated_at": goal["updated_at"]}
+
+
 def retry_failed_step(goal_id, plan_sha256, child_task_id, *,
                       brain_db_path=None, task_db_path=None):
     """Rearm only a confirmed failed V5 child; next run needs fresh consent."""
@@ -238,6 +249,13 @@ def recover(*, brain_db_path=None, task_db_path=None):
                                         db_path=task_db_path)
         except (KeyError, ValueError, RuntimeError):
             pass
+    for task_id in store.cancelled_task_ids(db_path=brain_db_path):
+        try:
+            child = task_history.get_task(task_id, db_path=task_db_path)
+        except KeyError:
+            continue
+        if child["status"] == "WAITING_APPROVAL":
+            task_history.transition(task_id, "CANCELLED", db_path=task_db_path)
     return {"interrupted_goals": len(recovered_ids), "automatic_replay": False}
 
 
@@ -256,5 +274,5 @@ def inspect(goal_id, *, brain_db_path=None, task_db_path=None):
         "parent_task_id": goal["parent_task_id"],
         "events": goal["events"],
         "spending_authorized": False,
-        "execution_authorized": goal["status"] != "PLANNED",
+        "execution_authorized": goal["status"] in {"APPROVED", "RUNNING", "WAITING_APPROVAL"},
     }

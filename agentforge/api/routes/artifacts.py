@@ -4,6 +4,31 @@ from agentforge.api.routes._shared import UNHANDLED
 
 
 def handle(server, path, request, session=None):
+    if path.startswith("/api/artifacts/reports/") and path.endswith("/revise"):
+        from uuid import uuid4
+        from agentforge import brain_planner, task_history
+        parts = path.split("/")
+        if (len(parts) != 6 or set(request) != {"ack", "sha256", "content"}
+                or request["ack"] != "PROPOSE_REPORT_REVISION"):
+            raise ValueError("Invalid report revision request")
+        ident = parts[4]
+        sha = request["sha256"]
+        if session is None or session.get("reviewed_reports", {}).get(ident) != sha:
+            raise PermissionError("Inspect the exact report before proposing a revision")
+        current = artifact_acceptance.inspect(ident, sha, "reports", db_path=server.task_db_path)
+        if current["status"] != "REJECTED":
+            raise PermissionError("Report revision requires a rejected source report")
+        doc, _ = artifact_acceptance.source(ident, sha, "reports", db_path=server.task_db_path)
+        if request["content"] == doc["content"]:
+            raise ValueError("REPORT_REVISION_UNCHANGED")
+        source = task_history.get_task(ident, db_path=server.task_db_path)
+        return brain_planner.propose(
+            "Chỉnh sửa báo cáo Markdown", "filesystem.revise_report",
+            {"path": "report-revisions/" + uuid4().hex + ".md",
+             "content": request["content"], "source_path": source["request"]["path"],
+             "source_sha256": sha, "source_task_id": ident},
+            db_path=server.brain_db_path)
+
     if path.startswith("/api/artifacts/") and path.endswith("/syntax"):
         parts = path.split("/")
         if (len(parts) != 6 or parts[3] not in {"webapps", "proposals"}

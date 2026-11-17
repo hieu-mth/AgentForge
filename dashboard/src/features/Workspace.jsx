@@ -22,6 +22,7 @@ const IDEAS = [
 ];
 const MIN_PROMPT=20;
 const GOAL_STATUS={
+  CANCELLED:"Đã hủy",
   PLANNED:'Chờ duyệt kế hoạch',WAITING_APPROVAL:'Cần bạn duyệt',
   APPROVED:'Sẵn sàng thực hiện',RUNNING:'Đang thực hiện',
   SUCCEEDED:'Đã thực thi',FAILED:'Thực hiện thất bại',
@@ -36,7 +37,7 @@ export function goalAction(status) {
   return 'Xem chi tiết';
 }
 
-export function Workspace({data, onPlan, openGoal, onOpenSettings, prompt, setPrompt, loading}) {
+export function Workspace({data, onPlan, onPlanWorkflow, openGoal, onOpenSettings, prompt, setPrompt, loading}) {
   const limits=quotaForPrompt(prompt,data?.workspace_policy);
   const videoIntent=isVideoRequest(prompt);
   const goals=data?.goals||[];
@@ -63,12 +64,15 @@ export function Workspace({data, onPlan, openGoal, onOpenSettings, prompt, setPr
           onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();submit();}}}
           placeholder="Ví dụ: Tạo website bán nệm cho gia đình tôi, có ảnh AI, danh sách sản phẩm, nút đặt hàng và giao diện đẹp trên điện thoại..."/>
         <div className="composer-footer">
-          <span className="composer-hint">Ctrl + Enter để gửi · Chưa gọi AI ở bước lập kế hoạch</span>
+          <span className="composer-hint">Ctrl + Enter để lập kế hoạch theo mẫu</span>
           <span className="composer-count" aria-live="polite">{countLabel}</span>
           <Button type="primary" size="large" icon={<SendOutlined/>} loading={loading}
             disabled={!!validation.error||limits.blocked} onClick={submit}>Lập kế hoạch</Button>
         </div>
       </div>
+      <Button style={{marginTop:12}} disabled={loading||!!validation.error||length>1500
+        ||limits.allowed<1||!data?.external_actions_enabled}
+        onClick={()=>onPlanWorkflow(prompt)}>Dùng Ollama lập kế hoạch nhiều bước</Button>
       {length>0&&validation.error&&<Alert style={{marginTop:12}} type="warning" showIcon message={validation.error}/>}
       {length>0&&!validation.error&&limits.blocked&&<Alert style={{marginTop:12}} type="warning" showIcon
         message="Cần điều chỉnh giới hạn lượt AI"
@@ -135,13 +139,13 @@ function StepCapabilities({goalId}) {
   return <Space wrap>
     <Button onClick={check} loading={loading}>Kiểm tra năng lực bước hiện tại</Button>
     {status&&<Text type="secondary">
-      {badge(status.status)} {status.model} {status.loadability&&'· Chưa thử nạp model'}
+      {badge(status.status)} {status.model} {status.route_source&&' · '+status.route_source} {status.loadability&&'· Chưa thử nạp model'}
     </Text>}
   </Space>;
 }
 
-const STEP_STATUS={SUCCEEDED:'Hoàn thành',FAILED:'Thất bại',RUNNING:'Đang chạy',WAITING_APPROVAL:'Chờ duyệt',APPROVED:'Đã duyệt',PLANNED:'Chưa chạy',INTERRUPTED:'Gián đoạn'};
-export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, onRetry, busy, externalEnabled}) {
+const STEP_STATUS={CANCELLED:'Đã hủy',SUCCEEDED:'Hoàn thành',FAILED:'Thất bại',RUNNING:'Đang chạy',WAITING_APPROVAL:'Chờ duyệt',APPROVED:'Đã duyệt',PLANNED:'Chưa chạy',INTERRUPTED:'Gián đoạn'};
+export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, onRetry, onCancel, busy, externalEnabled}) {
   const [grants,setGrants]=useState([]);
   useEffect(()=>{setGrants([]);},[goal?.goal_id,goal?.updated_at]);
   if(!goal)return null;
@@ -174,7 +178,10 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, o
     :null;
   return <Drawer title="Kế hoạch & phê duyệt" open={!!goal} onClose={onClose}
     size="min(680px, 100vw)" destroyOnHidden className="goal-owner-drawer"
-    extra={badge(goal.status)}
+    extra={<Space>{badge(goal.status)}
+      {['PLANNED','APPROVED','WAITING_APPROVAL'].includes(goal.status)&&
+        <Button danger disabled={busy} onClick={()=>onCancel(goal)}>Hủy công việc</Button>}
+    </Space>}
     footer={action&&<div className="goal-owner-footer">
       <div className="goal-owner-footer-hint">{goal.status==='PLANNED'
         ?'Duyệt SHA kế hoạch; chưa cấp quyền thực thi.'

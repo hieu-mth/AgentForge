@@ -42,6 +42,13 @@ def handle(server, path, request, session=None):
                 growth_db_path=server.growth_db_path)
             return brain_store.approve_goal(
                 ident, request["plan_sha256"], db_path=server.brain_db_path)
+        if action == "cancel":
+            if (set(request) != {"ack", "plan_sha256", "goal_updated_at"}
+                    or request["ack"] != "CANCEL_PENDING_GOAL"):
+                raise PermissionError("Explicit cancellation of the reviewed goal required")
+            return brain_runner.cancel_waiting(
+                ident, request["goal_updated_at"],
+                brain_db_path=server.brain_db_path, task_db_path=server.task_db_path)
         if action == "retry":
             if request.get("ack") != "RETRY_FAILED_STEP":
                 raise PermissionError("Explicit failed-step retry approval required")

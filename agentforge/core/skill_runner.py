@@ -68,6 +68,11 @@ def missing_grants(skill_id, granted=(), *, confirm_model_call=False,
 
 def _safe_failure(skill_id, exc):
     """Stable, deliberately allowlisted errors; never serialize arbitrary exceptions."""
+    if skill_id == "filesystem.revise_report" and str(exc) in {
+        "REPORT_REVISION_SOURCE_STALE", "REPORT_REVISION_UNCHANGED",
+        "REPORT_REVISION_REJECTED_SOURCE_REQUIRED",
+    }:
+        return str(exc)
     if skill_id == "workspace.analyze" and str(exc) in {
         "AGENT_INVALID_ACTION", "AGENT_REPEATED_ACTION", "AGENT_NO_EVIDENCE",
         "AGENT_INVALID_REPORT", "AGENT_NO_MARKDOWN_IN_SCOPE",
@@ -383,6 +388,16 @@ def _execute(task_id, skill_id, payload, *, grants, confirm_model_call,
         db_path=db_path,
     )
     try:
+        from agentforge.core import artifact_acceptance
+        if skill_id == "filesystem.revise_report":
+            source_id = payload["source_task_id"]
+            source = history.get_task(source_id, db_path=db_path)
+            if source["request"].get("path") != payload["source_path"]:
+                raise PermissionError("REPORT_REVISION_SOURCE_STALE")
+            decision = artifact_acceptance.inspect(
+                source_id, payload["source_sha256"], "reports", db_path=db_path)
+            if decision["status"] != "REJECTED":
+                raise PermissionError("REPORT_REVISION_REJECTED_SOURCE_REQUIRED")
         result = _dispatch(skill_id, payload)
         registry.validate_payload(registry.load_skill(skill_id), result, direction="output")
         if skill_id == "terminal.check" and result["status"] != "EXECUTED":
@@ -390,7 +405,6 @@ def _execute(task_id, skill_id, payload, *, grants, confirm_model_call,
             history.transition(task_id, "FAILED", result=result, error=error, db_path=db_path)
             return {"task_id": task_id, "skill_id": skill_id, "status": "FAILED",
                     "executed": True, "error": error}
-        from agentforge.core import artifact_acceptance
         try:
             artifact_acceptance.observe(skill_id, result, db_path=db_path)
         except FileNotFoundError:
@@ -431,7 +445,7 @@ def invoke(skill_id, payload, *, grants=(), confirm_model_call=False,
                     confirm_external_run=confirm_external_run, db_path=db_path)
 
 
-def resume_waiting(task_id, *, grants=(), confirm_model_call=False,
+def resume_waiting(task_id, *, parent_id=None, grants=(), confirm_model_call=False,
                    confirm_browser_run=False, confirm_external_run=False,
                    db_path=None):
     from agentforge.ops_control import require_active
@@ -439,6 +453,9 @@ def resume_waiting(task_id, *, grants=(), confirm_model_call=False,
     task = history.get_task(task_id, db_path=db_path)
     if task["kind"] != "skill" or task["status"] != "WAITING_APPROVAL":
         raise ValueError("Only never-started approval tasks may be resumed")
+    if task["parent_id"] != parent_id or (
+            parent_id is not None and history.get_task(parent_id, db_path=db_path)["status"] != "RUNNING"):
+        raise PermissionError("Resume a workflow child through its active parent")
     skill, _ = _contract(task["skill_id"])
     registry.validate_payload(skill, task["request"])
     if task["skill_id"] == "growth.record_event":

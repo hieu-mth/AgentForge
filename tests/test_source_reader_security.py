@@ -119,5 +119,30 @@ class TestSourceReaderSecurity(unittest.TestCase):
         )
 
 
+class PinnedTransportTests(unittest.TestCase):
+    def test_refuses_mixed_public_and_local_dns_before_connect(self):
+        import socket
+
+        records = [
+            (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("93.184.215.14", 443)),
+            (socket.AF_INET6, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", ("::1", 443, 0, 0)),
+        ]
+        with patch.object(socket, "getaddrinfo", return_value=records), patch.object(socket, "socket") as sock:
+            with self.assertRaisesRegex(PermissionError, "Non-public"):
+                source_reader._public_socket(("example.org", 443), 1, None)
+            sock.assert_not_called()
+
+    def test_connects_to_validated_numeric_result_without_second_dns_lookup(self):
+        import socket
+
+        peer = ("93.184.215.14", 443)
+        records = [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", peer)]
+        with patch.object(socket, "getaddrinfo", return_value=records) as dns, patch.object(socket, "socket") as sock:
+            result = source_reader._public_socket(("example.org", 443), 1, None)
+            self.assertIs(result, sock.return_value)
+            dns.assert_called_once()
+            sock.return_value.connect.assert_called_once_with(peer)
+
+
 if __name__ == "__main__":
     unittest.main()

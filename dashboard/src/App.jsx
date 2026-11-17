@@ -223,6 +223,14 @@ export default function App() {
     }
     message.success('Đã lập kế hoạch, chưa gọi model');await openGoal(outcome.goal_id);return true;
   };
+  const planWorkflow=prompt=>ask('Dùng Ollama để lập kế hoạch nhiều bước?',
+    <Paragraph>Gửi yêu cầu này cho Ollama local một lần để tạo bản nháp. Xem lại đường dẫn và quyền trước khi duyệt từng bước.</Paragraph>,
+    async()=>{
+      const result=await runAction(()=>post('/api/workspace/plan-workflow',{
+        ack:'RUN_LOCAL_WORKFLOW_PLANNER',prompt,
+      }));
+      if(result)await openGoal(result.goal_id);
+    });
   const approve=goal=>ask('Duyệt SHA kế hoạch?',
     <><Paragraph>Hành động này chỉ duyệt kế hoạch, chưa gọi model hoặc chạy skill.</Paragraph>
       <code className="digest">{goal.plan_sha256}</code></>,
@@ -246,6 +254,14 @@ export default function App() {
         ack_external:permissions.sensitive?'AUTHORIZE_EXTERNAL_TOOLS':''};
       const out=await runAction(()=>post('/api/goals/'+goal.goal_id+'/'+action,payload));
       if(out){message.success('Trạng thái: '+out.status);await openGoal(goal.goal_id);}});
+  const cancelGoal=goal=>ask('Hủy công việc đang chờ?',
+    <Paragraph>Các bước đã chạy và thành phẩm đã tạo vẫn có thể xem lại.</Paragraph>,
+    async()=>{
+      const out=await runAction(()=>post('/api/goals/'+goal.goal_id+'/cancel',{
+        ack:'CANCEL_PENDING_GOAL',plan_sha256:goal.plan_sha256,goal_updated_at:goal.updated_at,
+      }));
+      if(out) await openGoal(goal.goal_id);
+    });
   const retryFailed=(goal,step)=>ask(
     'Chuẩn bị chạy lại bước '+(step.step_index+1)+'?',
     <Space orientation="vertical">
@@ -324,6 +340,19 @@ export default function App() {
       if(revision===sessionRevision())setReviewedReport(report);
     }
     catch(e){authError(e);}
+  };
+  const reviseReport=report=>{
+    let content=report.content;
+    ask('Tạo phiên bản báo cáo mới?',
+      <Input.TextArea aria-label="Nội dung báo cáo đã chỉnh sửa"
+        defaultValue={content} autoSize={{minRows:6,maxRows:15}}
+        onChange={event=>{content=event.target.value;}}/>,
+      async()=>{
+        const out=await runAction(()=>post('/api/artifacts/reports/'+report.proposal_id+'/revise',{
+          ack:'PROPOSE_REPORT_REVISION',sha256:report.sha256,content,
+        }));
+        if(out){setTask(null);setReviewedReport(null);await openGoal(out.goal_id);}
+      });
   };
   const decideArtifact=(p,decision,namespace='webapps')=>ask(
     decision==='ACCEPTED'?'Owner chấp nhận sản phẩm?':'Từ chối sản phẩm?',
@@ -484,7 +513,7 @@ export default function App() {
           <Tabs className="workspace-tabs" activeKey={section}
             items={activeTabs} onChange={navigate}/>}
         <div className="page-body" key={section}>
-          {section==='workspace'&&<Workspace data={data} onPlan={plan} openGoal={openGoal}
+          {section==='workspace'&&<Workspace data={data} onPlan={plan} onPlanWorkflow={planWorkflow} openGoal={openGoal}
               prompt={workspacePrompt} setPrompt={setWorkspacePrompt}
               onOpenSettings={()=>navigate('settings')} loading={busy}/>} 
           {section==='overview'&&<Overview data={data} onNavigate={navigate} onRefresh={refreshCurrent}/>}
@@ -524,7 +553,7 @@ export default function App() {
     {visualDraft&&<StoryboardVisualModal key={visualDraft.task.task_id} {...visualDraft}
       onClose={()=>setVisualDraft(null)} onConfirm={confirmVisuals}/>}
     <GoalDrawer goal={goal} onClose={()=>{goalRead.current++;setGoal(null);}} onApprove={approve}
-      onExecute={execute} onRetry={retryFailed} onViewResult={openGoalResult} busy={busy} externalEnabled={!!data.external_actions_enabled}/>
+      onExecute={execute} onRetry={retryFailed} onCancel={cancelGoal} onViewResult={openGoalResult} busy={busy} externalEnabled={!!data.external_actions_enabled}/>
     <ProposalDrawer proposal={proposal} onClose={()=>setProposal(null)} onDecide={(p,d)=>decideArtifact(p,d,'proposals')} onValidate={p=>validateArtifact(p,'proposals')}
       onRevise={revise} onApply={apply} busy={busy}/>
     <WebappProposalDrawer proposal={webapp} onClose={()=>setWebapp(null)} onDecide={decideArtifact} onValidate={validateArtifact}
@@ -596,6 +625,9 @@ export default function App() {
       {task.report?.kind==='filesystem_report'&&<Card title="Báo cáo Markdown" style={{marginTop:18}}>
         <Paragraph><Text code copyable>{task.report.report_path}</Text></Paragraph>
         <Paragraph>SHA <Text code copyable>{task.report.sha256}</Text></Paragraph>
+        {task.report.source_task_id&&<Paragraph>
+          Phiên bản từ <Text code copyable>{task.report.source_task_id}</Text>
+        </Paragraph>}
         {Array.isArray(task.report.trace)&&<div>
           <Paragraph>Model <Text code>{task.report.model}</Text> · {task.report.citations_checked} tham chiếu hợp lệ</Paragraph>
           <ol>{task.report.trace.map((entry,index)=><li key={index}>
@@ -607,6 +639,8 @@ export default function App() {
           <pre className="source-text">{reviewedReport.content}</pre>
           <AcceptanceStatus acceptance={reviewedReport.artifact_acceptance}
             onDecide={decision=>decideArtifact(reviewedReport,decision,'reports')} busy={busy}/>
+          {reviewedReport.artifact_acceptance?.status==='REJECTED'&&
+            <Button disabled={busy} onClick={()=>reviseReport(reviewedReport)}>Chỉnh sửa báo cáo</Button>}
         </>}
       </Card>}
       {task.report?.kind==='storyboard'&&<Card title={task.report.title||'Kịch bản video'}

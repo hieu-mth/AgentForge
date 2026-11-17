@@ -157,19 +157,14 @@ def source(pid, sha, namespace, *, db_path=None):
         from agentforge import gateway
         task = task_history.get_task(pid, db_path=db_path)
         receipt = task["result"]
-        if (task["skill_id"] not in {"filesystem.report", "research.report", "workspace.analyze"} or task["status"] != "SUCCEEDED"
+        if (task["skill_id"] not in {"filesystem.report", "research.report", "workspace.analyze", "filesystem.revise_report"} or task["status"] != "SUCCEEDED"
                 or not isinstance(receipt, dict) or receipt.get("sha256") != sha
                 or receipt.get("status") != "VERIFIED"):
             raise PermissionError("ACCEPTANCE_SOURCE_STALE")
         path = task["request"]["path"]
         if receipt.get("report_path") != "workspace/" + path:
             raise PermissionError("ACCEPTANCE_SOURCE_STALE")
-        gateway.validate_report(path, task["request"].get("content", "verified report"))
-        target = gateway.safe_path(path)
-        if not target.is_file():
-            raise FileNotFoundError("Report missing")
-        with target.open("rb") as stream:
-            raw = stream.read(6001)
+        raw = gateway.read_report_bytes(path)
         if len(raw) != receipt.get("size_bytes") or hashlib.sha256(raw).hexdigest() != sha:
             raise PermissionError("ACCEPTANCE_SOURCE_STALE")
         return {"sha256": sha, "content": raw.decode("utf-8")}, "markdown_report"
@@ -294,7 +289,7 @@ def observe(skill_id, result, *, db_path=None):
 
 def for_task(task, *, db_path=None):
     result = task.get("result")
-    if task.get("skill_id") in {"filesystem.report", "research.report", "workspace.analyze"} and task.get("status") == "SUCCEEDED":
+    if task.get("skill_id") in {"filesystem.report", "research.report", "workspace.analyze", "filesystem.revise_report"} and task.get("status") == "SUCCEEDED":
         try:
             return inspect(task["task_id"], result["sha256"], "reports", db_path=db_path)
         except (ValueError, KeyError, OSError, TypeError):
