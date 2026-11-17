@@ -1,5 +1,8 @@
 # Remaining gaps
 
+For changes after PR #125, see the [workflow runtime follow-up](WORKFLOW_RUNTIME_REPORT.md).
+The table below records the PR #125 baseline.
+
 Verdict for the complete AI Company objective is **NO-GO**. The draft PR is
 an incremental delivery. An unavailable runtime and missing implementation
 are separate limits.
