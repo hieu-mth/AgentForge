@@ -35,3 +35,17 @@ class GoalCapabilityCheckTests(TestCase):
         propose.assert_not_called()
         self.assertEqual(result["status"], "CAPABILITY_BLOCKED")
         self.assertFalse(result["model_dispatched"])
+
+    def test_scoped_local_check_uses_same_catalog_gate_as_execution(self):
+        self.goal["plan"][0].update(skill_id="workspace.analyze", worker_id="opportunity_researcher")
+        runtime = {"provider": "ollama", "model": "alias:tag", "model_ref": "local_primary",
+                   "route_source": "owner", "base_url": "http://127.0.0.1:11434"}
+        with patch("agentforge.model.resolve_runtime", return_value=runtime), \
+                patch("agentforge.ops.runtime_certification._installed_local_model",
+                      return_value=False) as probe:
+            result = model_health.inspect_goal_step(self.goal)
+        probe.assert_called_once_with("127.0.0.1", 11434, "alias:tag")
+        self.assertEqual(result["status"], "LOCAL_MODEL_NOT_CONFIRMED")
+        self.assertEqual(result["route_source"], "owner")
+        self.assertFalse(result["inference_invoked"])
+        self.assertFalse(result["automatic_fallback"])

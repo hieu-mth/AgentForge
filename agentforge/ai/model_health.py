@@ -92,12 +92,25 @@ def inspect_goal_step(goal):
         return {**result, "status": "CONSENT_REQUIRED"}
     except (ValueError, OSError, KeyError, NotImplementedError):
         return {**result, "status": "CONFIG_ERROR"}
-    result.update(provider=runtime["provider"], model=runtime["model"], model_ref=runtime["model_ref"])
+    result.update(provider=runtime["provider"], model=runtime["model"], model_ref=runtime["model_ref"],
+                  route_source=runtime.get("route_source"), automatic_fallback=False)
+    scoped_research = step["skill_id"] in {"workspace.analyze", "research.report"}
     if step["skill_id"] == "workspace.analyze" and (
             runtime["provider"] != "ollama" or "cloud" in runtime["model"].casefold()):
         return {**result, "status": "RESEARCH_LOCAL_MODEL_REQUIRED"}
     if runtime["provider"] != "ollama":
         return {**result, "status": "CLOUD_NOT_PROBED"}
+    if scoped_research:
+        from agentforge.ops import runtime_certification as certification
+        try:
+            host, port = certification._local_endpoint(runtime["base_url"])
+        except (ValueError, KeyError):
+            return {**result, "status": "INVALID_ENDPOINT", "loadability": "UNKNOWN"}
+        metadata = certification._safe_probe(lambda: {
+            "status": "CATALOG_PRESENT" if certification._installed_local_model(
+                host, port, runtime["model"]) else "LOCAL_MODEL_NOT_CONFIRMED",
+        })
+        return {**result, **metadata, "loadability": "UNKNOWN"}
     metadata = check(resolve=lambda *_: runtime)
     return {**result, "status": "CATALOG_PRESENT" if metadata["status"] == "READY"
             else metadata["status"], "loadability": "UNKNOWN"}

@@ -139,7 +139,7 @@ function StepCapabilities({goalId}) {
   return <Space wrap>
     <Button onClick={check} loading={loading}>Kiểm tra năng lực bước hiện tại</Button>
     {status&&<Text type="secondary">
-      {badge(status.status)} {status.model} {status.loadability&&'· Chưa thử nạp model'}
+      {badge(status.status)} {status.model} {status.route_source&&' · '+status.route_source} {status.loadability&&'· Chưa thử nạp model'}
     </Text>}
   </Space>;
 }
