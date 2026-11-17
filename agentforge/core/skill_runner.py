@@ -431,7 +431,7 @@ def invoke(skill_id, payload, *, grants=(), confirm_model_call=False,
                     confirm_external_run=confirm_external_run, db_path=db_path)
 
 
-def resume_waiting(task_id, *, grants=(), confirm_model_call=False,
+def resume_waiting(task_id, *, parent_id=None, grants=(), confirm_model_call=False,
                    confirm_browser_run=False, confirm_external_run=False,
                    db_path=None):
     from agentforge.ops_control import require_active
@@ -439,6 +439,9 @@ def resume_waiting(task_id, *, grants=(), confirm_model_call=False,
     task = history.get_task(task_id, db_path=db_path)
     if task["kind"] != "skill" or task["status"] != "WAITING_APPROVAL":
         raise ValueError("Only never-started approval tasks may be resumed")
+    if task["parent_id"] != parent_id or (
+            parent_id is not None and history.get_task(parent_id, db_path=db_path)["status"] != "RUNNING"):
+        raise PermissionError("Resume a workflow child through its active parent")
     skill, _ = _contract(task["skill_id"])
     registry.validate_payload(skill, task["request"])
     if task["skill_id"] == "growth.record_event":

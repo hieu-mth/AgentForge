@@ -63,3 +63,49 @@ class WorkflowCompositionTests(unittest.TestCase):
             self.assertEqual((code, run["status"]), (200, "SUCCEEDED"), run)
             self.assertEqual((workspace / "reports/b.md").read_text(), "Evidence")
             self.assertEqual(server.req("GET", endpoint)[1]["step_runs"][0]["child_task_id"], a_id)
+
+    def test_cancel_paused_workflow_keeps_receipts_and_prevents_resume(self):
+        from agentforge import skill_runner, task_history
+
+        server = test_control_center_v1.TestControlCenterV1()
+        server.setUp()
+        self.addCleanup(server.tearDown)
+        server.login()
+        workspace = server.root / "workspace"
+        workspace.mkdir()
+        with patch.object(gateway, "WORKSPACE", workspace):
+            code, result, _ = server.req("POST", "/api/goals/propose", {
+                "ack": "PROPOSE", "title": "Cancel after one report",
+                "template": "workflow.compose",
+                "inputs": {"steps": [report("reports/a.md"), report("reports/b.md")]},
+            })
+            self.assertEqual(code, 200, result)
+            endpoint = "/api/goals/" + result["goal_id"]
+            initial = server.req("GET", endpoint)[1]
+            params = {"plan_sha256": initial["plan_sha256"]}
+            self.assertEqual(server.req("POST", endpoint + "/approve", {
+                **params, "ack": "APPROVE",
+            })[0], 200)
+            code, run, _ = server.req("POST", endpoint + "/run", {
+                **params, "ack": "RUN", "grants": ["workspace.write"],
+            })
+            self.assertEqual((code, run["status"]), (200, "WAITING_APPROVAL"))
+            current = server.req("GET", endpoint)[1]
+            child = current["step_runs"][1]["child_task_id"]
+            with self.assertRaises(PermissionError):
+                skill_runner.resume_waiting(child, grants=["workspace.write"], db_path=server.taskdb)
+            cancel = {**params, "ack": "CANCEL_PENDING_GOAL"}
+            self.assertEqual(server.req("POST", endpoint + "/cancel", {
+                **cancel, "goal_updated_at": initial["updated_at"],
+            })[0], 400)
+            code, receipt, _ = server.req("POST", endpoint + "/cancel", {
+                **cancel, "goal_updated_at": current["updated_at"],
+            })
+            self.assertEqual((code, receipt["status"]), (200, "CANCELLED"), receipt)
+            self.assertEqual(task_history.get_task(child, db_path=server.taskdb)["status"], "CANCELLED")
+            self.assertEqual(server.req("POST", endpoint + "/resume", {
+                **params, "ack": "RESUME", "goal_updated_at": receipt["updated_at"],
+                "grants": ["workspace.write"],
+            })[0], 400)
+            self.assertTrue((workspace / "reports/a.md").is_file())
+            self.assertFalse((workspace / "reports/b.md").exists())

@@ -22,6 +22,7 @@ const IDEAS = [
 ];
 const MIN_PROMPT=20;
 const GOAL_STATUS={
+  CANCELLED:"Đã hủy",
   PLANNED:'Chờ duyệt kế hoạch',WAITING_APPROVAL:'Cần bạn duyệt',
   APPROVED:'Sẵn sàng thực hiện',RUNNING:'Đang thực hiện',
   SUCCEEDED:'Đã thực thi',FAILED:'Thực hiện thất bại',
@@ -140,8 +141,8 @@ function StepCapabilities({goalId}) {
   </Space>;
 }
 
-const STEP_STATUS={SUCCEEDED:'Hoàn thành',FAILED:'Thất bại',RUNNING:'Đang chạy',WAITING_APPROVAL:'Chờ duyệt',APPROVED:'Đã duyệt',PLANNED:'Chưa chạy',INTERRUPTED:'Gián đoạn'};
-export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, onRetry, busy, externalEnabled}) {
+const STEP_STATUS={CANCELLED:'Đã hủy',SUCCEEDED:'Hoàn thành',FAILED:'Thất bại',RUNNING:'Đang chạy',WAITING_APPROVAL:'Chờ duyệt',APPROVED:'Đã duyệt',PLANNED:'Chưa chạy',INTERRUPTED:'Gián đoạn'};
+export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, onRetry, onCancel, busy, externalEnabled}) {
   const [grants,setGrants]=useState([]);
   useEffect(()=>{setGrants([]);},[goal?.goal_id,goal?.updated_at]);
   if(!goal)return null;
@@ -174,7 +175,10 @@ export function GoalDrawer({goal, onClose, onApprove, onExecute, onViewResult, o
     :null;
   return <Drawer title="Kế hoạch & phê duyệt" open={!!goal} onClose={onClose}
     size="min(680px, 100vw)" destroyOnHidden className="goal-owner-drawer"
-    extra={badge(goal.status)}
+    extra={<Space>{badge(goal.status)}
+      {['PLANNED','APPROVED','WAITING_APPROVAL'].includes(goal.status)&&
+        <Button danger disabled={busy} onClick={()=>onCancel(goal)}>Hủy công việc</Button>}
+    </Space>}
     footer={action&&<div className="goal-owner-footer">
       <div className="goal-owner-footer-hint">{goal.status==='PLANNED'
         ?'Duyệt SHA kế hoạch; chưa cấp quyền thực thi.'

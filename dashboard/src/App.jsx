@@ -246,6 +246,14 @@ export default function App() {
         ack_external:permissions.sensitive?'AUTHORIZE_EXTERNAL_TOOLS':''};
       const out=await runAction(()=>post('/api/goals/'+goal.goal_id+'/'+action,payload));
       if(out){message.success('Trạng thái: '+out.status);await openGoal(goal.goal_id);}});
+  const cancelGoal=goal=>ask('Hủy công việc đang chờ?',
+    <Paragraph>Các bước đã chạy và thành phẩm đã tạo vẫn có thể xem lại.</Paragraph>,
+    async()=>{
+      const out=await runAction(()=>post('/api/goals/'+goal.goal_id+'/cancel',{
+        ack:'CANCEL_PENDING_GOAL',plan_sha256:goal.plan_sha256,goal_updated_at:goal.updated_at,
+      }));
+      if(out) await openGoal(goal.goal_id);
+    });
   const retryFailed=(goal,step)=>ask(
     'Chuẩn bị chạy lại bước '+(step.step_index+1)+'?',
     <Space orientation="vertical">
@@ -524,7 +532,7 @@ export default function App() {
     {visualDraft&&<StoryboardVisualModal key={visualDraft.task.task_id} {...visualDraft}
       onClose={()=>setVisualDraft(null)} onConfirm={confirmVisuals}/>}
     <GoalDrawer goal={goal} onClose={()=>{goalRead.current++;setGoal(null);}} onApprove={approve}
-      onExecute={execute} onRetry={retryFailed} onViewResult={openGoalResult} busy={busy} externalEnabled={!!data.external_actions_enabled}/>
+      onExecute={execute} onRetry={retryFailed} onCancel={cancelGoal} onViewResult={openGoalResult} busy={busy} externalEnabled={!!data.external_actions_enabled}/>
     <ProposalDrawer proposal={proposal} onClose={()=>setProposal(null)} onDecide={(p,d)=>decideArtifact(p,d,'proposals')} onValidate={p=>validateArtifact(p,'proposals')}
       onRevise={revise} onApply={apply} busy={busy}/>
     <WebappProposalDrawer proposal={webapp} onClose={()=>setWebapp(null)} onDecide={decideArtifact} onValidate={validateArtifact}
