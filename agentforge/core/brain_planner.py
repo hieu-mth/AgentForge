@@ -15,6 +15,7 @@ COMPOSABLE = frozenset({
 })
 
 TEMPLATES = {
+    "filesystem.revise_report": ("path", "content", "source_path", "source_sha256", "source_task_id"),
     "workflow.compose": ("steps",),
     "workspace.analyze": ("prompt", "directory", "path"),
     "research.report": ("prompt", "directory", "path"),
@@ -87,10 +88,10 @@ def _steps(template, inputs):
         from agentforge.research_report import validate_request
         validate_request(**inputs)
         steps = [("research.report", dict(inputs))]
-    elif template == "filesystem.report":
+    elif template in {"filesystem.report", "filesystem.revise_report"}:
         from agentforge.gateway import validate_report
         validate_report(inputs["path"], inputs["content"])
-        steps = [("filesystem.report", dict(inputs))]
+        steps = [(template, dict(inputs))]
     elif template == "terminal.check":
         from agentforge.gateway import validate_terminal_recipe
         validate_terminal_recipe(inputs["recipe"], inputs["directory"])

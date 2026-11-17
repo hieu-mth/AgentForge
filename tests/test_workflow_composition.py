@@ -109,3 +109,52 @@ class WorkflowCompositionTests(unittest.TestCase):
             })[0], 400)
             self.assertTrue((workspace / "reports/a.md").is_file())
             self.assertFalse((workspace / "reports/b.md").exists())
+
+    def test_rejected_report_can_be_revised_as_new_immutable_artifact(self):
+        server = test_control_center_v1.TestControlCenterV1()
+        server.setUp()
+        self.addCleanup(server.tearDown)
+        server.login()
+        workspace = server.root / "workspace"
+        workspace.mkdir()
+
+        def execute(goal_id):
+            endpoint = "/api/goals/" + goal_id
+            goal = server.req("GET", endpoint)[1]
+            sha = {"plan_sha256": goal["plan_sha256"]}
+            self.assertEqual(server.req("POST", endpoint + "/approve", {
+                **sha, "ack": "APPROVE",
+            })[0], 200)
+            status, receipt, _ = server.req("POST", endpoint + "/run", {
+                **sha, "ack": "RUN", "grants": ["workspace.write"],
+            })
+            self.assertEqual((status, receipt["status"]), (200, "SUCCEEDED"), receipt)
+            return server.req("GET", endpoint)[1]["step_runs"][0]["child_task_id"]
+
+        def decide(path, doc, decision):
+            acceptance = doc["artifact_acceptance"]
+            return server.req("POST", path + "/decision", {
+                "ack": decision, "sha256": doc["sha256"],
+                "expected_revision": acceptance["revision"],
+                "evidence_sha": acceptance["evidence_sha"],
+            })
+
+        with patch.object(gateway, "WORKSPACE", workspace):
+            status, goal, _ = server.req("POST", "/api/goals/propose", {
+                "ack": "PROPOSE", "title": "Source report", **report("reports/a.md"),
+            })
+            self.assertEqual(status, 200, goal)
+            source_id = execute(goal["goal_id"])
+            endpoint = "/api/artifacts/reports/" + source_id
+            source = server.req("GET", endpoint)[1]
+            body = {"ack": "PROPOSE_REPORT_REVISION", "sha256": source["sha256"], "content": "Corrected"}
+            self.assertEqual(server.req("POST", endpoint + "/revise", body)[0], 400)
+            self.assertEqual(decide(endpoint, source, "REJECT_ARTIFACT")[0], 200)
+            status, draft, _ = server.req("POST", endpoint + "/revise", body)
+            self.assertEqual(status, 200, draft)
+            revised = "/api/artifacts/reports/" + execute(draft["goal_id"])
+            new = server.req("GET", revised)[1]
+            self.assertEqual(new["content"], "Corrected")
+            self.assertNotEqual(source["sha256"], new["sha256"])
+            self.assertEqual((workspace / "reports/a.md").read_text(), "Evidence")
+            self.assertEqual(decide(revised, new, "ACCEPT_ARTIFACT")[1]["status"], "ACCEPTED")

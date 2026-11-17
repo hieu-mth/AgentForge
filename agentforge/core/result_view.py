@@ -62,8 +62,8 @@ def present(skill_id, result):
     if skill_id == "research.report" and isinstance(result, dict):
         return {"kind": "filesystem_report", **_picked(result, {"status", "report_path", "sha256", "size_bytes", "model"}),
                 "tools": result.get("tools", [])[:8]}
-    if skill_id == "filesystem.report" and isinstance(result, dict):
-        return {"kind": "filesystem_report", **_picked(result, {"status", "report_path", "sha256", "size_bytes"})}
+    if skill_id in {"filesystem.report", "filesystem.revise_report"} and isinstance(result, dict):
+        return {"kind": "filesystem_report", **_picked(result, {"status", "report_path", "sha256", "size_bytes", "source_task_id", "source_sha256"})}
     if skill_id in {"webapp.architect","webapp.audit","webapp.review"}:
         import re
         if not isinstance(result,dict):

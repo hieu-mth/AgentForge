@@ -333,6 +333,19 @@ export default function App() {
     }
     catch(e){authError(e);}
   };
+  const reviseReport=report=>{
+    let content=report.content;
+    ask('Tạo phiên bản báo cáo mới?',
+      <Input.TextArea aria-label="Nội dung báo cáo đã chỉnh sửa"
+        defaultValue={content} autoSize={{minRows:6,maxRows:15}}
+        onChange={event=>{content=event.target.value;}}/>,
+      async()=>{
+        const out=await runAction(()=>post('/api/artifacts/reports/'+report.proposal_id+'/revise',{
+          ack:'PROPOSE_REPORT_REVISION',sha256:report.sha256,content,
+        }));
+        if(out){setTask(null);setReviewedReport(null);await openGoal(out.goal_id);}
+      });
+  };
   const decideArtifact=(p,decision,namespace='webapps')=>ask(
     decision==='ACCEPTED'?'Owner chấp nhận sản phẩm?':'Từ chối sản phẩm?',
     'Quyết định chỉ áp dụng cho đúng phiên bản mã nguồn và bằng chứng QA đã xem. Không tự xuất bản.',
@@ -604,6 +617,9 @@ export default function App() {
       {task.report?.kind==='filesystem_report'&&<Card title="Báo cáo Markdown" style={{marginTop:18}}>
         <Paragraph><Text code copyable>{task.report.report_path}</Text></Paragraph>
         <Paragraph>SHA <Text code copyable>{task.report.sha256}</Text></Paragraph>
+        {task.report.source_task_id&&<Paragraph>
+          Phiên bản từ <Text code copyable>{task.report.source_task_id}</Text>
+        </Paragraph>}
         {Array.isArray(task.report.trace)&&<div>
           <Paragraph>Model <Text code>{task.report.model}</Text> · {task.report.citations_checked} tham chiếu hợp lệ</Paragraph>
           <ol>{task.report.trace.map((entry,index)=><li key={index}>
@@ -615,6 +631,8 @@ export default function App() {
           <pre className="source-text">{reviewedReport.content}</pre>
           <AcceptanceStatus acceptance={reviewedReport.artifact_acceptance}
             onDecide={decision=>decideArtifact(reviewedReport,decision,'reports')} busy={busy}/>
+          {reviewedReport.artifact_acceptance?.status==='REJECTED'&&
+            <Button disabled={busy} onClick={()=>reviseReport(reviewedReport)}>Chỉnh sửa báo cáo</Button>}
         </>}
       </Card>}
       {task.report?.kind==='storyboard'&&<Card title={task.report.title||'Kịch bản video'}
