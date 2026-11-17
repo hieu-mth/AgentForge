@@ -6,6 +6,8 @@ from contextlib import redirect_stdout
 from io import StringIO
 
 POLICY = {
+    "workspace.analyze": ("opportunity_researcher", "owner_gated", frozenset({
+        "workspace.read", "workspace.write", "model.invoke"})),
     "research.report": ("opportunity_researcher", "owner_gated", frozenset({
         "workspace.read", "workspace.write", "network.search", "network.read", "model.invoke"})),
     "research.opportunity": ("opportunity_researcher", "owner_gated",
@@ -17,6 +19,9 @@ POLICY = {
 
 
 def dispatch(skill_id, payload):
+    if skill_id == "workspace.analyze":
+        from agentforge.workspace_agent import run
+        return run(**payload)
     if skill_id == "research.report":
         from agentforge.research_report import run
         return run(**payload)

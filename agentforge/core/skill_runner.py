@@ -68,6 +68,13 @@ def missing_grants(skill_id, granted=(), *, confirm_model_call=False,
 
 def _safe_failure(skill_id, exc):
     """Stable, deliberately allowlisted errors; never serialize arbitrary exceptions."""
+    if skill_id == "workspace.analyze" and str(exc) in {
+        "AGENT_INVALID_ACTION", "AGENT_REPEATED_ACTION", "AGENT_NO_EVIDENCE",
+        "AGENT_INVALID_REPORT", "AGENT_NO_MARKDOWN_IN_SCOPE",
+        "RESEARCH_INVALID_TOOL_CHOICE", "RESEARCH_LOCAL_MODEL_REQUIRED",
+        "RESEARCH_LOCAL_MODEL_NOT_INSTALLED", "CLOUD_MODEL_CONSENT_REQUIRED",
+    }:
+        return str(exc)
     if skill_id == "research.report" and str(exc) in {
         "CLOUD_MODEL_CONSENT_REQUIRED", "RESEARCH_LOCAL_MODEL_REQUIRED",
         "RESEARCH_LOCAL_MODEL_NOT_INSTALLED",

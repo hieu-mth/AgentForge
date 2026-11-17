@@ -276,6 +276,26 @@ def catalog(*, db_path=None):
     }
 
 
+def probe_local_profile(profile_id, *, expected_revision, db_path=None):
+    """Run an explicitly authorized fixed-prompt probe from one config snapshot."""
+    from datetime import datetime, timezone
+    from agentforge.ops import runtime_certification as runtime
+
+    _required_text(profile_id, ID_RE, "model ID")
+    revision, state = _read_state(db_path=db_path)
+    if type(expected_revision) is not int or revision != expected_revision:
+        raise ModelConfigError("MODEL_HUB_REVISION_CONFLICT")
+    profile = _profiles(state=state).get(profile_id)
+    if not profile or not profile["enabled"] or profile["provider"] != "ollama":
+        raise ModelConfigError("Probe requires an enabled local Ollama profile")
+    host, port = runtime._local_endpoint(profile["base_url"])
+    name = profile["model"]
+    result = runtime._safe_probe(
+        lambda: runtime._ollama_inference(profile_id, profile=(host, port, name)))
+    return {**result, "model": name, "revision": revision,
+            "checked_at": datetime.now(timezone.utc).isoformat()}
+
+
 def check_local_profile(profile_id, *, db_path=None, opener=None):
     """Owner-invoked, bounded GET to a loopback Ollama tags endpoint ONLY.
 

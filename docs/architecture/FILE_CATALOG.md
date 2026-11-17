@@ -79,6 +79,7 @@
 | `prompt_intake.py` | COMPAT | Wrapper sang ai/prompt_intake.py. |
 | `quality_v14.py` | LOGIC | Business profile, conservative QA và Owner review inbox. |
 | `research_report.py` | LOGIC | Bounded local-agent research and verified Markdown handoff. |
+| `workspace_agent.py` | LOGIC | Owner-scoped adaptive Markdown analysis. |
 | `research.py` | CLI | Research LangGraph, checkpoints và local reports. |
 | `result_view.py` | COMPAT | Wrapper sang core/result_view.py. |
 | `review_handoff.py` | LOGIC | Chuyển observations thành Owner review candidates. |

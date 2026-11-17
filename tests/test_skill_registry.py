@@ -33,7 +33,7 @@ class TestSkillRegistry(unittest.TestCase):
         self.assertEqual(set(registry), {
             "web.create", "webapp.create", "webapp.develop", "webapp.architect", "webapp.audit", "webapp.review", "webapp.sandbox_test", "webapp.browser_qa", "web.quality_check", "web.browser_test",
             "filesystem.report", "terminal.check",
-            "research.opportunity", "research.source_review", "research.report",
+            "research.opportunity", "research.source_review", "research.report", "workspace.analyze",
             "media.compose", "media.image_edit", "media.quality_check",
             "media.video_render", "media.tts", "media.copy_draft",
             "analytics.import", "analytics.quality_check", "analytics.content_report",
@@ -133,7 +133,7 @@ class TestSkillRegistry(unittest.TestCase):
               patch("subprocess.run") as shell,
               patch("urllib.request.urlopen") as network):
             registry = skills.load_registry(root=self.root)
-            self.assertEqual(len(registry), 34)
+            self.assertEqual(len(registry), 35)
             model.assert_not_called()
             shell.assert_not_called()
             network.assert_not_called()
@@ -152,9 +152,9 @@ class TestSkillRegistry(unittest.TestCase):
                         skills.main()
                     result = json.loads(stdout.getvalue())
                     if command == "validate":
-                        self.assertEqual(result["skill_count"], 34)
+                        self.assertEqual(result["skill_count"], 35)
                     elif command == "list":
-                        self.assertEqual(len(result), 34)
+                        self.assertEqual(len(result), 35)
                         self.assertTrue(all(not item["invocation_enabled"] for item in result))
                     else:
                         self.assertFalse(result["invocation_enabled"])

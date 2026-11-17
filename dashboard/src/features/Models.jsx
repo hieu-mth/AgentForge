@@ -29,6 +29,7 @@ export function ModelHub({mutate}) {
   const error=actionError;
   const [drafts,setDrafts]=useState({});
   const [checked,setChecked]=useState({});
+  const [probes,setProbes]=useState({});
   const motion=motionResource.data;
   const motionBusy=motionResource.loading;
   const [motionFilename,setMotionFilename]=useState({});
@@ -124,10 +125,14 @@ export function ModelHub({mutate}) {
         if(result){
           if(path==='/api/model-hub/check') {
             setChecked(old=>({...old,[body.profile_id]:result.status}));
+          }else if(path==='/api/model-hub/probe') {
+            setProbes(old=>({...old,[body.profile_id]:result}));
           }else {
-            setHub(result);setDrafts({});setChecked({});setError(null);
+            setHub(result);setDrafts({});setChecked({});setProbes({});setError(null);
           }
-          message.success(path==='/api/model-hub/check'?'Đã kiểm tra metadata local':'Đã lưu cấu hình local');
+          if(path!=='/api/model-hub/probe') {
+            message.success(path==='/api/model-hub/check'?'Đã kiểm tra metadata local':'Đã lưu cấu hình local');
+          }
           onSuccess?.();
         } else {
           await reload();
@@ -217,8 +222,12 @@ export function ModelHub({mutate}) {
           {title:'Trạng thái',width:145,render:(_,row)=><Space direction="vertical" size={2}>
             <Tag color={row.enabled?'blue':'default'}>{row.enabled?'Enabled':'Disabled'}</Tag>
             <Text type="secondary" style={{fontSize:11}}>{checked[row.id]||'Chưa kiểm chứng'}</Text>
+            {probes[row.id]&&probes[row.id].revision===hub?.revision&&<Text type="secondary" style={{fontSize:11}}>
+              {probes[row.id].status==='PASS_RUNTIME'?'Đã sinh văn bản thử':probes[row.id].status}
+              {' · '}{new Date(probes[row.id].checked_at).toLocaleTimeString('vi-VN')}
+            </Text>}
           </Space>},
-          {title:'Thao tác',width:205,render:(_,row)=><Space>
+          {title:'Thao tác',width:250,render:(_,row)=><Space>
             <Tooltip title={row.provider==='ollama'?'Chỉ GET /api/tags trên localhost':'Không kiểm tra cloud hoặc GPU tự động'}>
               <Button size="small" disabled={row.provider!=='ollama'}
                 onClick={()=>update('/api/model-hub/check',{
@@ -226,6 +235,12 @@ export function ModelHub({mutate}) {
                 },'Kiểm tra Ollama local?','Chỉ đọc danh sách model từ localhost trong 3 giây; không inference, không tải model.')}>
                 Kiểm tra</Button>
             </Tooltip>
+            <Button size="small" disabled={row.provider!=='ollama'||!row.enabled}
+              onClick={()=>update('/api/model-hub/probe',{
+                ack:'RUN_LOCAL_MODEL_PROBE',profile_id:row.id,expected_revision:hub.revision,
+              },'Chạy thử model Ollama?',
+              'Gọi một lượt local tối đa 32 token đầu ra bằng câu kiểm tra cố định. Có thể nạp model vào RAM hoặc VRAM. Backend cần bật quyền công cụ ngoài.')}>
+              Chạy thử</Button>
             <Button size="small" onClick={()=>editProfile(row)}>Sửa</Button>
           </Space>},
         ]}/>

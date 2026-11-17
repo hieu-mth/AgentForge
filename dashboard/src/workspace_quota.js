@@ -34,7 +34,11 @@ export function modelCallsForPrompt(prompt) {
   const normalized = normalizedRequest(prompt);
   const research = normalized.includes('markdown') && normalized.includes('bao cao')
     && ['tra cuu','nghien cuu','nguon cong khai','tim them nguon'].some(x=>normalized.includes(x));
-  return research || isCompanyRequest(prompt) ? 3 : 1;
+  // Workspace intake may plan adaptive analysis for an explicit local scope.
+  const scope = /\bworkspace\/[a-z0-9_-]+(?:\/[a-z0-9_-]+)*(?=[\s,;.!?)\x60]|$)/i.test(prompt);
+  const product = /website|landing page|trang web|web ban|web gioi thieu|trang gioi thieu|thiet ke web|ai developer|react tuy bien|web app|webapp|ung dung react tuy bien|ai viet code|shopee|marketplace|thuong mai dien tu|gio hang|ung dung mua sam|ecommerce/.test(normalized)
+    || isVideoRequest(prompt);
+  return research || isCompanyRequest(prompt) || (scope && !product) ? 3 : 1;
 }
 
 export function quotaForPrompt(prompt, currentPolicy) {

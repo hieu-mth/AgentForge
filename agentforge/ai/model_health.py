@@ -93,6 +93,9 @@ def inspect_goal_step(goal):
     except (ValueError, OSError, KeyError, NotImplementedError):
         return {**result, "status": "CONFIG_ERROR"}
     result.update(provider=runtime["provider"], model=runtime["model"], model_ref=runtime["model_ref"])
+    if step["skill_id"] == "workspace.analyze" and (
+            runtime["provider"] != "ollama" or "cloud" in runtime["model"].casefold()):
+        return {**result, "status": "RESEARCH_LOCAL_MODEL_REQUIRED"}
     if runtime["provider"] != "ollama":
         return {**result, "status": "CLOUD_NOT_PROBED"}
     metadata = check(resolve=lambda *_: runtime)

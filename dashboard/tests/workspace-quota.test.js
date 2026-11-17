@@ -59,3 +59,10 @@ test('normal Vietnamese video request shows storyboard-first UX instead of vague
   }
   assert.equal(isVideoRequest('Tạo landing page có video YouTube nhúng'),false);
 });
+
+test('scoped analysis requests three calls and respects existing product routing', () => {
+  const prompt = 'Đối chiếu quy định timeout và quy trình restart trong workspace/notes.';
+  assert.equal(modelCallsForPrompt(prompt), 3);
+  assert.equal(quotaForPrompt(prompt, {max_estimated_model_calls: 1}).blocked, true);
+  assert.equal(modelCallsForPrompt('Tạo landing page tham khảo workspace/notes.'), 1);
+});
