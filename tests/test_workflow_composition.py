@@ -190,3 +190,47 @@ class WorkflowCompositionTests(unittest.TestCase):
             suggestions["steps"][0]["inputs"]["recipe"] = "powershell"
             self.assertEqual(server.req("POST", path, body)[0], 400)
             self.assertFalse(server.taskdb.exists())
+
+    def test_terminal_then_report_uses_real_process_and_filesystem(self):
+        from agentforge import task_history
+
+        server = test_control_center_v1.TestControlCenterV1()
+        server.setUp()
+        self.addCleanup(server.tearDown)
+        server.login()
+        server.server.allow_external_actions = True
+        workspace = server.root / "workspace"
+        (workspace / "notes").mkdir(parents=True)
+        with patch.object(gateway, "WORKSPACE", workspace):
+            code, draft, _ = server.req("POST", "/api/goals/propose", {
+                "ack": "PROPOSE", "title": "Local diagnostic with report",
+                "template": "workflow.compose", "max_external_runs": 1,
+                "inputs": {"steps": [
+                    {"template": "terminal.check",
+                     "inputs": {"recipe": "python-version", "directory": "notes"}},
+                    report("reports/after-check.md"),
+                ]},
+            })
+            self.assertEqual(code, 200, draft)
+            endpoint = "/api/goals/" + draft["goal_id"]
+            sha = server.req("GET", endpoint)[1]["plan_sha256"]
+            self.assertEqual(server.req("POST", endpoint + "/approve", {
+                "ack": "APPROVE", "plan_sha256": sha,
+            })[0], 200)
+            code, run, _ = server.req("POST", endpoint + "/run", {
+                "ack": "RUN", "plan_sha256": sha, "grants": ["process.run"],
+                "ack_external": "AUTHORIZE_EXTERNAL_TOOLS", "confirm_external_run": True,
+            })
+            self.assertEqual((code, run["status"]), (200, "WAITING_APPROVAL"), run)
+            goal = server.req("GET", endpoint)[1]
+            receipt = task_history.get_task(goal["step_runs"][0]["child_task_id"],
+                                            db_path=server.taskdb)["result"]
+            self.assertEqual(receipt["exit_code"], 0)
+            self.assertIn("Python ", receipt["stdout"])
+            self.assertFalse((workspace / "reports/after-check.md").exists())
+            code, done, _ = server.req("POST", endpoint + "/resume", {
+                "ack": "RESUME", "plan_sha256": sha, "goal_updated_at": goal["updated_at"],
+                "grants": ["workspace.write"],
+            })
+            self.assertEqual((code, done["status"]), (200, "SUCCEEDED"), done)
+            self.assertEqual((workspace / "reports/after-check.md").read_text(), "Evidence")
