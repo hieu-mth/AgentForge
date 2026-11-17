@@ -65,7 +65,7 @@ class WorkflowCompositionTests(unittest.TestCase):
             self.assertEqual(server.req("GET", endpoint)[1]["step_runs"][0]["child_task_id"], a_id)
 
     def test_cancel_paused_workflow_keeps_receipts_and_prevents_resume(self):
-        from agentforge import skill_runner, task_history
+        from agentforge import brain_runner, skill_runner, task_history
 
         server = test_control_center_v1.TestControlCenterV1()
         server.setUp()
@@ -98,10 +98,16 @@ class WorkflowCompositionTests(unittest.TestCase):
             self.assertEqual(server.req("POST", endpoint + "/cancel", {
                 **cancel, "goal_updated_at": initial["updated_at"],
             })[0], 400)
-            code, receipt, _ = server.req("POST", endpoint + "/cancel", {
-                **cancel, "goal_updated_at": current["updated_at"],
-            })
-            self.assertEqual((code, receipt["status"]), (200, "CANCELLED"), receipt)
+            with patch.object(task_history, "transition", side_effect=OSError("history offline")):
+                code, _, _ = server.req("POST", endpoint + "/cancel", {
+                    **cancel, "goal_updated_at": current["updated_at"],
+                })
+            self.assertEqual(code, 500)
+            receipt = server.req("GET", endpoint)[1]
+            self.assertEqual(receipt["status"], "CANCELLED")
+            self.assertEqual(task_history.get_task(child, db_path=server.taskdb)["status"], "WAITING_APPROVAL")
+            for _ in range(2):
+                brain_runner.recover(brain_db_path=server.brain, task_db_path=server.taskdb)
             self.assertEqual(task_history.get_task(child, db_path=server.taskdb)["status"], "CANCELLED")
             self.assertEqual(server.req("POST", endpoint + "/resume", {
                 **params, "ack": "RESUME", "goal_updated_at": receipt["updated_at"],

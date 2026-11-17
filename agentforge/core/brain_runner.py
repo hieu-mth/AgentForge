@@ -249,6 +249,13 @@ def recover(*, brain_db_path=None, task_db_path=None):
                                         db_path=task_db_path)
         except (KeyError, ValueError, RuntimeError):
             pass
+    for task_id in store.cancelled_task_ids(db_path=brain_db_path):
+        try:
+            child = task_history.get_task(task_id, db_path=task_db_path)
+        except KeyError:
+            continue
+        if child["status"] == "WAITING_APPROVAL":
+            task_history.transition(task_id, "CANCELLED", db_path=task_db_path)
     return {"interrupted_goals": len(recovered_ids), "automatic_replay": False}
 
 

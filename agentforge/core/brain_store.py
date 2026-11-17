@@ -442,6 +442,21 @@ def interrupted_task_ids(*, db_path=None):
 
 
 
+def cancelled_task_ids(*, db_path=None):
+    """Find history links after a crash between Goal and task-store cancellation."""
+    db = _connect(db_path)
+    if db is None:
+        return []
+    with closing(db):
+        return [row[0] for row in db.execute("""
+            SELECT task_id FROM (
+                SELECT parent_task_id AS task_id FROM goals WHERE status='CANCELLED'
+                UNION
+                SELECT child_task_id AS task_id FROM step_runs WHERE status='CANCELLED'
+            ) WHERE task_id IS NOT NULL ORDER BY task_id
+        """)]
+
+
 def set_memory(key, note, evidence_ref, *, confirm_write=False, db_path=None):
     """Owner-managed notes, not autonomous fact learning or hidden prompts."""
     if confirm_write is not True:
