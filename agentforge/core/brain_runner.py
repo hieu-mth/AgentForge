@@ -121,7 +121,7 @@ def _run_steps(goal_id, *, grants, confirm_model_call,
                 # DISPATCHING / terminal markers must NEVER cause a second invoke.
                 raise store.BrainError("Previously dispatched step cannot be replayed")
             if receipt["status"] == "SUCCEEDED":
-                if scope_to_current_step:
+                if scope_to_current_step or goal["template"] == "workflow.compose":
                     # A later step may proceed only with the implicit read permission.
                     grants = ()
                     confirm_model_call = confirm_browser_run = confirm_external_run = False

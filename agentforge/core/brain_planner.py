@@ -6,7 +6,16 @@ choose a business goal; only trusted templates produce executable steps.
 import json
 from agentforge import brain_store, skill_registry, skill_runner
 
+# An explicit composition uses the existing validators for each step. These
+# single-step templates do not bind arbitrary outputs to later inputs.
+COMPOSABLE = frozenset({
+    "filesystem.report", "terminal.check", "workspace.analyze",
+    "research.report", "website.draft", "webapp.develop",
+    "webapp.qa", "webapp.browser_qa",
+})
+
 TEMPLATES = {
+    "workflow.compose": ("steps",),
     "workspace.analyze": ("prompt", "directory", "path"),
     "research.report": ("prompt", "directory", "path"),
     "filesystem.report": ("path", "content"),
@@ -68,6 +77,8 @@ def _steps(template, inputs):
         {"photo_name", "rights_confirmed"} if template == "media.produce" else set())
     if set(inputs) - allowed:
         raise brain_store.BrainError("Unexpected goal input fields")
+    if template == "workflow.compose":
+        return _compose(inputs["steps"])
     if template == "workspace.analyze":
         from agentforge.workspace_agent import validate_request
         validate_request(**inputs)
@@ -258,6 +269,27 @@ def _steps(template, inputs):
             "estimated_model_calls": skill["limits"]["estimated_model_calls"],
             "external_process": "process.run" in required_permissions,
         })
+    return plan
+
+
+def _compose(steps):
+    if not isinstance(steps, list) or not 2 <= len(steps) <= 6:
+        raise brain_store.BrainError("Composed workflow requires 2–6 reviewed steps")
+    plan = []
+    report_targets = set()
+    for step in steps:
+        if (not isinstance(step, dict) or set(step) != {"template", "inputs"}
+                or not isinstance(step["template"], str) or step["template"] not in COMPOSABLE):
+            raise brain_store.BrainError("Unsupported composed step")
+        item, = _steps(step["template"], step["inputs"])
+        if item["skill_id"] in {"filesystem.report", "research.report", "workspace.analyze"}:
+            target = item["payload"]["path"].casefold()
+            if target in report_targets:
+                raise brain_store.BrainError("Composed report targets must be distinct")
+            report_targets.add(target)
+        if item in plan:
+            raise brain_store.BrainError("Duplicate composed step")
+        plan.append(item)
     return plan
 
 
