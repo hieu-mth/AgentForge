@@ -26,3 +26,5 @@ separate evidence. This audit traces entry points and trust boundaries.
 Existing detailed evidence and caveats are in [Core Runtime Audit](CORE_RUNTIME_AUDIT.md)
 and [Core Runtime Final Report](CORE_RUNTIME_FINAL_REPORT.md). Broad cycle,
 performance and production security certification remain open.
+
+Xem [kết quả triển khai](FULL_IMPLEMENTATION_REPORT.md) và [trạng thái từng khoảng trống sau sửa](REMAINING_GAPS.md).

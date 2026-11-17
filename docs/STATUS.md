@@ -1,5 +1,11 @@
 # AgentForge — Trạng thái thực tế
 
+## Adaptive Workspace pilot
+
+Nhánh phát triển bổ sung phân tích Markdown local theo thư mục Owner duyệt và
+probe Ollama có xác nhận riêng. Phạm vi kiểm thử và các phần còn mở nằm trong
+[báo cáo triển khai](audits/FULL_IMPLEMENTATION_REPORT.md).
+
 ## Core Runtime — phạm vi PR #124
 
 Baseline đối chiếu là `main` tại `df8c90b`. [PR #124](https://github.com/hieu-mth/AgentForge/pull/124)
