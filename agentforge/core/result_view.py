@@ -55,6 +55,10 @@ def present(skill_id, result):
     """Return only preapproved owner-visible statistics; no raw result fallback."""
     if skill_id == "terminal.check" and isinstance(result, dict):
         return {"kind": "terminal_receipt", **_picked(result, {"status", "recipe", "exit_code", "stdout", "stderr"})}
+    if skill_id == "workspace.analyze" and isinstance(result, dict):
+        return {"kind": "filesystem_report", **_picked(
+            result, {"status", "report_path", "sha256", "size_bytes", "model",
+                     "trace", "citations_checked"})}
     if skill_id == "research.report" and isinstance(result, dict):
         return {"kind": "filesystem_report", **_picked(result, {"status", "report_path", "sha256", "size_bytes", "model"}),
                 "tools": result.get("tools", [])[:8]}

@@ -1,6 +1,9 @@
+from contextlib import ExitStack
+
 import hashlib
 import os
 import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -42,8 +45,27 @@ def read_file(path: str) -> str:
     target = safe_path(path)
     if not target.is_file():
         raise FileNotFoundError("Regular workspace file required")
-    with target.open("rb") as source:
-        data = source.read(MAX_BYTES + 1)
+    if os.open in os.supports_dir_fd and hasattr(os, "O_NOFOLLOW"):
+        # Walk from a directory handle so swapping a checked ancestor for a
+        # symlink between validation and open cannot redirect the read.
+        root = WORKSPACE.resolve()
+        parts = target.relative_to(root).parts
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        with ExitStack() as stack:
+            parent = os.open(root, flags)
+            stack.callback(os.close, parent)
+            for part in parts[:-1]:
+                parent = os.open(part, flags, dir_fd=parent)
+                stack.callback(os.close, parent)
+            descriptor = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                                 dir_fd=parent)
+            with os.fdopen(descriptor, "rb") as source:
+                if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+                    raise FileNotFoundError("Regular workspace file required")
+                data = source.read(MAX_BYTES + 1)
+    else:
+        with target.open("rb") as source:
+            data = source.read(MAX_BYTES + 1)
     if len(data) > MAX_BYTES:
         raise ValueError("File exceeds size limit")
     return data.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")

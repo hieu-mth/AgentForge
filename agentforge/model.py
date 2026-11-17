@@ -215,7 +215,8 @@ def _read_stream_event(response, deadline, max_bytes):
 
 
 
-def _ollama_chat(runtime, prompt, schema, *, worker_id=None, opener=None):
+def _ollama_chat(runtime, prompt, schema, *, worker_id=None, opener=None,
+                 timeout_seconds=None, max_output_tokens=None):
     stream_developer = worker_id == "webapp_developer" and schema is not None
     payload = {
         "model": runtime["model"],
@@ -230,6 +231,9 @@ def _ollama_chat(runtime, prompt, schema, *, worker_id=None, opener=None):
         payload["format"] = schema
         payload["options"] = {"temperature": 0.2}
 
+    if max_output_tokens is not None:
+        payload.setdefault("options", {})["num_predict"] = max_output_tokens
+
     request = urllib.request.Request(
         runtime["base_url"].rstrip("/") + "/api/chat",
         data=json.dumps(payload).encode("utf-8"),
@@ -237,6 +241,8 @@ def _ollama_chat(runtime, prompt, schema, *, worker_id=None, opener=None):
         method="POST",
     )
     timeout = _request_timeout(worker_id)
+    if timeout_seconds is not None:
+        timeout = min(timeout, timeout_seconds)
     deadline = time.monotonic() + timeout
     with (opener or urllib.request.urlopen)(request, timeout=timeout) as response:
         _remaining(deadline)

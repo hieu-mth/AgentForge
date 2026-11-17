@@ -596,6 +596,12 @@ export default function App() {
       {task.report?.kind==='filesystem_report'&&<Card title="Báo cáo Markdown" style={{marginTop:18}}>
         <Paragraph><Text code copyable>{task.report.report_path}</Text></Paragraph>
         <Paragraph>SHA <Text code copyable>{task.report.sha256}</Text></Paragraph>
+        {Array.isArray(task.report.trace)&&<div>
+          <Paragraph>Model <Text code>{task.report.model}</Text> · {task.report.citations_checked} tham chiếu hợp lệ</Paragraph>
+          <ol>{task.report.trace.map((entry,index)=><li key={index}>
+            {entry.tool==='read'?'Đọc đoạn':'Tìm văn bản'} · {entry.matches} đoạn · {entry.skipped} file bỏ qua
+          </li>)}</ol>
+        </div>}
         <Button onClick={()=>readReport(task.task_id)}>Đọc bản đã xác minh</Button>
         {reviewedReport?.proposal_id===task.task_id&&<>
           <pre className="source-text">{reviewedReport.content}</pre>

@@ -91,17 +91,22 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
     wants_research_report = ("markdown" in normalized and "bao cao" in normalized
                              and any(term in normalized for term in (
                                  "tra cuu", "nghien cuu", "nguon cong khai", "tim them nguon")))
+    scope = re.search(r"\bworkspace/([a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_-]+)*)(?=[\s,;.!?`\)]|$)", text)
     if wants_research_report:
-        scope = re.search(r"\bworkspace/([a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_-]+)*)(?=[\s,;.!?`\)]|$)", text)
         if not scope:
             return {"status": "NEEDS_CLARIFICATION",
                     "message": "Hãy ghi thư mục tài liệu đã cấp quyền, ví dụ workspace/docs-local."}
         if max_model_calls != 3:
-            raise ValueError("Nghiên cứu và tổng hợp cần ngân sách 3 lượt model local.")
+            raise ValueError("Nghiên cứu và tổng hợp cần ngân sách 3 lượt model.")
         template = "research.report"
         inputs = {"prompt": text, "directory": scope[1],
                   "path": "research-reports/report-" + uuid4().hex + ".md"}
         title = "Nghiên cứu và tổng hợp báo cáo Markdown"
+    elif scope and not any((wants_company, wants_advanced, wants_webapp, wants_website, wants_video)):
+        template = "workspace.analyze"
+        inputs = {"prompt": text, "directory": scope[1],
+                  "path": "agent-reports/" + uuid4().hex + ".md"}
+        title = "Phân tích tài liệu workspace và bàn giao báo cáo"
     elif wants_company:
         slug = "company-" + uuid4().hex[:12]
         template = "webapp.company"
