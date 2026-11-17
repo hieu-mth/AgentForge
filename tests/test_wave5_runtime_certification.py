@@ -22,7 +22,7 @@ class LoopbackHttpFixture(BaseHTTPRequestHandler):
     def do_GET(self):
         self.server.requests.append(("GET", self.path))
         if self.path == "/api/tags":
-            self._send({"models": [{"name": "test-local:latest"}]})
+            self._send({"models": self.server.models})
         elif self.path == "/":
             self.send_response(302)
             self.send_header("Location", "/dashboard/")
@@ -57,6 +57,7 @@ class LocalProbeTests(unittest.TestCase):
         server = HTTPServer(("127.0.0.1", 0), LoopbackHttpFixture)
         self.server = server
         server.requests, server.payloads = [], []
+        server.models = [{"name": "test-local:latest", "size": 1024}]
         self.port = server.server_port
         self.thread = threading.Thread(target=server.serve_forever, daemon=True)
         self.thread.start()
@@ -87,12 +88,20 @@ class LocalProbeTests(unittest.TestCase):
         self.assertEqual(result["status"], "PASS_RUNTIME")
         self.assertEqual(result["output_sha256"], hashlib.sha256(b"READY").hexdigest())
         self.assertNotIn("READY", json.dumps(result))
-        self.assertEqual(self.server.requests, [("POST", "/api/chat")])
+        self.assertEqual(self.server.requests, [("GET", "/api/tags"), ("POST", "/api/chat")])
         self.assertEqual(len(self.server.payloads), 1)
         payload = self.server.payloads[0]
         self.assertEqual(payload["model"], "test-local:latest")
         self.assertEqual(payload["options"]["num_predict"], 32)
         self.assertFalse(payload["stream"])
+
+    def test_remote_alias_is_not_invoked(self):
+        self.server.models[0]["remote_host"] = "https://example.invalid"
+        with patch.object(rc, "_ollama_profile", return_value=self.profile):
+            result = rc._ollama_inference("local_primary")
+        self.assertEqual(result["status"], "LOCAL_MODEL_NOT_CONFIRMED")
+        self.assertEqual(self.server.requests, [("GET", "/api/tags")])
+        self.assertFalse(self.server.payloads)
 
     def test_invalid_routes_and_response_caps_fail_closed(self):
         with self.assertRaises(ValueError):

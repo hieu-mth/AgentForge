@@ -122,8 +122,23 @@ def _ollama_preflight(model_ref):
                    inference_invoked=False, model_downloaded=False)
 
 
-def _ollama_inference(model_ref):
-    host, port, name = _ollama_profile(model_ref)
+def _installed_local_model(host, port, name):
+    if "cloud" in name.casefold():
+        return False
+    entries = _http_json(host, port, "/api/tags").get("models")
+    return isinstance(entries, list) and any(
+        isinstance(item, dict) and item.get("name") == name
+        and type(item.get("size")) is int and item["size"] > 0
+        and not item.get("remote_model") and not item.get("remote_host")
+        for item in entries
+    )
+
+
+def _ollama_inference(model_ref, *, profile=None):
+    host, port, name = _ollama_profile(model_ref) if profile is None else profile
+    if not _installed_local_model(host, port, name):
+        return _result("LOCAL_MODEL_NOT_CONFIRMED", model_ref=model_ref,
+                       inference_invoked=False)
     start = time.monotonic()
     response = _http_json(host, port, "/api/chat",
                           payload={"model": name, "stream": False, "think": False,

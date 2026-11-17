@@ -1,4 +1,4 @@
-"""Owner-authenticated Model Hub actions; model configuration never runs inference."""
+"""Owner-authenticated Model Hub configuration and explicit probes."""
 from agentforge.ai import model_hub
 from agentforge.api.routes._shared import UNHANDLED
 
@@ -33,6 +33,14 @@ def handle(server, path, request, session=None):
                 request["ack"] != "CHECK_LOCAL_MODEL"):
             raise PermissionError("Explicit read-only local preflight required")
         return model_hub.check_local_profile(request["profile_id"])
+    if path == "/api/model-hub/probe":
+        if (set(request) != {"ack", "profile_id", "expected_revision"} or
+                request["ack"] != "RUN_LOCAL_MODEL_PROBE" or not server.allow_external_actions):
+            raise PermissionError("Explicit local inference approval and external-tools mode required")
+        from agentforge.ops_control import require_active
+        require_active()
+        return model_hub.probe_local_profile(
+            request["profile_id"], expected_revision=request["expected_revision"])
     if path == "/api/model-hub/rollback":
         if (set(request) != {"ack", "expected_revision", "target_revision"} or
                 request["ack"] != "ROLLBACK_MODEL_HUB"):

@@ -148,6 +148,31 @@ class TestControlCenterV1(unittest.TestCase):
         code, _, _ = self.req("GET", "/api/bootstrap")
         self.assertEqual(code, 401)
 
+    def test_model_probe_requires_owner_csrf_external_mode_and_exact_revision(self):
+        from agentforge.ai import model_hub
+        from agentforge.ops import runtime_certification
+
+        path = "/api/model-hub/probe"
+        body = {"ack": "RUN_LOCAL_MODEL_PROBE", "profile_id": "local_primary",
+                "expected_revision": 0}
+        with (patch.object(model_hub, "DB_PATH", self.root / "model-hub.sqlite3"),
+              patch.object(runtime_certification, "_ollama_inference",
+                           return_value={"status": "PASS_RUNTIME", "inference_invoked": True}) as inference):
+            self.assertEqual(self.req("POST", path, body)[0], 401)
+            self.login()
+            self.assertEqual(self.req("POST", path, body)[0], 400)
+            self.server.allow_external_actions = True
+            self.assertEqual(self.req("POST", path, body, csrf=False)[0], 403)
+            self.assertEqual(self.req("POST", path, {**body, "ack": "CHECK"})[0], 400)
+            self.assertIn(self.req("POST", path, {**body, "expected_revision": 1})[0], (400, 409))
+            self.assertEqual(self.req("POST", path, {**body, "profile_id": "cloud_primary"})[0], 400)
+            inference.assert_not_called()
+            status, receipt, _ = self.req("POST", path, body)
+            self.assertEqual((status, receipt["status"]), (200, "PASS_RUNTIME"), receipt)
+            self.assertEqual(receipt["revision"], 0)
+            self.assertIn("checked_at", receipt)
+            inference.assert_called_once()
+
     def test_long_unicode_website_brief_over_authenticated_http(self):
         self.login()
         brief = ("Tạo website tư vấn nệm cho gia đình Việt Nam. "

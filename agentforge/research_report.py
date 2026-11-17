@@ -38,12 +38,7 @@ def _runtime(*, allow_cloud=True):
     if selected["provider"] != "ollama" or "cloud" in selected["model"].casefold():
         raise PermissionError("RESEARCH_LOCAL_MODEL_REQUIRED")
     host, port = runtime_health._local_endpoint(selected["base_url"])
-    tags = runtime_health._http_json(host, port, "/api/tags", timeout=3).get("models")
-    if not isinstance(tags, list) or not any(
-            isinstance(row, dict) and row.get("name") == selected["model"]
-            and type(row.get("size")) is int and row["size"] > 0
-            and not row.get("remote_model") and not row.get("remote_host")
-            for row in tags):
+    if not runtime_health._installed_local_model(host, port, selected["model"]):
         raise ValueError("RESEARCH_LOCAL_MODEL_NOT_INSTALLED")
     return selected
 
