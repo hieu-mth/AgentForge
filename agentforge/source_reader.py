@@ -1,7 +1,10 @@
 import argparse
+import http.client
 import json
 import ipaddress
 import re
+import socket
+import time
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,6 +38,7 @@ ALLOWED_HOSTS = frozenset({
 })
 
 MAX_BYTES = 400_000
+IPV6_GLOBAL_UNICAST = ipaddress.IPv6Network("2000::/3")
 
 
 HOST_RE = re.compile(
@@ -90,7 +94,55 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-OPENER = urllib.request.build_opener(NoRedirect())
+def _public_socket(address, timeout, source_address):
+    """Resolve once and connect using only the validated numeric address."""
+    host, port = address
+    records = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM,
+                                 proto=socket.IPPROTO_TCP)
+    if not records or len(records) > 16:
+        raise OSError("Unexpected DNS result count")
+    for family, _, _, _, peer in records:
+        ip = ipaddress.ip_address(peer[0])
+        if (family not in (socket.AF_INET, socket.AF_INET6)
+                or not ip.is_global or ip.is_multicast
+                or (isinstance(ip, ipaddress.IPv6Address) and (
+                    ip not in IPV6_GLOBAL_UNICAST or ip.sixtofour is not None))):
+            raise PermissionError("Non-public DNS address refused")
+    deadline = time.monotonic() + timeout
+    for family, kind, proto, _, peer in records:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        conn = socket.socket(family, kind, proto)
+        try:
+            conn.settimeout(remaining)
+            if source_address:
+                conn.bind(source_address)
+            conn.connect(peer)
+        except OSError:
+            conn.close()
+        except BaseException:
+            conn.close()
+            raise
+        else:
+            return conn
+    raise OSError("Could not connect to a validated public address")
+
+
+class _PublicHTTPSConnection(http.client.HTTPSConnection):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Keep the original hostname for SNI and certificate verification.
+        self._create_connection = _public_socket
+
+
+class _PublicHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(_PublicHTTPSConnection, req, context=self._context)
+
+
+OPENER = urllib.request.build_opener(
+    urllib.request.ProxyHandler({}), _PublicHTTPSHandler(), NoRedirect())
 
 
 def fetch_page(url: str, *, allowed_hosts=None) -> dict:
