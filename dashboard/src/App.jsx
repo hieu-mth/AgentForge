@@ -223,6 +223,14 @@ export default function App() {
     }
     message.success('Đã lập kế hoạch, chưa gọi model');await openGoal(outcome.goal_id);return true;
   };
+  const planWorkflow=prompt=>ask('Dùng Ollama để lập kế hoạch nhiều bước?',
+    <Paragraph>Gửi yêu cầu này cho Ollama local một lần để tạo bản nháp. Xem lại đường dẫn và quyền trước khi duyệt từng bước.</Paragraph>,
+    async()=>{
+      const result=await runAction(()=>post('/api/workspace/plan-workflow',{
+        ack:'RUN_LOCAL_WORKFLOW_PLANNER',prompt,
+      }));
+      if(result)await openGoal(result.goal_id);
+    });
   const approve=goal=>ask('Duyệt SHA kế hoạch?',
     <><Paragraph>Hành động này chỉ duyệt kế hoạch, chưa gọi model hoặc chạy skill.</Paragraph>
       <code className="digest">{goal.plan_sha256}</code></>,
@@ -505,7 +513,7 @@ export default function App() {
           <Tabs className="workspace-tabs" activeKey={section}
             items={activeTabs} onChange={navigate}/>}
         <div className="page-body" key={section}>
-          {section==='workspace'&&<Workspace data={data} onPlan={plan} openGoal={openGoal}
+          {section==='workspace'&&<Workspace data={data} onPlan={plan} onPlanWorkflow={planWorkflow} openGoal={openGoal}
               prompt={workspacePrompt} setPrompt={setWorkspacePrompt}
               onOpenSettings={()=>navigate('settings')} loading={busy}/>} 
           {section==='overview'&&<Overview data={data} onNavigate={navigate} onRefresh={refreshCurrent}/>}

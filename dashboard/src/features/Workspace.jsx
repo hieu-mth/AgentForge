@@ -37,7 +37,7 @@ export function goalAction(status) {
   return 'Xem chi tiết';
 }
 
-export function Workspace({data, onPlan, openGoal, onOpenSettings, prompt, setPrompt, loading}) {
+export function Workspace({data, onPlan, onPlanWorkflow, openGoal, onOpenSettings, prompt, setPrompt, loading}) {
   const limits=quotaForPrompt(prompt,data?.workspace_policy);
   const videoIntent=isVideoRequest(prompt);
   const goals=data?.goals||[];
@@ -64,12 +64,15 @@ export function Workspace({data, onPlan, openGoal, onOpenSettings, prompt, setPr
           onKeyDown={e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();submit();}}}
           placeholder="Ví dụ: Tạo website bán nệm cho gia đình tôi, có ảnh AI, danh sách sản phẩm, nút đặt hàng và giao diện đẹp trên điện thoại..."/>
         <div className="composer-footer">
-          <span className="composer-hint">Ctrl + Enter để gửi · Chưa gọi AI ở bước lập kế hoạch</span>
+          <span className="composer-hint">Ctrl + Enter để lập kế hoạch theo mẫu</span>
           <span className="composer-count" aria-live="polite">{countLabel}</span>
           <Button type="primary" size="large" icon={<SendOutlined/>} loading={loading}
             disabled={!!validation.error||limits.blocked} onClick={submit}>Lập kế hoạch</Button>
         </div>
       </div>
+      <Button style={{marginTop:12}} disabled={loading||!!validation.error||length>1500
+        ||limits.allowed<1||!data?.external_actions_enabled}
+        onClick={()=>onPlanWorkflow(prompt)}>Dùng Ollama lập kế hoạch nhiều bước</Button>
       {length>0&&validation.error&&<Alert style={{marginTop:12}} type="warning" showIcon message={validation.error}/>}
       {length>0&&!validation.error&&limits.blocked&&<Alert style={{marginTop:12}} type="warning" showIcon
         message="Cần điều chỉnh giới hạn lượt AI"

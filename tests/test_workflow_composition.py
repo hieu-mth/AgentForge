@@ -158,3 +158,35 @@ class WorkflowCompositionTests(unittest.TestCase):
             self.assertNotEqual(source["sha256"], new["sha256"])
             self.assertEqual((workspace / "reports/a.md").read_text(), "Evidence")
             self.assertEqual(decide(revised, new, "ACCEPT_ARTIFACT")[1]["status"], "ACCEPTED")
+
+    def test_local_model_can_propose_multiple_tools_but_cannot_run_them(self):
+        server = test_control_center_v1.TestControlCenterV1()
+        server.setUp()
+        self.addCleanup(server.tearDown)
+        server.login()
+        workspace = server.root / "workspace"
+        (workspace / "notes").mkdir(parents=True)
+        body = {"ack": "RUN_LOCAL_WORKFLOW_PLANNER",
+                "prompt": "Check Python and create a report explaining the next steps."}
+        suggestions = {"steps": [
+            {"template": "terminal.check",
+             "inputs": {"recipe": "python-version", "directory": "notes"}},
+            report("reports/a.md"),
+        ]}
+        with (patch.object(gateway, "WORKSPACE", workspace),
+              patch("agentforge.workspace_policy.read", return_value={"max_estimated_model_calls": 1}),
+              patch("agentforge.research_report._runtime", return_value={"provider": "ollama"}) as runtime,
+              patch("agentforge.research_report._ask", return_value=suggestions) as planner):
+            path = "/api/workspace/plan-workflow"
+            self.assertEqual(server.req("POST", path, body)[0], 400)
+            planner.assert_not_called()
+            server.server.allow_external_actions = True
+            code, draft, _ = server.req("POST", path, body)
+            self.assertEqual((code, draft["status"]), (200, "PLANNED"), draft)
+            runtime.assert_called_once_with(allow_cloud=False)
+            self.assertEqual([s["skill_id"] for s in draft["plan"]], ["terminal.check", "filesystem.report"])
+            self.assertFalse((workspace / "reports").exists())
+            self.assertFalse(server.taskdb.exists())
+            suggestions["steps"][0]["inputs"]["recipe"] = "powershell"
+            self.assertEqual(server.req("POST", path, body)[0], 400)
+            self.assertFalse(server.taskdb.exists())

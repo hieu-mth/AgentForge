@@ -13,6 +13,24 @@ def handle(server, path, request, session=None):
             max_estimated_model_calls=request["max_estimated_model_calls"],
             website_enabled=request["website_enabled"],
             storyboard_enabled=request["storyboard_enabled"], confirm=True)
+    if path == "/api/workspace/plan-workflow":
+        if (set(request) != {"ack", "prompt"}
+                or request["ack"] != "RUN_LOCAL_WORKFLOW_PLANNER"
+                or not server.allow_external_actions):
+            raise PermissionError("Explicit local model approval and external-tools mode required")
+        from agentforge import brain_planner, workspace_policy
+        from urllib.error import URLError
+
+        policy = workspace_policy.read()
+        try:
+            return brain_planner.propose_from_brief(
+                request["prompt"], max_model_calls=policy["max_estimated_model_calls"],
+                website_enabled=policy.get("website_enabled"), db_path=server.brain_db_path)
+        except (TimeoutError, URLError, OSError) as exc:
+            # Avoid leaking the model endpoint or transport error details.
+            if isinstance(exc, PermissionError):
+                raise
+            raise ValueError("LOCAL_WORKFLOW_PLANNER_UNAVAILABLE") from exc
     if path == "/api/workspace/request":
         if set(request) != {"ack", "prompt", "max_model_calls"} or request.get("ack") != "PLAN_ONLY":
             raise PermissionError("Chỉ được tạo kế hoạch sau xác nhận owner.")
