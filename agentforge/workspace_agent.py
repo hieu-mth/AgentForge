@@ -129,7 +129,8 @@ def run(prompt, directory, path):
     ids = set(re.findall(r"\[(\d+)\]", body))
     if (not ids or ids - {str(item["id"]) for item in evidence}
             or len(body.encode("utf-8")) > 3500 or "://" in body or "www." in body.lower()
-            or re.search(r"\]\s*\(|[<>]|[\x00-\x08\x0b-\x1f]", body)):
+            or re.search(r"\]\s*\(|[<>]|[\x00-\x08\x0b-\x1f]", body)
+            or re.search(r"(?m)^\s*\[[^\]\n]+\]:", body)):
         raise ValueError("AGENT_INVALID_REPORT")
     sources = [
         f'[{item["id"]}] `workspace/{directory}/{files[item["file"]]}` '

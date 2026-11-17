@@ -127,3 +127,26 @@ class WorkspaceAgentTests(unittest.TestCase):
                   patch.object(gateway, "safe_path", side_effect=replaced_after_check),
                   self.assertRaises(OSError)):
                 gateway.read_file("notes/report.md")
+
+    @unittest.skipUnless(os.open in os.supports_dir_fd and hasattr(os, "O_NOFOLLOW")
+                         and {os.mkdir, os.link, os.unlink} <= os.supports_dir_fd,
+                         "requires POSIX anchored report write")
+    def test_report_does_not_publish_into_parent_replaced_by_symlink(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp) / "workspace"
+            outside = Path(tmp) / "outside"
+            outside.mkdir()
+            parent = root / "reports"
+            parent.mkdir(parents=True)
+            original_write = gateway._write_report_at
+
+            def replaced_after_check(path, target, raw):
+                parent.rename(root / "old")
+                parent.symlink_to(outside, target_is_directory=True)
+                return original_write(path, target, raw)
+
+            with (patch.object(gateway, "WORKSPACE", root),
+                  patch.object(gateway, "_write_report_at", side_effect=replaced_after_check),
+                  self.assertRaises(OSError)):
+                gateway.write_verified_report("reports/report.md", "approved content")
+            self.assertFalse(list(outside.iterdir()))

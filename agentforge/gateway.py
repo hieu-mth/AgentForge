@@ -1,12 +1,12 @@
-from contextlib import ExitStack
-
 import hashlib
 import os
 import re
+import secrets
 import stat
 import subprocess
 import sys
 import tempfile
+from contextlib import ExitStack, contextmanager
 from pathlib import Path, PureWindowsPath
 
 from agentforge.paths import REPOSITORY_ROOT, ensure_local_root
@@ -41,29 +41,46 @@ def safe_path(path: str) -> Path:
     return target
 
 
+def _has_anchored_open():
+    return os.open in os.supports_dir_fd and hasattr(os, "O_NOFOLLOW")
+
+
+@contextmanager
+def _workspace_parent(target, *, create=False):
+    """Keep the checked directory chain anchored while opening a leaf."""
+    root = WORKSPACE.resolve()
+    parts = target.relative_to(root).parts
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    with ExitStack() as stack:
+        parent = os.open(root, flags)
+        stack.callback(os.close, parent)
+        for part in parts[:-1]:
+            if create:
+                try:
+                    os.mkdir(part, dir_fd=parent)
+                except FileExistsError:
+                    pass
+            parent = os.open(part, flags, dir_fd=parent)
+            stack.callback(os.close, parent)
+        yield parent, parts[-1]
+
+
+def _read_at(parent, name, limit):
+    fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
+    with os.fdopen(fd, "rb") as source:
+        if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+            raise FileNotFoundError("Regular workspace file required")
+        return source.read(limit)
+
+
 def read_file(path: str) -> str:
     target = safe_path(path)
-    if not target.is_file():
-        raise FileNotFoundError("Regular workspace file required")
-    if os.open in os.supports_dir_fd and hasattr(os, "O_NOFOLLOW"):
-        # Walk from a directory handle so swapping a checked ancestor for a
-        # symlink between validation and open cannot redirect the read.
-        root = WORKSPACE.resolve()
-        parts = target.relative_to(root).parts
-        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-        with ExitStack() as stack:
-            parent = os.open(root, flags)
-            stack.callback(os.close, parent)
-            for part in parts[:-1]:
-                parent = os.open(part, flags, dir_fd=parent)
-                stack.callback(os.close, parent)
-            descriptor = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
-                                 dir_fd=parent)
-            with os.fdopen(descriptor, "rb") as source:
-                if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
-                    raise FileNotFoundError("Regular workspace file required")
-                data = source.read(MAX_BYTES + 1)
+    if _has_anchored_open():
+        with _workspace_parent(target) as (parent, name):
+            data = _read_at(parent, name, MAX_BYTES + 1)
     else:
+        if not target.is_file():
+            raise FileNotFoundError("Regular workspace file required")
         with target.open("rb") as source:
             data = source.read(MAX_BYTES + 1)
     if len(data) > MAX_BYTES:
@@ -112,12 +129,30 @@ def validate_report(path, content):
     safe_path(path)
 
 
-def write_verified_report(path, content):
-    """Publish a complete file without overwriting, then verify its exact bytes."""
-    validate_report(path, content)
-    target = safe_path(path)
+def _write_report_at(path, target, raw):
+    with _workspace_parent(target, create=True) as (parent, name):
+        temporary = ".agentforge-" + secrets.token_hex(16) + ".tmp"
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                     0o600, dir_fd=parent)
+        try:
+            with os.fdopen(fd, "wb") as out:
+                out.write(raw)
+                out.flush()
+                os.fsync(out.fileno())
+            try:
+                os.link(temporary, name, src_dir_fd=parent, dst_dir_fd=parent,
+                        follow_symlinks=False)
+            except FileExistsError:
+                pass
+            # Reopen through the current namespace before emitting a receipt.
+            with _workspace_parent(safe_path(path)) as (verified_parent, leaf):
+                return _read_at(verified_parent, leaf, len(raw) + 1)
+        finally:
+            os.unlink(temporary, dir_fd=parent)
+
+
+def _write_report_portable(path, target, raw):
     target.parent.mkdir(parents=True, exist_ok=True)
-    raw = content.encode("utf-8")
     fd, temporary = tempfile.mkstemp(prefix=".agentforge-", suffix=".tmp", dir=target.parent)
     try:
         with os.fdopen(fd, "wb") as out:
@@ -132,11 +167,23 @@ def write_verified_report(path, content):
         if not target.is_file():
             raise ValueError("Regular Markdown file required")
         with target.open("rb") as source:
-            verified = source.read(len(raw) + 1)
-        if verified != raw:
-            raise FileExistsError("Existing file has different content")
+            return source.read(len(raw) + 1)
     finally:
         Path(temporary).unlink(missing_ok=True)
+
+
+def write_verified_report(path, content):
+    """Publish a complete file without overwriting, then verify exact bytes."""
+    validate_report(path, content)
+    target = safe_path(path)
+    raw = content.encode("utf-8")
+    if _has_anchored_open() and {os.mkdir, os.link, os.unlink} <= os.supports_dir_fd:
+        WORKSPACE.mkdir(parents=True, exist_ok=True)
+        verified = _write_report_at(path, target, raw)
+    else:
+        verified = _write_report_portable(path, target, raw)
+    if verified != raw:
+        raise FileExistsError("Existing file has different content")
     return {"status": "VERIFIED", "report_path": "workspace/" + path,
             "sha256": hashlib.sha256(verified).hexdigest(), "size_bytes": len(verified)}
 
