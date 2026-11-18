@@ -106,6 +106,10 @@ try {
   await env.locator('.env-stat-grid .env-stat').first().waitFor();
   if(await env.locator('.env-stat').count()!==4)throw new Error('Missing four resource tiles');
   await env.getByText('NVIDIA GeForce RTX 5070').first().waitFor();
+  await env.getByText('9,09 GB').first().waitFor();
+  await env.getByText('12,82 GB').first().waitFor();
+  if(/\b(?:MiB|GiB)\b/.test(await env.innerText()))
+    throw new Error('Technical capacity units leaked into the Environment UI');
   await env.getByText('Gián đoạn',{exact:true}).waitFor();
   await env.getByText('TIMEOUT',{exact:true}).waitFor();
   await env.getByText('qwen3:8b').first().waitFor();
