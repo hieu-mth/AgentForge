@@ -31,7 +31,7 @@ function Invoke-CheckedPython {
     if ($LASTEXITCODE -ne 0) { throw "Python check failed (exit $LASTEXITCODE)" }
 }
 
-Write-Host "AgentForge Video Studio — local acceptance"
+Write-Host "AgentForge Video Studio - local acceptance"
 Invoke-CheckedPython -Arguments @("-B","-m","agentforge.ops.preflight")
 Invoke-CheckedPython -Arguments @("-B","-m","agentforge.ops_control","status")
 
