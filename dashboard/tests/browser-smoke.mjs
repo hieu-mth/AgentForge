@@ -49,12 +49,46 @@ try {
   const page2=await browser.newPage();
   const errors2=[];
   page2.on('pageerror',error=>errors2.push(error.message));
+  let environmentRequests=0;
+  const environmentSnapshot={
+    checked_at:'2026-11-19T00:05:00+07:00',
+    config_error:null,endpoints_truncated:false,
+    hardware:{
+      os:'Windows',os_release:'11',cpu:'Intel Core i5',logical_cpu_count:12,
+      architecture:'AMD64',
+      memory:{available_bytes:18*1024**3,total_bytes:32*1024**3},
+      disk:{free_bytes:600*1024**3,total_bytes:1000*1024**3},
+      gpu:{status:'RUNNING',cuda_toolkit:{status:'NOT_INSTALLED'},devices:[
+        {name:'NVIDIA GeForce RTX 5070',driver_version:'621.01',
+          vram_free_mib:8673,vram_total_mib:12227}
+      ]},
+    },
+    software:[
+      {id:'python',status:'READY',version:'3.13.17',scope:'active virtualenv'},
+      {id:'ollama',status:'INSTALLED',scope:'CLI in PATH'},
+    ],
+    services:[
+      {id:'ollama',status:'RUNNING',endpoint:'http://127.0.0.1:11434'},
+      {id:'comfyui',status:'DEGRADED',endpoint:'http://127.0.0.1:8188',error:'TIMEOUT'},
+    ],
+    models:[
+      {id:'ollama:local:qwen3',name:'qwen3:8b',provider:'ollama',type:'ollama_model',
+       size_bytes:5905580032,status:'INSTALLED',loadability:'UNKNOWN',
+       endpoint:'http://127.0.0.1:11434',family:'qwen3'},
+    ],
+    configured_models:[
+      {id:'local_primary',name:'qwen3:8b',provider:'ollama',status:'INSTALLED'},
+    ],
+  };
   await page2.route('**/api/**',route=>{
     const p=new URL(route.request().url()).pathname;
+    if(p==='/api/ops/discovery')environmentRequests++;
     const payload=p==='/api/session'?{csrf:'fixture-only-csrf'}:
       p==='/api/video-studio/projects'?{projects:[],canonical_engine:'film_studio'}:
-      p==='/api/characters'?{characters:[]}:{};
-    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(payload)});
+      p==='/api/characters'?{characters:[]}:
+      p==='/api/ops/discovery'?environmentSnapshot:{};
+    return route.fulfill({status:200,contentType:'application/json',
+      body:JSON.stringify(payload)});
   });
   await page2.goto(origin+'/dashboard/#/projects',{waitUntil:'networkidle'});
   await page2.getByText('Dự án & tập phim',{exact:true}).waitFor();
@@ -65,6 +99,39 @@ try {
   await page2.goto(origin+'/dashboard/#/media-studio',{waitUntil:'networkidle'});
   await page2.getByRole('button',{name:'Xem bản dựng'}).click();
   await page2.waitForURL('**/#/models');
+  // Environment runs against the actual discovery contract, with no invented READY state.
+  await page2.goto(origin+'/dashboard/#/environment',{waitUntil:'networkidle'});
+  const env=page2.locator('[data-testid="environment-page"]');
+  await env.getByRole('heading',{name:'Môi trường & Tài nguyên'}).waitFor();
+  await env.locator('.env-stat-grid .env-stat').first().waitFor();
+  if(await env.locator('.env-stat').count()!==4)throw new Error('Missing four resource tiles');
+  await env.getByText('NVIDIA GeForce RTX 5070').first().waitFor();
+  await env.getByText('Gián đoạn',{exact:true}).waitFor();
+  await env.getByText('TIMEOUT',{exact:true}).waitFor();
+  await env.getByText('qwen3:8b').first().waitFor();
+  if(environmentRequests<1)throw new Error('Environment did not request actual discovery API');
+  const refreshResponse=page2.waitForResponse(r=>
+    r.url().includes('/api/ops/discovery')&&r.status()===200);
+  await env.getByRole('button',{name:'Quét lại'}).click();
+  await refreshResponse;
+  if(environmentRequests<2)throw new Error('Quét lại did not refresh environment data');
+  // Responsive acceptance: one document scrollbar, tables may scroll horizontally.
+  for(const width of [1440,900,390]){
+    await page2.setViewportSize({width,height:850});
+    await page2.waitForTimeout(150);
+    const overflow=await page2.evaluate(()=>
+      document.documentElement.scrollWidth>window.innerWidth+2);
+    if(overflow)throw new Error('Environment page overflows viewport at '+width+'px');
+  }
+  await page2.getByRole('button',{name:'Mở điều hướng'}).click();
+  await page2.getByText('LOCAL-FIRST AI STUDIO').last().waitFor();
+  await page2.keyboard.press('Escape');
+  await page2.getByRole('button',{name:'Sáng'}).click();
+  await page2.waitForFunction(()=>document.documentElement.dataset.theme==='light');
+  await page2.getByRole('button',{name:'Tối'}).click();
+  await page2.waitForFunction(()=>document.documentElement.dataset.theme==='dark');
+  await page2.setViewportSize({width:1440,height:900});
+  console.log('Environment layout, live discovery data and refresh: PASS');
   await page2.goto(origin+'/dashboard/#/workspace',{waitUntil:'networkidle'});
   await page2.getByText('Tổng quan Video Studio',{exact:true}).waitFor();
   if(errors2.length)throw new Error('Video Studio runtime errors: '+errors2.join(' | '));

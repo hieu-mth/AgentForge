@@ -1,5 +1,8 @@
 import {useCallback,useEffect,useState} from 'react';
-import {Alert,Button,Card,Form,Input,Layout,Menu,Space,Spin,Tabs,Typography} from 'antd';
+import {Alert,Button,Card,Drawer,Form,Input,Layout,Menu,Space,Spin,Tabs,Typography} from 'antd';
+import {AppstoreOutlined,DashboardOutlined,MenuOutlined,MoonOutlined,
+  PlayCircleOutlined,ReloadOutlined,SendOutlined,SettingOutlined,
+  SunOutlined,UserOutlined,VideoCameraOutlined} from '@ant-design/icons';
 import {api,onAuthExpired,requestError} from './api.js';
 import {useThemeMode} from './theme.jsx';
 import {NAV_GROUPS,groupFor,defaultSection,parseSection,hashFor,tabsFor,labelFor} from './navigation.js';
@@ -12,6 +15,10 @@ import {Publishing} from './features/Publishing.jsx';
 
 const {Header,Sider,Content}=Layout;
 const {Text,Title}=Typography;
+const NAV_ICONS={overview:<DashboardOutlined/>,studio:<VideoCameraOutlined/>,
+  characters:<UserOutlined/>,products:<PlayCircleOutlined/>,business:<SendOutlined/>,
+  settings:<SettingOutlined/>};
+const MENU_ITEMS=NAV_GROUPS.map(g=>({key:g.key,label:g.label,icon:NAV_ICONS[g.key]}));
 
 function Login({onLogin,error,busy}){
   return <div className="login-screen"><Card style={{maxWidth:460,margin:'8vh auto'}}>
@@ -33,6 +40,7 @@ export default function App(){
   const [status,setStatus]=useState('loading');
   const [error,setError]=useState(null);
   const [busy,setBusy]=useState(false);
+  const [mobileNavOpen,setMobileNavOpen]=useState(false);
   const {mode,toggle}=useThemeMode();
   const refresh=useCallback(async()=>{
     setStatus('loading');
@@ -47,7 +55,7 @@ export default function App(){
     window.addEventListener('hashchange',update);
     return ()=>window.removeEventListener('hashchange',update);
   },[]);
-  const navigate=next=>{window.location.hash=hashFor(next);setSection(parseSection(window.location.hash));};
+  const navigate=next=>{window.location.hash=hashFor(next);setSection(parseSection(window.location.hash));setMobileNavOpen(false);};
   const mutate=async(path,body)=>{
     if(!session?.csrf)throw new Error('Phiên Owner chưa sẵn sàng');
     setBusy(true);
@@ -84,22 +92,49 @@ export default function App(){
       <Button onClick={()=>navigate('projects')}>Xem dự án video</Button>
     </Space></Card>;
   }
+  const sidebar=<>
+    <div className="af-brand">
+      <span className="af-brand-mark" aria-hidden="true"><AppstoreOutlined/></span>
+      <div><strong>AgentForge</strong><small>LOCAL-FIRST AI STUDIO</small></div>
+    </div>
+    <div className="af-sidebar-label">WORKSPACE</div>
+    <Menu theme="dark" mode="inline" selectedKeys={[group]} items={MENU_ITEMS}
+      onClick={({key})=>navigate(defaultSection(key))}/>
+    <div className="af-sidebar-bottom">
+      <span className="af-sidebar-bottom-indicator"/>
+      <div><strong>Không gian local</strong><small>127.0.0.1 · Quyền Owner</small></div>
+    </div>
+  </>;
   return <Layout className="app-shell" style={{minHeight:'100vh'}}>
-    <Sider breakpoint="lg" collapsedWidth="0" width={220}>
-      <div className="brand" style={{padding:18}}><strong>AgentForge</strong></div>
-      <Menu theme="dark" mode="inline" selectedKeys={[group]}
-        items={NAV_GROUPS.map(g=>({key:g.key,label:g.label}))}
-        onClick={({key})=>navigate(defaultSection(key))}/>
-    </Sider>
-    <Layout>
-      <Header className="app-header" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-        <Text strong>{labelFor(section)}</Text>
-        <Space><Button onClick={refresh}>Làm mới</Button><Button onClick={toggle}>{mode==='dark'?'Sáng':'Tối'}</Button></Space>
+    <Sider className="af-sidebar" breakpoint="lg" collapsedWidth="0" width={244}
+      trigger={null}>{sidebar}</Sider>
+    <Drawer className="af-mobile-drawer" placement="left" width={256} title="Điều hướng"
+      open={mobileNavOpen} onClose={()=>setMobileNavOpen(false)}>
+      {sidebar}
+    </Drawer>
+    <Layout className="af-main-layout">
+      <Header className="app-header">
+        <div className="af-header-left">
+          <Button className="af-mobile-nav-toggle" aria-label="Mở điều hướng"
+            icon={<MenuOutlined/>} onClick={()=>setMobileNavOpen(true)}/>
+          <div className="af-header-title">
+            <span>AGENTFORGE / WORKSPACE</span><strong>{labelFor(section)}</strong>
+          </div>
+        </div>
+        <Space className="af-header-actions" size={10}>
+          <Button icon={<ReloadOutlined/>} onClick={refresh}>Kiểm tra phiên</Button>
+          <Button icon={mode==='dark'?<SunOutlined/>:<MoonOutlined/>}
+            onClick={toggle}>{mode==='dark'?'Sáng':'Tối'}</Button>
+        </Space>
       </Header>
-      <Content style={{padding:24}}>
-        {tabs.length>1&&<Tabs activeKey={section} items={tabs.map(t=>({key:t.key,label:t.label}))} onChange={navigate}/>}
-        {error&&<Alert closable showIcon type="error" message={requestError(error)} onClose={()=>setError(null)} style={{marginBottom:16}}/>}
-        {page}
+      <Content className="af-content">
+        <div className="af-page-container">
+          {tabs.length>1&&<Tabs className="af-section-tabs" activeKey={section}
+            items={tabs.map(t=>({key:t.key,label:t.label}))} onChange={navigate}/>}
+          {error&&<Alert closable showIcon type="error" message={requestError(error)}
+            onClose={()=>setError(null)} style={{marginBottom:16}}/>}
+          {page}
+        </div>
       </Content>
     </Layout>
   </Layout>;
