@@ -90,22 +90,11 @@ def _summary(server):
     from agentforge import autopilot_v13, company_v2
     delegated = autopilot_v13.policy()
     owner_company = company_v2.report()
-    from agentforge.media_workflow_v15 import report as production_report
-    productions = production_report()["productions"][:15]
     from agentforge.workspace_policy import read as read_workspace_policy
     return {
         "workspace_policy": read_workspace_policy(),
         "autopilot_policy": delegated,
         "company_v2": owner_company,
-        "local_video": {
-            "items": [{
-                "production_id": x["production_id"], "run_id": x["run_id"],
-                "status": x["status"], "quality": x["quality"],
-                "storyboard_sha": x["storyboard_sha"],
-                "video_sha": x["video_sha"],
-            } for x in productions],
-            "pending_count": sum(x["status"] == "VIDEO_READY" for x in productions),
-        },
         "autopilot_reviews": {
             "business_context": quality["business_context"],
             "pending_count": sum(x["decision"] == "PENDING" for x in quality["reviews"]),
