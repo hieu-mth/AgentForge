@@ -8,7 +8,7 @@ from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
-from agentforge import analytics_store, goal_preflight, result_view, task_history, skill_runner, ops_control
+from agentforge import analytics_store, brain_planner, goal_preflight, result_view, task_history, skill_runner, ops_control
 from agentforge import control_center_v1 as cc
 
 CODE = "testing-owner-company-ops-2026"
@@ -70,37 +70,38 @@ class TestCompanyOperationsV11(unittest.TestCase):
         return identifier
 
     def propose(self, dataset):
-        return self.req("POST", "/api/goals/propose", {
-            "ack": "PROPOSE", "title": "Review data", "template": "campaign.review",
-            "inputs": {"dataset": dataset}, "max_model_calls": 0,
-            "max_external_runs": 0})
+        # Seed an archived goal directly. New campaign goals are disallowed on
+        # Owner API, but persisted plans still need integrity checks.
+        planned = brain_planner.propose(
+            "Archived analytics review", "campaign.review",
+            {"dataset": dataset}, db_path=self.brain_db)
+        return 200, planned, {}
 
-    def test_preflight_requires_session_csrf_and_does_not_create_database(self):
-        code, _, _ = self.req("POST", "/api/goals/preflight", {
-            "ack": "PREFLIGHT", "template": "campaign.review",
-            "inputs": {"dataset": "demo-bogus"}})
-        self.assertEqual(code, 401)
+    def test_retired_preflight_requires_session_and_fails_closed(self):
+        payload = {"ack": "PREFLIGHT", "template": "campaign.review",
+                   "inputs": {"dataset": "demo-bogus"}}
+        self.assertEqual(self.req("POST", "/api/goals/preflight", payload)[0], 401)
         self.login()
-        code, out, _ = self.req("POST", "/api/goals/preflight", {
-            "ack": "PREFLIGHT", "template": "campaign.review",
-            "inputs": {"dataset": "demo-bogus"}})
-        self.assertEqual(code, 200)
-        self.assertFalse(out["ready"])
-        self.assertEqual(out["issues"][0]["code"], "DATASET_NOT_FOUND")
+        status, body, _ = self.req("POST", "/api/goals/preflight", payload)
+        self.assertEqual(status, 400)
+        self.assertIn("RETIRED_GOAL_TEMPLATE", body["message"])
+        status, body, _ = self.req("POST", "/api/goals/propose", {
+            "ack": "PROPOSE", "title": "Old analytics",
+            "template": "campaign.review", "inputs": {"dataset": "demo-bogus"}})
+        self.assertEqual(status, 400)
+        self.assertIn("RETIRED_GOAL_TEMPLATE", body["message"])
         self.assertFalse(self.analytics_db.exists())
         self.assertFalse(self.brain_db.exists())
-        code, out, _ = self.propose("demo-bogus")
-        self.assertEqual(code, 400)
-        self.assertIn("DATASET_NOT_FOUND", out["message"])
-        self.assertFalse(self.brain_db.exists())
+        self.assertFalse(self.task_db.exists())
 
     def test_valid_dataset_can_be_planned_and_missing_dataset_blocks_approval(self):
         self.dataset()
         self.login()
-        code, ready, _ = self.req("POST", "/api/goals/preflight", {
-            "ack": "PREFLIGHT", "template": "campaign.review",
-            "inputs": {"dataset": "demo-valid-001"}})
-        self.assertEqual(code, 200)
+        # Backend preflight validates an archived plan independently of the
+        # now-retired campaign intake endpoint.
+        ready = goal_preflight.inspect(
+            "campaign.review", {"dataset": "demo-valid-001"},
+            analytics_db_path=self.analytics_db)
         self.assertTrue(ready["ready"])
         code, proposed, _ = self.propose("demo-valid-001")
         self.assertEqual(code, 200)
@@ -140,8 +141,8 @@ class TestCompanyOperationsV11(unittest.TestCase):
         code, result, _ = self.req("POST", "/api/goals/preflight", {
             "ack": "PREFLIGHT", "template": "growth.review",
             "inputs": {"campaign": "missing-campaign"}})
-        self.assertEqual(code, 200)
-        self.assertEqual(result["issues"][0]["code"], "CAMPAIGN_NOT_FOUND")
+        self.assertEqual(code, 400)
+        self.assertIn("RETIRED_GOAL_TEMPLATE", result["message"])
         self.assertFalse(self.growth_db.exists())
         self.assertFalse(self.brain_db.exists())
 
