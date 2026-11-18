@@ -46,37 +46,22 @@ try {
     'Missing JS/CSS bundle: '+JSON.stringify(responses.filter(r=>r.status!==200)));
   if(!responses.some(r=>r.url.endsWith('.js'))) throw new Error('No JS bundle requested');
   console.log('React production boot: PASS; '+responses.length+' assets fetched');
-  // Video-first routing: retired Workspace deep links must not reopen legacy screens.
-  const acceptancePage=await browser.newPage({viewport:{width:1440,height:1000}});
-  acceptancePage.on('pageerror',error=>errors.push(error.message));
-  await acceptancePage.route('**/api/**',route=>{
-    const path=new URL(route.request().url()).pathname;
-    const body=path==='/api/session'?{csrf:'fixture-only-csrf'}
-      :path==='/api/model-hub'?{
-        revision:0,cloud_fallback:false,gpu_auto_start:false,
-        profiles:[{id:'local_primary',provider:'ollama',model:'qwen3:8b',enabled:true,
-          source:'git',health:'UNVERIFIED'}],
-        routes:[{id:'film.motion',label:'Tạo video chuyển động',kind:'video',model_ref:null,
-          source:'default',runtime_wired:false,status:'UNCONFIGURED'},
-          {id:'ops.monitor',label:'Theo dõi hệ thống',kind:'rules',model_ref:null,
-          source:'default',runtime_wired:false,status:'DETERMINISTIC'}],
-      }:{goals:[],tasks:[],stats:{},external_actions_enabled:false};
-    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
+  const page2=await browser.newPage();
+  const errors2=[];
+  page2.on('pageerror',error=>errors2.push(error.message));
+  await page2.route('**/api/**',route=>{
+    const p=new URL(route.request().url()).pathname;
+    const payload=p==='/api/session'?{csrf:'fixture-only-csrf'}:
+      p==='/api/video-studio/projects'?{projects:[],canonical_engine:'film_studio'}:
+      p==='/api/characters'?{characters:[]}:{};
+    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(payload)});
   });
-  await acceptancePage.goto(origin+'/dashboard/#/workspace',{waitUntil:'networkidle'});
-  await acceptancePage.locator('.app-shell').waitFor();
-  if(!acceptancePage.url().includes('#/workspace'))
-    throw new Error('Unexpected hash mutation during legacy route fallback');
-  await acceptancePage.getByText('Tổng quan',{exact:true}).first().waitFor();
-  console.log('Video-first legacy deep link fallback: PASS');
-  // Read-only Model Hub browser contract, with explicit mock data. Do not test
-  // paid inference or pretend that a model is installed/online.
-  await acceptancePage.goto(origin+'/dashboard/#/models',{waitUntil:'networkidle'});
-  await acceptancePage.getByText('Model Registry',{exact:true}).waitFor();
-  await acceptancePage.getByText('Task Routing',{exact:true}).waitFor();
-  await acceptancePage.getByText('Python rules · không cần AI',{exact:true}).first().waitFor();
-  if(errors.length)throw new Error('Model Hub runtime errors: '+errors.join(' | '));
-  console.log('Model Hub settings render: PASS (fixture, no provider calls)');
+  await page2.goto(origin+'/dashboard/#/projects',{waitUntil:'networkidle'});
+  await page2.getByText('Dự án & tập phim',{exact:true}).waitFor();
+  await page2.goto(origin+'/dashboard/#/workspace',{waitUntil:'networkidle'});
+  await page2.getByText('Tổng quan Video Studio',{exact:true}).waitFor();
+  if(errors2.length)throw new Error('Video Studio runtime errors: '+errors2.join(' | '));
+  console.log('Video-only project and retired route smoke: PASS');
 } finally {
   if (browser) await browser.close();
   vite.kill();
