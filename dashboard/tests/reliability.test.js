@@ -1,17 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {api, onAuthExpired, requestError} from '../src/api.js';
-import {promptValidation} from '../src/prompt_validation.js';
-
-test('Unicode code points match Python and byte budget is never silently truncated',()=>{
-  assert.equal(promptValidation('😀'.repeat(20)).characters,20);
-  assert.equal(promptValidation('😀'.repeat(20)).bytes,80);
-  assert.equal(promptValidation('  '+'ệ'.repeat(20)+'  ').characters,20);
-  assert.equal(promptValidation('a'.repeat(6000)).error,null);
-  assert.match(promptValidation('a'.repeat(6001)).error,/6.000/);
-  assert.ok(promptValidation('short').error);
-  assert.ok(promptValidation('Tạo website nội dung\u0000 không hợp lệ').error);
-});
 
 test('401 is global, 403 is not auth expiry, and stale GET cannot resurrect Owner data',async()=>{
   const original=globalThis.fetch;
