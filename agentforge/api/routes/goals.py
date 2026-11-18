@@ -11,19 +11,32 @@ RETIRED_TEMPLATES = frozenset({
     "campaign.review", "website.campaign", "website.draft", "website.browser",
     "webapp.draft", "webapp.develop", "webapp.company", "webapp.revision",
     "webapp.source_revision", "webapp.qa", "webapp.browser_qa",
-    "media.produce", "media.review", "growth.review", "growth.launch_local",
+    "media.produce", "media.review", "creative.storyboard",
+    "growth.review", "growth.launch_local",
 })
 
 
-def _require_current_template(template):
+def _require_current_template(template, inputs=None):
     canonical = brain_planner.ALIASES.get(template, template) if isinstance(template, str) else ""
     if canonical in RETIRED_TEMPLATES:
         raise ValueError("RETIRED_GOAL_TEMPLATE: legacy business/media workflow is unavailable")
+    # Composite Owner requests must not bypass the top-level retired-template
+    # guard. Invalid step shapes remain the planner's responsibility.
+    if canonical == "workflow.compose" and isinstance(inputs, dict):
+        steps = inputs.get("steps")
+        if isinstance(steps, list):
+            for step in steps[:32]:
+                if isinstance(step, dict):
+                    child = step.get("template")
+                    name = (brain_planner.ALIASES.get(child, child)
+                            if isinstance(child, str) else "")
+                    if name in RETIRED_TEMPLATES:
+                        raise ValueError("RETIRED_GOAL_TEMPLATE: composite step is unavailable")
 
 
 def handle(server, path, request, session=None):
     if path == "/api/goals/preflight":
-        _require_current_template(request.get("template"))
+        _require_current_template(request.get("template"), request.get("inputs"))
         if request.get("ack") != "PREFLIGHT":
             raise PermissionError("Confirm PREFLIGHT before reading references")
         return goal_preflight.inspect(
@@ -31,7 +44,7 @@ def handle(server, path, request, session=None):
             analytics_db_path=server.analytics_db_path,
             growth_db_path=server.growth_db_path)
     if path == "/api/goals/propose":
-        _require_current_template(request.get("template"))
+        _require_current_template(request.get("template"), request.get("inputs"))
         if request.get("ack") != "PROPOSE":
             raise PermissionError("Confirm PROPOSE before making a goal")
         goal_preflight.require_ready(
@@ -122,7 +135,7 @@ def handle(server, path, request, session=None):
                 scope_to_current_step=True, **flags)
         raise ValueError("Unknown goal operation")
     if path == "/api/schedules/create":
-        _require_current_template(request.get("template"))
+        _require_current_template(request.get("template"), request.get("inputs"))
         if request.get("ack") != "SCHEDULE":
             raise PermissionError("Explicit SCHEDULE required")
         return brain_scheduler.create_schedule(

@@ -103,6 +103,22 @@ class OwnerAuthVideoFoundationTests(unittest.TestCase):
         self.assertFalse(self.server.brain_db_path.exists())
         self.assertFalse(self.server.task_db_path.exists())
 
+    def test_composite_cannot_wrap_retired_website_step(self):
+        status, login, headers = self.request("POST", "/api/login", {"code": self.code})
+        self.assertEqual(status, 200)
+        self.cookie = headers["Set-Cookie"].split(";", 1)[0]
+        self.csrf = login["csrf"]
+        body = {"ack": "PROPOSE", "title": "Hidden website builder",
+                "template": "workflow.compose",
+                "inputs": {"steps": [
+                    {"template": "website.draft",
+                     "inputs": {"slug": "legacy-site", "brief": "old builder"}}
+                ]}}
+        status, reply, _ = self.request("POST", "/api/goals/propose", body)
+        self.assertEqual(status, 400)
+        self.assertIn("RETIRED_GOAL_TEMPLATE", reply["message"])
+        self.assertFalse(self.server.brain_db_path.exists())
+
     def test_film_inventory_requires_authentication(self):
         self.assertEqual(self.request("GET", "/api/film/productions")[0], 401)
         self.assertEqual(self.request("GET", "/api/characters")[0], 401)
