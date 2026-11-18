@@ -55,9 +55,12 @@ class ModelHubTests(unittest.TestCase):
         self.assertTrue(retired.isdisjoint({row["id"] for row in current["routes"]}))
         self.assertFalse(self.db.exists())
         # Simulate Owner's existing SQLite record; never delete it in cleanup.
-        with closing(model_hub._connect(self.db, create=True)) as conn, conn:
-            state = {"profiles": {}, "routes": {"web.create": "local_primary"}}
-            conn.execute("INSERT INTO hub_state(id,revision,payload) VALUES(1,1,?)",
+        model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0,
+                         profile=local_profile())
+        with closing(sqlite3.connect(self.db)) as conn, conn:
+            state = {"profiles": {"coding_local": local_profile()},
+                     "routes": {"web.create": "local_primary"}}
+            conn.execute("UPDATE hub_state SET payload=? WHERE id=1",
                          (json.dumps(state),))
         result = model_hub.catalog()
         self.assertEqual(1, result["revision"])
