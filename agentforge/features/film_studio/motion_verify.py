@@ -1,4 +1,4 @@
-"""Wave 8: Owner-approved local ComfyUI MP4 intake and technical QA.
+"""Owner-approved local ComfyUI MP4 intake and technical QA.
 
 Import is constrained to the unique per-job SaveVideo filename under an
 explicitly Owner-configured ComfyUI output directory. Checkpointed ComfyUI

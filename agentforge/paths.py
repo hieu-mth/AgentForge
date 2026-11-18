@@ -8,12 +8,9 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = REPOSITORY_ROOT / "config"
-WORKERS_DIR = REPOSITORY_ROOT / "workers"
 DATA_DIR = REPOSITORY_ROOT / "data"
 COMPANY_DATA_DIR = DATA_DIR / "company"
 WORKSPACE_DIR = REPOSITORY_ROOT / "workspace"
-PRODUCTS_DIR = WORKSPACE_DIR / "products"
-MEDIA_DIR = WORKSPACE_DIR / "media"
 UI_DASHBOARD_DIR = REPOSITORY_ROOT / "dashboard"
 
 def ensure_local_root(path: Path) -> Path:
