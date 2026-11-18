@@ -57,7 +57,7 @@ try {
       os:'Windows',os_release:'11',cpu:'Intel Core i5',logical_cpu_count:12,
       architecture:'AMD64',
       memory:{available_bytes:18*1024**3,total_bytes:32*1024**3},
-      disk:{free_bytes:600*1024**3,total_bytes:1000*1024**3},
+      disk:{free_bytes:696_990_000_000,total_bytes:1_000_190_000_000},
       gpu:{status:'RUNNING',cuda_toolkit:{status:'NOT_INSTALLED'},devices:[
         {name:'NVIDIA GeForce RTX 5070',driver_version:'621.01',
           vram_free_mib:8673,vram_total_mib:12227}
