@@ -1,7 +1,6 @@
-"""Local-first reusable ComfyUI visual jobs for video, images and web assets.
+"""Local-first ComfyUI image jobs for Film Studio source assets.
 
-Uses the trusted Image Studio ComfyUI workflow, without requiring an applied
-website. Each GPU submission is explicitly authorized; no automatic retry.
+GPU submission requires Owner approval; ambiguous jobs never retry.
 """
 import hashlib
 import io
@@ -77,23 +76,18 @@ def _prompt(topic, scene, index, purpose):
         raise ValueError("Visual topic must be 1-450 characters")
     if not isinstance(scene, str) or not scene.strip() or len(scene) > 300:
         raise ValueError("Visual scene must be 1-300 characters")
-    # Subject is grounded in the user's brief. The image model is responsible
-    # for pixels; no unverified brand/logo or health/price claims.
-    # Reserve space for each scene and the immutable safety suffix first.
-    # A verbose shared topic must never erase a shot's distinguishing brief.
-    prefix = ("Commercial editorial photography, realistic product and environment, "
-              "excellent lighting and composition. ")
-    suffix = (" No text, logos, watermark, price, medical claims or UI. "
-              "Full scene, clearly visible subject.")
-    shot = f". Shot {index+1}: "
-    # Keep explicit room for the subject while prioritizing a distinct shot.
-    scene_budget = min(210, 450 - len(prefix + "Product/subject: " + shot + "." + suffix) - 40)
+    # The Owner's subject and scene define the style; never impose commerce imagery.
+    prefix = "Original AI film frame. "
+    suffix = (" No embedded text, logos or watermark. "
+              "Keep the main subject and composition visible.")
+    shot = f" Scene {index + 1}: "
+    scene_budget = min(210, 450 - len(prefix + "Subject: " + shot + "." + suffix) - 40)
     scene_text = scene.strip()[:scene_budget]
-    fixed = prefix + "Product/subject: " + shot + scene_text + "." + suffix
+    fixed = prefix + "Subject: " + shot + scene_text + "." + suffix
     topic_budget = 450 - len(fixed)
     if topic_budget < 1:
-        raise ValueError("Visual prompt cannot fit required scene/safety content")
-    value = (prefix + "Product/subject: " + topic.strip()[:topic_budget]
+        raise ValueError("Visual prompt cannot fit the scene brief")
+    value = (prefix + "Subject: " + topic.strip()[:topic_budget]
              + shot + scene_text + "." + suffix)
     if len(value) > 450:
         raise ValueError("Visual prompt exceeds limit")

@@ -1,6 +1,6 @@
 # Motion ComfyUI — One-shot 12 GiB
 
-**Phân biệt trạng thái:** code/Windows CI kiểm tra hợp đồng; chưa chạy GPU thật, chưa có MP4 thật của máy Owner, chưa đo peak VRAM và chưa duyệt nội dung. Không gán F2 hoặc WAVE8_OWNER_PASS khi chưa có bằng chứng.
+**Phân biệt trạng thái:** code/Windows CI kiểm tra hợp đồng; chưa chạy GPU thật, chưa có MP4 thật của máy Owner, chưa đo peak VRAM và chưa duyệt nội dung. Không gán OWNER_MOTION_12GB_MP4_PASS khi chưa có bằng chứng.
 
 ## Chuẩn bị tự nguyện
 

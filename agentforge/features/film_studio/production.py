@@ -1,6 +1,6 @@
-"""Wave 9: local-first film continuity, versioned edit decisions and MP4 assembly.
+"""Film Production: local-first film continuity, versioned edit decisions and MP4 assembly.
 
-Only Wave 8 SHA-verified ComfyUI motion clips can enter this pipeline. There
+Only verified motion SHA-verified ComfyUI motion clips can enter this pipeline. There
 are no model calls, downloads, GPU inference or publishing operations. Film
 quality/character identity are NOT inferable from hashes or FFmpeg checks.
 All FFmpeg execution requires explicit Owner confirmation.
@@ -188,7 +188,7 @@ def _check_shot(raw, planned, cast_ids):
 
 
 def _sources(shots, film_slug, plan_sha, film_root, db_path):
-    """Re-read and rehash every Wave 8 receipt + MP4 before a process run."""
+    """Re-read and rehash every verified motion receipt + MP4 before a process run."""
     paths = []
     seen = set()
     seen_bytes = set()
@@ -212,7 +212,7 @@ def _sources(shots, film_slug, plan_sha, film_root, db_path):
                 or receipt["technical"].get("fps") != FRAME_RATE
                 or receipt["technical"].get("width") != motion_comfy.PROFILE["width"]
                 or receipt["technical"].get("height") != motion_comfy.PROFILE["height"]):
-            raise PermissionError("Film clip not proven by matching Wave 8 receipt")
+            raise PermissionError("Film clip not proven by matching verified motion receipt")
         path = motion_verify._dir(
             {"film_slug": film_slug, "job_id": ident}, film_root) / "clip.mp4"
         ensure_local_root(path)
@@ -298,7 +298,7 @@ def prepare(spec, *, film_root=FILMS, db_path=DB):
     validated = []
     for raw, planned in zip(shots, plan["shots"][first:first + len(shots)]):
         if planned["duration_seconds"] != 4:
-            raise FilmProductionError("Wave 9 requires full four-second plan slots")
+            raise FilmProductionError("Film Production requires full four-second plan slots")
         if (planned["chapter_id"] not in
                 {c["id"] for c in plan["chapters"]}):
             raise FilmProductionError("Unknown chapter")
@@ -718,7 +718,7 @@ def inspect_render(episode_id, film_slug, *, film_root=FILMS):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description="Wave9 local film edit, no AI inference or publishing")
+        description="Film Production local film edit, no AI inference or publishing")
     cmd = parser.add_subparsers(dest="action", required=True)
     work = cmd.add_parser("draft")
     work.add_argument("--film-slug", required=True)

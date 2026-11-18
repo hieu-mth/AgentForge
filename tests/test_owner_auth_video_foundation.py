@@ -5,6 +5,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from agentforge.api.server import create_server
 
@@ -112,6 +113,18 @@ class OwnerAuthVideoFoundationTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("Unknown mutation route", reply["message"])
         self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_character_registry_get_does_not_create_owner_database(self):
+        db = self.root / "owner" / "characters.sqlite3"
+        status, login, headers = self.request("POST", "/api/login", {"code": self.code})
+        self.assertEqual(status, 200)
+        self.cookie = headers["Set-Cookie"].split(";", 1)[0]
+        self.csrf = login["csrf"]
+        with patch.dict("os.environ", {"AGENTFORGE_CHARACTER_DB": str(db)}):
+            status, response, _ = self.request("GET", "/api/characters")
+        self.assertEqual(status, 200)
+        self.assertEqual(response, {"characters": []})
+        self.assertFalse(db.parent.exists())
 
     def test_film_inventory_requires_authentication(self):
         self.assertEqual(self.request("GET", "/api/film/productions")[0], 401)

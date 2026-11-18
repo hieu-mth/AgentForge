@@ -58,6 +58,13 @@ try {
   });
   await page2.goto(origin+'/dashboard/#/projects',{waitUntil:'networkidle'});
   await page2.getByText('Dự án & tập phim',{exact:true}).waitFor();
+  await page2.goto(origin+'/dashboard/#/media-studio',{waitUntil:'networkidle'});
+  await page2.getByRole('button',{name:'Xem dự án video'}).click();
+  await page2.waitForURL('**/#/projects');
+  await page2.getByText('Dự án & tập phim',{exact:true}).waitFor();
+  await page2.goto(origin+'/dashboard/#/media-studio',{waitUntil:'networkidle'});
+  await page2.getByRole('button',{name:'Xem bản dựng'}).click();
+  await page2.waitForURL('**/#/models');
   await page2.goto(origin+'/dashboard/#/workspace',{waitUntil:'networkidle'});
   await page2.getByText('Tổng quan Video Studio',{exact:true}).waitFor();
   if(errors2.length)throw new Error('Video Studio runtime errors: '+errors2.join(' | '));

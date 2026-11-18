@@ -1,6 +1,6 @@
 """Trusted local ComfyUI image transport for Film Studio and media jobs.
 
-No Website Builder, product workspace, or arbitrary workflow execution.
+Only reviewed image workflows are accepted; arbitrary graph execution is forbidden.
 All image requests are restricted to the loopback ComfyUI allowlist.
 """
 import json

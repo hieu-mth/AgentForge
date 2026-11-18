@@ -1,6 +1,6 @@
 # AgentForge — Local AI Video Studio
 
-AgentForge là nền tảng video AI local-first (Python 3.13 + React/Ant Design), tập trung vào Film Studio, Character Registry, media generation, Model Hub và publishing handoff có xác nhận Owner. Không còn Website, Webapp, Growth, skill engine V1 hoặc các sản phẩm thương mại cũ trong runtime Git.
+AgentForge là nền tảng video AI local-first (Python 3.13 + React/Ant Design), tập trung vào Film Studio, Character Registry, media generation, Model Hub và publishing handoff có xác nhận Owner. Các nghiệp vụ ngoài Studio không nằm trong runtime hiện hành.
 
 ## Chạy trên Windows
 

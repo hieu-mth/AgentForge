@@ -6,10 +6,6 @@ from http import cookies
 
 COOKIE = "af_owner_session"
 SESSION_SECONDS = 8 * 60 * 60
-SENSITIVE_GRANTS = {"model.invoke", "network.read", "network.search",
-                    "browser.run", "process.run"}
-LOCAL_GRANTS = {"workspace.write", "workspace.propose", "workspace.read"}
-
 
 def get_session(self):
     raw = self.headers.get("Cookie", "")

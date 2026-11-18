@@ -11,7 +11,7 @@ class ModelHubTests(unittest.TestCase):
         self.assertEqual(set(routes), {
             "general.text", "film.storyboard", "film.motion",
             "image.generate", "ops.monitor"})
-        self.assertTrue(all(item["worker"] is None for item in routes.values()))
+        self.assertTrue(all("worker" not in item for item in routes.values()))
         self.assertTrue(all(item["execution"] != "wired" for item in routes.values()))
         self.assertEqual(routes["film.motion"]["kind"], "video")
 
@@ -23,6 +23,7 @@ class ModelHubTests(unittest.TestCase):
             self.assertFalse(db.exists())
             self.assertEqual({r["id"] for r in result["routes"]}, set(model_hub._defaults()))
             self.assertFalse(result["cloud_fallback"])
+            self.assertTrue(all("runtime_wired" not in row for row in result["routes"]))
 
     def test_unknown_historical_route_is_inert_and_not_auto_migrated(self):
         model_hub._validate_state({

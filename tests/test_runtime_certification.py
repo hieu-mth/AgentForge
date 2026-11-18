@@ -15,6 +15,14 @@ class RuntimeCertificationTests(unittest.TestCase):
             with self.subTest(target=target), self.assertRaises(ValueError):
                 cert._local_endpoint(target)
 
+    def test_model_hub_text_snapshot_still_powers_ollama_preflight(self):
+        from agentforge.ai.model_hub import effective_models
+        profiles = effective_models()
+        self.assertIn("local_primary", profiles)
+        self.assertEqual(profiles["local_primary"]["provider"], "ollama")
+        self.assertEqual(cert._ollama_profile("local_primary")[2],
+                         profiles["local_primary"]["model"])
+
     def test_default_preflight_does_not_start_inference_or_gpu(self):
         with patch.object(cert, "_ollama_preflight", return_value={"status": "UNAVAILABLE"}), \
              patch.object(cert, "_comfy_preflight", return_value={"status": "UNAVAILABLE"}), \

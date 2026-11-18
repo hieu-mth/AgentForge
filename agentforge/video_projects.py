@@ -1,7 +1,6 @@
 """Canonical Film Studio project inventory.
 
-Only film productions are exposed. Legacy media V1.5 is not imported,
-migrated, or executed. Owner files are never deleted by this module.
+Only verified film production records are exposed. Owner files are never deleted.
 """
 
 

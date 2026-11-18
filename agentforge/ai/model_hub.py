@@ -2,9 +2,8 @@
 
 Git-owned models.toml and task_routes.toml are defaults. Dashboard writes an
 audited SQLite overlay, never TOML, API credentials or generated workflows.
-Only text routes marked "wired" affect the existing LLM runtime. Media routes
-are intentionally configuration-only until their adapters consume the routing
-contract. Any new cloud provider use still needs explicit run-time consent.
+All model routes are configuration-only until an explicitly reviewed runtime
+consumes their bindings. A saved cloud profile never authorizes a cloud call.
 """
 from __future__ import annotations
 
@@ -32,7 +31,7 @@ ID_RE = re.compile(r"[a-z][a-z0-9_]{2,39}\Z")
 TASK_RE = re.compile(r"[a-z][a-z0-9_.]{2,59}\Z")
 MODEL_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/+-]{0,159}\Z")
 KINDS = {"text", "image", "video", "rules"}
-EXECUTIONS = {"wired", "config_only", "rules"}
+EXECUTIONS = {"config_only", "rules"}
 MAX_PROFILE_COUNT = 32
 MAX_STATE_BYTES = 65536
 
@@ -110,31 +109,22 @@ def _defaults():
     for key, value in raw["routes"].items():
         _required_text(key, TASK_RE, "task key")
         if (not isinstance(value, dict) or
-                not set(value).issubset({"label", "kind", "execution",
-                                          "worker", "default_model"})):
+                not set(value).issubset({"label", "kind", "execution", "default_model"})):
             raise ModelConfigError("Invalid route config")
         label = value.get("label")
         kind = value.get("kind")
         execution = value.get("execution")
-        worker = value.get("worker")
         if not isinstance(label, str) or not 1 <= len(label) <= 90:
             raise ModelConfigError("Route label is missing")
         if kind not in KINDS or execution not in EXECUTIONS:
             raise ModelConfigError("Invalid route kind")
         if (execution == "rules") != (kind == "rules"):
             raise ModelConfigError("Rules must be deterministic")
-        if execution == "wired" and kind != "text":
-            raise ModelConfigError("Non-text adapters are not wired yet")
-        if worker is not None:
-            raise ModelConfigError("Worker-specific routes are not enabled")
         default_model = value.get("default_model")
         if default_model is not None:
             _required_text(default_model, ID_RE, "default model reference")
-        if execution == "wired" and not default_model:
-            raise ModelConfigError("Wired route needs a default model")
         routes[key] = {"id": key, "label": label, "kind": kind,
-                       "execution": execution, "worker": worker,
-                       "default_model": default_model}
+                       "execution": execution, "default_model": default_model}
     return routes
 
 
@@ -205,7 +195,10 @@ def _profiles(*, state=None):
 
 
 def effective_models(*, db_path=None):
-    """Only text providers returned to agentforge.model; no ComfyUI execution."""
+    """Effective text-only profile snapshot for local runtime certification.
+
+    This is a read-only lookup, never model inference or a cloud request.
+    """
     state = _read_state(db_path=db_path)[1]
     return {key: {k: v for k, v in value.items() if k != "id"}
             for key, value in _profiles(state=state).items()
@@ -232,11 +225,11 @@ def catalog(*, db_path=None):
                 profiles[selected]["provider"] != "comfyui"):
             status = "INCOMPATIBLE"
         else:
-            status = "ROUTED" if route["execution"] == "wired" else "CONFIG_ONLY"
+            status = "CONFIG_ONLY"
         routes.append({**route, "model_ref": selected,
                         "source": ("owner" if key in state["routes"] else "default"),
                        "status": status,
-                       "runtime_wired": route["execution"] == "wired"})
+                       })
     return {
         "revision": revision,
         "profiles": [{"id": k, **v, "source": (
@@ -390,14 +383,6 @@ def change(action, *, expected_revision, db_path=None, profile=None,
                 raise ValueError("Rollback snapshot not available")
             updated = json.loads(row[0])
         _validate_state(updated)
-        # Reject edits that disable a model still used by a wired route.
-        view = _profiles(state=updated)
-        for key, route in _defaults().items():
-            if route["execution"] == "wired":
-                selected = updated["routes"].get(key, route["default_model"])
-                if (selected not in view or not view[selected]["enabled"] or
-                        view[selected]["provider"] not in {"ollama", "anthropic"}):
-                    raise ModelConfigError("A wired task would lose its text model")
         moment = datetime.now(timezone.utc).isoformat(timespec="seconds")
         conn.execute("INSERT OR IGNORE INTO hub_history VALUES(?,?,?,?)",
                      (revision, json.dumps(current, ensure_ascii=False),

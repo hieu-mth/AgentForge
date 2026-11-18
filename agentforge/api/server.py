@@ -32,8 +32,7 @@ class _Handler(BaseHTTPRequestHandler):
         return (host in (f"127.0.0.1:{port}", f"localhost:{port}") and
                 self.client_address[0] in {"127.0.0.1", "::1"})
 
-    def _reply(self, code, data, *, mime="application/json", headers=(),
-               isolated_preview=False):
+    def _reply(self, code, data, *, mime="application/json", headers=()):
         if isinstance(data, (dict, list)):
             raw = json.dumps(data, ensure_ascii=False, allow_nan=False).encode("utf-8")
         elif isinstance(data, bytes):
@@ -45,25 +44,15 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(raw)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        if not isolated_preview:
-            self.send_header("X-Frame-Options", "DENY")
+        self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Cross-Origin-Resource-Policy", "same-origin")
         self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-        if isolated_preview:
-            # Opaque-origin sandbox: NO JS, forms, network, navigation or top access.
-            # Only inline CSS and bounded local document rendering are allowed.
-            self.send_header("Content-Security-Policy",
-                "sandbox; default-src 'none'; script-src 'none'; "
-                "style-src 'unsafe-inline'; img-src data:; font-src data:; "
-                "connect-src 'none'; form-action 'none'; base-uri 'none'; "
-                "frame-ancestors 'self'")
-        else:
-            self.send_header("Content-Security-Policy",
-                ("default-src 'none'; script-src 'self'; style-src 'self'"+
-                 (" 'unsafe-inline'" if self.path.startswith("/dashboard") else "")+
-                 "; connect-src 'self'; img-src 'self' data:; media-src 'self'; font-src 'self' data:; "+
-                 "frame-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"))
+        self.send_header("Content-Security-Policy",
+            ("default-src 'none'; script-src 'self'; style-src 'self'"+
+             (" 'unsafe-inline'" if self.path.startswith("/dashboard") else "")+
+             "; connect-src 'self'; img-src 'self' data:; media-src 'self'; font-src 'self' data:; "+
+             "frame-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"))
         for k, v in headers:
             self.send_header(k, v)
         self.end_headers()
@@ -150,7 +139,7 @@ class _Handler(BaseHTTPRequestHandler):
                                      "message": msg})
         except Exception:
             return self._reply(500, {"error": "internal_error",
-                                     "message": "Inspect local task/goal status; no automatic retry"})
+                                     "message": "Check local video job status before any retry"})
 
     def do_PUT(self):
         return self._blocked(405, "method_not_allowed")

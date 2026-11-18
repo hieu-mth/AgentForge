@@ -94,7 +94,7 @@ def upload_private(release_id, release_sha, *, client_secrets_path,
         raise PermissionError("Release already attempted; never blindly retry")
     handoff = publishing.handoff(release_id, db_path=db_path, film_root=film_root)
     video_file = Path(handoff["video_file"])
-    # Reverify the exact Wave 9 render and source hash before any OAuth/network.
+    # Reverify the exact signed film render and source hash before any OAuth/network.
     report = production.inspect_render(
         item["episode_id"], item["film_slug"], film_root=film_root)
     if (report["video_sha256"] != item["video_sha256"]
