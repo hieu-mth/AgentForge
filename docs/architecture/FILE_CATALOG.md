@@ -1,8 +1,8 @@
 # Python module catalog — tracked source snapshot
 
-Danh mục các module **đang tồn tại trong source**, không đồng nghĩa tất cả đang phục vụ runtime. Tự cập nhật khi xóa module legacy. Không quét hoặc sửa `data/`, `workspace/` hay model của Owner.
+Đây là inventory file Python thực tế dưới `agentforge/`, **không phải cam kết runtime API hoặc production readiness**. Mọi thay đổi cần cập nhật ở đây; không đọc hay sửa dữ liệu Owner trong `data/`/`workspace/`.
 
-Số Python modules: **179**.
+Tổng số: **174 module Python**.
 
 - `__init__.py`
 - `__main__.py`
@@ -41,7 +41,6 @@ Số Python modules: **179**.
 - `brain_runner.py`
 - `brain_scheduler.py`
 - `brain_store.py`
-- `browser_fix.py`
 - `browser_validation.py`
 - `company_brain.py`
 - `company_flow.py`
@@ -118,7 +117,6 @@ Số Python modules: **179**.
 - `gateway.py`
 - `goal_preflight.py`
 - `growth_bundle.py`
-- `growth_pipeline.py`
 - `growth_reports.py`
 - `growth_store.py`
 - `image_studio_v24.py`
@@ -145,7 +143,6 @@ Số Python modules: **179**.
 - `pain_discovery.py`
 - `paths.py`
 - `product_builder.py`
-- `product_cycle.py`
 - `product_quality.py`
 - `product_revision.py`
 - `prompt_intake.py`
@@ -167,12 +164,10 @@ Số Python modules: **179**.
 - `video_projects.py`
 - `web_assets.py`
 - `web_design_kit.py`
-- `web_design_v2.py`
 - `web_tools.py`
 - `webapp_architect.py`
 - `webapp_builder.py`
 - `webapp_developer.py`
-- `webapp_feedback.py`
 - `webapp_reviewer.py`
 - `webapp_sandbox.py`
 - `webapp_static_qa.py`
@@ -184,4 +179,4 @@ Số Python modules: **179**.
 - `workspace_agent.py`
 - `workspace_policy.py`
 
-[Current architecture](REPOSITORY_STRUCTURE.md).
+[Kiến trúc hiện hành](REPOSITORY_STRUCTURE.md).
