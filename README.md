@@ -1,36 +1,28 @@
 # AgentForge — Local AI Video Studio
 
-AgentForge là ứng dụng local-first (Python 3.13 + React) cho một Owner, tập trung vào sản xuất video AI và kiểm duyệt trước khi xuất bản. Đây là bản thử nghiệm; GPU, ComfyUI và chất lượng video thực tế chưa được chứng nhận trên máy Owner.
+AgentForge là nền tảng video AI local-first (Python 3.13 + React/Ant Design), tập trung vào Film Studio, Character Registry, media generation, Model Hub và publishing handoff có xác nhận Owner. Không còn Website, Webapp, Growth, skill engine V1 hoặc các sản phẩm thương mại cũ trong runtime Git.
 
 ## Chạy trên Windows
 
-```powershell
+\`\`\`powershell
 cd D:\AgentForge
 py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[media]"
 npm.cmd ci --prefix dashboard --ignore-scripts --no-audit --no-fund
 npm.cmd run build --prefix dashboard
 .\.venv\Scripts\python.exe -m agentforge --port 8780
-```
+\`\`\`
 
-Mở http://127.0.0.1:8780/ và đăng nhập bằng mã Owner hiển thị trong PowerShell.
+Mở http://127.0.0.1:8780/dashboard/ và đăng nhập bằng mã Owner được in riêng tại terminal. Chỉ bật \`--allow-external-tools\` khi chủ động chạy các tác vụ media đã review. Ứng dụng không tự cài ComfyUI, tải weights, kích hoạt GPU hay public YouTube.
 
-## Phạm vi đang giữ
+## Hướng dẫn
 
-- Film Studio: episode, shot, motion receipt, FFmpeg assembly, Owner review.
-- Character Registry, Model Hub, môi trường chạy và lưu trữ local.
-- Publishing handoff có xác nhận Owner, không tự public.
-- Dashboard video-first; một số backend và kiểm thử legacy còn đang được loại bỏ.
-
-Không coi CI fixture là bằng chứng model/GPU/video thực tế chạy thành công.
-
-## Tài liệu
-
-- [Hướng dẫn phát triển](docs/DEVELOPMENT.md)
-- [Trạng thái cleanup](docs/STATUS.md)
-- [Định hướng cleanup](docs/ROADMAP.md)
+- [Phát triển và CI](docs/DEVELOPMENT.md)
+- [Cấu trúc nền tảng](docs/architecture/REPOSITORY_STRUCTURE.md)
 - [Film Studio](docs/architecture/LONG_FORM_AI_FILM_STUDIO.md)
-- [Motion GPU](docs/architecture/FILM_MOTION_12GB_PILOT.md)
-- [Nghiệm thu Owner](docs/verification/OWNER_PRODUCTION_GATE.md)
+- [Motion ComfyUI 12 GiB](docs/verification/MOTION.md)
+- [Production/FFmpeg](docs/verification/PRODUCTION.md)
+- [Publishing handoff](docs/verification/PUBLISHING.md)
+- [Owner runtime acceptance](docs/verification/OWNER_PRODUCTION_GATE.md)
 
-Dữ liệu và model trên máy Owner không được xóa bởi thao tác cleanup Git.
+Git cleanup **không xóa hay migrate** \`data/\`, \`workspace/\`, \`.env\`, model weights, secrets, video và backups của Owner. CI fixture không chứng minh GPU, continuity, voice hay upload thật.

@@ -1,37 +1,13 @@
-# Nghiệm thu AgentForge Video Studio trên máy Owner
+# Owner production gate — AgentForge Video Studio
 
-Phạm vi hiện hành: một Owner, Windows localhost, Film Studio, Character Registry, Model Hub, media render và publishing handoff có duyệt. CI chỉ chứng minh source/build/contract; không chứng minh GPU hoặc video thực tế.
+CI Windows/React chỉ kiểm code, security contracts, fixture FFmpeg và static asset serving. Production GO đòi bằng chứng trên PC Owner với đúng commit.
 
-## Chuẩn bị
+1. Đăng nhập Dashboard localhost; xác nhận Owner session, CSRF và các route sản xuất video.
+2. Ollama/ComfyUI model phải được kiểm bằng runtime thực, không suy từ \`config/models.toml\`.
+3. Tạo một shot motion có consent; kiểm graph, model hash, Comfy history, MP4 decode và SHA receipt; không blind retry.
+4. Owner xem motion thật, continuity và nguồn âm thanh, quyền sử dụng.
+5. Render episode với FFmpeg, phát lại và đối chiếu source/receipt SHA.
+6. Chỉ tạo Publishing handoff khi Owner đã duyệt; private upload phải xác minh độc lập trong YouTube Studio.
+7. Không xóa/migrate SQLite, workspace, model, secret, video trong cleanup Git.
 
-```powershell
-cd D:\AgentForge
-git status --short
-git switch main
-git pull --ff-only origin main
-.\.venv\Scripts\python.exe -m pip install -e ".[media]"
-npm.cmd ci --prefix dashboard --ignore-scripts --no-audit --no-fund
-npm.cmd run build --prefix dashboard
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\agentforge_runtime_certify_windows.ps1 -SaveReport
-```
-
-Không dùng `git clean -fdx`, `reset --hard` hoặc xóa `data/`, `workspace/`, `.env`, `models/`. Các kết quả preflight không chứng nhận inference hay video.
-
-## Tiêu chí nghiệm thu
-
-| Phạm vi | Bằng chứng bắt buộc |
-| --- | --- |
-| Dashboard | Đăng nhập Owner; session/CSRF; xem Film Studio, Model Hub, Character Registry và tình trạng hệ thống trên localhost |
-| Local model | Model tồn tại, suy luận thực trên Ollama (chỉ khi Owner chủ động cho phép); không tự fallback lên cloud |
-| Character Registry | Tạo/chọn nhân vật đã đăng ký, tham chiếu và metadata đúng; không giả nhận dạng ảnh |
-| ComfyUI / GPU | Chạy một shot được Owner cho phép; ghi model, receipt, VRAM thực tế nếu đo được, thời gian và lỗi |
-| Film assembly | MP4 có motion thực, FFmpeg/ffprobe decode, SHA receipt, tiếng/phụ đề được kiểm tra |
-| Continuity | Owner xem nhiều shot và duyệt tính nhất quán nhân vật/cảnh, không chỉ dựa metadata |
-| Publishing | Owner duyệt từng release, kiểm tra quyền tài khoản; không tự suy ra đã upload từ handoff |
-| Local data | Backup/restore thử trong staging độc lập, không ghi đè database đang dùng |
-
-Tài liệu thao tác Film Studio: [Motion 12GB](../architecture/FILM_MOTION_12GB_PILOT.md), [Film Studio](../architecture/LONG_FORM_AI_FILM_STUDIO.md), [Runtime checklist](runtime_2026_11/README.md).
-
-## Ranh giới
-
-Website/Webapp/Growth, bán nệm, các template commerce và các Wave nghiệp vụ lịch sử **không thuộc phạm vi phát hành**. Không sử dụng tài liệu hoặc test legacy để tuyên bố tính năng đó còn được hỗ trợ. Phần source, manifests và callers chưa gỡ sạch phải tiếp tục được xử lý trong cleanup Đợt 4. Chỉ phát hành khi runtime trên PC Owner có evidence; không gán Production GO từ CI fixture.
+Xem [Runtime](RUNTIME.md), [Motion](MOTION.md), [Production](PRODUCTION.md), [Publishing](PUBLISHING.md).

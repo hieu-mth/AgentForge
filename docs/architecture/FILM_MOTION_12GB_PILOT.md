@@ -87,9 +87,9 @@ Provider-confirmed terminal success frees the one-active-GPU-shot quota for
 another shot without auto-retrying the original shot. No user video, model source or YouTube credentials are
 stored in Git.
 
-## Wave 8 import and technical QA
+## Motion import and technical QA
 
-Sample graph: examples/film_studio/wan22_5b_4s_api.json. Commands and Owner checklist: [Wave 8](../verification/wave8/README.md). 49 frames at 12 fps means ~4.083 seconds. Wall duration from queue to import **includes waiting/manual handling**, not pure model latency. VRAM total/free snapshot is not peak; Owner can optionally record a manually observed peak (unverified). Never assume ComfyUI history success means the video decoded or was accepted.
+Sample graph: examples/film_studio/wan22_5b_4s_api.json. Commands and Owner checklist: [Motion](../verification/MOTION.md). 49 frames at 12 fps means ~4.083 seconds. Wall duration from queue to import **includes waiting/manual handling**, not pure model latency. VRAM total/free snapshot is not peak; Owner can optionally record a manually observed peak (unverified). Never assume ComfyUI history success means the video decoded or was accepted.
 
 ## Current blocker before claiming Milestone 2 complete
 
