@@ -1,4 +1,4 @@
-"""Wave 10 local release, OAuth private-only and Owner HTTP contracts.
+"""Film publishing local release, OAuth private-only and Owner HTTP contracts.
 
 Mock source MP4 and Google SDK are fixtures; tests do NOT certify a channel,
 a public posting, monetization, bank reconciliation or platform statistics.
@@ -14,7 +14,7 @@ from uuid import uuid4
 
 from agentforge.features.film_studio import production, publishing
 from agentforge.integrations import youtube_private
-from tests.test_wave9_film_production import FilmProductionWave9Tests
+from tests.test_film_production import FilmProductionTests
 
 METADATA = {
     "title": "Original Forest Documentary",
@@ -26,9 +26,9 @@ METADATA = {
 VIDEO_ID = "AbCdef123_-"
 
 
-class FilmPublishingWave10Tests(unittest.TestCase):
+class FilmPublishingFilmTests(unittest.TestCase):
     def setUp(self):
-        w9 = FilmProductionWave9Tests("test_owner_gated_ffmpeg_render_and_receipt")
+        w9 = FilmProductionTests("test_owner_gated_ffmpeg_render_and_receipt")
         w9.setUp()
         self.addCleanup(w9.doCleanups)
         self.w9 = w9
@@ -250,7 +250,7 @@ class FilmPublishingWave10Tests(unittest.TestCase):
         self.assertTrue(args["body"]["status"]["selfDeclaredMadeForKids"] is False)
 
 
-class Wave10PublishingHttpTests(unittest.TestCase):
+class FilmPublishingHttpTests(unittest.TestCase):
     def setUp(self):
         from tests.owner_http_fixture import OwnerHttpFixture
         fixture=OwnerHttpFixture(

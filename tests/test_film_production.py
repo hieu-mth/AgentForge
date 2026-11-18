@@ -1,4 +1,4 @@
-"""Wave 9 Film Production: signed shot continuity, offline TTS, FFmpeg and QA.
+"""Film production Film Production: signed shot continuity, offline TTS, FFmpeg and QA.
 
 These are fixture contracts, not evidence of real ComfyUI film clips or human
 continuity acceptance. No native FFmpeg/voice/model is executed in CI.
@@ -23,7 +23,7 @@ PROMPT_SHA = "c" * 64
 REFERENCE_SHA = "f" * 64
 
 
-class FilmProductionWave9Tests(unittest.TestCase):
+class FilmProductionFilmTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -388,7 +388,7 @@ class FilmProductionWave9Tests(unittest.TestCase):
 
 
 
-class Wave9FilmHttpTests(unittest.TestCase):
+class FilmFilmHttpTests(unittest.TestCase):
     """Authentication, reviewed manifest SHA, CSRF and external mode gates."""
 
     def setUp(self):

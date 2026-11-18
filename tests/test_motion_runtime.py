@@ -1,4 +1,4 @@
-"""Wave 8 Film Studio: real MP4 intake contract exercised with safe fixtures.
+"""Film motion Film Studio: real MP4 intake contract exercised with safe fixtures.
 
 No actual GPU, ComfyUI or native FFmpeg invoked in CI; Owner evidence stays
 UNVERIFIED until manual 12-GiB pilot. Tests are intentionally strict on SHA,
@@ -22,7 +22,7 @@ from tests.test_film_motion_comfy import template, sample_plan
 TEST_MP4 = b"\x00\x00\x00\x18ftypisom" + b"local-test-video" * 200
 
 
-class MotionRuntimeWave8Tests(unittest.TestCase):
+class MotionRuntimeFilmMotionTests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -223,7 +223,7 @@ class MotionRuntimeWave8Tests(unittest.TestCase):
 
 
 
-class Wave8MotionHttpTests(unittest.TestCase):
+class FilmMotionMotionHttpTests(unittest.TestCase):
     """Real localhost auth/CSRF and explicit job SHA gates, no GPU or video calls."""
 
     def setUp(self):
