@@ -5,7 +5,6 @@
 | Ví dụ | Mục đích |
 | --- | --- |
 | [film_studio/feature_fantasy.json](film_studio/feature_fantasy.json) | Kịch bản tổng quan fantasy tạo chapter và shot slots trong Film Studio; **chưa sinh phim chuyển động** |
-| [nem-ngu-storyboard-v15.json](nem-ngu-storyboard-v15.json) | Bản storyboard 4 cảnh cho video ngắn tĩnh; dữ liệu minh họa, không phải video đã render |
 
 Tham khảo [Long-form Film Studio](../docs/architecture/LONG_FORM_AI_FILM_STUDIO.md) để chạy ví dụ lập kế hoạch.
 
