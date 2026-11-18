@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, App as AntApp, Button, Card, Checkbox, Descriptions, Form,
-  Input, InputNumber, Space, Table, Tag, Typography } from 'antd';
+  Input, InputNumber, Select, Space, Table, Tag, Typography } from 'antd';
 import { api } from '../api.js';
 import {useScreenRefresh} from '../refresh_scope.jsx';
 import {useReadSequence} from '../use_resource.jsx';
