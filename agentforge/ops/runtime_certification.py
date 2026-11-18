@@ -163,9 +163,9 @@ def _ollama_inference(model_ref, *, profile=None):
 
 def _comfy_preflight():
     from agentforge.features.film_studio import motion_comfy
-    from agentforge.features.websites import image_studio
+    from agentforge.features.media import comfy_image
     motion = motion_comfy.health()
-    images = image_studio.health()
+    images = comfy_image.health()
     # Only structured non-identifying metadata; no GPU host device names.
     return _result(
         "READY_FOR_OWNER_GPU_PILOT" if
