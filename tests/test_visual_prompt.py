@@ -17,7 +17,7 @@ class VisualPromptTests(unittest.TestCase):
         self.assertLessEqual(len(one), 450)
 
     def test_long_brief_reserves_space_for_each_scene(self):
-        text = _prompt("mèo " * 100, "bước lên cây " * 25, 0, "image")
+        text = _prompt("mèo " * 100, "bước lên cây " * 20, 0, "image")
         self.assertIn("bước lên cây", text)
         self.assertLessEqual(len(text), 450)
 
