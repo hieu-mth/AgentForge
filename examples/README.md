@@ -9,4 +9,3 @@
 
 Tham khảo [Long-form Film Studio](../docs/architecture/LONG_FORM_AI_FILM_STUDIO.md) để chạy ví dụ lập kế hoạch.
 
-Mã nguồn React NovaMart từng nằm tại `examples/novamart/`, nhưng được WebApp Builder dùng làm **trusted template** nên đã chuyển sang [templates/novamart](../templates/novamart/README.md). Đừng xóa hoặc đổi tên template này khi chưa sửa Builder và CI.
