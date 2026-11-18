@@ -252,8 +252,8 @@ class FilmPublishingWave10Tests(unittest.TestCase):
 
 class Wave10PublishingHttpTests(unittest.TestCase):
     def setUp(self):
-        from tests.test_webapp_revision_http_v41 import WebappRevisionHttpTests
-        fixture=WebappRevisionHttpTests(
+        from tests.owner_http_fixture import OwnerHttpFixture
+        fixture=OwnerHttpFixture(
             "test_get_requires_login_and_allows_signed_source_review")
         fixture.setUp();self.addCleanup(fixture.doCleanups);self.http=fixture
         self.slug="fox-film";self.episode="episode-one"

@@ -222,8 +222,8 @@ class Wave3LegacyQualityInspectionTests(unittest.TestCase):
 
 class Wave3AuthenticatedReadTests(unittest.TestCase):
     def test_owner_bootstrap_does_not_initialize_missing_task_or_quality_storage(self):
-        from tests.test_webapp_revision_http_v41 import WebappRevisionHttpTests
-        case = WebappRevisionHttpTests(
+        from tests.owner_http_fixture import OwnerHttpFixture
+        case = OwnerHttpFixture(
             "test_get_requires_login_and_allows_signed_source_review")
         case.setUp()
         self.addCleanup(case.doCleanups)

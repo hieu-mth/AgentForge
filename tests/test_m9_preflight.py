@@ -98,8 +98,8 @@ class M9PreflightTests(unittest.TestCase):
         self.assertEqual(json.loads(stream.getvalue().decode("ascii")), payload)
 
     def test_authenticated_get_route_still_needs_owner_session(self):
-        import tests.test_webapp_revision_http_v41 as fixture
-        test = fixture.WebappRevisionHttpTests(
+        import tests.owner_http_fixture as fixture
+        test = fixture.OwnerHttpFixture(
             "test_get_requires_login_and_allows_signed_source_review")
         test.setUp()
         self.addCleanup(test.doCleanups)

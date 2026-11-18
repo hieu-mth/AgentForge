@@ -227,8 +227,8 @@ class Wave8MotionHttpTests(unittest.TestCase):
     """Real localhost auth/CSRF and explicit job SHA gates, no GPU or video calls."""
 
     def setUp(self):
-        from tests.test_webapp_revision_http_v41 import WebappRevisionHttpTests
-        fixture = WebappRevisionHttpTests(
+        from tests.owner_http_fixture import OwnerHttpFixture
+        fixture = OwnerHttpFixture(
             "test_get_requires_login_and_allows_signed_source_review")
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)
