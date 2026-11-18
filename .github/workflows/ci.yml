@@ -10,6 +10,22 @@ permissions:
   contents: read
 
 jobs:
+  video-foundation:
+    name: Video foundation security and routing (Windows, Python 3.13)
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install project
+        run: python -m pip install -e ".[media]"
+      - name: Run independent Owner security and Film project regressions
+        run: python -m unittest tests.test_owner_auth_video_foundation tests.test_video_projects -v
+
   unit-tests:
     name: Unit tests (Windows, Python 3.13)
     runs-on: windows-latest

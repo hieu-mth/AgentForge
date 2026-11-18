@@ -382,3 +382,9 @@
 ## Nguyên tắc cập nhật catalog
 
 Mỗi lần migration thực sự được merge, cập nhật đường dẫn trong catalog hoặc chuyển tài liệu này thành **migration baseline snapshot** và tạo catalog mới từ HEAD. Không gọi một tên file đã bỏ là active; không xóa một alias chỉ vì rất ngắn. Với mọi file chưa xác minh callers, giữ file và đánh dấu cần audit thay vì tự kết luận UNUSED.
+
+## Film Studio canonical inventory (cleanup 2026-11-18)
+
+| Module | Vai trò |
+| --- | --- |
+| `video_projects.py` | Danh sách dự án Film Studio; không phụ thuộc NovaMart hoặc Media V1.5. |
