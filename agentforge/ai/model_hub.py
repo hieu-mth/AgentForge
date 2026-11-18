@@ -194,6 +194,17 @@ def _profiles(*, state=None):
     return merged
 
 
+def effective_models(*, db_path=None):
+    """Effective text-only profile snapshot for local runtime certification.
+
+    This is a read-only lookup, never model inference or a cloud request.
+    """
+    state = _read_state(db_path=db_path)[1]
+    return {key: {k: v for k, v in value.items() if k != "id"}
+            for key, value in _profiles(state=state).items()
+            if value["provider"] in {"ollama", "anthropic"}}
+
+
 def catalog(*, db_path=None):
     revision, state = _read_state(db_path=db_path)
     profiles = _profiles(state=state)
