@@ -1,5 +1,4 @@
 """Local-first character metadata registry. No implicit model training or uploads."""
-import json
 import os
 import re
 import sqlite3
@@ -8,30 +7,47 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from agentforge.paths import REPOSITORY_ROOT, ensure_local_root
 
 _LOCK = threading.RLock()
 _ID = re.compile(r"^[a-f0-9]{32}$")
-_DEFAULT_DB = Path(os.environ.get("AGENTFORGE_CHARACTER_DB", "data/characters.sqlite3"))
+def _db_path(path=None):
+    candidate = Path(path) if path is not None else Path(
+        os.environ.get("AGENTFORGE_CHARACTER_DB", "data/characters.sqlite3"))
+    if not candidate.is_absolute():
+        candidate = REPOSITORY_ROOT / candidate
+    return ensure_local_root(candidate)
+
 
 @contextmanager
-def _db(path=None):
-    target = Path(path) if path is not None else _DEFAULT_DB
-    target.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(target, timeout=10)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA busy_timeout=10000")
-    conn.execute("""CREATE TABLE IF NOT EXISTS characters (
-        id TEXT PRIMARY KEY, name TEXT NOT NULL, species TEXT NOT NULL,
-        appearance TEXT NOT NULL, personality TEXT NOT NULL,
-        voice TEXT NOT NULL, model_ref TEXT NOT NULL,
-        reference_notes TEXT NOT NULL, version INTEGER NOT NULL,
-        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-    )""")
+def _db(path=None, *, create=False):
+    target = _db_path(path)
+    if not create and not target.is_file():
+        yield None
+        return
+    if create:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        ensure_local_root(target)
+        conn = sqlite3.connect(target, timeout=10)
+    else:
+        # Open existing SQLite read-only, without creating database/journal files.
+        conn = sqlite3.connect(target.as_uri() + "?mode=ro", uri=True, timeout=10)
     try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA busy_timeout=10000")
+        if create:
+            conn.execute("""CREATE TABLE IF NOT EXISTS characters (
+                id TEXT PRIMARY KEY, name TEXT NOT NULL, species TEXT NOT NULL,
+                appearance TEXT NOT NULL, personality TEXT NOT NULL,
+                voice TEXT NOT NULL, model_ref TEXT NOT NULL,
+                reference_notes TEXT NOT NULL, version INTEGER NOT NULL,
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+            )""")
         with conn:
             yield conn
     finally:
         conn.close()
+
 
 def _clean(value, limit=2000):
     if not isinstance(value, str) or len(value) > limit:
@@ -50,6 +66,8 @@ def _validate(data):
 
 def list_characters(path=None):
     with _LOCK, _db(path) as conn:
+        if conn is None:
+            return {"characters": []}
         return {"characters": [dict(row) for row in conn.execute(
             "SELECT * FROM characters ORDER BY updated_at DESC, id DESC LIMIT 500")]}
 
@@ -57,7 +75,7 @@ def save_character(data, path=None):
     values = _validate(data)
     now = datetime.now(timezone.utc).isoformat()
     identifier = data.get("id")
-    with _LOCK, _db(path) as conn:
+    with _LOCK, _db(path, create=True) as conn:
         if identifier is None:
             identifier = uuid.uuid4().hex
             conn.execute("""INSERT INTO characters
