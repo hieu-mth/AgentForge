@@ -83,6 +83,12 @@ class TestControlCenterV1(unittest.TestCase):
         self.assertIn("HttpOnly", headers["Set-Cookie"])
         self.assertIn("SameSite=Strict", headers["Set-Cookie"])
 
+    def _seed_analytics(self):
+        # A retained analytics goal needs an existing dataset at Owner preflight.
+        # Create only isolated fixture metadata; no real Owner dataset is touched.
+        with closing(analytics_store._connect(self.analytics, create=True)) as conn, conn:
+            conn.execute("INSERT INTO datasets VALUES (?,?)", ("demo-test", 1))
+
     def campaign(self):
         # Historical goal concurrency fixtures use an isolated Growth record.
         # Campaign creation is no longer an Owner API capability.
@@ -216,6 +222,7 @@ class TestControlCenterV1(unittest.TestCase):
             brain_planner.propose("Retired growth", "growth.review",
                                   {"campaign": "archived"}, db_path=self.brain)
         self.assertFalse(self.brain.exists())
+        self._seed_analytics()
         goal = brain_planner.propose(
             "Review local analytics", "campaign.review",
             {"dataset": "demo-test"}, db_path=self.brain)
@@ -247,6 +254,7 @@ class TestControlCenterV1(unittest.TestCase):
 
     def test_concurrent_initial_run_creates_only_one_parent(self):
         self.login()
+        self._seed_analytics()
         goal = brain_planner.propose(
             "Review local analytics", "campaign.review",
             {"dataset": "demo-test"}, db_path=self.brain)
@@ -274,6 +282,7 @@ class TestControlCenterV1(unittest.TestCase):
 
     def test_task_database_start_failure_interrupts_goal(self):
         self.login()
+        self._seed_analytics()
         goal = brain_planner.propose(
             "Review local analytics", "campaign.review",
             {"dataset": "demo-test"}, db_path=self.brain)
