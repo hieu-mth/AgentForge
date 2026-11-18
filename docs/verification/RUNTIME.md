@@ -9,7 +9,7 @@ cd D:\AgentForge
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\agentforge_runtime_certify_windows.ps1 -SaveReport
 ```
 
-Kiểm Python/Node, model catalog Ollama, ComfyUI, FFmpeg và HTTP Dashboard. Không cần Webapp Docker QA; Film Studio hoạt động với ứng dụng local được Owner cài riêng. Receipt được lưu trong `workspace/runtime-certification/` khi bật SaveReport; không upload receipt hoặc secret.
+Kiểm Python/Node, model catalog Ollama, ComfyUI, FFmpeg và HTTP Dashboard. Các công cụ render local được Owner cài và bật riêng. Receipt được lưu trong `workspace/runtime-certification/` khi bật SaveReport; không upload receipt hoặc secret.
 
 ## 2. FFmpeg fixture thực (Owner chủ động)
 
@@ -55,4 +55,4 @@ Dùng [Motion 12 GiB](../architecture/FILM_MOTION_12GB_PILOT.md) và [Film Studi
 | Owner xem và chấp nhận continuity/voice/video | OWNER_VIDEO_REVIEW_PASS |
 | Publish thực được Owner duyệt và xác minh | PUBLISH_VERIFIED |
 
-Website/Webapp/NovaMart, Growth, bán nệm và các Wave nghiệp vụ đã nghỉ **không thuộc checklist này**. Không xây Docker image từ `templates/novamart`: thư mục đó đã bị xóa. Dữ liệu, model, credential và workspace của Owner luôn nằm ngoài cleanup Git.
+Dữ liệu, model, credential và workspace của Owner luôn nằm ngoài cleanup Git.

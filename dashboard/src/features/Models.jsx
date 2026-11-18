@@ -180,7 +180,7 @@ export function ModelHub({mutate}) {
 
   const resetRoute=(route)=>update('/api/model-hub/reset',{
     ack:'RESET_MODEL_ROUTE',expected_revision:hub.revision,task_id:route.id,
-  },'Khôi phục route mặc định?','Chỉ xóa override của một tác vụ; mặc định Git/worker.toml được áp dụng trở lại.');
+  },'Khôi phục route mặc định?','Chỉ xóa override của một tác vụ; mặc định config/task_routes.toml được áp dụng trở lại.');
 
   const rollback=()=>update('/api/model-hub/rollback',{
     ack:'ROLLBACK_MODEL_HUB',expected_revision:hub.revision,target_revision:hub.revision-1,
@@ -190,7 +190,7 @@ export function ModelHub({mutate}) {
 
   return <Space direction="vertical" size={18} style={{width:'100%'}}>
     <Alert showIcon type="info" message="Model Hub · cấu hình local, không tự gọi AI"
-      description="models.toml + worker.toml là defaults; thay đổi trên Dashboard lưu trong SQLite local có version/rollback. Cloud không có auto-fallback; Video/Image hiện là cấu hình, chưa chứng minh GPU/ComfyUI chạy thật."/>
+      description="models.toml và task_routes.toml là cấu hình mặc định; thay đổi trên Dashboard lưu trong SQLite local có version/rollback. Cloud không có auto-fallback; Video/Image hiện là cấu hình, chưa chứng minh GPU/ComfyUI chạy thật."/>
     {error&&<Alert type="error" showIcon message="Không đọc được Model Hub" description={error}
       action={<Button onClick={reload}>Thử lại</Button>}/>}
     <Row gutter={[12,12]}>
@@ -320,11 +320,11 @@ export function ModelHub({mutate}) {
         ]}/>
       <Text type="secondary">Để nhập file trên Dashboard, đặt AGENTFORGE_COMFY_OUTPUT_DIR trước khi khởi động với --allow-external-tools. Muốn đo peak VRAM thật hãy theo dõi nvidia-smi và khai báo thủ công qua CLI. Chưa có benchmark GPU 12 GB thực.</Text>
     </Card>
-    <Card title="Film Studio · Đợt 9 (Continuity & Dựng phim)"
+    <Card title="Film Studio · Continuity & Dựng phim"
       extra={<Button loading={productionBusy} onClick={reloadProductions}>Làm mới Episodes</Button>}>
       <ResourceStatus resource={productionResource} label="episodes"/>
       <Alert type="warning" showIcon style={{marginBottom:14}}
-        message="Chỉ ghép clip Wave 8 đã có MP4 kỹ thuật"
+        message="Chỉ ghép clip đã xác minh SHA và MP4 kỹ thuật"
         description="Tạo episode-plan bằng CLI từ receipt clip thật; mỗi cảnh cần ghi identity/reference/costume/location/action/camera/caption. Không tự render GPU. 3–5 shot xem continuity (~12–20s), 15–22 shot làm pilot 60–90s. Các kiểm tra metadata KHÔNG thay thế quan sát nhân vật bằng mắt."/>
       <Space wrap style={{marginBottom:14}}>
         <Text>Giọng đọc:</Text>

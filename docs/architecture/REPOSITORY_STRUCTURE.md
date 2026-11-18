@@ -18,6 +18,6 @@ scripts/         # Windows setup, preflight and source/docs hygiene
 tests/           # only current video/security tests
 ```
 
-Film Studio giữ SHA-bound receipts và explicit Owner approval. GPU tasks, external subprocess/YouTube upload không tự chạy khi truy cập GET/UI. Các đường code Website/Webapp/Growth/Goal/Skill/Worker legacy đã nghỉ được xóa, không giữ alias chỉ để tương thích.
+Film Studio giữ SHA-bound receipts và explicit Owner approval. GPU tasks, external subprocess/YouTube upload không tự chạy khi truy cập GET/UI. Không giữ alias của sản phẩm đã nghỉ chỉ để tương thích ngược.
 
 `data/`, `workspace/`, `.env`, `models/` thuộc Owner, ngoài phạm vi xóa. Không có migration tự động đối với historical SQLite.

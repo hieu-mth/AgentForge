@@ -10,4 +10,4 @@ npm.cmd run build --prefix dashboard
 .\.venv\Scripts\python.exe -m agentforge --port 8780
 ```
 
-Các trang hiện hành: Video Studio, Character Registry, Video Projects, Model Hub, môi trường local và Publishing handoff. Không có Website/Webapp, Growth, Retention/commerce UI hoặc Goal/Skill engine. Build artifact `dashboard/dist/` bị Git ignore. Không tuyên bố nhận dạng nhân vật, inference hay xuất bản thực nếu chưa có Owner runtime evidence.
+Các trang hiện hành: Video Studio, Character Registry, Video Projects, Model Hub, môi trường local và Publishing handoff. Build artifact `dashboard/dist/` bị Git ignore. Không tuyên bố nhận dạng nhân vật, inference hay xuất bản thực nếu chưa có Owner runtime evidence.

@@ -45,7 +45,7 @@ export function Publishing({mutate,data}) {
       const [film,episode]=value.split(':');
       const detail=await api('/api/film/productions/'+film+'/'+episode);
       if(!detail.render){
-        message.warning('Phim chưa có render-receipt SHA hợp lệ. Hoàn tất Đợt 9 trước.');
+        message.warning('Phim chưa có render-receipt SHA hợp lệ. Hoàn tất bản dựng và xác minh SHA trước.');
       } else{
         setSelected({...detail,film_slug:film,episode_id:episode});
       }
