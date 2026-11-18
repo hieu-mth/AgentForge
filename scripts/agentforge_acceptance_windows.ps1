@@ -3,7 +3,7 @@
   AgentForge one-pass owner acceptance, PowerShell 5.1+ / Windows CI.
 .DESCRIPTION
   Default is LOCAL READ-ONLY: prints registry, owner pause, SQLite integrity,
-  datasets and scheduler/backup health. No model, network, browser, OAuth,
+  scheduler/backup health. No model, network, browser, OAuth,
   social publishing or process execution beyond these local Python CLIs.
   Explicit flags opt into isolated CI contract tests, an unencrypted local
   backup, optional non-destructive staging restore, or a foreground Dashboard.
@@ -59,7 +59,6 @@ Write-Host ("Python: " + $python)
 Invoke-LocalCheck -Label "Skill Registry" -PythonArguments @("-m","agentforge.skill_registry","validate")
 Invoke-LocalCheck -Label "Owner Dispatch State" -PythonArguments @("-m","agentforge.ops_control","status")
 Invoke-LocalCheck -Label "Database / Scheduler / Backup Doctor" -PythonArguments @("-m","agentforge.ops_doctor")
-Invoke-LocalCheck -Label "Existing Intelligence Datasets" -PythonArguments @("-m","agentforge.analytics_pipeline","datasets")
 Invoke-LocalCheck -Label "Base V1 readiness (not hardware acceptance)" -PythonArguments @("-B","-m","agentforge.ops.base_acceptance")
 
 if ($RunContractTests) {
@@ -117,10 +116,10 @@ if ($CreateBackup) {
 }
 
 Write-Host ""
-Write-Host "Local acceptance completed. Demo data is NOT verified business revenue."
+Write-Host "Local acceptance completed. Fixture tests are NOT real AI video certification."
 Write-Host "Owner pause/resume, deployments and external account grants remain separate."
 if ($StartDashboard) {
     Write-Host "Launching local authenticated Control Center at http://127.0.0.1:8780/"
     Write-Host "Use the fresh owner code printed below; never share it in chat or screenshots."
-    Invoke-LocalCheck -Label "Control Center V1" -PythonArguments @("-m","agentforge.control_center_v1","--port","8780")
+    Invoke-LocalCheck -Label "AgentForge Video Studio" -PythonArguments @("-m","agentforge","--port","8780")
 }
