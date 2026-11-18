@@ -94,48 +94,22 @@ class AIModelFailureDiagnosticsTests(unittest.TestCase):
         self.assertEqual(json.loads(send.call_args.args[0].data)["max_tokens"],4096)
 
 
-class V5NaturalLanguageIntakeTests(unittest.TestCase):
-    def setUp(self):
-        temp=tempfile.TemporaryDirectory()
+class RetiredWebappIntakeTests(unittest.TestCase):
+    def test_webapp_request_is_refused_before_goal_or_model_call(self):
+        temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
-        self.db=Path(temp.name)/"goals.db"
-
-    def test_all_four_named_roles_route_to_v5_without_prefix(self):
-        prompt=("Tạo ứng dụng React bán hàng demo. "
-                "Yêu cầu AI Architect lập kiến trúc, AI Developer viết React, "
-                "QA kiểm tra mã nguồn và AI Reviewer phản biện sản phẩm.")
-        with patch("agentforge.workspace_policy.read",return_value={
-            "website_enabled":True,"storyboard_enabled":True,
-            "max_estimated_model_calls":3}), \
+        db = Path(temp.name) / "goals.db"
+        prompt = ("Tạo ứng dụng React bán hàng, yêu cầu AI Architect, "
+                  "AI Developer, QA kiểm tra mã và AI Reviewer phản biện.")
+        with patch("agentforge.workspace_policy.read", return_value={
+            "website_enabled": True, "storyboard_enabled": True,
+            "max_estimated_model_calls": 3}), \
              patch("agentforge.model.generate_json") as model_call:
-            outcome=prompt_intake.plan_request(
-                prompt,max_model_calls=3,brain_db_path=self.db)
-            model_call.assert_not_called()
-        self.assertEqual(outcome["template"],"webapp.company")
-        plan=brain_store.get_goal(outcome["goal_id"],db_path=self.db)["plan"]
-        self.assertEqual([x["skill_id"] for x in plan],
-                         ["webapp.architect","webapp.develop",
-                          "webapp.audit","webapp.review"])
-        self.assertEqual(sum(x["estimated_model_calls"] for x in plan),3)
-
-    def test_full_v5_roles_need_explicit_three_call_cap(self):
-        prompt=("Tạo web app React. AI Architect lập thiết kế, AI Developer viết, "
-                "QA kiểm thử và AI Reviewer phản biện.")
-        with patch("agentforge.workspace_policy.read",return_value={
-            "website_enabled":True,"storyboard_enabled":True,
-            "max_estimated_model_calls":3}):
-            with self.assertRaisesRegex(ValueError,"3 lượt model"):
+            with self.assertRaises(PermissionError):
                 prompt_intake.plan_request(
-                    prompt,max_model_calls=1,brain_db_path=self.db)
-        self.assertFalse(self.db.exists())
-
-    def test_single_role_developer_remains_single_call(self):
-        prompt=("AI Developer: viết React app demo với bộ lọc danh mục "
-                "và giỏ hàng hoạt động tại local.")
-        outcome=prompt_intake.plan_request(prompt,brain_db_path=self.db)
-        self.assertEqual(outcome["template"],"webapp.develop")
-        goal=brain_store.get_goal(outcome["goal_id"],db_path=self.db)
-        self.assertEqual(len(goal["plan"]),1)
+                    prompt, max_model_calls=3, brain_db_path=db)
+            model_call.assert_not_called()
+        self.assertFalse(db.exists())
 
 
 if __name__ == "__main__":

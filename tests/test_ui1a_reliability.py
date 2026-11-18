@@ -28,12 +28,11 @@ class PromptBudgetTests(unittest.TestCase):
             mock.start()
             self.addCleanup(mock.stop)
 
-    def test_unicode_and_v5_preserve_brief_sha_and_task_records(self):
+    def test_unicode_website_brief_sha_and_task_records(self):
         for prefix, suffix, calls in (
             ("Tạo website ", "Mô tả tiếng Việt có dấu. " * 35, 1),
             ("Create website ", "ASCII content " * 40, 1),
             ("Tạo website ", "🛏️😀 " * 80, 1),
-            ("AI Company V5 ", "Ứng dụng bán hàng 😀 " * 40, 3),
         ):
             brief = (prefix + suffix).strip()
             with self.subTest(prefix=prefix, suffix=suffix[:12]), patch("agentforge.model.generate_json") as model:
@@ -52,7 +51,6 @@ class PromptBudgetTests(unittest.TestCase):
 
     def test_reject_budget_before_any_database_write_and_no_truncation(self):
         for prompt, calls in (("Tạo website " + "ệ" * 5900, 1),
-                              ("AI Company V5 " + "a" * 5900, 3),
                               ("Tạo website " + "😀" * 3000, 1)):
             with self.subTest(calls=calls), self.assertRaisesRegex(brain_store.BrainError, "PLAN_UTF8_BUDGET:.*8 KiB"):
                 plan_request(prompt, max_model_calls=calls, brain_db_path=self.db)
@@ -61,7 +59,7 @@ class PromptBudgetTests(unittest.TestCase):
 
     def test_exact_serialized_plan_boundary(self):
         # Measure the real signed plan, not a guessed character/word conversion.
-        for template, char, calls in (("website.draft", "ệ", 1), ("webapp.company", "a", 3)):
+        for template, char, calls in (("website.draft", "ệ", 1),):
             def fits(length):
                 inputs = {"slug": "synthetic", "brief": "Tạo website " + char * length}
                 plan = brain_planner.make_plan(template, inputs, max_model_calls=calls)
