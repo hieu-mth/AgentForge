@@ -19,8 +19,8 @@ export function buildTheme(mode) {
   return {
     algorithm: dark ? antTheme.darkAlgorithm : antTheme.defaultAlgorithm,
     token: {
-      colorPrimary: '#5b5ef4',
-      colorInfo: '#5b5ef4',
+      colorPrimary: '#7270f4',
+      colorInfo: '#7270f4',
       colorSuccess: '#16a34a',
       colorWarning: '#f59e0b',
       colorError: '#e5484d',
