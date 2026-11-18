@@ -377,8 +377,6 @@ def summary(*, db_path=DB, film_root=production.FILMS):
                          for item in releases],
             "scheduled_actions_automatic": False, "auto_publish": False,
             "oauth_connected": False, "youtube_analytics_connected": False,
-            "verified_net_profit_vnd": None,
-            "bookkeeping_note": "Growth ledger remains source of Owner-entered VND; no bank reconciliation.",
             "status": "OWNER_CONTROLLED_UNVERIFIED"}
 
 
