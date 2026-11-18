@@ -1,4 +1,4 @@
-# Đợt 8 — Film Studio 12 GiB: One-shot Wan 2.2 5B
+# Motion ComfyUI — One-shot 12 GiB
 
 **Phân biệt trạng thái:** code/Windows CI kiểm tra hợp đồng; chưa chạy GPU thật, chưa có MP4 thật của máy Owner, chưa đo peak VRAM và chưa duyệt nội dung. Không gán F2 hoặc WAVE8_OWNER_PASS khi chưa có bằng chứng.
 
@@ -71,4 +71,4 @@ Trong AI Models & Routing → Film Studio 4s pilot: xem GPU total/free snapshot,
 - Một file MP4 local hợp lệ, 49 frames ~4.083s, ffprobe/FFmpeg decode thật, SHA receipt khớp khi đọc lại.
 - Owner tự xem video, xác nhận có chuyển động đáng kể và không gặp lỗi OOM.
 - Ghi GPU/driver/model phiên bản, thời gian thực **ComfyUI sampling** và nếu được, peak VRAM đo trong lúc chạy. Không bịa latency/VRAM từ fixture CI.
-- Chỉ khi các điều kiện trên có bằng chứng mới chốt WAVE8_OWNER_12GB_MP4_PASS. Nếu chưa, trạng thái GPU_UNVERIFIED. Continuity/multi-shot/voice/assembly thuộc Đợt 9.
+- Chỉ khi các điều kiện trên có bằng chứng mới chốt OWNER_MOTION_12GB_MP4_PASS. Nếu chưa, trạng thái GPU_UNVERIFIED. Continuity/multi-shot/voice/assembly thuộc Film Production.

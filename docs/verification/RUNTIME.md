@@ -1,4 +1,4 @@
-# Runtime checklist — AgentForge Video Studio (Windows / Owner)
+# Runtime — AgentForge Video Studio (Windows / Owner)
 
 Đây là checklist chạy thực tế, không phải chứng nhận Production GO. Không suy ra GPU, motion, voice, upload hay chất lượng video từ CI fixture.
 
@@ -9,7 +9,7 @@ cd D:\AgentForge
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\agentforge_runtime_certify_windows.ps1 -SaveReport
 ```
 
-Kiểm Python/Node, model catalog Ollama, ComfyUI, FFmpeg, Docker preflight và HTTP Dashboard. Một số probe Docker legacy vẫn còn trong source và cần tách khỏi Webapp ở cleanup Đợt 4; trạng thái Docker không phải điều kiện đủ để chạy Film Studio. Receipt được lưu trong `workspace/runtime-certification/` khi bật SaveReport; không upload receipt hoặc secret.
+Kiểm Python/Node, model catalog Ollama, ComfyUI, FFmpeg và HTTP Dashboard. Không cần Webapp Docker QA; Film Studio hoạt động với ứng dụng local được Owner cài riêng. Receipt được lưu trong `workspace/runtime-certification/` khi bật SaveReport; không upload receipt hoặc secret.
 
 ## 2. FFmpeg fixture thực (Owner chủ động)
 

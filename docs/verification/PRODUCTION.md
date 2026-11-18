@@ -1,10 +1,10 @@
-# Wave 9 — Film Production: continuity and 60–90s pilot
+# Film Production — continuity and 60–90s pilot
 
 **Status:** Code/Windows CI fixtures. Real ComfyUI GPU clips, assembled 60–90s movie, Owner visual/audio review: **PENDING**. This pipeline never auto-generates GPU footage, downloads models, clones voices or publishes.
 
 ## Contract
 
-- Every shot references the exact Wave 8 film-plan SHA, job ID, clip SHA and technical receipt SHA. Rehash inputs before AND after FFmpeg. No arbitrary remote clips or repeated job IDs.
+- Every shot references the exact Motion film-plan SHA, job ID, clip SHA and technical receipt SHA. Rehash inputs before AND after FFmpeg. No arbitrary remote clips or repeated job IDs.
 - Metadata from the original character bible: cast IDs, reference SHA, costume, location, props, action/camera and caption. Change in costume/location/reference requires Owner note; **not visual identity recognition**.
 - 3–5 distinct 49-frame/12fps clips yield a ~12–20-second continuity preview. 15–22 distinct clips yield ~61–90 seconds (no artificial looping).
 - Optional installed Windows SAPI/Piper TTS uses captions to create verified PCM WAV; otherwise output gets a silent AAC track. SRT is a UTF-8 sidecar, not burned-in.
@@ -19,13 +19,13 @@ git status --short
 git pull --ff-only origin main
 
 # Three-shot pilot
-.\.venv\Scripts\python.exe -m agentforge.features.film_studio.long_form plan --spec .\examples\film_studio\wave9_continuity_3shot.json --output-root .\workspace\films --slug fox-preview
+.\.venv\Scripts\python.exe -m agentforge.features.film_studio.long_form plan --spec .\examples\film_studio\continuity_3shot.json --output-root .\workspace\films --slug fox-preview
 
 # Separate 15-shot (~61s) pilot
-.\.venv\Scripts\python.exe -m agentforge.features.film_studio.long_form plan --spec .\examples\film_studio\wave9_film_60s.json --output-root .\workspace\films --slug fox-pilot
+.\.venv\Scripts\python.exe -m agentforge.features.film_studio.long_form plan --spec .\examples\film_studio\film_60s.json --output-root .\workspace\films --slug fox-pilot
 ~~~
 
-These commands create a SHA-bound film-plan.json once per slug. Use the [Wave 8 checklist](../wave8/README.md) to individually submit, reconcile, import and verify a real MP4 for EVERY shot in the same plan. Do not proceed until all source receipts exist.
+These commands create a SHA-bound film-plan.json once per slug. Use the [Motion checklist](../MOTION.md) to individually submit, reconcile, import and verify a real MP4 for EVERY shot in the same plan. Do not proceed until all source receipts exist.
 
 ## Step 2 — Auto-draft edit worksheet from actual receipts
 
@@ -66,12 +66,12 @@ Files: workspace/films/fox-preview/productions/preview-v1/episode.mp4, captions.
 
 ## Dashboard
 
-Start AgentForge with --allow-external-tools and log in as Owner. In AI Models & Routing → Film Studio Đợt 9, inspect episode ID/SHA/shot metadata, then choose voice or assemble. These actions require authenticated Owner session, CSRF, active Ops and an external-capable mode. No GPU generation or publishing is attached to the buttons.
+Start AgentForge with --allow-external-tools and log in as Owner. In AI Models & Routing → Film Studio, inspect episode ID/SHA/shot metadata, then choose voice or assemble. These actions require authenticated Owner session, CSRF, active Ops and an external-capable mode. No GPU generation or publishing is attached to the buttons.
 
 ## Owner acceptance
 
 - Preview: actually watch 3–5 different motion clips; visually evaluate the recurring character, clothing, pose, camera and location.
-- Production: provide 15–22 signed Wave 8 MP4 receipts, assemble a playable 60–90s video, verify subtitle timestamps and soundtrack/voice language, record encode duration and disk use.
+- Production: provide 15–22 signed Motion MP4 receipts, assemble a playable 60–90s video, verify subtitle timestamps and soundtrack/voice language, record encode duration and disk use.
 - Reopen MP4, verify SHA receipt, and inspect full video/audio playback. Test one shot change via a new episode version, confirm other source clips are not regenerated.
 - CI mocks do NOT establish real GPU throughput, film coherence, copyright/licensing, visual identity or production readiness.
 
