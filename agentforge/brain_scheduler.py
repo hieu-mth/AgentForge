@@ -116,6 +116,17 @@ def tick(*, confirm_tick=False, db_path=None, task_db_path=None,
             for row in rows:
                 # Revalidate trusted code-level plan, not just stored template.
                 inputs = json.loads(row["inputs_json"])
+                # Historical Growth/Website/Media schedules remain inspectable,
+                # but cannot spawn new deprecated jobs during routine ticks.
+                retired = frozenset({
+                    "growth.review", "growth.launch_local",
+                    "website.campaign", "website.browser", "website.draft",
+                    "webapp.draft", "webapp.develop", "webapp.company",
+                    "media.produce", "media.review", "creative.storyboard",
+                })
+                canonical = planner.ALIASES.get(row["template"], row["template"])
+                if canonical in retired:
+                    raise PermissionError("RETIRED_SCHEDULE_TEMPLATE: schedule is read-only history")
                 if not planner.read_only_plan(row["template"], inputs):
                     raise PermissionError("Schedule template gained side effects")
                 plan = planner.make_plan(row["template"], inputs)

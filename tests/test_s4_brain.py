@@ -283,6 +283,24 @@ class TestS4Brain(unittest.TestCase):
             scheduler.set_schedule_status(result["schedule_id"], "ACTIVE",
                                           db_path=self.brain_db)
 
+    def test_retired_schedule_cannot_spawn_goal_or_consume_due_slot(self):
+        due = datetime(2026, 11, 6, 9, 0, tzinfo=timezone.utc)
+        archived = scheduler.create_schedule(
+            "Archived growth review", "growth.review",
+            {"campaign": "old-growth"}, due.isoformat(), 60,
+            confirm_schedule=True, db_path=self.brain_db,
+            now=due - timedelta(hours=1))
+        with patch.object(runner, "execute") as execute:
+            with self.assertRaisesRegex(PermissionError, "RETIRED_SCHEDULE_TEMPLATE"):
+                scheduler.tick(confirm_tick=True, db_path=self.brain_db,
+                               task_db_path=self.task_db, now=due)
+            execute.assert_not_called()
+        self.assertFalse(self.task_db.exists())
+        self.assertEqual(store.list_goals(db_path=self.brain_db), [])
+        history = scheduler.list_schedules(db_path=self.brain_db)
+        self.assertEqual(history[0]["schedule_id"], archived["schedule_id"])
+        self.assertEqual(history[0]["next_due_utc"], due.isoformat())
+
     def test_schedule_digest_blocks_template_changes_without_reapproval(self):
         future = datetime(2026, 11, 6, 9, 0, tzinfo=timezone.utc)
         schedule = scheduler.create_schedule(
