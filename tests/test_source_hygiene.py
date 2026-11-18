@@ -34,7 +34,11 @@ class SourceHygieneTests(unittest.TestCase):
     def test_current_git_tree_has_no_prohibited_tracked_files(self):
         result = inspect(REPOSITORY_ROOT)
         self.assertEqual(result["status"], "PASS", result["problems"][:5])
-        self.assertGreater(result["tracked_files"], 500)
+        # Cleanup intentionally reduces tracked files. Reject an empty/wrong
+        # repository scan instead of enforcing the historical >500 count.
+        self.assertGreater(result["tracked_files"], 0)
+        self.assertTrue((REPOSITORY_ROOT / "agentforge" / "api" / "server.py").is_file())
+        self.assertTrue((REPOSITORY_ROOT / "dashboard" / "src" / "App.jsx").is_file())
 
 
 if __name__ == "__main__":
