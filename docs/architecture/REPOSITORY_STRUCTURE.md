@@ -1,6 +1,6 @@
 # Kiến trúc AgentForge Video Studio
 
-\`\`\`text
+```text
 agentforge/
   api/           # Owner-auth localhost HTTP, CSRF, feature endpoints
   ai/            # Model registry + Model Hub, no implicit model execution
@@ -16,8 +16,8 @@ config/          # model profiles, film/image routes
 examples/film_studio/
 scripts/         # Windows setup, preflight and source/docs hygiene
 tests/           # only current video/security tests
-\`\`\`
+```
 
 Film Studio giữ SHA-bound receipts và explicit Owner approval. GPU tasks, external subprocess/YouTube upload không tự chạy khi truy cập GET/UI. Các đường code Website/Webapp/Growth/Goal/Skill/Worker legacy đã nghỉ được xóa, không giữ alias chỉ để tương thích.
 
-\`data/\`, \`workspace/\`, \`.env\`, \`models/\` thuộc Owner, ngoài phạm vi xóa. Không có migration tự động đối với historical SQLite.
+`data/`, `workspace/`, `.env`, `models/` thuộc Owner, ngoài phạm vi xóa. Không có migration tự động đối với historical SQLite.
