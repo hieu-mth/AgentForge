@@ -21,10 +21,9 @@ CHECKS = (
     ("dashboard_build", "Dashboard build", "dashboard/dist/index.html", "file"),
     ("model_defaults", "Model registry", "config/models.toml", "file"),
     ("task_routes", "Task routing", "config/task_routes.toml", "file"),
-    ("worker_manifests", "Workers", "workers", "dir"),
 )
 REQUIRED = frozenset({"source", "pyproject", "dashboard_source", "model_defaults",
-                      "task_routes", "worker_manifests"})
+                      "task_routes"})
 
 
 def _path_status(root, relative, kind):

@@ -1,34 +1,15 @@
-# Owner defaults. Keep task/worker mapping reviewed in Git; Dashboard overrides
-# store only selected model IDs in data/company/model_hub.sqlite3.
-# "wired": existing LLM runtime reads the selected model.
-# "config_only": UI assignment only; does NOT execute image/video generation.
-# "rules": deterministic system monitoring, no model call.
+# Local-first Video Studio routing. Assignment does not start model inference.
+# Model selection is reviewed on the dashboard; GPU jobs require a separate
+# signed Film Studio action and explicit Owner consent.
 
 [routes."general.text"]
-label = "Chat / phân tích chung"
+label = "LLM văn bản"
 kind = "text"
-execution = "wired"
+execution = "config_only"
 default_model = "local_primary"
 
-[routes."research.opportunity"]
-label = "Nghiên cứu cơ hội"
-kind = "text"
-execution = "wired"
-worker = "opportunity_researcher"
-
-[routes."research.source_review"]
-label = "Đánh giá nguồn"
-kind = "text"
-execution = "wired"
-worker = "source_reviewer"
-
-[routes."analytics.quality_check"]
-label = "Phân tích dữ liệu (quy tắc Python)"
-kind = "rules"
-execution = "rules"
-
 [routes."film.storyboard"]
-label = "Kịch bản phim dài"
+label = "Kịch bản và phân cảnh"
 kind = "text"
 execution = "config_only"
 default_model = "local_primary"
@@ -44,6 +25,6 @@ kind = "image"
 execution = "config_only"
 
 [routes."ops.monitor"]
-label = "Theo dõi hệ thống"
+label = "Giám sát local (quy tắc)"
 kind = "rules"
 execution = "rules"
