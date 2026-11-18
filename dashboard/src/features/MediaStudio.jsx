@@ -1,5 +1,5 @@
 import { Alert, Button, Card, Col, Row, Space, Steps, Tag, Typography } from 'antd';
-import { ArrowRightOutlined, PictureOutlined, TeamOutlined, SafetyCertificateOutlined, SettingOutlined } from '@ant-design/icons';
+import { PictureOutlined, TeamOutlined, SafetyCertificateOutlined, SettingOutlined } from '@ant-design/icons';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -7,8 +7,8 @@ const { Title, Text, Paragraph } = Typography;
 // All destinations are existing Owner routes and retain their own authorization gates.
 // Only link to routes exposed by the video-first sidebar.
 const WORKFLOW = [
-  {title:'Chuẩn bị tư liệu',description:'Tạo và kiểm tra ảnh AI trên máy',route:'projects',action:'Mở kho ảnh',icon:<PictureOutlined/>},
-  {title:'Kiểm tra thành phẩm',description:'Duyệt storyboard và video đã tạo',route:'reviews',action:'Mở nơi duyệt',icon:<SafetyCertificateOutlined/>},
+  {title:'Dự án video',description:'Xem những tập phim đã lưu trên máy',route:'projects',action:'Xem dự án video',icon:<PictureOutlined/>},
+  {title:'Kiểm tra bản dựng',description:'Xem receipt kỹ thuật và từng shot trong Model Hub',route:'models',action:'Xem bản dựng',icon:<SafetyCertificateOutlined/>},
 ];
 const LINKS = [
   {title:'Thư viện nhân vật',description:'Quản lý hồ sơ nhân vật local',route:'characters',icon:<TeamOutlined/>},
