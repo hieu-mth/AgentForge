@@ -7,8 +7,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from agentforge import product_builder as builder, product_quality
-from agentforge.domains.websites.ai_designer import DESIGN_SCHEMA, render, validate_spec
-from agentforge.domains.websites.structured_builder import owner_phone
+from agentforge.features.websites.ai_designer import DESIGN_SCHEMA, render, validate_spec
+from agentforge.features.websites.structured_builder import owner_phone
 from tests.designer_fixture import DESIGN, revised_design, longer_design
 
 BRIEF = "Thiết kế website portfolio cho nhiếp ảnh gia Việt Nam, phong cách tối giản."

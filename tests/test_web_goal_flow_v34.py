@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from agentforge import brain_planner, brain_runner, brain_store, task_history
 from agentforge import product_builder as builder
-from agentforge.domains.websites.preview import from_proposal
+from agentforge.features.websites.preview import from_proposal
 
 from copy import deepcopy
 from tests.designer_fixture import DESIGN

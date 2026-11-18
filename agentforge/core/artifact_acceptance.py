@@ -85,7 +85,7 @@ def record_validation(pid, sha, artifact_type, kind, outcome, evidence_id, *, db
     if actual_type != artifact_type:
         raise ValueError("ACCEPTANCE_TYPE_MISMATCH")
     if kind == "TOOLCHAIN_CURRENT" and outcome == "PASS":
-        from agentforge.domains.webapps.toolchain import require_current
+        from agentforge.features.webapps.toolchain import require_current
         require_current(doc["files"])
     if (kind not in CHECKS or outcome not in ({"REVISE", "MANUAL_REVIEW"} if kind == "REVIEW" else {"PASS", "FAIL"})
             or not isinstance(evidence_id, str) or not 1 <= len(evidence_id) <= 128):
@@ -199,12 +199,12 @@ def inspect(pid, sha, namespace="webapps", *, db_path=None):
 
 def validate_source(pid, sha, namespace="webapps", *, db_path=None):
     """Explicit syntax-only validation: no subprocess, model or preview."""
-    from agentforge.domains.webapps.syntax import check_files
+    from agentforge.features.webapps.syntax import check_files
     doc, artifact_type = source(pid, sha, namespace)
     report = check_files(doc["files"], sha)
     if namespace == "webapps":
         from agentforge import webapp_developer
-        from agentforge.domains.webapps import syntax
+        from agentforge.features.webapps import syntax
         provider = webapp_developer.provider(pid)
         report_file = provider.PROPOSALS / "syntax" / (pid + ".json")
         if not report_file.exists():
@@ -214,7 +214,7 @@ def validate_source(pid, sha, namespace="webapps", *, db_path=None):
     record_validation(pid, sha, artifact_type, "CONTRACT_VALID", "PASS", "proposal:" + sha, db_path=db_path)
     record_validation(pid, sha, artifact_type, "SYNTAX_VALID", report["status"], _sha(report), db_path=db_path)
     if namespace == "webapps":
-        from agentforge.domains.webapps.toolchain import require_current
+        from agentforge.features.webapps.toolchain import require_current
         try:
             require_current(doc["files"])
         except ValueError:
@@ -263,7 +263,7 @@ def observe(skill_id, result, *, db_path=None):
         if namespace == "webapps":
             record_validation(pid, sha, kind, "TOOLCHAIN_CURRENT", "PASS", "toolchain:" + sha, db_path=db_path)
             from agentforge import webapp_developer
-            from agentforge.domains.webapps import syntax
+            from agentforge.features.webapps import syntax
             provider = webapp_developer.provider(pid)
             doc, _ = provider._read_proposal(pid)
             report = syntax.read_report(provider.PROPOSALS, pid, sha, doc["files"])
@@ -272,12 +272,12 @@ def observe(skill_id, result, *, db_path=None):
     elif skill_id in {"webapp.audit", "webapp.review", "webapp.sandbox_test"}:
         _, kind = source(pid, sha, "webapps")
         if skill_id == "webapp.review":
-            from agentforge.domains.webapps import reviewer
+            from agentforge.features.webapps import reviewer
             report = reviewer.read(result["review_id"], result["review_sha"])
             record_validation(pid, sha, kind, "REVIEW", report["assessment"]["recommendation"],
                               result["review_sha"], db_path=db_path)
         elif skill_id == "webapp.audit":
-            from agentforge.domains.webapps import static_qa
+            from agentforge.features.webapps import static_qa
             report = static_qa.read(result["qa_report_id"], result["qa_report_sha"])
             if "syntax" in report:
                 record_validation(pid, sha, kind, "SYNTAX_VALID", report["syntax"]["status"],

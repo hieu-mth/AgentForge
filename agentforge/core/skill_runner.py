@@ -88,7 +88,7 @@ def _safe_failure(skill_id, exc):
         "RESEARCH_CITATIONS_REQUIRED", "RESEARCH_UNVERIFIED_URL",
     }:
         return str(exc)
-    from agentforge.domains.webapps.syntax import SourceSyntaxError
+    from agentforge.features.webapps.syntax import SourceSyntaxError
     if isinstance(exc, SourceSyntaxError):
         # Typed parser diagnostics only; never expose generated source snippets.
         return str(exc)

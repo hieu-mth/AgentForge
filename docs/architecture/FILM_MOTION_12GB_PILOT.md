@@ -64,8 +64,8 @@ AgentForge package. No Docker is needed for the local, Owner-installed model.
 
 \`\`\`powershell
 cd D:\AgentForge
-.\.venv\Scripts\python.exe -m agentforge.domains.media.motion_comfy health
-.\.venv\Scripts\python.exe -m agentforge.domains.media.motion_comfy inspect-workflow --workflow D:\FilmWorkflows\wan5b-api-reviewed.json
+.\.venv\Scripts\python.exe -m agentforge.features.film_studio.motion_comfy health
+.\.venv\Scripts\python.exe -m agentforge.features.film_studio.motion_comfy inspect-workflow --workflow D:\FilmWorkflows\wan5b-api-reviewed.json
 \`\`\`
 
 For the first pilot create a local 4-second film plan (chapter duration 4)
@@ -74,8 +74,8 @@ using the \`long_form\` CLI. The 2-hour example uses 8-second slots and is
 commands and make your own local \`shot-prompt.txt\`.
 
 \`\`\`powershell
-.\.venv\Scripts\python.exe -m agentforge.domains.media.motion_comfy submit --film-slug pilot --shot-id sh-00001 --plan-sha YOUR_FILM_PLAN_SHA --workflow D:\FilmWorkflows\wan5b-api-reviewed.json --workflow-sha YOUR_WORKFLOW_SHA --prompt-file D:\FilmWorkflows\shot-prompt.txt --seed 7 --confirm-gpu-run
-.\.venv\Scripts\python.exe -m agentforge.domains.media.motion_comfy status --job-id RETURNED_JOB_ID
+.\.venv\Scripts\python.exe -m agentforge.features.film_studio.motion_comfy submit --film-slug pilot --shot-id sh-00001 --plan-sha YOUR_FILM_PLAN_SHA --workflow D:\FilmWorkflows\wan5b-api-reviewed.json --workflow-sha YOUR_WORKFLOW_SHA --prompt-file D:\FilmWorkflows\shot-prompt.txt --seed 7 --confirm-gpu-run
+.\.venv\Scripts\python.exe -m agentforge.features.film_studio.motion_comfy status --job-id RETURNED_JOB_ID
 \`\`\`
 
 This adapter does **not** have an automatic retry option. It writes an SQLite

@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
-from agentforge.domains.media import long_form, motion_comfy as motion
+from agentforge.features.film_studio import long_form, motion_comfy as motion
 
 
 def template():

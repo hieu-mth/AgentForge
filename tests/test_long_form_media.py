@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from agentforge.domains.media.long_form import (
+from agentforge.features.film_studio.long_form import (
     FilmPlanError, build_plan, estimate_attempts, load_plan, save_plan,
     verify_plan,
 )

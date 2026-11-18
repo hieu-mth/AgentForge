@@ -109,7 +109,7 @@ Bản hiện tại có Film planner và adapter ComfyUI localhost, **chưa có m
 Kiểm tra kết nối (không chạy inference):
 
 ~~~powershell
-.\.venv\Scripts\python.exe -m agentforge.domains.media.motion_comfy health
+.\.venv\Scripts\python.exe -m agentforge.features.film_studio.motion_comfy health
 ~~~
 
 - Film planner: [long-form spec và CLI](architecture/LONG_FORM_AI_FILM_STUDIO.md).

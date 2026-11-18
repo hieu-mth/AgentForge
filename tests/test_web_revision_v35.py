@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 from agentforge import brain_runner, brain_store, task_history
 from agentforge import product_builder as builder, website_feedback
-from agentforge.domains.websites.preview import from_proposal
-from agentforge.domains.websites.structured_builder import render as legacy_render, requested_design
+from agentforge.features.websites.preview import from_proposal
+from agentforge.features.websites.structured_builder import render as legacy_render, requested_design
 from tests.designer_fixture import DESIGN, revised_design
 
 BRIEF = ("Tạo website giới thiệu dịch vụ tư vấn nệm cao cấp, giao diện hiện đại "

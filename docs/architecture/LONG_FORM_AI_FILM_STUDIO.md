@@ -11,8 +11,8 @@ A feature film can be divided into chapters, character reference descriptions an
 Build a demo plan on the local machine after installing AgentForge:
 
     cd D:\AgentForge
-    .\.venv\Scripts\python.exe -m agentforge.domains.media.long_form plan --spec examples/film_studio/feature_fantasy.json --slug moonfire-pilot --output-root workspace/films
-    .\.venv\Scripts\python.exe -m agentforge.domains.media.long_form inspect --slug moonfire-pilot --output-root workspace/films
+    .\.venv\Scripts\python.exe -m agentforge.features.film_studio.long_form plan --spec examples/film_studio/feature_fantasy.json --slug moonfire-pilot --output-root workspace/films
+    .\.venv\Scripts\python.exe -m agentforge.features.film_studio.long_form inspect --slug moonfire-pilot --output-root workspace/films
 
 The output is an exclusively written, SHA-validated film-plan.json in user workspace. Existing plans are not overwritten. The sample plot is original and high level; detailed scripts, scene timing and motion prompts are still missing.
 
