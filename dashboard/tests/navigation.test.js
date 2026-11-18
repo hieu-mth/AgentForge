@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { NAV_GROUPS, groupFor, defaultSection, tabsFor, parseSection, hashFor, labelFor } from '../src/navigation.js';
 
 const videoScreens = [
-  'overview','media-studio','characters','projects','reviews','channels',
+  'overview','media-studio','characters','projects','channels',
   'environment','models',
 ];
-const retiredScreens = ['websites','workspace','mattress','growth','finance','team','goals','tasks','intelligence','memory','schedules'];
+const retiredScreens = ['websites','workspace','mattress','growth','finance','team','goals','tasks','intelligence','memory','schedules','reviews'];
 
 test('navigation exposes only video studio workflows and operational settings',()=>{
   assert.deepEqual(NAV_GROUPS.map(x=>x.label),[
@@ -41,9 +41,7 @@ test('video-first deep links work, retired links fail closed',()=>{
 test('studio and settings remain reachable',()=>{
   assert.equal(groupFor('media-studio'),'studio');
   assert.equal(groupFor('characters'),'characters');
-  assert.equal(groupFor('reviews'),'products');
   assert.equal(groupFor('channels'),'business');
-  assert.equal(groupFor('models'),'settings');
   assert.equal(groupFor('models'),'settings');
   assert.equal(parseSection(''),'overview');
 });
