@@ -5,8 +5,25 @@ from agentforge.api.auth import SENSITIVE_GRANTS
 from agentforge.api.routes._shared import UNHANDLED
 
 
+# Only current Film Studio and generic Owner workflows may be newly submitted.
+# Historical goals remain inspectable and may finish with their original gates.
+RETIRED_TEMPLATES = frozenset({
+    "campaign.review", "website.campaign", "website.draft", "website.browser",
+    "webapp.draft", "webapp.develop", "webapp.company", "webapp.revision",
+    "webapp.source_revision", "webapp.qa", "webapp.browser_qa",
+    "media.produce", "media.review", "growth.review", "growth.launch_local",
+})
+
+
+def _require_current_template(template):
+    canonical = brain_planner.ALIASES.get(template, template) if isinstance(template, str) else ""
+    if canonical in RETIRED_TEMPLATES:
+        raise ValueError("RETIRED_GOAL_TEMPLATE: legacy business/media workflow is unavailable")
+
+
 def handle(server, path, request, session=None):
     if path == "/api/goals/preflight":
+        _require_current_template(request.get("template"))
         if request.get("ack") != "PREFLIGHT":
             raise PermissionError("Confirm PREFLIGHT before reading references")
         return goal_preflight.inspect(
@@ -14,6 +31,7 @@ def handle(server, path, request, session=None):
             analytics_db_path=server.analytics_db_path,
             growth_db_path=server.growth_db_path)
     if path == "/api/goals/propose":
+        _require_current_template(request.get("template"))
         if request.get("ack") != "PROPOSE":
             raise PermissionError("Confirm PROPOSE before making a goal")
         goal_preflight.require_ready(
@@ -104,6 +122,7 @@ def handle(server, path, request, session=None):
                 scope_to_current_step=True, **flags)
         raise ValueError("Unknown goal operation")
     if path == "/api/schedules/create":
+        _require_current_template(request.get("template"))
         if request.get("ack") != "SCHEDULE":
             raise PermissionError("Explicit SCHEDULE required")
         return brain_scheduler.create_schedule(

@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from agentforge import analytics_store, brain_store, growth_store, task_history
+from agentforge import analytics_store, brain_planner, brain_scheduler, brain_store, growth_store, task_history
 from agentforge import control_center_v1 as cc
 from agentforge import ops_daemon
 
@@ -214,10 +214,9 @@ class TestControlCenterV1(unittest.TestCase):
         c, created, _ = self.campaign()
         self.assertEqual(c, 200)
         self.assertEqual(created["status"], "CREATED")
-        code, goal, _ = self.req("POST", "/api/goals/propose", {
-            "ack": "PROPOSE", "title": "Review local growth",
-            "template": "growth.review", "inputs": {"campaign": "nem-pilot"}})
-        self.assertEqual(code, 200)
+        goal = brain_planner.propose(
+            "Review archived local growth", "growth.review",
+            {"campaign": "nem-pilot"}, db_path=self.brain)
         self.assertEqual(goal["status"], "PLANNED")
         self.assertEqual(goal["step_count"], 3)
         self.assertFalse(self.taskdb.exists())
@@ -246,65 +245,28 @@ class TestControlCenterV1(unittest.TestCase):
         self.assertEqual(task["status"], "SUCCEEDED")
         self.assertNotIn("request", task)
 
-    def test_http_grants_cannot_authorize_later_steps(self):
+    def test_retired_media_v15_goal_cannot_start_even_with_extra_grants(self):
         self.login()
         self.server.allow_external_actions = True
-        code, goal, _ = self.req("POST", "/api/goals/propose", {
-            "ack": "PROPOSE", "title": "Make a video", "template": "media.produce",
-            "inputs": {"slug": "nem-s2", "title": "Tu van nem", "scenes": [
-                {"headline": "Nệm phù hợp", "caption": "Tư vấn theo nhu cầu.", "duration_seconds": 3},
-                {"headline": "Liên hệ", "caption": "Trao đổi với cửa hàng.", "duration_seconds": 3},
-            ]},
-            "max_external_runs": 1,
-        })
-        self.assertEqual(code, 200)
-        path = "/api/goals/" + goal["goal_id"]
-        approval = {"plan_sha256": goal["plan_sha256"]}
-        self.assertEqual(self.req("POST", path + "/approve", {**approval, "ack": "APPROVE"})[0], 200)
-        external = {"ack_external": "AUTHORIZE_EXTERNAL_TOOLS", "confirm_external_run": True}
-        with ExitStack() as stack:
-            compose = stack.enter_context(patch("agentforge.media_assets.make_assets", return_value={
-                "run_id": "a" * 32, "project_slug": "nem-s2",
-                "status": "ASSETS_READY", "video_rendered": False,
-            }))
-            stack.enter_context(patch("agentforge.media_quality.check", return_value={
-                "run_id": "a" * 32, "status": "ASSETS_PASS",
-                "failures": 0, "warnings": 0, "findings": [],
-            }))
-            render = stack.enter_context(patch("agentforge.media_render.render_video", return_value={
-                "run_id": "a" * 32, "status": "VIDEO_RENDERED",
-                "video_path": "offline.mp4", "quality_status": "VIDEO_PASS",
-            }))
-            code, denied, _ = self.req("POST", path + "/run", {
-                **approval, **external, "ack": "RUN", "grants": ["workspace.write", "process.run"],
-            })
-            self.assertEqual(code, 400)
-            self.assertIn("current step", denied["message"])
+        request = {"ack": "PROPOSE", "title": "Retired media workflow",
+                   "template": "media.produce", "inputs": {
+                       "slug": "old-video", "title": "Old media",
+                       "scenes": []}, "max_external_runs": 1}
+        with patch("agentforge.media_assets.make_assets") as compose, \
+             patch("agentforge.media_render.render_video") as render:
+            status, _, _ = self.req("POST", "/api/goals/propose", request)
+            self.assertEqual(status, 400)
             compose.assert_not_called()
-            self.assertFalse(self.taskdb.exists())
-            code, waiting, _ = self.req("POST", path + "/run", {
-                **approval, "ack": "RUN", "grants": ["workspace.write"],
-            })
-            self.assertEqual((code, waiting["status"], waiting["waiting_step"]),
-                             (200, "WAITING_APPROVAL", 2))
-            self.assertIn("workspace.write", waiting["missing"])
             render.assert_not_called()
-            detail = self.req("GET", path)[1]
-            code, final, _ = self.req("POST", path + "/resume", {
-                **approval, **external, "ack": "RESUME", "goal_updated_at": detail["updated_at"],
-                "grants": ["workspace.write", "process.run"],
-            })
-            self.assertEqual((code, final["status"]), (200, "SUCCEEDED"))
-            render.assert_called_once_with("a" * 32, confirm_external_run=True)
+        self.assertFalse(self.brain.exists())
+        self.assertFalse(self.taskdb.exists())
 
     def test_concurrent_initial_run_creates_only_one_parent(self):
         self.login()
         self.assertEqual(self.campaign()[0], 200)
-        code, goal, _ = self.req("POST", "/api/goals/propose", {
-            "ack": "PROPOSE", "title": "Review growth", "template": "growth.review",
-            "inputs": {"campaign": "nem-pilot"},
-        })
-        self.assertEqual(code, 200)
+        goal = brain_planner.propose(
+            "Review archived growth", "growth.review",
+            {"campaign": "nem-pilot"}, db_path=self.brain)
         path = "/api/goals/" + goal["goal_id"]
         approval = {"plan_sha256": goal["plan_sha256"]}
         self.assertEqual(self.req("POST", path + "/approve", {**approval, "ack": "APPROVE"})[0], 200)
@@ -330,11 +292,9 @@ class TestControlCenterV1(unittest.TestCase):
     def test_task_database_start_failure_interrupts_goal(self):
         self.login()
         self.assertEqual(self.campaign()[0], 200)
-        code, goal, _ = self.req("POST", "/api/goals/propose", {
-            "ack": "PROPOSE", "title": "Review growth", "template": "growth.review",
-            "inputs": {"campaign": "nem-pilot"},
-        })
-        self.assertEqual(code, 200)
+        goal = brain_planner.propose(
+            "Review archived growth", "growth.review",
+            {"campaign": "nem-pilot"}, db_path=self.brain)
         path = "/api/goals/" + goal["goal_id"]
         approval = {"plan_sha256": goal["plan_sha256"]}
         self.assertEqual(self.req("POST", path + "/approve", {**approval, "ack": "APPROVE"})[0], 200)
@@ -413,11 +373,10 @@ class TestControlCenterV1(unittest.TestCase):
         self.login()
         self.campaign()
         due=(datetime.now(timezone.utc)+timedelta(hours=1)).isoformat()
-        code, created, _ = self.req("POST", "/api/schedules/create", {
-            "ack":"SCHEDULE", "title":"Periodic growth review",
-            "template":"growth.review", "inputs":{"campaign":"nem-pilot"},
-            "frequency_minutes":60, "next_due":due})
-        self.assertEqual(code,200)
+        created = brain_scheduler.create_schedule(
+            "Periodic archived growth review", "growth.review",
+            {"campaign": "nem-pilot"}, due, 60,
+            confirm_schedule=True, db_path=self.brain)
         self.assertEqual(created["status"],"ACTIVE")
         code, _, _ = self.req("POST", "/api/schedules/create", {
             "ack":"SCHEDULE", "title":"Dangerous browser schedule",

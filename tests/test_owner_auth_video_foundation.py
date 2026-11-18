@@ -84,6 +84,25 @@ class OwnerAuthVideoFoundationTests(unittest.TestCase):
             with self.subTest(route=route):
                 self.assertEqual(self.request("GET", route)[0], 404)
 
+    def test_retired_goal_and_campaign_entrypoints_do_not_create_state(self):
+        status, login, headers = self.request("POST", "/api/login", {"code": self.code})
+        self.assertEqual(status, 200)
+        self.cookie = headers["Set-Cookie"].split(";", 1)[0]
+        self.csrf = login["csrf"]
+        for path, data in (
+            ("/api/goals/propose", {"ack": "PROPOSE", "title": "Old website",
+                                    "template": "website.draft", "inputs": {}}),
+            ("/api/goals/preflight", {"ack": "PREFLIGHT",
+                                      "template": "growth.review", "inputs": {}}),
+            ("/api/schedules/create", {"ack": "SCHEDULE", "title": "Legacy",
+                                        "template": "media.produce", "inputs": {}}),
+            ("/api/campaigns/create", {"ack": "CREATE_CAMPAIGN", "data": {}}),
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(self.request("POST", path, data)[0], 400)
+        self.assertFalse(self.brain.exists())
+        self.assertFalse(self.tasks.exists())
+
     def test_film_inventory_requires_authentication(self):
         self.assertEqual(self.request("GET", "/api/film/productions")[0], 401)
         self.assertEqual(self.request("GET", "/api/characters")[0], 401)
