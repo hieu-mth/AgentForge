@@ -11,7 +11,7 @@ export function Projects() {
   const rows = resource.data?.projects || [];
   return <Space direction="vertical" size="large" style={{width:'100%'}}>
     <Alert type="info" showIcon message="Kho dự án video local"
-      description="Film Studio là hướng sản xuất mới. Video V1.5 chỉ hiển thị lịch sử; không tự chuyển đổi, đăng tải hoặc xóa dữ liệu. Trạng thái kỹ thuật không xác nhận chất lượng hình ảnh."/>
+      description="Film Studio là hướng sản xuất mới. Dữ liệu lịch sử không được tự động chuyển đổi hoặc đăng tải. Trạng thái kỹ thuật không xác nhận chất lượng hình ảnh."/>
     <Card title="Dự án & tập phim" extra={<Button icon={<ReloadOutlined/>}
       onClick={resource.reload} loading={resource.loading}>Làm mới</Button>}>
       <ResourceStatus resource={resource} label="danh sách dự án video"/>
