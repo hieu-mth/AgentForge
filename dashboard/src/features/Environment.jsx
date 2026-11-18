@@ -43,7 +43,7 @@ export function Environment({onNavigate}) {
     {snapshot && <>
       <Card title="Phần mềm và runtime">
         <Table size="small" pagination={false} rowKey={r=>r.id+':'+(r.endpoint||'')} scroll={{x:520}}
-          dataSource={[...snapshot.software,...snapshot.services,{id:'Browser QA',...snapshot.browser_qa}]}
+          dataSource={[...snapshot.software,...snapshot.services]}
           columns={[
             {title:'Runtime', dataIndex:'id'},
             statusColumn,
