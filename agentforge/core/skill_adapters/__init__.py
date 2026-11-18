@@ -3,9 +3,9 @@
 Adding a skill requires a reviewed code policy and explicit handler in one domain
 adapter, plus its validated TOML manifest. Dispatch never trusts a path from TOML.
 """
-from . import analytics, filesystem, growth, media, research, web
+from . import analytics, filesystem, media, research, web
 
-_ADAPTERS = (web, research, media, analytics, growth, filesystem)
+_ADAPTERS = (web, research, media, analytics, filesystem)
 POLICY = {}
 _HANDLERS = {}
 for _module in _ADAPTERS:

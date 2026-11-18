@@ -6,14 +6,14 @@ from unittest.mock import patch
 
 from agentforge import skill_registry, skill_runner
 from agentforge.core import skill_adapters
-from agentforge.core.skill_adapters import analytics, filesystem, growth, media, research, web
+from agentforge.core.skill_adapters import analytics, filesystem, media, research, web
 
 
 class DomainSkillAdapterTests(unittest.TestCase):
     def test_all_manifests_have_exactly_one_reviewed_code_policy(self):
         registry = skill_registry.load_registry()
         self.assertEqual(set(registry), set(skill_adapters.POLICY))
-        modules = (web, research, media, analytics, growth, filesystem)
+        modules = (web, research, media, analytics, filesystem)
         self.assertEqual(sum(len(module.POLICY) for module in modules), len(registry))
         for skill_id, contract in registry.items():
             with self.subTest(skill_id=skill_id):
@@ -23,11 +23,15 @@ class DomainSkillAdapterTests(unittest.TestCase):
                 self.assertEqual(permissions, frozenset(contract["required_permissions"]))
                 self.assertIs(skill_runner.POLICY, skill_adapters.POLICY)
 
-    def test_unknown_adapter_refused_before_import_or_execution(self):
+    def test_unknown_and_retired_growth_adapters_refused_before_execution(self):
         with patch("agentforge.product_builder.propose") as model:
             with self.assertRaisesRegex(PermissionError, "No trusted adapter"):
                 skill_adapters.dispatch("fake.execute", {"brief": "untrusted"})
             model.assert_not_called()
+        for ident in ("growth.campaign_create", "growth.bundle_prepare", "growth.record_event",
+                      "growth.report", "growth.quality_check", "growth.reconcile"):
+            with self.subTest(ident=ident), self.assertRaises(PermissionError):
+                skill_adapters.dispatch(ident, {"campaign": "archived"})
 
     def test_web_proposal_revision_kwargs_are_preserved(self):
         payload = {"slug": "site", "brief": "new", "source_proposal_id": "prior",
@@ -59,15 +63,12 @@ class DomainSkillAdapterTests(unittest.TestCase):
             skill_adapters.dispatch("media.video_render", {"run_id": "run"})
             mock.assert_called_once_with("run", confirm_external_run=True)
 
-    def test_analytics_and_growth_still_route_to_named_functions(self):
+    def test_analytics_still_routes_to_named_functions(self):
         with patch("agentforge.analytics_insights.finance_report", return_value={"ok": 1}) as finance:
             self.assertEqual(skill_adapters.dispatch("analytics.finance_report",
                              {"dataset": "demo", "campaign": "c"}), {"ok": 1})
             finance.assert_called_once_with("demo", campaign="c")
-        with patch("agentforge.growth_reports.report", return_value={"ok": 2}) as report:
-            self.assertEqual(skill_adapters.dispatch("growth.report",
-                             {"campaign": "c"}), {"ok": 2})
-            report.assert_called_once_with("c")
+
 
 
 if __name__ == "__main__":

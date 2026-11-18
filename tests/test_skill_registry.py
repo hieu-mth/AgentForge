@@ -39,8 +39,6 @@ class TestSkillRegistry(unittest.TestCase):
             "analytics.import", "analytics.quality_check", "analytics.content_report",
             "analytics.trend_report", "analytics.experiment_report",
             "analytics.finance_report", "analytics.opportunity_score",
-            "growth.campaign_create", "growth.bundle_prepare", "growth.record_event",
-            "growth.report", "growth.quality_check", "growth.reconcile",
         })
         for contract in registry.values():
             self.assertEqual(contract["schema_version"], 1)
@@ -133,7 +131,7 @@ class TestSkillRegistry(unittest.TestCase):
               patch("subprocess.run") as shell,
               patch("urllib.request.urlopen") as network):
             registry = skills.load_registry(root=self.root)
-            self.assertEqual(len(registry), 36)
+            self.assertEqual(len(registry), 30)
             model.assert_not_called()
             shell.assert_not_called()
             network.assert_not_called()

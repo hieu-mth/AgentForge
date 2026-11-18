@@ -1,8 +1,6 @@
 # Python module catalog — tracked source snapshot
 
-Đây là inventory file Python thực tế dưới `agentforge/`, **không phải cam kết runtime API hoặc production readiness**. Mọi thay đổi cần cập nhật ở đây; không đọc hay sửa dữ liệu Owner trong `data/`/`workspace/`.
-
-Tổng số: **174 module Python**.
+Tổng số **173 Python modules** dưới `agentforge/` tại commit Phase 3. Catalog là inventory, không phải chứng nhận tất cả module đều được runtime hỗ trợ. Không đọc/xóa `data/`, `workspace/`, .env hoặc model weights trong cleanup.
 
 - `__init__.py`
 - `__main__.py`
@@ -57,7 +55,6 @@ Tổng số: **174 module Python**.
 - `core/skill_adapters/__init__.py`
 - `core/skill_adapters/analytics.py`
 - `core/skill_adapters/filesystem.py`
-- `core/skill_adapters/growth.py`
 - `core/skill_adapters/media.py`
 - `core/skill_adapters/research.py`
 - `core/skill_adapters/web.py`
