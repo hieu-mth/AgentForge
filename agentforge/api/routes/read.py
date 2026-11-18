@@ -1,23 +1,7 @@
-"""Authenticated read-only API routing; no new public endpoints."""
-from agentforge import analytics_store, brain_runner, brain_store
-from agentforge import task_history
-from agentforge.core import artifact_acceptance
-from agentforge.api.routes.bootstrap import _public_task, _summary
+"""Authenticated Video Studio read API; no legacy Goal or business handlers."""
 
 
 def dispatch(self, route):
-    if route.startswith("/api/artifacts/reports/"):
-        ident = route.removeprefix("/api/artifacts/reports/")
-        task = task_history.get_task(ident, db_path=self.server.task_db_path)
-        result = task["result"]
-        if not isinstance(result, dict):
-            raise ValueError("Report receipt unavailable")
-        sha = result.get("sha256")
-        doc, _ = artifact_acceptance.source(ident, sha, "reports", db_path=self.server.task_db_path)
-        acceptance = artifact_acceptance.inspect(ident, sha, "reports", db_path=self.server.task_db_path)
-        self._session().setdefault("reviewed_reports", {})[ident] = sha
-        return self._reply(200, {**doc, "proposal_id": ident,
-                                 "artifact_acceptance": acceptance})
     if route == "/api/characters":
         from agentforge.features.film_studio.characters import list_characters
         return self._reply(200, list_characters())
@@ -25,8 +9,6 @@ def dispatch(self, route):
         session = self._session()
         return self._reply(200, {
             "status": "AUTHENTICATED", "csrf": session["csrf"]})
-    if route == "/api/bootstrap":
-        return self._reply(200, _summary(self.server))
     if route == "/api/publishing":
         from agentforge.features.film_studio.publishing import summary
         return self._reply(200, summary())
@@ -108,62 +90,12 @@ def dispatch(self, route):
     if route == "/api/model-hub":
         from agentforge.ai.model_hub import catalog
         return self._reply(200, catalog())
-    if route == "/api/model/health":
-        from agentforge.model_health import check
-        return self._reply(200, check())
-    if route == "/api/retention/inventory":
-        from agentforge.storage import retention
-        return self._reply(200, retention.inventory())
-    if route == "/api/retention/backups":
-        from agentforge.storage import retention
-        return self._reply(200, retention.list_backups())
-    if route.startswith("/api/retention/inspect/"):
-        from agentforge.storage import retention
-        pieces = route.split("/")
-        if len(pieces) != 6 or pieces[1:4] != ["api", "retention", "inspect"]:
-            raise ValueError("Invalid artifact inspection route")
-        inspected = retention.inspect(pieces[4], pieces[5])
-        session = self._session()
-        session.setdefault("inspected_artifacts", {})[(pieces[4], pieces[5])] = inspected["tree_sha256"]
-        return self._reply(200, inspected)
-    if route.startswith("/api/retention/verify/"):
-        from agentforge.storage import retention
-        pieces = route.split("/")
-        if len(pieces) != 5 or pieces[1:4] != ["api", "retention", "verify"]:
-            raise ValueError("Invalid backup verification route")
-        verified = retention.verify(pieces[4])
-        session = self._session()
-        session.setdefault("verified_artifact_backups", {})[pieces[4]] = verified["tree_sha256"]
-        return self._reply(200, verified)
-    if route == "/api/artifacts":
-        from agentforge.artifact_catalog import report
-        return self._reply(200, report())
-    if route == "/api/workforce":
-        from agentforge.ai.workforce import inspect
-        return self._reply(200, inspect(brain_db_path=self.server.brain_db_path,
-                                        task_db_path=self.server.task_db_path))
     if route == "/api/ops/discovery":
         from agentforge.ops.discovery import inspect
         return self._reply(200, inspect())
     if route == "/api/ops/preflight":
         from agentforge.ops.preflight import inspect
         return self._reply(200, inspect())
-    if route == "/api/ops/acceptance":
-        from agentforge.ops.base_acceptance import inspect
-        return self._reply(200, inspect())
-    if route == "/api/ops/health":
-        from agentforge import ops_doctor
-        source_paths = {
-            "S1 tasks": self.server.task_db_path or task_history.DEFAULT_DB,
-            "S3 analytics": self.server.analytics_db_path or analytics_store.DB,
-            "S4 goals": self.server.brain_db_path or brain_store.DB,
-        }
-        return self._reply(200, ops_doctor.inspect(
-            paths=source_paths, task_db=self.server.task_db_path,
-            brain_db=self.server.brain_db_path))
-    if route == "/api/memory":
-        return self._reply(200, brain_store.list_memory(
-            db_path=self.server.brain_db_path))
     if route == "/api/visuals/jobs":
         from agentforge.features.media import visual_jobs
         return self._reply(200, visual_jobs.report())
@@ -192,21 +124,4 @@ def dispatch(self, route):
         return self._reply(200, {"images": images[:80],
                                  "generation_started": False,
                                  "require_distinct_images": True})
-    if route.startswith("/api/goals/") and route.endswith("/capabilities"):
-        from agentforge.ai.model_health import inspect_goal_step
-        ident = route.removeprefix("/api/goals/").removesuffix("/capabilities")
-        goal = brain_store.get_goal(ident, db_path=self.server.brain_db_path)
-        return self._reply(200, inspect_goal_step(goal))
-    if route.startswith("/api/goals/"):
-        ident = route.removeprefix("/api/goals/")
-        return self._reply(200, brain_runner.inspect(
-            ident, brain_db_path=self.server.brain_db_path, task_db_path=self.server.task_db_path))
-    if route.startswith("/api/tasks/"):
-        ident = route.removeprefix("/api/tasks/")
-        task = task_history.get_task(ident, db_path=self.server.task_db_path)
-        return self._reply(200, {
-            **_public_task(task, db_path=self.server.task_db_path),
-            "storyboard_source_sha": None,
-            "events": [{"at": x["at"], "name": x["name"]}
-                       for x in task["events"]]})
     return self._blocked(404, "not_found")

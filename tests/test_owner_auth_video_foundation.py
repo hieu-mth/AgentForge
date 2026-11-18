@@ -15,13 +15,8 @@ class OwnerAuthVideoFoundationTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         root = Path(temp.name)
         self.code = "owner-video-foundation-test-secret"
-        self.server = create_server(
-            0, owner_code=self.code,
-            task_db_path=root / "tasks.sqlite3",
-            brain_db_path=root / "brain.sqlite3",
-            analytics_db_path=root / "analytics.sqlite3",
-            growth_db_path=root / "growth.sqlite3",
-        )
+        self.root = root
+        self.server = create_server(0, owner_code=self.code)
         thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         thread.start()
         self.addCleanup(thread.join, 3)
@@ -100,8 +95,7 @@ class OwnerAuthVideoFoundationTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 self.assertEqual(self.request("POST", path, data)[0], 400)
-        self.assertFalse(self.server.brain_db_path.exists())
-        self.assertFalse(self.server.task_db_path.exists())
+        self.assertEqual(list(self.root.iterdir()), [])
 
     def test_composite_cannot_wrap_retired_website_step(self):
         status, login, headers = self.request("POST", "/api/login", {"code": self.code})
@@ -116,8 +110,8 @@ class OwnerAuthVideoFoundationTests(unittest.TestCase):
                 ]}}
         status, reply, _ = self.request("POST", "/api/goals/propose", body)
         self.assertEqual(status, 400)
-        self.assertIn("RETIRED_GOAL_TEMPLATE", reply["message"])
-        self.assertFalse(self.server.brain_db_path.exists())
+        self.assertIn("Unknown mutation route", reply["message"])
+        self.assertEqual(list(self.root.iterdir()), [])
 
     def test_film_inventory_requires_authentication(self):
         self.assertEqual(self.request("GET", "/api/film/productions")[0], 401)

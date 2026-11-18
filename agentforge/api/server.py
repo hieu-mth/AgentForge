@@ -125,7 +125,7 @@ class _Handler(BaseHTTPRequestHandler):
             except (ValueError, FileNotFoundError, OSError):
                 return self._blocked(404, "react_dashboard_not_built_or_invalid_asset")
         if route == "/":
-            # One canonical frontend: redirect legacy bookmarks without serving old UI.
+            # The root path redirects to the canonical React app.
             return self._reply(302, "", mime="text/plain; charset=utf-8",
                                headers=(("Location", "/dashboard/"),))
         if route in ("/app.css", "/app.js", "/app.html"):
@@ -200,9 +200,7 @@ class _Handler(BaseHTTPRequestHandler):
         return self._blocked(405, "no_cors")
 
 
-def create_server(port=8780, *, owner_code=None, allow_external_actions=False,
-                  task_db_path=None, brain_db_path=None, analytics_db_path=None,
-                  growth_db_path=None):
+def create_server(port=8780, *, owner_code=None, allow_external_actions=False):
     if type(port) is not int or not 0 <= port <= 65535:
         raise ValueError("Invalid port")
     if owner_code is not None and (
@@ -214,17 +212,13 @@ def create_server(port=8780, *, owner_code=None, allow_external_actions=False,
     server.sessions = {}
     server.failed_logins = []
     server.auth_lock = threading.RLock()
-    server.task_db_path = task_db_path
-    server.brain_db_path = brain_db_path
-    server.analytics_db_path = analytics_db_path
-    server.growth_db_path = growth_db_path
     server.allow_external_actions = allow_external_actions is True
     return server
 
 
 def main():
     cli = argparse.ArgumentParser(
-        description="Owner-authenticated localhost AgentForge Control Center V1")
+        description="Owner-authenticated localhost AgentForge Video Studio")
     cli.add_argument("--port", type=int, default=8780)
     cli.add_argument("--allow-external-tools", action="store_true",
                      help="Explicitly enable gated model/network/browser/process workflows")
