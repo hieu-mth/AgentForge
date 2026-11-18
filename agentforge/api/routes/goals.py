@@ -1,6 +1,6 @@
-"""Goals, schedules, growth campaigns and explicit memory actions."""
+"""Owner-gated goals, schedules and explicit memory actions."""
 from agentforge import brain_planner, brain_runner, brain_scheduler, brain_store
-from agentforge import goal_preflight, growth_store, skill_registry
+from agentforge import goal_preflight, skill_registry
 from agentforge.api.auth import SENSITIVE_GRANTS
 from agentforge.api.routes._shared import UNHANDLED
 
@@ -125,21 +125,6 @@ def handle(server, path, request, session=None):
             raise PermissionError("Explicit schedule status confirmation required")
         return brain_scheduler.set_schedule_status(
             pieces[3], target, confirm_write=True, db_path=server.brain_db_path)
-    if path == "/api/campaigns/create":
-        if request.get("ack") != "CREATE_CAMPAIGN":
-            raise PermissionError("Explicit CREATE_CAMPAIGN required")
-        return growth_store.create_campaign(
-            request.get("data"), confirm_write=True,
-            db_path=server.growth_db_path, analytics_db_path=server.analytics_db_path)
-    if path == "/api/campaigns/event":
-        if request.get("ack") != "RECORD_EVENT":
-            raise PermissionError("Explicit RECORD_EVENT required")
-        # Strict nested validation occurs before any storage; does not log PII.
-        growth_store.validate_event_payload(request.get("kind"),
-                                            request.get("data"))
-        return growth_store.record_event(
-            request["kind"], request["data"], confirm_write=True,
-            db_path=server.growth_db_path)
     if path == "/api/memory/set":
         if request.get("ack") != "SAVE_NOTE":
             raise PermissionError("Explicit SAVE_NOTE required")

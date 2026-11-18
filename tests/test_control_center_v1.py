@@ -84,12 +84,14 @@ class TestControlCenterV1(unittest.TestCase):
         self.assertIn("SameSite=Strict", headers["Set-Cookie"])
 
     def campaign(self):
-        return self.req("POST", "/api/campaigns/create", {
-            "ack": "CREATE_CAMPAIGN", "data": {
-                "campaign": "nem-pilot", "title": "Tư vấn nệm",
-                "analytics_dataset": "", "budget_vnd": 50000,
-                "synthetic": False,
-            }})
+        # Historical goal concurrency fixtures use an isolated Growth record.
+        # Campaign creation is no longer an Owner API capability.
+        created = growth_store.create_campaign({
+            "campaign": "nem-pilot", "title": "Tư vấn nệm",
+            "analytics_dataset": "", "budget_vnd": 50000,
+            "synthetic": False,
+        }, confirm_write=True, db_path=self.growth, analytics_db_path=self.analytics)
+        return 200, created, {}
 
     def test_react_dashboard_is_canonical_and_api_requires_session(self):
         code, _, headers = self.req("GET", "/")
@@ -139,7 +141,7 @@ class TestControlCenterV1(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertEqual(payload["stats"]["skills"], 36)
         self.assertFalse(payload["external_actions_enabled"])
-        self.assertEqual(len(payload["connectors"]), 3)
+        self.assertEqual(len(payload["connectors"]), 2)
         self.assertFalse(payload["connectors"][0]["authenticated"])
         self.assertNotIn(CODE, json.dumps(payload))
         code, out, headers = self.req("POST", "/api/logout", {})
@@ -387,23 +389,24 @@ class TestControlCenterV1(unittest.TestCase):
         self.assertEqual(brain_store.get_goal(id,db_path=self.brain)["status"],
                          "APPROVED")
 
-    def test_growth_event_pii_rejected_before_db_or_task_write(self):
+    def test_retired_campaign_event_api_fails_closed_without_storing_pii(self):
         self.login()
-        self.campaign()
-        code, _, _ = self.req("POST", "/api/campaigns/event", {
-            "ack": "RECORD_EVENT", "kind": "lead_new",
-            "data": {"campaign":"nem-pilot","channel":"website",
-                     "consent_confirmed":True, "phone":"+84123456789"}})
-        self.assertEqual(code, 400)
-        self.assertNotIn(b"+84123456789", self.growth.read_bytes())
-        code, good, _ = self.req("POST", "/api/campaigns/event", {
-            "ack":"RECORD_EVENT","kind":"lead_new",
-            "data":{"campaign":"nem-pilot","channel":"website",
-                    "consent_confirmed":True}})
-        self.assertEqual(code, 200)
-        self.assertTrue(good["personal_data_stored"] is False)
-        code, data, _ = self.req("GET", "/api/bootstrap")
-        self.assertEqual(data["growth"][0]["lead_total"],1)
+        with patch("agentforge.growth_store.record_event") as record:
+            for payload in (
+                {"ack": "RECORD_EVENT", "kind": "lead_new",
+                 "data": {"campaign": "nem-pilot", "channel": "website",
+                          "consent_confirmed": True, "phone": "+84123456789"}},
+                {"ack": "RECORD_EVENT", "kind": "lead_new",
+                 "data": {"campaign": "nem-pilot", "channel": "website",
+                          "consent_confirmed": True}},
+            ):
+                self.assertEqual(self.req("POST", "/api/campaigns/event", payload)[0], 400)
+            record.assert_not_called()
+        self.assertFalse(self.growth.exists())
+        self.assertFalse(self.taskdb.exists())
+        status, data, _ = self.req("GET", "/api/bootstrap")
+        self.assertEqual(status, 200)
+        self.assertNotIn("growth", data)
         self.assertNotIn("lead_id", json.dumps(data))
 
     def test_schedule_readonly_api_and_standing_sha(self):
