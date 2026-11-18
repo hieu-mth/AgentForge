@@ -222,19 +222,13 @@ class MediaWorkflowV15Tests(unittest.TestCase):
                                 db_path=self.db)
             invoked.assert_not_called()
 
-    def test_dashboard_prepare_api_requires_matching_owner_ack(self):
+    def test_retired_dashboard_prepare_api_does_not_touch_media(self):
         from agentforge.control_center_v1 import _owner_action
-        with patch("agentforge.media_workflow_v15.prepare",
-                   return_value={"status": "ASSETS_READY"}) as action:
-            with self.assertRaises(PermissionError):
+        with patch("agentforge.media_workflow_v15.prepare") as action:
+            with self.assertRaisesRegex(ValueError, "Unknown mutation route"):
                 _owner_action(None, "/api/media/prepare",
-                              {"ack": "wrong", "storyboard": STORY})
+                              {"ack": "PREPARE_EDITED_STORYBOARD", "storyboard": STORY})
             action.assert_not_called()
-            result = _owner_action(None, "/api/media/prepare",
-                                   {"ack": "PREPARE_EDITED_STORYBOARD",
-                                    "storyboard": STORY})
-            self.assertEqual("ASSETS_READY", result["status"])
-            self.assertTrue(action.call_args.kwargs["confirm_edit"])
 
     def test_emergency_pause_prevents_preparation_and_render(self):
         with patch("agentforge.ops_control.require_active", side_effect=PermissionError("PAUSED")):

@@ -2,7 +2,6 @@
 from agentforge import analytics_store, brain_runner, brain_store
 from agentforge import task_history
 from agentforge.core import artifact_acceptance
-from agentforge.features.websites import image_studio
 from agentforge.api.routes.bootstrap import _public_task, _summary
 
 
@@ -28,15 +27,6 @@ def dispatch(self, route):
             "status": "AUTHENTICATED", "csrf": session["csrf"]})
     if route == "/api/bootstrap":
         return self._reply(200, _summary(self.server))
-    if route.startswith("/api/image/") and route.endswith("/preview"):
-        from agentforge.asset_preview import image_for_job
-        job_id = route[len("/api/image/"):-len("/preview")]
-        content, image_type = image_for_job(job_id)
-        return self._reply(200, content, mime=image_type)
-    if route == "/api/image/health":
-        return self._reply(200, image_studio.health())
-    if route == "/api/image/jobs":
-        return self._reply(200, image_studio.report())
     if route == "/api/publishing":
         from agentforge.features.film_studio.publishing import summary
         return self._reply(200, summary())
@@ -174,65 +164,6 @@ def dispatch(self, route):
     if route == "/api/memory":
         return self._reply(200, brain_store.list_memory(
             db_path=self.server.brain_db_path))
-    if route.startswith("/api/media/") and route.endswith("/preview"):
-        from agentforge import media_workflow_v15, media_quality, media_assets
-        import re
-        parts = route.split("/")
-        if (len(parts) != 5 or parts[:3] != ["", "api", "media"]
-                or parts[4] != "preview" or
-                not re.fullmatch(r"[a-f0-9]{32}", parts[3])):
-            raise ValueError("Invalid media preview request")
-        record = media_workflow_v15._row(parts[3])
-        if record["status"] not in {"ASSETS_READY", "VIDEO_READY",
-                                     "APPROVED", "REJECTED"}:
-            raise PermissionError("Media images not ready to review")
-        _, manifest = media_workflow_v15._verify_storyboard_manifest(record)
-        qa = media_quality.check(record["run_id"])
-        if qa["status"] not in {"ASSETS_PASS", "VIDEO_PASS"} or qa["failures"]:
-            raise PermissionError("Cannot preview media that failed QA")
-        plan = media_assets.validate_visual_plan(
-            manifest.get("visual_plan"), len(manifest["scenes"]))
-        return self._reply(200, {
-            "production_id": record["production_id"],
-            "status": record["status"], "qa": qa["status"],
-            "storyboard_sha": record["storyboard_sha"],
-            "title": manifest["title"], "scene_count": len(manifest["scenes"]),
-            "scene_titles": [x["headline"] for x in manifest["scenes"]],
-            "visual_mode": plan["mode"], "motion": plan["motion"],
-            "video_rendered": record["status"] in {"VIDEO_READY", "APPROVED", "REJECTED"},
-            "frames": [f"/api/media/{parts[3]}/frame/{i:02}"
-                       for i in range(1, len(manifest["scenes"])+1)],
-        })
-    if route.startswith("/api/media/") and "/frame/" in route:
-        import re
-        from agentforge import media_workflow_v15, media_quality, media_assets
-        parts = route.split("/")
-        if (len(parts) != 6 or parts[:3] != ["", "api", "media"]
-                or parts[4] != "frame"
-                or not re.fullmatch(r"[0-9]{2}", parts[5])):
-            raise ValueError("Invalid media frame request")
-        ident, index = parts[3], int(parts[5])
-        record = media_workflow_v15._row(ident)
-        if record["status"] not in {"ASSETS_READY", "VIDEO_READY",
-                                     "APPROVED", "REJECTED"}:
-            raise PermissionError("No prepared media frame for this production")
-        folder, manifest = media_workflow_v15._verify_storyboard_manifest(record)
-        count = len(media_assets._scenes(manifest["scenes"]))
-        if not 1 <= index <= count:
-            raise ValueError("Invalid scene index")
-        qa = media_quality.check(record["run_id"])
-        if qa["status"] not in {"ASSETS_PASS", "VIDEO_PASS"} or qa["failures"]:
-            raise PermissionError("Cannot preview media that failed artifact QA")
-        name = f"scene_{index:02}.png"
-        file = folder / name
-        media_assets._safe(file)
-        if (name not in manifest["artifacts"] or not file.is_file()
-                or not 0 < file.stat().st_size <= 8_000_000
-                or media_assets._sha(file) != manifest["artifacts"][name]):
-            raise PermissionError("Scene image checksum mismatch")
-        return self._reply(200, file.read_bytes(), mime="image/png",
-                           headers=(("Cache-Control", "private, no-store"),
-                                    ("X-Content-Type-Options", "nosniff")))
     if route == "/api/visuals/jobs":
         from agentforge.features.media import visual_jobs
         return self._reply(200, visual_jobs.report())
@@ -246,99 +177,21 @@ def dispatch(self, route):
         self._session().setdefault("reviewed_visual_images", {})[parts[3]] = _row(parts[3])["asset_sha"]
         return self._reply(200, contents, mime=mime)
     if route == "/api/media/studio-images":
-        # Reuse already collected ComfyUI assets; no GPU invocation or remote
-        # fetch. Each selected job is SHA-verified again before composition.
-        rows = image_studio.report()["jobs"]
-        images = [{
-            "job_id": row["job_id"], "source": row["slug"],
-            "sha256": row["asset_sha"],
-            "preview_url": "/api/image/" + row["job_id"] + "/preview"
-        } for row in rows
-            if row.get("status") in {"ASSET_READY", "ATTACHED"}
-            and row.get("asset_name") and row.get("asset_sha")]
+        # Film Studio only: report already imported generic image/video jobs.
+        # No Website Builder DB reads, network calls, or GPU execution.
         from agentforge.features.media import visual_jobs
-        for item in visual_jobs.report()["jobs"]:
-            if item["status"] == "ASSET_READY" and item["purpose"] in {"video", "image", "website"}:
-                images.append({"job_id": item["job_id"],
-                               "source": "AI " + item["purpose"] + " · scene " + str(item["scene_index"]+1),
-                               "sha256": item["asset_sha"],
-                               "preview_url": "/api/visuals/" + item["job_id"] + "/preview"})
+        rows = visual_jobs.report()["jobs"]
+        images = [{
+            "job_id": row["job_id"], "source": "AI " + row["purpose"],
+            "sha256": row["asset_sha"],
+            "preview_url": "/api/visuals/" + row["job_id"] + "/preview",
+        } for row in rows
+            if row.get("status") == "ASSET_READY"
+            and row.get("purpose") in {"video", "image"}
+            and row.get("asset_sha")]
         return self._reply(200, {"images": images[:80],
                                  "generation_started": False,
                                  "require_distinct_images": True})
-    if route.startswith("/api/videos/") and route.endswith("/stream"):
-        from agentforge import media_workflow_v15, media_quality, media_assets
-        from agentforge.api.video_stream import InvalidVideoRange, parse_range
-        from pathlib import Path
-        ident = route.removeprefix("/api/videos/").removesuffix("/stream").rstrip("/")
-        record = media_workflow_v15._row(ident)  # validates strict ID
-        if record["status"] not in {"VIDEO_READY", "APPROVED", "REJECTED"}:
-            raise PermissionError("Video is not ready for playback")
-        folder, manifest = media_workflow_v15._verify_storyboard_manifest(record)
-        qa = media_quality.check(record["run_id"])
-        if (qa["status"] != "VIDEO_PASS" or qa["failures"]
-                or not qa["video_verified"]
-                or manifest["artifacts"].get("video.mp4") != record["video_sha"]):
-            raise PermissionError("Video digest or QA does not match")
-        if self._session().get("inspected_video", {}).get(ident) != record["video_sha"]:
-            raise PermissionError("Inspect exact production SHA before playback")
-        source = Path(folder) / "video.mp4"
-        media_assets._safe(source)
-        if not source.is_file() or not 0 < source.stat().st_size <= 512 * 1024 * 1024:
-            raise ValueError("MP4 missing or oversized")
-        try:
-            parse_range(self.headers.get("Range"), source.stat().st_size)
-        except InvalidVideoRange:
-            return self._reply(416, b"", mime="text/plain",
-                               headers=(("Content-Range", f"bytes */{source.stat().st_size}"),
-                                        ("Accept-Ranges", "bytes")))
-        return self._stream_video(source)
-    if route.startswith("/api/videos/"):
-        from agentforge import media_workflow_v15, media_quality
-        ident = route.removeprefix("/api/videos/")
-        record = media_workflow_v15._row(ident)
-        if record["status"] not in {"VIDEO_READY", "APPROVED", "REJECTED"}:
-            raise PermissionError("Only completed MP4 can be reviewed")
-        _, manifest = media_workflow_v15._verify_storyboard_manifest(record)
-        qa = media_quality.check(record["run_id"])
-        if (qa["status"] != "VIDEO_PASS" or qa["failures"] or
-                not qa["video_verified"] or
-                manifest["artifacts"].get("video.mp4") != record["video_sha"]):
-            raise PermissionError("MP4 integrity/quality is not verified")
-        self._session().setdefault("inspected_video", {})[ident] = record["video_sha"]
-        return self._reply(200, {
-            "production_id": ident, "run_id": record["run_id"],
-            "status": record["status"],
-            "video_sha": record["video_sha"], "quality": qa["status"],
-            "relative_path": "workspace/media/" + record["run_id"] + "/video.mp4",
-            "stream_url": "/api/videos/" + ident + "/stream",
-            "published": False, "review_requires_playback": True})
-    if route.startswith("/api/drafts/"):
-        from agentforge import quality_v14
-        ident = route.removeprefix("/api/drafts/")
-        brain_store._id(ident)
-        found = next((item for item in quality_v14.inbox()["reviews"]
-                      if item["job_id"] == ident), None)
-        if found is None:
-            raise KeyError("Draft not found")
-        task = task_history.get_task(found["task_id"], db_path=self.server.task_db_path)
-        if (task.get("status") != "SUCCEEDED" or
-                task.get("skill_id") != "media.copy_draft" or
-                found["skill_id"] != "media.copy_draft"):
-            raise PermissionError("Only bounded storyboard drafts can be inspected")
-        result = task.get("result")
-        if (not isinstance(result, dict) or
-                len(quality_v14._canonical(result).encode("utf-8")) > 65000 or
-                quality_v14._sha(result) != found["output_sha"]):
-            raise PermissionError("Storyboard result digest mismatch")
-        # Read-only review: model data displayed as text, never executed.
-        session = self._session()
-        session.setdefault("reviewed_ai_drafts", {})[ident] = found["output_sha"]
-        return self._reply(200, {
-            "job_id": ident, "output_sha": found["output_sha"],
-            "quality": found["quality"], "decision": found["decision"],
-            "task": _public_task(task),
-            "storyboard": result})
     if route.startswith("/api/goals/") and route.endswith("/capabilities"):
         from agentforge.ai.model_health import inspect_goal_step
         ident = route.removeprefix("/api/goals/").removesuffix("/capabilities")
@@ -351,26 +204,9 @@ def dispatch(self, route):
     if route.startswith("/api/tasks/"):
         ident = route.removeprefix("/api/tasks/")
         task = task_history.get_task(ident, db_path=self.server.task_db_path)
-        storyboard_source_sha = None
-        if task.get("status") == "SUCCEEDED" and task.get("skill_id") == "media.copy_draft":
-            # Exact task result is shown to the Owner, not silently applied.
-            # Bind the later prepare action to this inspected result digest.
-            from agentforge import quality_v14
-            result = task.get("result")
-            if isinstance(result, dict):
-                from agentforge.media_assets import _text, _scenes
-                try:
-                    if set(result) == {"title", "scenes", "status",
-                                       "review_required", "verified_claims"}:
-                        _text(result["title"], "title", 88)
-                        _scenes(result["scenes"])
-                        storyboard_source_sha = quality_v14._sha(result)
-                        self._session().setdefault("inspected_storyboard_tasks", {})[ident] = storyboard_source_sha
-                except (ValueError, KeyError, TypeError):
-                    pass
         return self._reply(200, {
             **_public_task(task, db_path=self.server.task_db_path),
-            "storyboard_source_sha": storyboard_source_sha,
+            "storyboard_source_sha": None,
             "events": [{"at": x["at"], "name": x["name"]}
                        for x in task["events"]]})
     return self._blocked(404, "not_found")

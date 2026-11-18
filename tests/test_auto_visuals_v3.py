@@ -127,33 +127,16 @@ class AutoVisualV3Tests(unittest.TestCase):
             req.assert_not_called()
         self.assertFalse(self.db.exists())
 
-    def test_video_generation_requires_inspected_task_sha_and_external_mode(self):
-        ident="b"*32
-        sha=quality_v14._sha(STORY)
-        server=SimpleNamespace(allow_external_actions=True, task_db_path=None)
-        req={"ack":"GENERATE_STORYBOARD_VISUALS", "task_id":ident,
-             "source_sha":sha, "checkpoint":self.checkpoint}
-        with patch("agentforge.task_history.get_task", return_value={
-            "skill_id":"media.copy_draft", "status":"SUCCEEDED", "result":STORY,
-        }), patch("agentforge.features.media.visual_jobs.submit",
-                 return_value={"status":"SUBMITTED"}) as submit:
-            with self.assertRaises(PermissionError):
-                media_routes.handle(server, "/api/visuals/generate-for-task", req, session={})
-            out=media_routes.handle(
-                server, "/api/visuals/generate-for-task", req,
-                session={"inspected_storyboard_tasks":{ident:sha}})
-            self.assertEqual(out["status"], "SUBMITTED")
-            args,kwargs=submit.call_args
-            self.assertEqual(args[0],"video")
-            self.assertEqual(len(args[2]),2)
-            self.assertEqual(kwargs["source_sha"],sha)
-            self.assertTrue(kwargs["confirm_generation"])
-            submit.assert_called_once()
-            server.allow_external_actions=False
-            with self.assertRaises(PermissionError):
-                media_routes.handle(
-                    server, "/api/visuals/generate-for-task", req,
-                    session={"inspected_storyboard_tasks":{ident:sha}})
+    def test_retired_task_visual_api_is_not_dispatched(self):
+        from agentforge.api.routes._shared import UNHANDLED
+        server = SimpleNamespace(allow_external_actions=True, task_db_path=None)
+        request = {"ack": "GENERATE_STORYBOARD_VISUALS", "task_id": "b"*32,
+                   "source_sha": "a"*64, "checkpoint": self.checkpoint}
+        with patch("agentforge.features.media.visual_jobs.submit") as submit:
+            self.assertIs(
+                media_routes.handle(server, "/api/visuals/generate-for-task",
+                                    request, session={}), UNHANDLED)
+            submit.assert_not_called()
 
 
 if __name__ == "__main__":

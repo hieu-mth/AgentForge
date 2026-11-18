@@ -353,7 +353,7 @@ class TestControlCenterV1(unittest.TestCase):
     def test_dashboard_read_routes_return_authenticated_json(self):
         self.login()
         for path, shape in (
-            ("/api/image/jobs", dict), ("/api/ops/health", dict), ("/api/memory", list),
+            ("/api/visuals/jobs", dict), ("/api/ops/health", dict), ("/api/memory", list),
         ):
             with self.subTest(path=path):
                 code, output, _ = self.req("GET", path)

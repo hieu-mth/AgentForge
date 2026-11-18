@@ -57,46 +57,16 @@ class V2CompanyTests(unittest.TestCase):
                     "ack": "SET_DAILY_MODEL_POLICY", "enabled": False, "daily_cap": 0})
             configure.assert_not_called()
 
-    def test_ai_draft_approval_requires_reviewed_sha(self):
-        with patch("agentforge.quality_v14.decide", return_value={
-            "decision": "APPROVED"
-        }) as decide:
-            base = {"ack": "REVIEW_APPROVE", "decision": "APPROVE",
-                    "output_sha": "a" * 64}
-            with self.assertRaises(PermissionError):
-                _owner_action(None, "/api/drafts/" + "b" * 32 + "/decide",
-                              base, session={})
-            decide.assert_not_called()
-            session = {"reviewed_ai_drafts": {"b" * 32: "a" * 64}}
-            result = _owner_action(
-                None, "/api/drafts/" + "b" * 32 + "/decide",
-                base, session=session)
-            self.assertEqual("APPROVED", result["decision"])
-            decide.assert_called_once_with("b" * 32, "APPROVE", "a" * 64,
-                                           confirm=True)
-
-    def test_video_approval_requires_prior_inspection_and_watched_ack(self):
-        vid = "b" * 32
-        sha = "c" * 64
-        route = "/api/videos/" + vid + "/decide"
-        data = {"ack": "VIDEO_APPROVE", "decision": "APPROVE",
-                "video_sha": sha, "watched_local_file": True}
-        with patch("agentforge.media_workflow_v15.decide", return_value={
-            "decision": "APPROVED", "published": False
-        }) as decide:
-            with self.assertRaises(PermissionError):
-                _owner_action(None, route, data, session={})
-            with self.assertRaises(PermissionError):
-                _owner_action(None, route, {**data, "watched_local_file": False},
-                              session={"inspected_video": {vid: sha}})
-            with self.assertRaises(PermissionError):
-                _owner_action(None, route, {**data, "video_sha": "d" * 64},
-                              session={"inspected_video": {vid: sha}})
-            result = _owner_action(None, route, data,
-                                   session={"inspected_video": {vid: sha}})
-            self.assertFalse(result["published"])
-            decide.assert_called_once_with(vid, "APPROVE", sha,
-                                           confirm_review=True)
+    def test_retired_draft_and_media_v15_approvals_are_not_dispatched(self):
+        with patch("agentforge.quality_v14.decide") as draft, \
+             patch("agentforge.media_workflow_v15.decide") as video:
+            for path in ("/api/drafts/" + "b"*32 + "/decide",
+                         "/api/videos/" + "b"*32 + "/decide"):
+                with self.subTest(path=path), self.assertRaisesRegex(
+                        ValueError, "Unknown mutation route"):
+                    _owner_action(None, path, {"ack": "APPROVE"}, session={})
+            draft.assert_not_called()
+            video.assert_not_called()
 
     def test_no_unrestricted_publish_route(self):
         with self.assertRaises(ValueError):
