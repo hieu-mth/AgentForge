@@ -266,6 +266,13 @@ class Wave10PublishingHttpTests(unittest.TestCase):
             "youtube_video_id":None,"title":"Owner release",
         }
 
+    def test_campaign_linkage_is_retired_without_accessing_growth(self):
+        from agentforge.features.film_studio.publishing import PublishingError, _validated_payload
+        with patch("agentforge.features.growth.store.campaign_info") as db_reader:
+            with self.assertRaisesRegex(PublishingError, "no longer supported"):
+                _validated_payload({**METADATA, "campaign": "legacy-demo"})
+            db_reader.assert_not_called()
+
     def test_authenticated_reviewed_sha_and_csrf_are_required(self):
         from agentforge.features.film_studio import production
         detail="/api/film/productions/"+self.slug+"/"+self.episode

@@ -17,8 +17,7 @@ def handle(server, path, request, session=None):
         return publishing.prepare(
             film_slug=request["film_slug"], episode_id=request["episode_id"],
             episode_sha=request["episode_sha"], render_sha=request["render_sha"],
-            metadata=request["metadata"], confirmed=True,
-            growth_db_path=server.growth_db_path)
+            metadata=request["metadata"], confirmed=True)
     if path.startswith("/api/publishing/") and path.endswith("/attest"):
         parts = path.split("/")
         if len(parts) != 5:

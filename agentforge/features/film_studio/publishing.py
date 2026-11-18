@@ -136,10 +136,12 @@ def _validated_payload(payload):
             raise PublishingError("Media disclosures/Owner review must be explicit booleans")
     if not payload["rights_attested"] or not payload["owner_watched"]:
         raise PermissionError("Owner must watch film and attest media rights before handoff")
+    # Historical release receipts retain a nullable campaign key for SHA
+    # compatibility, but new Film Studio handoffs cannot attach Growth records.
+    # Reject rather than silently accepting an unchecked business campaign.
     campaign = payload["campaign"]
     if campaign is not None:
-        from agentforge.features.growth import store
-        store._identifier(campaign, store.CAMPAIGN, "campaign")
+        raise PublishingError("Business campaign linkage is no longer supported")
     return {
         "title": title, "description": description,
         "synthetic_media": payload["synthetic_media"],
@@ -156,7 +158,7 @@ def _validated_payload(payload):
 
 def prepare(*, film_slug, episode_id, episode_sha, render_sha,
             metadata, confirmed=False, db_path=DB, film_root=production.FILMS,
-            growth_db_path=None):
+            ):
     if confirmed is not True:
         raise PermissionError("Explicit Owner release review required")
     source = production.inspect(episode_id, film_slug, film_root=film_root)
@@ -166,11 +168,6 @@ def prepare(*, film_slug, episode_id, episode_sha, render_sha,
             or report["receipt_sha256"] != render_sha):
         raise PermissionError("Reviewed film source/receipt SHA changed")
     meta = _validated_payload(metadata)
-    if meta["campaign"] is not None:
-        from agentforge.features.growth import store
-        if store.campaign_info(meta["campaign"], db_path=growth_db_path)["synthetic"]:
-            # A demo campaign cannot be attached to a supposedly real release.
-            raise PublishingError("Synthetic campaign cannot be linked to real upload")
     body = {
         "format": RELEASE_FORMAT, "film_slug": film_slug, "episode_id": episode_id,
         "episode_sha256": episode_sha, "render_receipt_sha256": render_sha,
