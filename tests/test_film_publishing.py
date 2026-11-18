@@ -26,7 +26,7 @@ METADATA = {
 VIDEO_ID = "AbCdef123_-"
 
 
-class FilmPublishingFilmTests(unittest.TestCase):
+class FilmPublishingTests(unittest.TestCase):
     def setUp(self):
         w9 = FilmProductionTests("test_owner_gated_ffmpeg_render_and_receipt")
         w9.setUp()

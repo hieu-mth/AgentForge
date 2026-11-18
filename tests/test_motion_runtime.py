@@ -22,7 +22,7 @@ from tests.test_film_motion_comfy import template, sample_plan
 TEST_MP4 = b"\x00\x00\x00\x18ftypisom" + b"local-test-video" * 200
 
 
-class MotionRuntimeFilmMotionTests(unittest.TestCase):
+class MotionRuntimeTests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -223,7 +223,7 @@ class MotionRuntimeFilmMotionTests(unittest.TestCase):
 
 
 
-class FilmMotionMotionHttpTests(unittest.TestCase):
+class MotionHttpTests(unittest.TestCase):
     """Real localhost auth/CSRF and explicit job SHA gates, no GPU or video calls."""
 
     def setUp(self):

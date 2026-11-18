@@ -23,7 +23,7 @@ PROMPT_SHA = "c" * 64
 REFERENCE_SHA = "f" * 64
 
 
-class FilmProductionFilmTests(unittest.TestCase):
+class FilmProductionTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -388,7 +388,7 @@ class FilmProductionFilmTests(unittest.TestCase):
 
 
 
-class FilmFilmHttpTests(unittest.TestCase):
+class FilmProductionHttpTests(unittest.TestCase):
     """Authentication, reviewed manifest SHA, CSRF and external mode gates."""
 
     def setUp(self):
