@@ -38,8 +38,8 @@ class ModelHubTests(unittest.TestCase):
         self.assertEqual(0, value["revision"])
         self.assertFalse(self.db.exists())
         by_id = {v["id"]: v for v in value["routes"]}
-        self.assertEqual("ROUTED", by_id["web.create"]["status"])
-        self.assertEqual("local_primary", by_id["web.create"]["model_ref"])
+        self.assertEqual("ROUTED", by_id["research.opportunity"]["status"])
+        self.assertEqual("local_primary", by_id["research.opportunity"]["model_ref"])
         self.assertEqual("UNCONFIGURED", by_id["film.motion"]["status"])
         self.assertFalse(by_id["film.motion"]["runtime_wired"])
         self.assertEqual("DETERMINISTIC", by_id["ops.monitor"]["status"])
@@ -47,6 +47,25 @@ class ModelHubTests(unittest.TestCase):
         self.assertFalse(value["cloud_fallback"])
         self.assertFalse(value["gpu_auto_start"])
         self.assertNotIn("secret", json.dumps(value).lower())
+
+    def test_retired_routes_are_not_exposed_and_archived_owner_overlays_remain_readable(self):
+        current = model_hub.catalog()
+        retired = {"web.create", "webapp.architect", "webapp.develop",
+                   "webapp.review", "media.copy_draft", "growth.report"}
+        self.assertTrue(retired.isdisjoint({row["id"] for row in current["routes"]}))
+        self.assertFalse(self.db.exists())
+        # Simulate Owner's existing SQLite record; never delete it in cleanup.
+        with closing(model_hub._connect(self.db, create=True)) as conn, conn:
+            state = {"profiles": {}, "routes": {"web.create": "local_primary"}}
+            conn.execute("INSERT INTO hub_state(id,revision,payload) VALUES(1,1,?)",
+                         (json.dumps(state),))
+        result = model_hub.catalog()
+        self.assertEqual(1, result["revision"])
+        self.assertFalse(any(row["id"] in retired for row in result["routes"]))
+        with self.assertRaises(ValueError):
+            model_hub.change("SET_MODEL_ROUTE", expected_revision=1,
+                             task_id="web.create", model_ref="local_primary")
+        self.assertEqual(1, model_hub.catalog()["revision"])
 
     def test_profile_validation_rejects_ssrf_secrets_and_unknown_providers(self):
         bad_profiles = [
@@ -78,11 +97,11 @@ class ModelHubTests(unittest.TestCase):
         model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0,
                          profile=local_profile())
         data = model_hub.change("SET_MODEL_ROUTE", expected_revision=1,
-                                task_id="webapp.develop", model_ref="coding_local")
+                                task_id="research.opportunity", model_ref="coding_local")
         self.assertEqual(2, data["revision"])
         with patch.dict(os.environ, {"AGENTFORGE_MODEL_REF": ""}):
             with patch.object(model, "DOTENV_PATH", self.db.parent / "missing.env"):
-                runtime = model.resolve_runtime("webapp_developer", model.DEFAULT_JSON_SYSTEM)
+                runtime = model.resolve_runtime("opportunity_researcher", model.DEFAULT_JSON_SYSTEM)
         self.assertEqual("coding_local", runtime["model_ref"])
         self.assertEqual("qwen3-coder:7b", runtime["model"])
         self.assertEqual(2, runtime["routing_revision"])
@@ -100,7 +119,7 @@ class ModelHubTests(unittest.TestCase):
              "model_ref": "local_primary"},
             {"action": "SET_MODEL_ROUTE", "task_id": "film.motion",
              "model_ref": "local_primary"},
-            {"action": "SET_MODEL_ROUTE", "task_id": "web.create",
+            {"action": "SET_MODEL_ROUTE", "task_id": "research.opportunity",
              "model_ref": "unknown"},
             {"action": "SAVE_MODEL_PROFILE", "profile":
                 local_profile(id="local_primary", provider="comfyui")},
@@ -111,7 +130,7 @@ class ModelHubTests(unittest.TestCase):
                 self.assertEqual(1, model_hub.catalog()["revision"])
         with self.assertRaisesRegex(ValueError, "MODEL_HUB_REVISION_CONFLICT"):
             model_hub.change("RESET_MODEL_ROUTE", expected_revision=0,
-                             task_id="web.create")
+                             task_id="research.opportunity")
 
     def test_video_is_configurable_but_never_wired_as_text(self):
         p = {"id": "wan_video", "provider": "comfyui", "model": "wan2.2_5b",
@@ -125,17 +144,17 @@ class ModelHubTests(unittest.TestCase):
         self.assertNotIn("wan_video", model_hub.effective_models())
         with self.assertRaises(ValueError):
             model_hub.change("SET_MODEL_ROUTE", expected_revision=2,
-                             task_id="web.create", model_ref="wan_video")
+                             task_id="research.opportunity", model_ref="wan_video")
 
     def test_versioned_rollback_is_explicit_and_atomic(self):
         model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0,
                          profile=local_profile())
         model_hub.change("SET_MODEL_ROUTE", expected_revision=1,
-                         task_id="web.create", model_ref="coding_local")
+                         task_id="research.opportunity", model_ref="coding_local")
         restored = model_hub.change("ROLLBACK_MODEL_HUB", expected_revision=2,
                                     target_revision=1)
         self.assertEqual(3, restored["revision"])
-        route = next(x for x in restored["routes"] if x["id"] == "web.create")
+        route = next(x for x in restored["routes"] if x["id"] == "research.opportunity")
         self.assertEqual("local_primary", route["model_ref"])
         self.assertEqual("default", route["source"])
         with self.assertRaises(ValueError):
@@ -235,7 +254,7 @@ class ModelHubHttpTests(unittest.TestCase):
         self.assertEqual(200, self.request("GET", "/api/model-hub",
                                            headers={"Cookie": cookie})[0])
         payload = {"ack": "SET_MODEL_ROUTE", "expected_revision": 0,
-                   "task_id": "web.create", "model_ref": "local_primary"}
+                   "task_id": "research.opportunity", "model_ref": "local_primary"}
         self.assertEqual(403, self.request("POST", "/api/model-hub/route",
                                            payload, {"Cookie": cookie})[0])
         ok = self.request("POST", "/api/model-hub/route", payload, {

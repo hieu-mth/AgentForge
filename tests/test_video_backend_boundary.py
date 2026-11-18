@@ -47,6 +47,13 @@ class VideoBackendBoundaryTests(unittest.TestCase):
                 self.assertNotIn("from agentforge.features.growth", content)
                 self.assertNotIn("from agentforge import product_builder", content)
 
+    def test_model_hub_hides_retired_business_routing(self):
+        text = (ROOT / "config/task_routes.toml").read_text(encoding="utf-8")
+        for route in ("web.create", "webapp.architect", "webapp.develop",
+                      "webapp.review", "growth.report", "media.copy_draft"):
+            with self.subTest(route=route):
+                self.assertNotIn(f'[routes."{route}"]', text)
+
     def test_mattress_backend_source_is_retired(self):
         self.assertFalse((ROOT / "agentforge/features/mattress_sales").exists())
 

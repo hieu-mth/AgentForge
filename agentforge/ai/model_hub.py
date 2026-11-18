@@ -26,6 +26,10 @@ from agentforge.paths import COMPANY_DATA_DIR, CONFIG_DIR, ensure_local_root
 
 DB_PATH = COMPANY_DATA_DIR / "model_hub.sqlite3"
 ROUTES_FILE = CONFIG_DIR / "task_routes.toml"
+# Persisted Owner overlays for retired products are accepted read-only but
+# excluded from active routes. Never rewrite the Owner's SQLite on GET.
+RETIRED_ROUTE_KEYS = frozenset(["web.create","webapp.architect","webapp.develop","webapp.review","media.copy_draft","growth.report"])
+
 ID_RE = re.compile(r"[a-z][a-z0-9_]{2,39}\Z")
 TASK_RE = re.compile(r"[a-z][a-z0-9_.]{2,59}\Z")
 MODEL_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/+-]{0,159}\Z")
@@ -178,8 +182,11 @@ def _validate_state(doc):
         validate_profile(profile, profile_id=ident)
     defaults = _defaults()
     for key, ref in doc["routes"].items():
-        if key not in defaults:
+        if key not in defaults and key not in RETIRED_ROUTE_KEYS:
             raise ModelConfigError("Unknown task route")
+        if key in RETIRED_ROUTE_KEYS:
+            _required_text(ref, ID_RE, "archived routed model ID")
+            continue
         if defaults[key]["kind"] == "rules" and key not in {
                 "analytics.quality_check", "growth.report"}:
             raise ModelConfigError("Deterministic monitoring cannot use a model")

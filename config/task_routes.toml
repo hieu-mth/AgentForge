@@ -10,30 +10,6 @@ kind = "text"
 execution = "wired"
 default_model = "local_primary"
 
-[routes."web.create"]
-label = "Tạo Website"
-kind = "text"
-execution = "wired"
-worker = "product_builder"
-
-[routes."webapp.architect"]
-label = "Phân tích WebApp"
-kind = "text"
-execution = "wired"
-worker = "webapp_architect"
-
-[routes."webapp.develop"]
-label = "Viết mã React"
-kind = "text"
-execution = "wired"
-worker = "webapp_developer"
-
-[routes."webapp.review"]
-label = "Review mã React"
-kind = "text"
-execution = "wired"
-worker = "webapp_reviewer"
-
 [routes."research.opportunity"]
 label = "Nghiên cứu cơ hội"
 kind = "text"
@@ -46,19 +22,8 @@ kind = "text"
 execution = "wired"
 worker = "source_reviewer"
 
-[routes."media.copy_draft"]
-label = "Viết kịch bản video ngắn"
-kind = "text"
-execution = "wired"
-worker = "media_producer"
-
 [routes."analytics.quality_check"]
 label = "Phân tích dữ liệu (quy tắc Python)"
-kind = "rules"
-execution = "rules"
-
-[routes."growth.report"]
-label = "Báo cáo Growth (quy tắc Python)"
 kind = "rules"
 execution = "rules"
 
