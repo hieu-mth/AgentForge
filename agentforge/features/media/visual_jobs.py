@@ -15,17 +15,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from agentforge import ops_control, product_builder
-from agentforge.features.websites import image_studio
+from agentforge import ops_control
+from agentforge.paths import REPOSITORY_ROOT, ensure_local_root
+from agentforge.features.media import comfy_image
 
-ROOT = product_builder.ROOT
+ROOT = REPOSITORY_ROOT
 DB = ROOT / "data" / "company" / "visual_jobs_v3.sqlite3"
 OUTPUTS = ROOT / "workspace" / "visuals"
 ID = re.compile(r"[a-f0-9]{32}\Z")
 SHA = re.compile(r"[a-f0-9]{64}\Z")
-PURPOSES = {"video", "image", "website"}
+PURPOSES = {"video", "image"}
 MAX_JOBS = 5
-MAX_IMAGE = image_studio.MAX_IMAGE
+MAX_IMAGE = comfy_image.MAX_IMAGE
 
 
 def _now():
@@ -40,12 +41,12 @@ def _id(value):
 
 def _db(path=None, *, create=False):
     target = Path(path) if path is not None else DB
-    product_builder._check_path_chain(target)
+    ensure_local_root(target)
     if not create and not target.is_file():
         return None
     if create:
         target.parent.mkdir(parents=True, exist_ok=True)
-        product_builder._check_path_chain(target.parent)
+        ensure_local_root(target.parent)
     db = sqlite3.connect(target, timeout=20)
     db.row_factory = sqlite3.Row
     if create:
@@ -113,9 +114,9 @@ def submit(purpose, topic, scenes, checkpoint, *, confirm_generation=False,
             or any(not isinstance(x, str) for x in scenes)):
         raise ValueError("Visual batch must contain 1-5 shots")
     prompts = [_prompt(topic, scene, i, purpose) for i, scene in enumerate(scenes)]
-    if not isinstance(checkpoint, str) or not image_studio.CHECKPOINT.fullmatch(checkpoint):
+    if not isinstance(checkpoint, str) or not comfy_image.CHECKPOINT.fullmatch(checkpoint):
         raise ValueError("Invalid image checkpoint")
-    ready = image_studio.health(opener=opener)
+    ready = comfy_image.health(opener=opener)
     if ready["status"] != "READY" or checkpoint not in ready["checkpoints"]:
         raise PermissionError("Configured local ComfyUI checkpoint unavailable")
     package_id = uuid4().hex
@@ -129,8 +130,8 @@ def submit(purpose, topic, scenes, checkpoint, *, confirm_generation=False,
                        (ident, package_id, purpose, index, prompt, checkpoint,
                         None, "SUBMITTING", None, source_sha, _now(), _now()))
         planned.append(ident)
-        raw = image_studio._request(
-            "/prompt", payload={"prompt": image_studio._workflow(ident, prompt, checkpoint)},
+        raw = comfy_image._request(
+            "/prompt", payload={"prompt": comfy_image._workflow(ident, prompt, checkpoint)},
             max_bytes=65536, timeout=12, opener=opener)
         data = json.loads(raw)
         provider_id = str(UUID(data["prompt_id"]))
@@ -155,7 +156,7 @@ def collect(job_id, *, confirm_import=False, db_path=None, output_root=None, ope
         return {"job_id": job_id, "status": "ASSET_READY", "sha256": row["asset_sha"]}
     if row["status"] != "SUBMITTED" or not row["provider_id"]:
         raise PermissionError("No submitted visual image to import")
-    raw = image_studio._request("/history/" + row["provider_id"],
+    raw = comfy_image._request("/history/" + row["provider_id"],
                                 max_bytes=131072, timeout=5, opener=opener)
     history = json.loads(raw).get(row["provider_id"])
     if history is None:
@@ -172,7 +173,7 @@ def collect(job_id, *, confirm_import=False, db_path=None, output_root=None, ope
     item = images[0]
     if (item.get("subfolder") != "" or item.get("type") != "output"
             or not isinstance(item.get("filename"), str)
-            or not image_studio.IMAGE_FILE.fullmatch(item["filename"])
+            or not comfy_image.IMAGE_FILE.fullmatch(item["filename"])
             or not item["filename"].startswith("af_" + job_id + "_")):
         raise PermissionError("Untrusted ComfyUI output image")
     with closing(_db(db_path, create=True)) as db, db:
@@ -182,7 +183,7 @@ def collect(job_id, *, confirm_import=False, db_path=None, output_root=None, ope
             raise PermissionError("Visual import already claimed")
     query = urllib.parse.urlencode({"filename": item["filename"],
                                     "subfolder": "", "type": "output"})
-    contents = image_studio._request("/view?" + query, max_bytes=MAX_IMAGE,
+    contents = comfy_image._request("/view?" + query, max_bytes=MAX_IMAGE,
                                      timeout=15, opener=opener)
     from PIL import Image
     with Image.open(io.BytesIO(contents)) as decoded:
@@ -192,9 +193,9 @@ def collect(job_id, *, confirm_import=False, db_path=None, output_root=None, ope
         decoded.verify()
     output_root = Path(output_root) if output_root is not None else OUTPUTS
     target = output_root / (job_id + ".png")
-    product_builder._check_path_chain(target)
+    ensure_local_root(target)
     target.parent.mkdir(parents=True, exist_ok=True)
-    product_builder._check_path_chain(target.parent)
+    ensure_local_root(target.parent)
     with target.open("xb") as stream:
         stream.write(contents)
         stream.flush()
@@ -216,106 +217,13 @@ def image_for_job(job_id, *, db_path=None, output_root=None):
         raise PermissionError("AI visual image is not ready")
     root = Path(output_root) if output_root is not None else OUTPUTS
     path = root / (_id(job_id) + ".png")
-    product_builder._check_path_chain(path)
+    ensure_local_root(path)
     if not path.is_file() or not 0 < path.stat().st_size <= MAX_IMAGE:
         raise PermissionError("Missing/oversized visual image")
     data = path.read_bytes()
     if hashlib.sha256(data).hexdigest() != row["asset_sha"]:
         raise PermissionError("AI image hash changed")
     return data, "image/png"
-
-
-def website_subject(slug):
-    """Get grounded visual subject from an already applied local static site."""
-    from html.parser import HTMLParser
-    from agentforge import web_assets
-    project = web_assets._project(slug)
-    source = project / "index.html"
-    product_builder._check_path_chain(source)
-    if not 0 < source.stat().st_size <= 600_000:
-        raise ValueError("Website source is missing or oversized")
-    class Content(HTMLParser):
-        def __init__(self):
-            super().__init__(convert_charrefs=True)
-            self.parts = []
-            self.include = False
-            self.skip = 0
-        def handle_starttag(self, tag, attrs):
-            if tag in {"script", "style"}:
-                self.skip += 1
-            if tag in {"title", "h1", "h2", "p"} and self.skip == 0:
-                self.include = True
-        def handle_endtag(self, tag):
-            if tag in {"script", "style"} and self.skip:
-                self.skip -= 1
-            if tag in {"title", "h1", "h2", "p"}:
-                self.include = False
-        def handle_data(self, data):
-            if self.include and not self.skip and data.strip():
-                self.parts.append(data.strip())
-    parsed = Content()
-    parsed.feed(source.read_text(encoding="utf-8"))
-    subject = " ".join(parsed.parts)[:300].strip()
-    if len(subject) < 8:
-        raise ValueError("Website has insufficient content for an AI image prompt")
-    return subject
-
-
-def attach_website(job_id, slug, image_sha, html_sha, *,
-                   confirm_attach=False, db_path=None):
-    """Bridge a reviewed standalone GPU image into existing SHA-gated web attach.
-
-    Uses the original Image Studio website-attach quality gate/backups rather
-    than editing HTML directly here. No external deploy, model, or subprocess.
-    """
-    if confirm_attach is not True:
-        raise PermissionError("Explicit Owner consent to attach visual required")
-    ops_control.require_active()
-    from agentforge import web_assets
-    row = _row(job_id, db_path=db_path)
-    if (row["status"] != "ASSET_READY" or row["purpose"] != "website"
-            or row["source_sha"] != html_sha
-            or not isinstance(image_sha, str) or image_sha != row["asset_sha"]
-            or not isinstance(html_sha, str) or not SHA.fullmatch(html_sha)):
-        raise PermissionError("Incorrect website visual receipt or SHA")
-    contents, mime = image_for_job(job_id, db_path=db_path)
-    if mime != "image/png":
-        raise ValueError("Only reviewed PNG may be attached to static website")
-    project = web_assets._project(slug)
-    original = project / "index.html"
-    product_builder._check_path_chain(original)
-    existing = original.read_bytes()
-    if hashlib.sha256(existing).hexdigest() != html_sha:
-        raise PermissionError("Website source changed since Owner review")
-    if b'af-ai-hero-style' in existing:
-        raise PermissionError("Website already contains an AI hero; review manually")
-    images = web_assets.list_images(slug)
-    if (len(images) >= web_assets.MAX_IMAGES
-            or sum(x["bytes"] for x in images) + len(contents) > web_assets.MAX_ALL_BYTES):
-        raise ValueError("Website image asset budget reached")
-    name = "af-ai-" + job_id + ".png"
-    target = web_assets._path(slug, name)
-    # Retry an uncertain promotion must never overwrite an existing image.
-    if target.exists():
-        raise FileExistsError("Image was already promoted; inspect existing job")
-    with closing(image_studio._connect(create=True)) as db:
-        if db.execute("SELECT 1 FROM jobs WHERE job_id=?", (job_id,)).fetchone():
-            raise FileExistsError("Image already registered for website")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    product_builder._check_path_chain(target.parent)
-    with target.open("xb") as stream:
-        stream.write(contents)
-        stream.flush()
-        os.fsync(stream.fileno())
-    # Persist a compatible Image Studio receipt. If attaching fails, it is
-    # recoverable from Projects & Files without re-generating the AI image.
-    with closing(image_studio._connect(create=True)) as db, db:
-        db.execute("INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                   (job_id, slug, "ASSET_READY", hashlib.sha256(row["prompt"].encode()).hexdigest(),
-                    row["checkpoint"], None, name, image_sha, None, _now(), _now()))
-    result = image_studio.attach(job_id, image_sha, html_sha,
-                                 confirm_attach=True)
-    return {**result, "source": "auto_visual_v3"}
 
 
 def report(*, db_path=None):
