@@ -19,14 +19,14 @@ class ArchitectureFileCatalogTests(unittest.TestCase):
             with self.subTest(module=rel):
                 self.assertIn(f"`{rel}`", inventory)
 
-    def test_current_docs_explicitly_distinguish_approved_target_from_runtime(self):
-        target = (ROOT / "docs" / "architecture" / "TARGET_STRUCTURE.md").read_text(encoding="utf-8")
+    def test_current_docs_show_only_one_owner_frontend_and_canonical_film(self):
         runtime = (ROOT / "docs" / "architecture" / "REPOSITORY_STRUCTURE.md").read_text(encoding="utf-8")
-        self.assertIn("M4 research/ops PENDING", target)
-        self.assertIn("M5 phase 2 PENDING", target)
+        guide = (ROOT / "docs" / "DEVELOPMENT.md").read_text(encoding="utf-8")
         self.assertIn("CURRENT IMPLEMENTATION", runtime)
-        self.assertIn("agentforge/", runtime)
-        self.assertIn("dashboard/", target)
+        self.assertIn("features/film_studio", runtime)
+        self.assertIn("dashboard/", runtime)
+        self.assertIn("agentforge.features.film_studio", guide)
+        self.assertIn("workspace/", guide)
 
 
 if __name__ == "__main__":

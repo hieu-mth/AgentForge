@@ -1,9 +1,0 @@
-# Local install/build scratch and intermediate verification logs.
-.toolchain-ci/
-wheels/
-*.log
-!*final.log
-!python-full.log
-!generated-lock-ci.log
-dashboard-audit.json
-novamart-audit.json

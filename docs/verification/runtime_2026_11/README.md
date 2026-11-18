@@ -115,7 +115,7 @@ Báo cáo script không tự đặt real_gpu_video_verified=true.
   có review rõ quyền. Không chia sẻ mã đăng nhập.
 - Với backup Owner thực hiện create --include-workspace --confirm-backup,
   verify checksum và stage-restore vào **thư mục mới** theo
-  [Wave 2 Backup Coverage](../../milestones/WAVE2_BACKUP_COVERAGE.md).
+  [Base V1 backup/restore](../base_v1/README.md).
   Đối chiếu tham chiếu DB/artifacts và business data trong staged copy,
   không ghi đè active SQLite. Backup/staging không mã hóa, không upload.
 - Kiểm recovery sau restart/crash trên bản sao an toàn do Owner chọn;

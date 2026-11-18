@@ -20,3 +20,5 @@ Không phát triển tính năng mới trong đợt cleanup. Không xóa dữ li
 Bằng chứng nghiệm thu Đợt 1: [PHASE1_ACCEPTANCE.md](audits/PHASE1_ACCEPTANCE.md). Cleanup backend cũ tiếp tục ở Đợt 2–3.
 
 Bằng chứng nghiệm thu backend Đợt 2: [PHASE2_BACKEND_ACCEPTANCE.md](audits/PHASE2_BACKEND_ACCEPTANCE.md). Source/manifest/test/docs legacy còn lại tiếp tục dọn theo dependency ở Đợt 3.
+
+Đợt 3 đang loại các alias/module/test và tài liệu lịch sử; kết quả cuối phải đối chiếu GitHub CI và danh sách dependency còn tồn.

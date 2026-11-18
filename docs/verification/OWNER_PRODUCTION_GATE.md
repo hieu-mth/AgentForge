@@ -41,5 +41,5 @@ thử phục hồi trước khi áp dụng cho dữ liệu vận hành.
 Ưu tiên luồng website + một đơn bán nệm nếu mục tiêu phát hành là MVP phục
 vụ gia đình. Theo dõi trạng thái model/GPU/Docker hoặc tính năng chưa thử
 theo [Runtime Certification](runtime_2026_11/README.md). Dùng
-[Wave 7](wave7/README.md) cho React QA và [Wave 8](wave8/README.md) cho clip
+[Wave 9](wave9/README.md) cho FFmpeg/continuity và [Wave 8](wave8/README.md) cho clip
 motion. Mỗi lần nghiệm thu lưu kết quả PASS, FAIL hoặc BLOCKED kèm bằng chứng.

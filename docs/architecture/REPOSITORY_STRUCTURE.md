@@ -1,83 +1,28 @@
-# Kiến trúc repository AgentForge
+# AgentForge — cấu trúc hiện hành (CURRENT IMPLEMENTATION)
 
-> **CURRENT IMPLEMENTATION** — M1/M2 đặt Python `agentforge/` và React `dashboard/` tại root; **M3 đã tách API thành `agentforge/api/`**. M8 đã chia code-level skill policies/handlers theo domain; M4a–M4d1 đã chuyển Growth, Websites, Webapps, shared Media và Film Studio sang `features/` với compatibility aliases; M4d2 đã tách ComfyUI HTTP transport; M4 research/ops và M5 phase 1 đã cập nhật 22 root aliases trỏ thẳng `features/` và có audit CI; chưa xóa aliases. Xem [catalog từng file](FILE_CATALOG.md) và [kế hoạch migration](MIGRATION_PLAN.md).
+Ngày kiểm: 18/11/2026. Source of truth là Git `main` + CI, không phải milestone lịch sử.
 
-**Current source of truth:** Python modular monolith, một React dashboard, local SQLite + workspace. Đã loại bỏ frontend HTML/CSS/JS V0 và Python dashboard V0.
+| Vùng source | Trách nhiệm |
+| --- | --- |
+| `agentforge/api/` | HTTP loopback, login/session/CSRF, Owner routes, React asset serving |
+| `agentforge/core/` | Task history, Owner-gated workflow, acceptance/report evidence, skill policy |
+| `agentforge/ai/` | Model Hub, provider routing, worker configuration |
+| `agentforge/features/film_studio/` | Film, character, motion, production, review, publishing ledger |
+| `agentforge/features/media/` | Shared image/video jobs, ComfyUI image transport, media assets/render |
+| `agentforge/integrations/` | Trusted external IO adapters; localhost ComfyUI and private YouTube |
+| `agentforge/ops/`, `agentforge/storage/` | Readiness, backup/retention, local persistence |
+| `dashboard/` | React Owner dashboard duy nhất; source JS trong `dashboard/src/` |
+| `skills/`, `workers/`, `config/` | Static allowlists/model/task profile, đang tiếp tục loại manifest nghiệp vụ cũ |
+| `tests/`, `scripts/` | Regression, Windows CI, read-only acceptance và source hygiene |
 
-## Cấu trúc đang sử dụng
+**Giai đoạn cleanup:** các package/alias `features/websites`, `features/webapps`, `features/growth`, `media.workflow` có thể còn dưới source trong quá trình dọn Đợt 3. Chúng không còn thuộc Owner API video-first được hỗ trợ. Không dùng các module đó để tạo tính năng mới.
 
-~~~text
-AgentForge/
-├── agentforge/
-│   ├── __main__.py                 # python -m agentforge
-│   ├── control_center_v1.py       # Compatibility facade cho import/CLI cũ
-│   ├── api/                       # Canonical localhost HTTP, auth, static, routes
-│   │   ├── server.py              # HTTP transport, CSP, CSRF, request parsing
-│   │   ├── auth.py                # Owner sessions/login
-│   │   ├── static.py              # Strictly trusted React assets
-│   │   └── routes/                # Bootstrap, GET and domain-specific mutations
-│   ├── core/skill_adapters/       # M8 static policies + lazy handlers theo domain
-│   ├── ai/                        # AI intake, routing, provider profiles
-│   ├── core/                      # workflow, tasks, permissions, artifact acceptance
-│   ├── features/growth/           # M4a canonical campaign, reports, manual handoff
-│   ├── features/websites/         # M4b canonical website design/proposals/revisions/QA
-│   ├── features/webapps/          # M4c canonical React proposals, syntax, sandbox adapter
-│   ├── features/media/            # M4d1 canonical assets/render/QA/workflow
-│   ├── features/film_studio/      # M4d1 canonical film plan and Owner motion pilot
-│   ├── integrations/comfyui.py    # M4d2 safe localhost ComfyUI JSON transport
-│   ├── domains/
-│   │   ├── growth/                # COMPAT aliases sang features/growth
-│   │   ├── websites/              # COMPAT aliases sang features/websites
-│   │   ├── webapps/               # COMPAT aliases sang features/webapps
-│   │   ├── media/                 # COMPAT aliases sang features/media và film_studio
-│   │   └── growth/                # demo campaigns, offline handoff
-│   ├── storage/                   # storage and retention logic
-│   └── paths.py                   # local root and path guards
-├── dashboard/                     # ONLY Owner frontend (React + Vite)
-├── templates/novamart/            # trusted React marketplace runtime template
-├── examples/                      # sample film/storyboard JSON only
-├── skills/                        # skill contracts, tool permissions
-├── workers/                       # worker manifests and instructions
-├── config/                        # models.toml + task_routes.toml defaults
-├── scripts/                       # maintenance and safety checks
-├── tests/                         # Python and Node regression
-├── docs/                          # current, evidence, historic docs
-├── data/                          # Owner SQLite/ledgers (gitignored)
-└── workspace/                     # Owner products/films/proposals (gitignored)
-~~~
+## Luồng thực thi
 
-`agentforge/` là **backend Python đang chạy** ở root, còn `dashboard/` là frontend React; URL vẫn `/dashboard/`. Namespace Python `agentforge.*`, các CLI và SQLite paths không đổi về ý nghĩa. M3 đã hoàn thành cho API; M4a–M4d2 đã chuyển canonical business code, còn research/ops review và M5 aliases chưa làm. Những Python compatibility aliases root-level được giữ; M5 phase 1 trỏ trực tiếp canonical features, nhưng caller ngoài repo chưa được xác minh để xóa. Không tự tái tổ chức tất cả folder chỉ để đẹp cây thư mục.
+`dashboard/` → `api/` → `core/` → `features/film_studio` và `features/media` → `ai/`, `integrations/`, `storage/`.
 
-## Model Hub
+- `data/` và `workspace/` là Owner local data, không thuộc cleanup Git.
+- `dashboard/dist/` và `dashboard/node_modules/` là build cache sinh ra, không commit.
+- CLI hiện hành: `python -m agentforge`; Film planner: `python -m agentforge.features.film_studio.long_form`.
 
-`agentforge/ai/model_hub.py` kết hợp default model/worker/route TOML với local SQLite Owner overrides. `agentforge/api/routes/model_hub.py` kiểm soát GET/POST và `dashboard/src/features/Models.jsx` trình bày tab `#/models`. Text LLM runtime đã nối; `film.motion` và image vẫn config-only. Xem [hướng dẫn Model Hub](MODEL_HUB.md).
-
-## Vòng đời sản phẩm
-
-1. Owner đưa brief → `ai/prompt_intake.py` route vào allowlisted goal/skill.
-2. Workflow và worker tạo proposal; input/output được bảo vệ bằng permission + budget.
-3. Source/design/artifact được lưu với SHA; QA evidence có phạm vi rõ.
-4. Owner inspect, feedback/approve/decision; không tự ACCEPTED khi thiếu gate.
-5. Local deliverable nằm trong `workspace/`; không có implicit deploy/upload.
-
-Với Film Studio: `features/film_studio/long_form.py` chỉ tạo shot slots; `features/film_studio/motion_comfy.py` gửi job tới `integrations/comfyui.py` theo quyền Owner. ComfyUI `history.success` **không phải** QA đạt hoặc video đã hoàn thành.
-
-## Ranh giới vận hành
-
-- HTTP bind **localhost**, không public; dữ liệu Owner không dùng chung với người khác.
-- Generated JavaScript không chạy trên host Windows khi thiếu sandbox tin cậy.
-- Các subprocess media chỉ chạy theo lệnh và quyền rõ ràng, model phải do Owner cài đặt.
-- Local ComfyUI `127.0.0.1:8188` không được tự suy ra đang khả dụng.
-- Không mở rộng khả năng của module bằng cách xóa guard, bypass acceptance hay tự cho PASS.
-
-## Những đường dẫn được bảo vệ
-
-`data/`, `workspace/`, `.env`, model weights, backup và video/proposal do Owner tạo **không thuộc cleanup Git**. Không xóa hoặc overwrite tự động. Cần backup, SHA/integrity và thao tác cụ thể do Owner cho phép.
-
-## Tài liệu liên quan
-
-- [Tổng quan trạng thái](../STATUS.md)
-- [Roadmap](../ROADMAP.md)
-- [Cài đặt và kiểm thử](../DEVELOPMENT.md)
-- [Long-form Film Studio](LONG_FORM_AI_FILM_STUDIO.md)
-- [GPU 12 GB pilot](FILM_MOTION_12GB_PILOT.md)
+Chi tiết từng Python module đang tracked: [catalog](FILE_CATALOG.md). Quy trình chạy: [DEVELOPMENT](../DEVELOPMENT.md). Các giới hạn đã nghiệm thu: [PHASE2](../audits/PHASE2_BACKEND_ACCEPTANCE.md).
