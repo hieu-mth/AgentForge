@@ -182,6 +182,9 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .env-disclaimer{color:var(--muted);font-size:11px;line-height:1.6;
   display:flex;align-items:flex-start;gap:8px;margin:0 1px 3px}
 .env-disclaimer>.anticon{color:var(--primary);margin-top:3px}
+.env-units-note{display:flex;align-items:flex-start;gap:8px;color:var(--env-subtle);
+  font-size:11px;line-height:1.5;margin:-8px 1px 0}
+.env-units-note .anticon{margin-top:2px;color:var(--primary);flex-shrink:0}
 .env-placeholder{min-height:170px;display:grid;place-items:center;color:var(--muted);font-size:13px}
 @media(max-width:1290px){.env-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:991px){
