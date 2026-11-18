@@ -31,7 +31,7 @@ class TestSkillRegistry(unittest.TestCase):
         registry = skills.load_registry(root=self.root)
         self.assertEqual(list(registry), sorted(registry))
         self.assertEqual(set(registry), {
-            "web.create", "webapp.create", "webapp.develop", "webapp.architect", "webapp.audit", "webapp.review", "webapp.sandbox_test", "webapp.browser_qa", "web.quality_check", "web.browser_test",
+            "web.create", "web.quality_check", "web.browser_test",
             "filesystem.report", "filesystem.revise_report", "terminal.check",
             "research.opportunity", "research.source_review", "research.report", "workspace.analyze",
             "media.compose", "media.image_edit", "media.quality_check",
@@ -131,7 +131,7 @@ class TestSkillRegistry(unittest.TestCase):
               patch("subprocess.run") as shell,
               patch("urllib.request.urlopen") as network):
             registry = skills.load_registry(root=self.root)
-            self.assertEqual(len(registry), 30)
+            self.assertEqual(len(registry), 23)
             model.assert_not_called()
             shell.assert_not_called()
             network.assert_not_called()

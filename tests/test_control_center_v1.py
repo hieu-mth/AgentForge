@@ -139,7 +139,7 @@ class TestControlCenterV1(unittest.TestCase):
         self.assertEqual(result["csrf"], self.csrf)
         code, payload, _ = self.req("GET", "/api/bootstrap")
         self.assertEqual(code, 200)
-        self.assertEqual(payload["stats"]["skills"], 30)
+        self.assertEqual(payload["stats"]["skills"], 23)
         self.assertFalse(payload["external_actions_enabled"])
         self.assertEqual(len(payload["connectors"]), 2)
         self.assertFalse(payload["connectors"][0]["authenticated"])

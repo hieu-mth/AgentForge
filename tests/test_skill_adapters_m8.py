@@ -42,13 +42,13 @@ class DomainSkillAdapterTests(unittest.TestCase):
                                          source_sha256="a" * 64,
                                          revision_feedback="change header")
 
-    def test_webapp_development_architecture_kwargs_are_preserved(self):
-        payload = {"slug": "store", "brief": "cart", "architecture_id": "arch",
-                   "architecture_sha": "a" * 64}
-        with patch("agentforge.webapp_developer.propose", return_value={"id": "ok"}) as mock:
-            skill_adapters.dispatch("webapp.develop", payload)
-            mock.assert_called_once_with("store", "cart", architecture_id="arch",
-                                         architecture_sha="a" * 64)
+    def test_retired_webapp_adapters_are_not_dispatchable(self):
+        for ident in ("webapp.create", "webapp.develop", "webapp.architect",
+                      "webapp.audit", "webapp.review", "webapp.sandbox_test",
+                      "webapp.browser_qa"):
+            with self.subTest(ident=ident), self.assertRaises(PermissionError):
+                skill_adapters.dispatch(ident, {})
+
 
     def test_research_stdout_is_captured(self):
         with patch("agentforge.research.run", side_effect=lambda topic: print("private prompt") or {"topic": topic}):
