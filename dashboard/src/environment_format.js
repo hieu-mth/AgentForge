@@ -1,16 +1,29 @@
 // Pure presentation helpers. Preserve unavailable data instead of guessing.
-// Dashboard uses familiar decimal GB/MB; raw API units remain unchanged.
-// System RAM/disk/model sizes arrive in bytes, NVIDIA VRAM arrives in MiB.
-export function formatCapacity(bytes, digits=2) {
+// Raw API values are preserved: RAM/disk/models use bytes, NVIDIA VRAM uses MiB.
+// User-facing memory follows the common Windows 1024 convention (displayed MB/GB/TB).
+// Storage/model capacities follow decimal SI (1000). Never simply relabel a number.
+const DISPLAY_UNITS=['B','KB','MB','GB','TB','PB'];
+function adaptiveUnits(bytes, base, digits) {
   if(typeof bytes!=='number'||!Number.isFinite(bytes)||bytes<0)return 'Chưa xác định';
-  const inGB=bytes>=1e9;
-  return (bytes/(inGB?1e9:1e6)).toLocaleString('vi-VN',{
-    maximumFractionDigits:digits,
-  })+(inGB?' GB':' MB');
+  if(bytes===0)return '0 MB';
+  let index=0;
+  let value=bytes;
+  while(value>=base && index<DISPLAY_UNITS.length-1){
+    value/=base;
+    index++;
+  }
+  return value.toLocaleString('vi-VN',{maximumFractionDigits:digits})+
+    ' '+DISPLAY_UNITS[index];
+}
+export function formatCapacity(bytes, digits=2){
+  return adaptiveUnits(bytes,1000,digits);
+}
+export function formatMemory(bytes, digits=2){
+  return adaptiveUnits(bytes,1024,digits);
 }
 export function formatVram(mib, digits=2) {
   if(typeof mib!=='number'||!Number.isFinite(mib)||mib<0)return '—';
-  return formatCapacity(mib*(1024**2),digits);
+  return formatMemory(mib*(1024**2),digits);
 }
 export function percentUsed(free,total) {
   if(typeof free!=='number'||typeof total!=='number'||

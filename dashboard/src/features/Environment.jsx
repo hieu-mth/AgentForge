@@ -4,7 +4,7 @@ import {AppstoreOutlined, CloudServerOutlined, CodeOutlined, DatabaseOutlined,
   SafetyCertificateOutlined, ThunderboltOutlined} from '@ant-design/icons';
 import {useResource, ResourceStatus} from '../use_resource.jsx';
 import {useScreenRefresh} from '../refresh_scope.jsx';
-import {formatCapacity, formatVram, percentUsed, formatChecked, displayStatus,
+import {formatCapacity, formatMemory, formatVram, percentUsed, formatChecked, displayStatus,
   statusTone} from '../environment_format.js';
 
 const {Text,Title,Paragraph}=Typography;
@@ -147,8 +147,8 @@ export function Environment({onNavigate}){
             (vramUsage!==null?' · Đã dùng '+vramUsage+'%':''):'Đợi phát hiện GPU'}
           progress={vramUsage}/>
         <Stat icon={<DatabaseOutlined/>} label="RAM khả dụng"
-          value={formatCapacity(memory.available_bytes)}
-          sub={'Tổng '+formatCapacity(memory.total_bytes)+
+          value={formatMemory(memory.available_bytes)}
+          sub={'Tổng '+formatMemory(memory.total_bytes)+
             (memoryUsage!==null?' · Đã dùng '+memoryUsage+'%':'')}
           progress={memoryUsage}/>
         <Stat icon={<HddOutlined/>} label="Ổ đĩa workspace"
@@ -156,6 +156,11 @@ export function Environment({onNavigate}){
           sub={'Tổng '+formatCapacity(disk.total_bytes)+
             (diskUsage!==null?' · Đã dùng '+diskUsage+'%':'')}
           progress={diskUsage}/>
+      </div>
+
+      <div className="env-units-note"><InfoCircleOutlined/>
+        <span>RAM/VRAM hiển thị theo hệ 1.024 như Windows; ổ đĩa và model theo
+          hệ 1.000. Đơn vị MB/GB/TB được chọn tự động.</span>
       </div>
 
       <Card className="env-panel" title={<SectionTitle icon={<DesktopOutlined/>}
