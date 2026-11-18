@@ -21,4 +21,4 @@ Bằng chứng nghiệm thu Đợt 1: [PHASE1_ACCEPTANCE.md](audits/PHASE1_ACCEP
 
 Bằng chứng nghiệm thu backend Đợt 2: [PHASE2_BACKEND_ACCEPTANCE.md](audits/PHASE2_BACKEND_ACCEPTANCE.md). Source/manifest/test/docs legacy còn lại tiếp tục dọn theo dependency ở Đợt 3.
 
-Đợt 3 đã có [báo cáo nghiệm thu](audits/PHASE3_CLEANUP_ACCEPTANCE.md); CI PASS nhưng 29 file feature legacy và một số caller/alias chưa chứng minh được safe-to-delete, chuyển vào final audit Đợt 4.
+Đợt 3 đã có [báo cáo nghiệm thu](audits/PHASE3_CLEANUP_ACCEPTANCE.md). Đợt 4 đang dọn sâu: đã xóa placeholder `templates/`, bỏ phép quét tài liệu của thư mục này, xóa runbook Docker Webapp cũ, thay Owner production gate và runtime checklist bằng phạm vi video, bỏ Analytics Dataset khỏi acceptance và sửa entrypoint Dashboard. **Chưa nghiệm thu Đợt 4**: 29 file feature legacy, root aliases, Skill Registry (23 manifest; Web/Analytics/Media cũ), skill adapters, worker/config/test/CI callers và một số docs lịch sử vẫn phải được xử lý đồng bộ. Không tuyên bố repository sạch hoặc CI PASS cho những commit Đợt 4 chưa kiểm chứng.
