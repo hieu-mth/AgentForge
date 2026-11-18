@@ -63,6 +63,9 @@ def dispatch(self, route):
                 raise ValueError("Unknown release operation")
             return self._reply(200, publishing.handoff(rid))
         return self._reply(200, record)
+    if route == "/api/video-studio/projects":
+        from agentforge.video_projects import list_projects
+        return self._reply(200, list_projects())
     if route == "/api/film/productions":
         from agentforge.features.film_studio.production import list_episodes
         return self._reply(200, {
