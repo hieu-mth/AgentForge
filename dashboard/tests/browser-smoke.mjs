@@ -110,9 +110,10 @@ try {
   await env.getByText('TIMEOUT',{exact:true}).waitFor();
   await env.getByText('qwen3:8b').first().waitFor();
   if(environmentRequests<1)throw new Error('Environment did not request actual discovery API');
+  const refreshResponse=page2.waitForResponse(r=>
+    r.url().includes('/api/ops/discovery')&&r.status()===200);
   await env.getByRole('button',{name:'Quét lại'}).click();
-  await page2.waitForFunction(()=>document.querySelector('.env-checked')?.
-    textContent.includes('Lần quét:'));
+  await refreshResponse;
   if(environmentRequests<2)throw new Error('Quét lại did not refresh environment data');
   // Responsive acceptance: one document scrollbar, tables may scroll horizontally.
   for(const width of [1440,900,390]){
@@ -124,6 +125,9 @@ try {
   }
   await page2.getByRole('button',{name:'Mở điều hướng'}).click();
   await page2.getByText('LOCAL-FIRST AI STUDIO').last().waitFor();
+  await page2.keyboard.press('Escape');
+  await page2.getByRole('button',{name:'Sáng'}).click();
+  await page2.waitForFunction(()=>document.documentElement.dataset.theme==='light');
   await page2.getByRole('button',{name:'Tối'}).click();
   await page2.waitForFunction(()=>document.documentElement.dataset.theme==='dark');
   await page2.setViewportSize({width:1440,height:900});
