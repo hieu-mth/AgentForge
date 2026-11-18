@@ -1,8 +1,7 @@
 """Owner-side runtime evidence, deliberately distinct from CI contract tests.
 
 Default: bounded localhost GETs and read-only executable/image inspection.
-Explicit flags: one Ollama inference, disposable FFmpeg fixture or pinned
-offline Docker container. No cloud calls, model pulls, Owner artifact reads,
+Explicit flags: one Ollama inference or disposable FFmpeg fixture. No cloud calls, model pulls, Owner artifact reads,
 secret dumps, retries, publishing or production certification.
 """
 from __future__ import annotations
@@ -196,7 +195,7 @@ def _ffmpeg_preflight():
 
 def _ffmpeg_runtime():
     """Actual encode + audio/video decode in an automatically deleted fixture."""
-    from agentforge.features.media.quality import _mp4_structural
+    from agentforge.features.media.mp4 import _mp4_structural
     executable = _ffmpeg_executable()
     start = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="agentforge-ffmpeg-evidence-") as temp:
@@ -231,67 +230,6 @@ def _ffmpeg_runtime():
                    duration_seconds=round(time.monotonic() - start, 2))
 
 
-def _docker_context():
-    from agentforge.features.webapps import sandbox
-    docker, host = sandbox._docker_executable(), sandbox._local_docker_host()
-    image = os.environ.get("AGENTFORGE_BROWSER_QA_IMAGE", "")
-    if not sandbox.IMAGE_ID.fullmatch(image):
-        return docker, host, None
-    return docker, host, image
-
-
-def _docker_preflight():
-    from agentforge.features.webapps import sandbox
-    docker, host, image = _docker_context()
-    if image is None:
-        return _result("QA_IMAGE_NOT_PINNED", container_started=False)
-    sandbox._image_ready(docker, host, image)
-    return _result("READY_FOR_OFFLINE_SANDBOX_TEST", pinned_image=True,
-                   container_started=False, browser_qa_verified=False)
-
-
-def _docker_runtime():
-    """Start only the cached, SHA-pinned QA image; no source or network mount."""
-    from agentforge.features.webapps import sandbox
-    docker, host, image = _docker_context()
-    if image is None:
-        raise ValueError("A local browser QA image must be pinned by SHA")
-    sandbox._image_ready(docker, host, image)
-    name = "af-runtime-" + uuid4().hex[:16]
-    args = [
-        docker, "-H", host, "run", "--rm", "--pull", "never",
-        "--name", name, "--network", "none", "--read-only", "--cap-drop", "ALL",
-        "--security-opt", "no-new-privileges=true",
-        "--user", "10001:10001", "--cpus", "1", "--memory", "512m",
-        "--memory-swap", "512m", "--pids-limit", "32", "--ipc", "none",
-        "--entrypoint", "node", image, "--version",
-    ]
-    needs_cleanup = True
-    try:
-        result = subprocess.run(
-            args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL, timeout=45, check=False,
-            env=sandbox._env())
-        needs_cleanup = False
-    finally:
-        if needs_cleanup:
-            # A timed-out CLI can leave its disposable container running.
-            # Remove ONLY our randomized container, never an Owner container.
-            try:
-                subprocess.run(
-                    [docker, "-H", host, "container", "rm", "-f", name],
-                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL, timeout=12, check=False,
-                    env=sandbox._env())
-            except (OSError, subprocess.TimeoutExpired):
-                pass
-    if result.returncode != 0:
-        raise RuntimeError("Pinned offline QA container failed to start")
-    return _result("PASS_RUNTIME", container_started=True,
-                   pinned_image=True, network="none", source_executed=False,
-                   browser_qa_verified=False, image_pull_performed=False)
-
-
 def _dashboard_preflight():
     connection = http.client.HTTPConnection("127.0.0.1", 8780, timeout=3)
     try:
@@ -305,7 +243,7 @@ def _dashboard_preflight():
 
 
 def inspect(*, model_ref="local_primary", run_ollama=False,
-            run_ffmpeg=False, run_docker=False):
+            run_ffmpeg=False):
     """Actual host probes, no mocks; explicitly tagged which stages ran."""
     checks = {
         "python": _result("PASS_PRECHECK" if sys.version_info >= (3, 13)
@@ -316,7 +254,6 @@ def inspect(*, model_ref="local_primary", run_ollama=False,
         "ollama": _safe_probe(lambda: _ollama_preflight(model_ref)),
         "comfyui_gpu": _safe_probe(_comfy_preflight),
         "ffmpeg": _safe_probe(_ffmpeg_preflight),
-        "docker": _safe_probe(_docker_preflight),
         "dashboard": _safe_probe(_dashboard_preflight),
     }
     # No automatic escalation: optional probes each need a separate CLI flag.
@@ -324,18 +261,15 @@ def inspect(*, model_ref="local_primary", run_ollama=False,
         checks["ollama_inference"] = _safe_probe(lambda: _ollama_inference(model_ref))
     if run_ffmpeg:
         checks["ffmpeg_encode_decode"] = _safe_probe(_ffmpeg_runtime)
-    if run_docker:
-        checks["docker_offline_container"] = _safe_probe(_docker_runtime)
     checks.update({
-        "ai_generated_app_browser_qa": _result("OWNER_RUNTIME_PENDING"),
         "film_motion_import_decode_owner_review": _result("OWNER_RUNTIME_PENDING"),
-        "real_business_backup_staged_restore": _result("OWNER_RUNTIME_PENDING"),
         "dashboard_owner_login_and_workflow": _result("OWNER_RUNTIME_PENDING"),
     })
     failed_opt_in = any(
-        checks[key]["status"] != "PASS_RUNTIME" for key, run in (
-            ("ollama_inference", run_ollama), ("ffmpeg_encode_decode", run_ffmpeg),
-            ("docker_offline_container", run_docker)) if run)
+        checks[key]["status"] != "PASS_RUNTIME"
+        for key, run in (("ollama_inference", run_ollama), ("ffmpeg_encode_decode", run_ffmpeg))
+        if run
+    )
     report = {
         "format": REPORT_FORMAT,
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -345,12 +279,10 @@ def inspect(*, model_ref="local_primary", run_ollama=False,
         "explicit_authorization": {
             "local_ollama_inference": bool(run_ollama),
             "disposable_ffmpeg_fixture": bool(run_ffmpeg),
-            "offline_pinned_docker_container": bool(run_docker),
         },
         "cloud_requests": 0, "model_downloads": 0,
         "gpu_jobs_submitted": 0, "youtube_uploads": 0,
         "existing_owner_data_modified_by_design": False,
-        "generated_app_browser_verified": False,
         "real_gpu_video_verified": False,
         "production_go": False,
     }
@@ -383,16 +315,13 @@ def main(argv=None):
     parser.add_argument("--confirm-inference", action="store_true")
     parser.add_argument("--run-ffmpeg", action="store_true")
     parser.add_argument("--confirm-local-exec", action="store_true")
-    parser.add_argument("--run-docker", action="store_true")
-    parser.add_argument("--confirm-docker-run", action="store_true")
     parser.add_argument("--save-report", action="store_true")
     args = parser.parse_args(argv)
     if (args.run_ollama and not args.confirm_inference
-            or args.run_ffmpeg and not args.confirm_local_exec
-            or args.run_docker and not args.confirm_docker_run):
+            or args.run_ffmpeg and not args.confirm_local_exec):
         parser.error("Every active probe requires its matching explicit confirmation flag")
     report = inspect(model_ref=args.model_ref, run_ollama=args.run_ollama,
-                     run_ffmpeg=args.run_ffmpeg, run_docker=args.run_docker)
+                     run_ffmpeg=args.run_ffmpeg)
     if args.save_report:
         dest = save_report(report)
         report["saved_receipt_filename"] = dest.name

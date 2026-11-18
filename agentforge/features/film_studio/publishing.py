@@ -1,4 +1,4 @@
-"""Wave 10: SHA-bound local Film Studio release ledger and Owner observations.
+""" SHA-bound local Film Studio release ledger and Owner observations.
 
 No automatic posting, public visibility changes, billing, monetization claims,
 cloud API calls or timers. The optional YouTube private-only upload adapter
@@ -120,14 +120,14 @@ def _render(film_slug, episode_id, film_root):
     if (report.get("status") != production.READY
             or report.get("video_accepted") is not False
             or report.get("published") is not False):
-        raise PublishingError("Expected Wave 9 source-only technical QA receipt")
+        raise PublishingError("Expected signed Film Studio technical QA receipt")
     return report
 
 
 def _validated_payload(payload):
     if not isinstance(payload, dict) or set(payload) != {
             "title", "description", "synthetic_media", "made_for_kids",
-            "rights_attested", "owner_watched", "planned_utc", "campaign"}:
+            "rights_attested", "owner_watched", "planned_utc"}:
         raise PublishingError("Invalid release metadata schema")
     title = _text(payload["title"], "YouTube title", 100)
     description = _text(payload["description"], "YouTube description", 4500, minimum=0)
@@ -136,19 +136,12 @@ def _validated_payload(payload):
             raise PublishingError("Media disclosures/Owner review must be explicit booleans")
     if not payload["rights_attested"] or not payload["owner_watched"]:
         raise PermissionError("Owner must watch film and attest media rights before handoff")
-    # Historical release receipts retain a nullable campaign key for SHA
-    # compatibility, but new Film Studio handoffs cannot attach Growth records.
-    # Reject rather than silently accepting an unchecked business campaign.
-    campaign = payload["campaign"]
-    if campaign is not None:
-        raise PublishingError("Business campaign linkage is no longer supported")
     return {
         "title": title, "description": description,
         "synthetic_media": payload["synthetic_media"],
         "made_for_kids": payload["made_for_kids"],
         "rights_owner_attested": True, "owner_watched_attested": True,
         "planned_utc": _date(payload["planned_utc"]),
-        "campaign": campaign,
         "public_approval_given": False,
         "platform_posting_scheduled": False,
         "auto_publication": False,
@@ -384,8 +377,6 @@ def summary(*, db_path=DB, film_root=production.FILMS):
                          for item in releases],
             "scheduled_actions_automatic": False, "auto_publish": False,
             "oauth_connected": False, "youtube_analytics_connected": False,
-            "verified_net_profit_vnd": None,
-            "bookkeeping_note": "Growth ledger remains source of Owner-entered VND; no bank reconciliation.",
             "status": "OWNER_CONTROLLED_UNVERIFIED"}
 
 

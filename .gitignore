@@ -1,46 +1,17 @@
+# Local Owner assets and secrets are never Git-managed.
 .venv/
 data/
 workspace/
-__pycache__/
-*.pyc
+models/
 .env
 .env.*
-!.env.example
-*.egg-info/
-build/
-dist/
-.pytest_cache/
-
-# Locally downloaded TTS voice models; never commit licensed model weights.
-models/voices/
-
-# React Dashboard dependencies/build outputs (source is committed)
-dashboard/node_modules/
-dashboard/dist/
-dashboard/.vite/
-
-# Ignore caches from older local installations; never auto-delete user files.
-ui/dashboard/node_modules/
-ui/dashboard/dist/
-ui/dashboard/.vite/
-
-# Additional local front-end dependencies and generated tooling
-templates/novamart/node_modules/
-templates/novamart/.vite/
-templates/novamart/dist/
-
-# Leave old locally installed template caches ignored after git rename.
-examples/novamart/node_modules/
-examples/novamart/.vite/
-examples/novamart/dist/
-.mypy_cache/
-.ruff_cache/
-htmlcov/
-.coverage
-
-# Public-repository guardrails: locally downloaded weights and secrets are
-# Owner-owned. These patterns complement (do not replace) CI tracked-file audit.
-models/
+*.sqlite3
+*.db
+*.mp4
+*.mov
+*.wav
+*.mp3
+*.zip
 *.safetensors
 *.ckpt
 *.onnx
@@ -54,10 +25,24 @@ client_secret*.json
 *oauth*client*.json
 credentials.json
 token.json
-*.sqlite3
-*.db
-*.mp4
-*.mov
-*.wav
-*.mp3
-*.zip
+
+# Build/dependency caches.
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.vite/
+
+# Existing local folders from retired releases may contain Owner files.
+# Keep ignored; do not stage, reset or erase them automatically.
+ui/
+templates/
+examples/novamart/

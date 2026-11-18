@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  M9 local AgentForge Windows setup. Default is read-only inspection.
+  AgentForge Video Studio Windows setup. Default is read-only inspection.
 .DESCRIPTION
   Without switches, checks versions and runs the safe Python preflight.
   -Install -AllowNetwork explicitly opts into trusted pip/npm dependency installs,
@@ -61,7 +61,7 @@ if ($null -eq $python -and $Install) {
     $launcher = Get-Command py.exe -ErrorAction SilentlyContinue
     if ($null -eq $launcher) { throw "Python 3.13+ is required; install it first." }
 }
-Write-Host "AgentForge M9 setup · local-first"
+Write-Host "AgentForge Video Studio setup · local-first"
 Write-Host ("Mode: " + $(if ($Install) {"CONSENTED_INSTALL"} else {"READ_ONLY"}))
 $pyVersion = $null
 if ($null -ne $python) {
@@ -115,7 +115,7 @@ if ($RunTests) {
     & $npm.Source run test:navigation --prefix dashboard
     Assert-Exit "Dashboard navigation tests"
 }
-Write-Host "Local setup complete. Model/GPU/ComfyUI and generated app QA remain unverified."
+Write-Host "Local setup complete. Model/GPU/ComfyUI/video runtime remain unverified."
 if ($StartDashboard) {
     Write-Host "Starting authenticated local Dashboard on 127.0.0.1:8780 (Ctrl+C to stop)."
     & $python -m agentforge --port 8780

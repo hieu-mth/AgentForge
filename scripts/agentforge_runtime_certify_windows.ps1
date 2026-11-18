@@ -1,12 +1,11 @@
 <#
 .SYNOPSIS
-  Đợt 5: kiểm tra runtime AgentForge trên máy Owner (PowerShell 5.1+).
+  Kiểm tra runtime AgentForge Video Studio (PowerShell 5.1+).
 .DESCRIPTION
   Mặc định: chỉ đọc localhost, trạng thái tool và cấu hình.
   Những phép thử tạo tải thực bắt buộc có cờ xác nhận riêng:
     -RunOllama -ConfirmInference
     -RunFFmpeg -ConfirmLocalExec
-    -RunDocker -ConfirmDockerRun
   Không pull model, cài package, public, sửa owner SQLite/artifact,
   hoặc tự báo production-ready.
 .EXAMPLE
@@ -21,8 +20,6 @@ param(
     [switch]$ConfirmInference,
     [switch]$RunFFmpeg,
     [switch]$ConfirmLocalExec,
-    [switch]$RunDocker,
-    [switch]$ConfirmDockerRun,
     [switch]$SaveReport
 )
 Set-StrictMode -Version Latest
@@ -33,9 +30,6 @@ if ($RunOllama -and -not $ConfirmInference) {
 }
 if ($RunFFmpeg -and -not $ConfirmLocalExec) {
     throw "RunFFmpeg requires ConfirmLocalExec (disposable local MP4 fixture)."
-}
-if ($RunDocker -and -not $ConfirmDockerRun) {
-    throw "RunDocker requires ConfirmDockerRun (one pinned offline container)."
 }
 
 $root = Split-Path -Parent $PSScriptRoot
@@ -55,7 +49,6 @@ $argsList = @("-B", "-m", "agentforge.ops.runtime_certification",
               "--model-ref", $ModelRef)
 if ($RunOllama) { $argsList += @("--run-ollama", "--confirm-inference") }
 if ($RunFFmpeg) { $argsList += @("--run-ffmpeg", "--confirm-local-exec") }
-if ($RunDocker) { $argsList += @("--run-docker", "--confirm-docker-run") }
 if ($SaveReport) { $argsList += "--save-report" }
 
 Write-Host "AgentForge - Owner Runtime Evidence V1"

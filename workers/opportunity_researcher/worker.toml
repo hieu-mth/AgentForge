@@ -1,8 +1,0 @@
-id = "opportunity_researcher"
-model_ref = "local_primary"
-runtime = "langgraph"
-
-capabilities = [
-    "web_research",
-    "evidence_analysis"
-]

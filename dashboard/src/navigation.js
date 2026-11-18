@@ -1,20 +1,16 @@
-// Video-first Owner navigation. Legacy feature APIs are not removed here;
-// backend dependency cleanup must be verified independently.
+// Only implemented Video Studio sections are routable.
 export const NAV_GROUPS = Object.freeze([
   {key:'overview',label:'Tổng quan',tabs:[['overview','Tổng quan']]},
   {key:'studio',label:'Studio video',tabs:[['media-studio','Sản xuất video']]},
   {key:'characters',label:'Nhân vật',tabs:[['characters','Thư viện nhân vật']]},
-  {key:'products',label:'Thành phẩm',tabs:[
-    ['projects','Kho tài nguyên & thành phẩm'],['reviews','Duyệt video']]},
-  {key:'business',label:'Phân phối',tabs:[['channels','Kênh phân phối']]},
+  {key:'products',label:'Thành phẩm',tabs:[['projects','Dự án video']]},
+  {key:'business',label:'Phân phối',tabs:[['channels','Kênh xuất bản']]},
   {key:'settings',label:'Cài đặt',tabs:[
-    ['settings','Cấu hình'],['environment','Môi trường & Tài nguyên'],
-    ['models','Model AI & Điều phối'],['operations','Vận hành'],
-    ['retention','Sao lưu & Dọn dẹp']]},
+    ['models','Model AI & Điều phối'],['environment','Môi trường & Tài nguyên']]},
 ]);
 export const DEFAULT_TAB = Object.freeze({
   overview:'overview',studio:'media-studio',characters:'characters',
-  products:'projects',business:'channels',settings:'settings',
+  products:'projects',business:'channels',settings:'models',
 });
 const ROUTES = Object.fromEntries(NAV_GROUPS.flatMap(group=>
   group.tabs.map(([key,label])=>[key,{group:group.key,label}])

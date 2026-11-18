@@ -1,8 +1,0 @@
-id = "source_reviewer"
-model_ref = "local_primary"
-runtime = "manual"
-
-capabilities = [
-    "source_review",
-    "quote_validation"
-]

@@ -1,16 +1,14 @@
-# Tài liệu AgentForge — Video Studio
-
-Ưu tiên tài liệu hiện hành, không dùng milestone lịch sử làm mô tả chức năng đang chạy.
+# AgentForge Video Studio — tài liệu hiện hành
 
 - [Chạy ứng dụng](../README.md)
-- [Trạng thái cleanup](STATUS.md)
-- [Roadmap cleanup](ROADMAP.md)
 - [Phát triển và kiểm thử](DEVELOPMENT.md)
+- [Trạng thái source](STATUS.md)
+- [Cấu trúc](architecture/REPOSITORY_STRUCTURE.md)
 - [Film Studio](architecture/LONG_FORM_AI_FILM_STUDIO.md)
-- [Motion 12 GB](architecture/FILM_MOTION_12GB_PILOT.md)
 - [Model Hub](architecture/MODEL_HUB.md)
-- [Owner production gate](verification/OWNER_PRODUCTION_GATE.md)
+- [Motion GPU](verification/MOTION.md)
+- [FFmpeg/Production](verification/PRODUCTION.md)
+- [Publishing](verification/PUBLISHING.md)
+- [Runtime trên PC Owner](verification/RUNTIME.md)
 
-Các báo cáo cũ còn trong Git history, không được coi là tài liệu runtime hiện hành.
-
-- [Nghiệm thu cleanup Đợt 3](audits/PHASE3_CLEANUP_ACCEPTANCE.md)
+Tài liệu milestone cũ chỉ còn trong Git history, không còn thuộc checkout hiện hành.

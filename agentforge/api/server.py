@@ -69,44 +69,6 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
-    def _stream_video(self, file_path):
-        """Authenticated, bounded-memory local MP4 stream with seek support.
-
-        Caller must verify ownership, source digest and path before entry.
-        Only a single strict byte range is supported; malformed ranges fail
-        closed instead of falling back to an unbounded full-file response.
-        """
-        from agentforge.api.video_stream import parse_range
-        length = file_path.stat().st_size
-        requested = self.headers.get("Range")
-        start, end, partial = parse_range(requested, length)
-        count = end - start + 1
-        self.send_response(206 if partial else 200)
-        self.send_header("Content-Type", "video/mp4")
-        self.send_header("Content-Length", str(count))
-        self.send_header("Accept-Ranges", "bytes")
-        if partial:
-            self.send_header("Content-Range", f"bytes {start}-{end}/{length}")
-        self.send_header("Cache-Control", "private, no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Content-Security-Policy", "default-src 'none'")
-        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
-        self.send_header("Referrer-Policy", "no-referrer")
-        self.end_headers()
-        try:
-            with file_path.open("rb") as stream:
-                stream.seek(start)
-                remaining = count
-                while remaining:
-                    block = stream.read(min(64 * 1024, remaining))
-                    if not block:
-                        break
-                    self.wfile.write(block)
-                    remaining -= len(block)
-        except (BrokenPipeError, ConnectionResetError):
-            # Browser seek/cancel can close an in-progress response normally.
-            pass
-
     def _session(self):
         return auth.get_session(self)
 
@@ -125,7 +87,7 @@ class _Handler(BaseHTTPRequestHandler):
             except (ValueError, FileNotFoundError, OSError):
                 return self._blocked(404, "react_dashboard_not_built_or_invalid_asset")
         if route == "/":
-            # One canonical frontend: redirect legacy bookmarks without serving old UI.
+            # The root path redirects to the canonical React app.
             return self._reply(302, "", mime="text/plain; charset=utf-8",
                                headers=(("Location", "/dashboard/"),))
         if route in ("/app.css", "/app.js", "/app.html"):
@@ -200,9 +162,7 @@ class _Handler(BaseHTTPRequestHandler):
         return self._blocked(405, "no_cors")
 
 
-def create_server(port=8780, *, owner_code=None, allow_external_actions=False,
-                  task_db_path=None, brain_db_path=None, analytics_db_path=None,
-                  growth_db_path=None):
+def create_server(port=8780, *, owner_code=None, allow_external_actions=False):
     if type(port) is not int or not 0 <= port <= 65535:
         raise ValueError("Invalid port")
     if owner_code is not None and (
@@ -214,17 +174,13 @@ def create_server(port=8780, *, owner_code=None, allow_external_actions=False,
     server.sessions = {}
     server.failed_logins = []
     server.auth_lock = threading.RLock()
-    server.task_db_path = task_db_path
-    server.brain_db_path = brain_db_path
-    server.analytics_db_path = analytics_db_path
-    server.growth_db_path = growth_db_path
     server.allow_external_actions = allow_external_actions is True
     return server
 
 
 def main():
     cli = argparse.ArgumentParser(
-        description="Owner-authenticated localhost AgentForge Control Center V1")
+        description="Owner-authenticated localhost AgentForge Video Studio")
     cli.add_argument("--port", type=int, default=8780)
     cli.add_argument("--allow-external-tools", action="store_true",
                      help="Explicitly enable gated model/network/browser/process workflows")

@@ -1,4 +1,4 @@
-name: CI
+name: Video Studio CI
 
 on:
   push:
@@ -11,108 +11,54 @@ permissions:
 
 jobs:
   video-foundation:
-    name: Video foundation security and routing (Windows, Python 3.13)
+    name: Windows Python 3.13 + React/Edge
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Install project
+      - name: Install Python media dependencies
         run: python -m pip install -e ".[media]"
-      - name: Run independent Owner security and Film project regressions
-        run: python -m unittest tests.test_owner_auth_video_foundation tests.test_video_projects -v
-
-  unit-tests:
-    name: Unit tests (Windows, Python 3.13)
-    runs-on: windows-latest
-    timeout-minutes: 15
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-
-      - name: Install project
-        run: python -m pip install -e ".[media]"
-
-      - name: Verify installed package from outside the repository
+      - name: Verify installed Python package from outside source tree
         shell: pwsh
         run: |
           Push-Location $env:RUNNER_TEMP
           try {
-            python -c "import os; from pathlib import Path; import agentforge; from agentforge import paths; root=Path(os.environ['GITHUB_WORKSPACE']).resolve(); assert paths.REPOSITORY_ROOT.resolve()==root; assert Path(agentforge.__file__).resolve().parent== (root/'agentforge').resolve()"
-            if ($LASTEXITCODE -ne 0) { throw "Flat Python package import failed outside checkout" }
+            python -c "import agentforge, os; from pathlib import Path; from agentforge.paths import REPOSITORY_ROOT; assert Path(agentforge.__file__).resolve().parent == REPOSITORY_ROOT / 'agentforge'; assert REPOSITORY_ROOT == Path(os.environ['GITHUB_WORKSPACE']).resolve()"
+            if ($LASTEXITCODE -ne 0) { throw "Python package import failed" }
           } finally { Pop-Location }
-
-      - name: Verify wheel contains root agentforge package only
-        shell: pwsh
-        run: |
-          $out = Join-Path $env:RUNNER_TEMP 'agentforge-wheel'
-          New-Item -ItemType Directory -Force -Path $out | Out-Null
-          python -m pip wheel . --no-deps --wheel-dir $out
-          if ($LASTEXITCODE -ne 0) { throw "Python wheel build failed" }
-          $wheels = @(Get-ChildItem -Path $out -Filter 'agentforge-*.whl')
-          if ($wheels.Count -ne 1) { throw "Expected exactly one AgentForge wheel" }
-          python -c "import sys,zipfile; files=zipfile.ZipFile(sys.argv[1]).namelist(); assert 'agentforge/__main__.py' in files; assert 'agentforge/paths.py' in files; assert not any(p.startswith(('src/','dashboard/','tests/')) for p in files)" $wheels[0].FullName
-          if ($LASTEXITCODE -ne 0) { throw "Wheel incorrectly includes non-package content or lacks modules" }
-
-      - name: Validate documentation links
+      - name: Compile all Python modules
+        run: python -m compileall -q agentforge tests
+      - name: Validate Markdown links
         run: python scripts/check_docs.py
-
-      - name: Check Git-tracked source for accidental credentials and binary artifacts
+      - name: Verify tracked-file hygiene
         run: python scripts/check_source_hygiene.py
-
-      - name: Audit retained compatibility imports (read-only)
-        run: python scripts/compat_audit.py --check
-
-      - name: Setup Node for standalone React Dashboard
-        uses: actions/setup-node@v4
+      - name: Run all video foundation regressions
+        run: python -m unittest discover -s tests -v
+      - name: Run read-only Owner acceptance
+        shell: powershell
+        run: .\scripts\agentforge_acceptance_windows.ps1 -RunContractTests
+      - name: Run FFmpeg fixture (real encode/decode, no model)
+        run: python -B -m agentforge.ops.runtime_certification --run-ffmpeg --confirm-local-exec
+      - name: Run no-inference Owner preflight wrapper
+        shell: powershell
+        run: .\scripts\agentforge_runtime_certify_windows.ps1
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
-
-      - name: Install React Dashboard dependencies
+      - name: Install Dashboard dependencies
         working-directory: dashboard
         run: npm ci --ignore-scripts --no-audit --no-fund
-
-      - name: Validate compact React navigation
+      - name: Dashboard unit checks
         working-directory: dashboard
         run: npm run test:navigation
-
-      - name: Build React Dashboard (Ant Design)
+      - name: Dashboard production build
         working-directory: dashboard
         run: npm run build
-
-      - name: Smoke-test React production boot in Microsoft Edge
+      - name: Dashboard Edge browser smoke
         working-directory: dashboard
         run: npm run test:browser
-
-      - name: Validate built dashboard routing and assets
-        run: python -m unittest tests.test_react_dashboard_v27 -v
-
-      - name: Smoke-test M9 read-only Windows setup
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup_windows.ps1
-
-      - name: Check trusted offline Chromium runner syntax
-        run: node --check sandbox/webapp/browser_runner.mjs
-
-      - name: Run unit tests
-        run: python -m unittest discover -s tests -v
-
-      - name: Verify actual FFmpeg encode and decode with disposable CI fixture
-        run: python -B -m agentforge.ops.runtime_certification --run-ffmpeg --confirm-local-exec
-
-      - name: Smoke-test new Owner runtime preflight wrapper (PowerShell 5.1, no AI)
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/agentforge_runtime_certify_windows.ps1
-
-      - name: Wave 5 Base V1 acceptance (read-only, no Owner data writes)
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/agentforge_acceptance_windows.ps1 -RunContractTests
-
-      - name: Smoke-test read-only owner acceptance (PowerShell 5.1)
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/agentforge_acceptance_windows.ps1
+      - name: Dashboard asset security
+        run: python -m unittest tests.test_dashboard_static -v

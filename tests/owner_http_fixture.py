@@ -24,11 +24,7 @@ class OwnerHttpFixture(unittest.TestCase):
         self.root = Path(temp.name)
         self.brain = self.root / "brain.sqlite3"
         self.tasks = self.root / "tasks.sqlite3"
-        self.server = create_server(
-            0, owner_code=CODE, brain_db_path=self.brain,
-            task_db_path=self.tasks, analytics_db_path=self.root / "analytics.sqlite3",
-            growth_db_path=self.root / "growth.sqlite3",
-        )
+        self.server = create_server(0, owner_code=CODE)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.addCleanup(self._shutdown)

@@ -164,15 +164,6 @@ def _comfy_catalog_at_port(category, port):
         return [], _error(exc)[1]
 
 
-def _browser_preflight():
-    from agentforge.features.webapps import sandbox
-    docker, host, image = probes._docker_context()
-    if image is None:
-        return {"status": "QA_IMAGE_NOT_PINNED"}
-    sandbox._image_ready(docker, host, image, timeout=3)
-    return {"status": "READY_FOR_OFFLINE_SANDBOX_TEST"}
-
-
 def inspect():
     """One live snapshot with no model loads, installation, or external addresses."""
     disk = shutil.disk_usage(REPOSITORY_ROOT)
@@ -194,21 +185,18 @@ def inspect():
     software_commands = [
         ("node", shutil.which("node"), "--version"),
         ("git", shutil.which("git"), "--version"),
-        ("docker", shutil.which("docker"), "--version"),
 
         ("ffmpeg", ffmpeg, "-version"),
     ]
     with ThreadPoolExecutor(max_workers=10) as pool:
         tools = [pool.submit(_software, *args) for args in software_commands]
         gpu = pool.submit(_gpu)
-        docker = pool.submit(probes._safe_probe, _browser_preflight)
         runtime = [pool.submit(_ollama, endpoint) for endpoint in ollama[:4]]
         runtime.extend(pool.submit(_comfy, port) for port in comfy[:4])
         rows = [future.result() for future in runtime]
     checked_at = datetime.now(timezone.utc).isoformat()
     services = [service for service, _ in rows]
     models = list({model["id"]: model for _, entries in rows for model in entries}.values())
-    browser = docker.result()
     checked = {(row["id"], row["endpoint"]): row for row in services}
     present = {(row["provider"], row["endpoint"], row["name"]) for row in models}
     configured = []
@@ -240,7 +228,5 @@ def inspect():
                           else "NOT_INSTALLED", "scope": "CLI in PATH"},
                          *[future.result() for future in tools]],
             "services": services, "models": models, "configured_models": configured,
-            "browser_qa": {"status": "INSTALLED" if browser["status"] == "READY_FOR_OFFLINE_SANDBOX_TEST"
-                           else "UNKNOWN", "detail": browser["status"], "smoke_tested": False},
             "validation": {"discovery": True, "model_loadability": "UNKNOWN",
                            "capability_smoke": "NOT_RUN", "benchmark": "NOT_RUN"}}

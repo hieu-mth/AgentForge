@@ -1,10 +1,7 @@
-"""Owner-local emergency pause for NEW AgentForge skill/Goal/schedule dispatch.
+"""Owner-local emergency pause for new Video Studio operations.
 
-No running subprocess or external API can be forcibly stopped safely; this
-state is checked before future actions and between bounded Goal steps. Existing
-actions may finish or become INTERRUPTED. It is not OS sandboxing or a service.
-Corrupted state is fail-closed PAUSED. Default with no file is ACTIVE for
-backward-compatible local operation. Owner must explicitly resume.
+Existing external work may finish; this is not a process sandbox. Malformed
+state fails closed. No Owner file is deleted or migrated automatically.
 """
 import argparse
 import json
@@ -13,9 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from agentforge.ops_backup import _safe
-
-from agentforge.paths import REPOSITORY_ROOT
+from agentforge.paths import REPOSITORY_ROOT, ensure_local_root as _safe
 
 STATE_FILE = REPOSITORY_ROOT / "data" / "company" / "ops_control.json"
 MAX_BYTES = 4096
@@ -25,7 +20,7 @@ MODES = {"ACTIVE", "PAUSED"}
 def read(*, path=None):
     try:
         target = _safe(Path(path) if path is not None else STATE_FILE)
-    except (ValueError, OSError):
+    except (ValueError, OSError, PermissionError):
         return {"mode": "PAUSED", "reason": "INVALID_STATE", "persisted": True}
     if not target.exists():
         return {"mode": "ACTIVE", "reason": "DEFAULT_LOCAL", "persisted": False}

@@ -21,14 +21,12 @@ from urllib.parse import urlsplit
 from agentforge.ai.model_registry import (
     DEFAULT_CONFIG, ENV_NAME, ModelConfigError, load_models,
 )
-from agentforge.ai.worker_registry import load_worker
 from agentforge.paths import COMPANY_DATA_DIR, CONFIG_DIR, ensure_local_root
 
 DB_PATH = COMPANY_DATA_DIR / "model_hub.sqlite3"
 ROUTES_FILE = CONFIG_DIR / "task_routes.toml"
 # Persisted Owner overlays for retired products are accepted read-only but
 # excluded from active routes. Never rewrite the Owner's SQLite on GET.
-RETIRED_ROUTE_KEYS = frozenset(["web.create","webapp.architect","webapp.develop","webapp.review","media.copy_draft","growth.report"])
 
 ID_RE = re.compile(r"[a-z][a-z0-9_]{2,39}\Z")
 TASK_RE = re.compile(r"[a-z][a-z0-9_.]{2,59}\Z")
@@ -101,7 +99,7 @@ def validate_profile(value, *, profile_id=None):
 
 
 def _defaults():
-    """Read reviewed task keys; worker default model stays in worker.toml."""
+    """Load only reviewed runtime capabilities; no implicit worker execution."""
     try:
         raw = tomllib.loads(ROUTES_FILE.read_text(encoding="utf-8-sig"))
     except (OSError, UnicodeError, tomllib.TOMLDecodeError) as exc:
@@ -109,7 +107,6 @@ def _defaults():
     if set(raw) != {"routes"} or not isinstance(raw["routes"], dict):
         raise ModelConfigError("Invalid default routes")
     routes = {}
-    wired_workers = set()
     for key, value in raw["routes"].items():
         _required_text(key, TASK_RE, "task key")
         if (not isinstance(value, dict) or
@@ -129,15 +126,8 @@ def _defaults():
         if execution == "wired" and kind != "text":
             raise ModelConfigError("Non-text adapters are not wired yet")
         if worker is not None:
-            _required_text(worker, ID_RE, "worker ID")
-            if execution != "wired" or worker in wired_workers:
-                raise ModelConfigError("Worker can have only one active route")
-            wired_workers.add(worker)
+            raise ModelConfigError("Worker-specific routes are not enabled")
         default_model = value.get("default_model")
-        if worker is not None:
-            if default_model is not None:
-                raise ModelConfigError("Worker model belongs in worker.toml")
-            default_model = load_worker(worker)["model_ref"]
         if default_model is not None:
             _required_text(default_model, ID_RE, "default model reference")
         if execution == "wired" and not default_model:
@@ -180,20 +170,14 @@ def _validate_state(doc):
         raise ModelConfigError("Model Hub exceeds bounded limits")
     for ident, profile in doc["profiles"].items():
         validate_profile(profile, profile_id=ident)
+    # Unknown keys in older Owner SQLite are inert archival data, not routes.
+    # Read safely without rewriting the Owner database during GET.
     defaults = _defaults()
     for key, ref in doc["routes"].items():
-        if key not in defaults and key not in RETIRED_ROUTE_KEYS:
-            raise ModelConfigError("Unknown task route")
-        if key in RETIRED_ROUTE_KEYS:
-            _required_text(ref, ID_RE, "archived routed model ID")
-            continue
-        if defaults[key]["kind"] == "rules" and key not in {
-                "analytics.quality_check", "growth.report"}:
+        _required_text(key, TASK_RE, "stored task key")
+        _required_text(ref, ID_RE, "stored model ID")
+        if key in defaults and defaults[key]["kind"] == "rules":
             raise ModelConfigError("Deterministic monitoring cannot use a model")
-        # Legacy Owner overlays may still contain these two previously-wired
-        # routes. They remain inert/readable until an explicit Owner edit;
-        # GET must never mutate or reject the entire existing Model Hub.
-        _required_text(ref, ID_RE, "routed model ID")
     if len(json.dumps(doc, ensure_ascii=False).encode("utf-8")) > MAX_STATE_BYTES:
         raise ModelConfigError("Model Hub state exceeds safe size")
 
@@ -228,19 +212,6 @@ def effective_models(*, db_path=None):
             if value["provider"] in {"ollama", "anthropic"}}
 
 
-def model_for_worker(worker_id, fallback, *, db_path=None):
-    """Return (model_ref, revision, changed_by_owner); no network or fallback."""
-    revision, state = _read_state(db_path=db_path)
-    for key, config in _defaults().items():
-        if config["execution"] == "wired" and config["worker"] == worker_id:
-            return state["routes"].get(key, config["default_model"]), revision, (
-                key in state["routes"])
-    if worker_id is None:
-        return state["routes"].get("general.text", fallback), revision, (
-            "general.text" in state["routes"])
-    return fallback, revision, False
-
-
 def catalog(*, db_path=None):
     revision, state = _read_state(db_path=db_path)
     profiles = _profiles(state=state)
@@ -263,9 +234,7 @@ def catalog(*, db_path=None):
         else:
             status = "ROUTED" if route["execution"] == "wired" else "CONFIG_ONLY"
         routes.append({**route, "model_ref": selected,
-                       "source": ("legacy_inactive" if route["kind"] == "rules"
-                                  and key in state["routes"] else
-                                  "owner" if key in state["routes"] else "default"),
+                        "source": ("owner" if key in state["routes"] else "default"),
                        "status": status,
                        "runtime_wired": route["execution"] == "wired"})
     return {
