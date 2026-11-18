@@ -29,36 +29,23 @@ def handle(server, path, request, session=None):
              "source_sha256": sha, "source_task_id": ident},
             db_path=server.brain_db_path)
 
-    if path.startswith("/api/artifacts/") and path.endswith("/syntax"):
+    if path.startswith("/api/artifacts/reports/") and path.endswith("/decision"):
         parts = path.split("/")
-        if (len(parts) != 6 or parts[3] not in {"webapps", "proposals"}
-                or set(request) != {"ack", "sha256"} or request["ack"] != "VALIDATE_SYNTAX"):
-            raise ValueError("Invalid source validation request")
-        namespace, pid = parts[3:5]
-        reviewed = "reviewed_webapps" if namespace == "webapps" else "reviewed_proposals"
-        if session is None or session.get(reviewed, {}).get(pid) != request["sha256"]:
-            raise PermissionError("Inspect exact source before validation")
-        from agentforge.ops_control import require_active
-        require_active()
-        return artifact_acceptance.validate_source(pid, request["sha256"], namespace, db_path=server.task_db_path)
-    if path.startswith("/api/artifacts/") and path.endswith("/decision"):
-        parts = path.split("/")
-        if (len(parts) != 6 or parts[3] not in {"webapps", "proposals", "reports"}
-                or set(request) != {"ack", "sha256", "expected_revision", "evidence_sha"}):
-            raise ValueError("Invalid artifact decision")
-        namespace, pid = parts[3:5]
-        decision = {"ACCEPT_ARTIFACT": "ACCEPTED", "REJECT_ARTIFACT": "REJECTED"}.get(request["ack"])
-        reviewed = {"webapps": "reviewed_webapps", "proposals": "reviewed_proposals",
-                    "reports": "reviewed_reports"}[namespace]
-        if (decision is None or session is None
-                or session.get(reviewed, {}).get(pid) != request["sha256"]):
-            raise PermissionError("Inspect the exact source before deciding acceptance")
+        if (len(parts) != 6 or set(request) !=
+                {"ack", "sha256", "expected_revision", "evidence_sha"}):
+            raise ValueError("Invalid report decision")
+        ident = parts[4]
+        decision = {"ACCEPT_ARTIFACT": "ACCEPTED",
+                    "REJECT_ARTIFACT": "REJECTED"}.get(request["ack"])
+        if (decision is None or session is None or
+                session.get("reviewed_reports", {}).get(ident) != request["sha256"]):
+            raise PermissionError("Inspect exact report before deciding acceptance")
         from agentforge.ops_control import require_active
         require_active()
         return artifact_acceptance.decide(
-            pid, request["sha256"], namespace, decision, confirm=True,
-            expected_revision=request["expected_revision"], evidence_sha=request["evidence_sha"],
-            db_path=server.task_db_path)
+            ident, request["sha256"], "reports", decision, confirm=True,
+            expected_revision=request["expected_revision"],
+            evidence_sha=request["evidence_sha"], db_path=server.task_db_path)
     if path == "/api/retention/backup":
         from agentforge.storage import retention
         if (set(request) != {"ack", "kind", "id", "tree_sha"} or
