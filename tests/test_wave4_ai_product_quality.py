@@ -186,7 +186,7 @@ class ProductQualityAndRoutingTests(unittest.TestCase):
 
     def test_deterministic_routes_are_never_wired_to_model(self):
         routes = {x["id"]: x for x in model_hub.catalog()["routes"]}
-        for name in ("analytics.quality_check", "growth.report"):
+        for name in ("analytics.quality_check", "ops.monitor"):
             route = routes[name]
             self.assertEqual(route["status"], "DETERMINISTIC")
             self.assertIsNone(route["model_ref"])
@@ -207,10 +207,10 @@ class ProductQualityAndRoutingTests(unittest.TestCase):
             routes = {x["id"]: x for x in model_hub.catalog(
                 db_path=db_path)["routes"]}
             self.assertEqual(db_path.read_bytes(), before)
-            for name in ("analytics.quality_check", "growth.report"):
-                self.assertEqual(routes[name]["source"], "legacy_inactive")
-                self.assertIsNone(routes[name]["model_ref"])
-                self.assertEqual(routes[name]["status"], "DETERMINISTIC")
+            self.assertEqual(routes["analytics.quality_check"]["source"], "legacy_inactive")
+            self.assertIsNone(routes["analytics.quality_check"]["model_ref"])
+            self.assertEqual(routes["analytics.quality_check"]["status"], "DETERMINISTIC")
+            self.assertNotIn("growth.report", routes)
             with self.assertRaises(ValueError):
                 model_hub.change("SET_MODEL_ROUTE", expected_revision=1,
                                  db_path=db_path, task_id="growth.report",
