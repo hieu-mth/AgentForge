@@ -129,9 +129,6 @@ def _defaults():
             raise ModelConfigError("Worker-specific routes are not enabled")
         default_model = value.get("default_model")
         if default_model is not None:
-                raise ModelConfigError("Worker model belongs in worker.toml")
-            default_model = load_worker(worker)["model_ref"]
-        if default_model is not None:
             _required_text(default_model, ID_RE, "default model reference")
         if execution == "wired" and not default_model:
             raise ModelConfigError("Wired route needs a default model")
