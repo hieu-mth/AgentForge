@@ -1,4 +1,4 @@
-"""M4d2: local-only transport and stable Film Studio error/patch boundary."""
+"""Local-only transport and stable Film Studio error/patch boundary."""
 import unittest
 from unittest.mock import patch
 
