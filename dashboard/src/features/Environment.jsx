@@ -4,7 +4,7 @@ import {AppstoreOutlined, CloudServerOutlined, CodeOutlined, DatabaseOutlined,
   SafetyCertificateOutlined, ThunderboltOutlined} from '@ant-design/icons';
 import {useResource, ResourceStatus} from '../use_resource.jsx';
 import {useScreenRefresh} from '../refresh_scope.jsx';
-import {formatGiB, formatMiB, percentUsed, formatChecked, displayStatus,
+import {formatCapacity, formatVram, percentUsed, formatChecked, displayStatus,
   statusTone} from '../environment_format.js';
 
 const {Text,Title,Paragraph}=Typography;
@@ -71,7 +71,7 @@ const modelColumns=[
   {title:'Trạng thái',dataIndex:'status',key:'status',width:155,
     render:value=><Status value={value}/>},
   {title:'Dung lượng',dataIndex:'size_bytes',key:'size',width:130,
-    render:value=>typeof value==='number'?formatGiB(value,2):'Chưa rõ'},
+    render:value=>typeof value==='number'?formatCapacity(value,2):'Chưa rõ'},
 ];
 const profileColumns=[
   {title:'Profile',dataIndex:'id',key:'id',
@@ -142,18 +142,18 @@ export function Environment({onNavigate}){
           sub={primaryGpu?'Driver '+(primaryGpu.driver_version||'chưa rõ'):
             (gpu.error||'Chưa có số liệu GPU')}/>
         <Stat icon={<ThunderboltOutlined/>} label="VRAM khả dụng"
-          value={primaryGpu?formatMiB(primaryGpu.vram_free_mib):'Chưa xác định'}
-          sub={primaryGpu?'Tổng '+formatMiB(primaryGpu.vram_total_mib)+
+          value={primaryGpu?formatVram(primaryGpu.vram_free_mib):'Chưa xác định'}
+          sub={primaryGpu?'Tổng '+formatVram(primaryGpu.vram_total_mib)+
             (vramUsage!==null?' · Đã dùng '+vramUsage+'%':''):'Đợi phát hiện GPU'}
           progress={vramUsage}/>
         <Stat icon={<DatabaseOutlined/>} label="RAM khả dụng"
-          value={formatGiB(memory.available_bytes)}
-          sub={'Tổng '+formatGiB(memory.total_bytes)+
+          value={formatCapacity(memory.available_bytes)}
+          sub={'Tổng '+formatCapacity(memory.total_bytes)+
             (memoryUsage!==null?' · Đã dùng '+memoryUsage+'%':'')}
           progress={memoryUsage}/>
         <Stat icon={<HddOutlined/>} label="Ổ đĩa workspace"
-          value={formatGiB(disk.free_bytes)}
-          sub={'Tổng '+formatGiB(disk.total_bytes)+
+          value={formatCapacity(disk.free_bytes)}
+          sub={'Tổng '+formatCapacity(disk.total_bytes)+
             (diskUsage!==null?' · Đã dùng '+diskUsage+'%':'')}
           progress={diskUsage}/>
       </div>
@@ -179,7 +179,7 @@ export function Environment({onNavigate}){
             {title:'Driver',dataIndex:'driver_version',key:'driver',width:130},
             {title:'VRAM trống / tổng',key:'vram',width:255,
               render:(_,r)=><div className="env-gpu-memory">
-                <span>{formatMiB(r.vram_free_mib)} / {formatMiB(r.vram_total_mib)}</span>
+                <span>{formatVram(r.vram_free_mib)} / {formatVram(r.vram_total_mib)}</span>
                 {percentUsed(r.vram_free_mib,r.vram_total_mib)!==null&&
                   <Progress percent={percentUsed(r.vram_free_mib,r.vram_total_mib)}
                     showInfo={false} size="small" strokeColor="#7776ee"
