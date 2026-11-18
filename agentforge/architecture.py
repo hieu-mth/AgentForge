@@ -50,7 +50,6 @@ BUSINESS_DOMAIN_IMPORTS = {
     "agentforge.media_assets": "agentforge.features.media.assets",
     "agentforge.media_quality": "agentforge.features.media.quality",
     "agentforge.media_render": "agentforge.features.media.render",
-    "agentforge.media_workflow_v15": "agentforge.features.media.workflow",
     "agentforge.growth_store": "agentforge.features.growth.store",
     "agentforge.growth_reports": "agentforge.features.growth.reports",
     "agentforge.growth_bundle": "agentforge.features.growth.bundle",

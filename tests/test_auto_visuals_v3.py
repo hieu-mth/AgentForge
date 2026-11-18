@@ -11,7 +11,6 @@ from uuid import uuid4
 
 from agentforge.features.media import visual_jobs
 from agentforge.api.routes import media as media_routes
-from agentforge import quality_v14
 
 STORY = {
     "title": "Video quảng cáo nệm ngủ",

@@ -13,8 +13,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from agentforge import (
-    autopilot_v13, brain_runner, brain_store, ops_doctor,
-    quality_v14, task_history,
+    brain_runner, brain_store, ops_doctor, task_history,
 )
 from agentforge.features.film_studio import motion_comfy, long_form
 from tests.test_film_motion_comfy import template, sample_plan
@@ -188,38 +187,6 @@ class Wave3RecoveryAndHealthTests(unittest.TestCase):
         self.assertFalse((self.tasks.parent / (self.tasks.name + "-journal")).exists())
 
 
-class Wave3LegacyQualityInspectionTests(unittest.TestCase):
-    def setUp(self):
-        temp = tempfile.TemporaryDirectory()
-        self.addCleanup(temp.cleanup)
-        self.db = Path(temp.name) / "autopilot.sqlite3"
-
-    def test_absent_quality_inbox_is_pure_read(self):
-        self.assertEqual(quality_v14.inbox(db_path=self.db),
-                         {"business_context": None, "reviews": []})
-        self.assertFalse(autopilot_v13.policy(db_path=self.db)["enabled"])
-        self.assertFalse(self.db.exists())
-
-    def test_existing_v13_schema_is_not_migrated_during_inspection(self):
-        with closing(sqlite3.connect(self.db)) as db, db:
-            db.execute("CREATE TABLE policy (singleton INTEGER PRIMARY KEY, "
-                       "enabled INTEGER, daily_cap INTEGER, updated_utc TEXT)")
-            db.execute("INSERT INTO policy VALUES(1,0,0,'old')")
-        before = self.db.read_bytes()
-        with closing(sqlite3.connect(self.db)) as db:
-            tables_before = [r[0] for r in db.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")]
-        self.assertEqual(quality_v14.inbox(db_path=self.db),
-                         {"business_context": None, "reviews": []})
-        self.assertFalse(autopilot_v13.policy(db_path=self.db)["enabled"])
-        self.assertEqual(self.db.read_bytes(), before)
-        with closing(sqlite3.connect(self.db)) as db:
-            self.assertEqual(tables_before, [r[0] for r in db.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")])
-        self.assertNotIn("content_reviews", tables_before)
-
-
-
 class Wave3AuthenticatedReadTests(unittest.TestCase):
     def test_owner_bootstrap_does_not_initialize_missing_task_or_quality_storage(self):
         from tests.owner_http_fixture import OwnerHttpFixture
@@ -227,15 +194,14 @@ class Wave3AuthenticatedReadTests(unittest.TestCase):
             "test_noop")
         case.setUp()
         self.addCleanup(case.doCleanups)
-        autopilot_db = case.brain.parent / "missing-autopilot.sqlite3"
-        with patch.object(autopilot_v13, "DB", autopilot_db):
-            case.login()
-            status, response, _ = case.req("GET", "/api/bootstrap")
+        archived_db = case.brain.parent / "missing-autopilot.sqlite3"
+        case.login()
+        status, response, _ = case.req("GET", "/api/bootstrap")
         self.assertEqual(status, 200, response)
         self.assertFalse(case.tasks.exists(), "Authenticated GET created S1 database")
         self.assertFalse(case.brain.exists(), "Authenticated GET created S4 database")
-        self.assertFalse(autopilot_db.exists(),
-                         "Authenticated GET initialized quality/autopilot schema")
+        self.assertFalse(archived_db.exists(),
+                         "Authenticated GET must not initialize archived business storage")
 
     def test_doctor_reports_unreadable_running_counts_instead_of_false_pass(self):
         with tempfile.TemporaryDirectory() as temp:

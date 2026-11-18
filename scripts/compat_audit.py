@@ -25,7 +25,7 @@ GROUPS = {
     },
     "media": {
         "media_assets": "assets", "media_render": "render",
-        "media_quality": "quality", "media_workflow_v15": "workflow",
+        "media_quality": "quality",
     },
     "growth": {
         "growth_store": "store", "growth_bundle": "bundle",

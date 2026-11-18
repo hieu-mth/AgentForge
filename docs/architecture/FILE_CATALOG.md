@@ -1,8 +1,8 @@
 # Python module catalog — tracked source snapshot
 
-Catalog này liệt kê **module hiện có trong repository tại commit sau dọn alias/frontend Đợt 3**, không phải cam kết tất cả là active runtime. Đường dẫn tính từ `agentforge/`. Khi xóa module trong cleanup phải cập nhật danh sách; CI kiểm đủ module và không tự quét `data/`/`workspace/`.
+Danh mục các module **đang tồn tại trong source**, không đồng nghĩa tất cả đang phục vụ runtime. Tự cập nhật khi xóa module legacy. Không quét hoặc sửa `data/`, `workspace/` hay model của Owner.
 
-Số Python modules: **184**. Các package legacy còn được ghi nhận để không báo nhầm đã xóa.
+Số Python modules: **179**.
 
 - `__init__.py`
 - `__main__.py`
@@ -37,7 +37,6 @@ Số Python modules: **184**. Các package legacy còn được ghi nhận để
 - `architecture.py`
 - `artifact_catalog.py`
 - `asset_preview.py`
-- `autopilot_v13.py`
 - `brain_planner.py`
 - `brain_runner.py`
 - `brain_scheduler.py`
@@ -46,7 +45,6 @@ Số Python modules: **184**. Các package legacy còn được ghi nhận để
 - `browser_validation.py`
 - `company_brain.py`
 - `company_flow.py`
-- `company_v2.py`
 - `competitor_facts.py`
 - `competitors.py`
 - `control_center_v1.py`
@@ -92,7 +90,6 @@ Số Python modules: **184**. Các package legacy còn được ghi nhận để
 - `features/media/quality.py`
 - `features/media/render.py`
 - `features/media/visual_jobs.py`
-- `features/media/workflow.py`
 - `features/webapps/__init__.py`
 - `features/webapps/architect.py`
 - `features/webapps/browser_qa.py`
@@ -132,7 +129,6 @@ Số Python modules: **184**. Các package legacy còn được ghi nhận để
 - `media_pipeline.py`
 - `media_quality.py`
 - `media_render.py`
-- `media_workflow_v15.py`
 - `model.py`
 - `model_health.py`
 - `model_registry.py`
@@ -153,7 +149,6 @@ Số Python modules: **184**. Các package legacy còn được ghi nhận để
 - `product_quality.py`
 - `product_revision.py`
 - `prompt_intake.py`
-- `quality_v14.py`
 - `research.py`
 - `research_report.py`
 - `result_view.py`
