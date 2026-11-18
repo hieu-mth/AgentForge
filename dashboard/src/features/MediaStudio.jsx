@@ -5,8 +5,8 @@ const { Title, Text, Paragraph } = Typography;
 
 // The studio is a workflow entry point, not a simulated video-production runtime.
 // All destinations are existing Owner routes and retain their own authorization gates.
+// Only link to routes exposed by the video-first sidebar.
 const WORKFLOW = [
-  {title:'Giao ý tưởng',description:'Tạo kế hoạch và duyệt từng bước',route:'workspace',action:'Giao việc',icon:<ArrowRightOutlined/>},
   {title:'Chuẩn bị tư liệu',description:'Tạo và kiểm tra ảnh AI trên máy',route:'projects',action:'Mở kho ảnh',icon:<PictureOutlined/>},
   {title:'Kiểm tra thành phẩm',description:'Duyệt storyboard và video đã tạo',route:'reviews',action:'Mở nơi duyệt',icon:<SafetyCertificateOutlined/>},
 ];
@@ -19,7 +19,7 @@ export function MediaStudio({onNavigate}) {
     <div>
       <Tag>AI Media Studio</Tag>
       <Title level={3} style={{margin:'10px 0 6px'}}>Sản xuất video</Title>
-      <Paragraph type="secondary" style={{margin:0}}>Đi từ ý tưởng đến tư liệu và bản duyệt bằng các công cụ hiện có của AgentForge.</Paragraph>
+      <Paragraph type="secondary" style={{margin:0}}>Đi từ tư liệu đến bản duyệt bằng các công cụ hiện có của AgentForge. Khâu biên kịch chưa được tích hợp vào Studio.</Paragraph>
     </div>
     <Alert type="info" showIcon message="Trung tâm điều hướng, không phải trình render"
       description="Trang này không tự tạo video, không xác nhận GPU/model đã sẵn sàng. Mỗi bước mở đúng màn hình thực tế; quyền chạy AI, tiến trình ngoài và duyệt thành phẩm vẫn được kiểm soát riêng."/>
