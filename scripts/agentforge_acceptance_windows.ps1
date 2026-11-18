@@ -32,11 +32,11 @@ function Invoke-CheckedPython {
 }
 
 Write-Host "AgentForge Video Studio — local acceptance"
-Invoke-CheckedPython @("-B","-m","agentforge.ops.preflight")
-Invoke-CheckedPython @("-B","-m","agentforge.ops_control","status")
+Invoke-CheckedPython -Arguments @("-B","-m","agentforge.ops.preflight")
+Invoke-CheckedPython -Arguments @("-B","-m","agentforge.ops_control","status")
 
 if ($RunContractTests) {
-    Invoke-CheckedPython @("-B","-m","unittest","-q",
+    Invoke-CheckedPython -Arguments @("-B","-m","unittest","-q",
         "tests.test_owner_auth_video_foundation",
         "tests.test_video_projects",
         "tests.test_character_registry",
@@ -50,9 +50,9 @@ if ($RunContractTests) {
     Write-Host "Contract fixtures passed; GPU and video playback remain Owner-unverified."
 }
 if ($RunTests) {
-    Invoke-CheckedPython @("-B","-m","unittest","discover","-s","tests","-q")
+    Invoke-CheckedPython -Arguments @("-B","-m","unittest","discover","-s","tests","-q")
 }
 if ($StartDashboard) {
     Write-Host "Starting localhost Dashboard: http://127.0.0.1:8780/"
-    Invoke-CheckedPython @("-m","agentforge","--port","8780")
+    Invoke-CheckedPython -Arguments @("-m","agentforge","--port","8780")
 }
