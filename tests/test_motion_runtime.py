@@ -244,8 +244,7 @@ class MotionHttpTests(unittest.TestCase):
         self.addCleanup(self.patch_job.stop)
 
     def test_status_requires_auth_and_no_model_is_invoked(self):
-        from agentforge import model
-        with patch.object(model, "generate_json") as ai, \
+        with patch.object(motion, "_json_request") as provider, \
              patch.object(motion, "health", return_value={
                  "status": "COMFYUI_UNAVAILABLE", "video_verified": False}), \
              patch.object(verify, "list_jobs", return_value=[]):
@@ -255,7 +254,7 @@ class MotionHttpTests(unittest.TestCase):
             self.assertEqual(code, 200, body)
             self.assertEqual(body["status"], "LOCAL_MOTION_PILOT_UNVERIFIED")
             self.assertFalse(body["owner_12gb_benchmark_verified"])
-            ai.assert_not_called()
+            provider.assert_not_called()
 
     def test_import_needs_owner_mode_review_csrf_sha_and_explicit_ack(self):
         self.http.login()
