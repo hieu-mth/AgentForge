@@ -71,8 +71,8 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
         "thuong mai dien tu", "gio hang", "web app", "webapp",
         "ung dung mua sam", "ecommerce"))
     if re.match(r"(?:tao|sinh|ve|thiet ke)\s+(?:(?:mot|1)\s+)?(?:anh|hinh anh)\b", normalized):
-        from agentforge.features.websites import image_studio
-        health = image_studio.health()
+        from agentforge.features.media import comfy_image
+        health = comfy_image.health()
         available = bool(health["checkpoints"])
         return {
             "status": "OPEN_IMAGE_STUDIO" if available else "CAPABILITY_BLOCKED",
@@ -80,7 +80,7 @@ def plan_request(prompt, *, max_model_calls=1, max_external_runs=0,
             "runtime_status": "CATALOG_PRESENT" if available else health["status"],
             "model_dispatched": False,
             "message": (
-                "Có checkpoint local. Mở Sản phẩm → Kho thành phẩm & Ảnh AI để chọn model và cấp quyền."
+                "Có checkpoint local. Mở Video Studio để chọn model và cấp quyền."
                 if available else
                 "Chưa tìm được checkpoint tạo ảnh từ ComfyUI. Mở Môi trường & Tài nguyên để kiểm tra."
             ),
