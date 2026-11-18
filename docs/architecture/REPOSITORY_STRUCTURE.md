@@ -12,10 +12,10 @@ Ngày kiểm: 18/11/2026. Source of truth là Git `main` + CI, không phải mil
 | `agentforge/integrations/` | Trusted external IO adapters; localhost ComfyUI and private YouTube |
 | `agentforge/ops/`, `agentforge/storage/` | Readiness, backup/retention, local persistence |
 | `dashboard/` | React Owner dashboard duy nhất; source JS trong `dashboard/src/` |
-| `skills/`, `workers/`, `config/` | Static allowlists/model/task profile, đang tiếp tục loại manifest nghiệp vụ cũ |
+| `skills/`, `workers/`, `config/` | Static allowlists/model/task profile, đã giảm manifest Growth/Webapp; cần final audit những skill/worker cũ còn caller |
 | `tests/`, `scripts/` | Regression, Windows CI, read-only acceptance và source hygiene |
 
-**Giai đoạn cleanup:** các package/alias `features/websites`, `features/webapps`, `features/growth`, `media.workflow` có thể còn dưới source trong quá trình dọn Đợt 3. Chúng không còn thuộc Owner API video-first được hỗ trợ. Không dùng các module đó để tạo tính năng mới.
+**Giai đoạn cleanup:** các package/alias `features/websites`, `features/webapps`, `features/growth` còn 29 file Python legacy có caller chưa kiểm chứng safe-to-delete. Chúng không còn thuộc Owner API video-first được hỗ trợ. Không dùng các module đó để tạo tính năng mới.
 
 ## Luồng thực thi
 
@@ -25,4 +25,4 @@ Ngày kiểm: 18/11/2026. Source of truth là Git `main` + CI, không phải mil
 - `dashboard/dist/` và `dashboard/node_modules/` là build cache sinh ra, không commit.
 - CLI hiện hành: `python -m agentforge`; Film planner: `python -m agentforge.features.film_studio.long_form`.
 
-Chi tiết từng Python module đang tracked: [catalog](FILE_CATALOG.md). Quy trình chạy: [DEVELOPMENT](../DEVELOPMENT.md). Các giới hạn đã nghiệm thu: [PHASE2](../audits/PHASE2_BACKEND_ACCEPTANCE.md).
+[Nghiệm thu cleanup Đợt 3](../audits/PHASE3_CLEANUP_ACCEPTANCE.md). Chi tiết từng Python module đang tracked: [catalog](FILE_CATALOG.md). Quy trình chạy: [DEVELOPMENT](../DEVELOPMENT.md). Các giới hạn đã nghiệm thu: [PHASE2](../audits/PHASE2_BACKEND_ACCEPTANCE.md).

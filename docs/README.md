@@ -12,3 +12,5 @@
 - [Owner production gate](verification/OWNER_PRODUCTION_GATE.md)
 
 Các báo cáo cũ còn trong Git history, không được coi là tài liệu runtime hiện hành.
+
+- [Nghiệm thu cleanup Đợt 3](audits/PHASE3_CLEANUP_ACCEPTANCE.md)
