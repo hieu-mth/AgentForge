@@ -1,4 +1,4 @@
-"""Authenticated Video Studio read API; no legacy Goal or business handlers."""
+"""Authenticated, read-only Video Studio routes."""
 
 
 def dispatch(self, route):
@@ -110,7 +110,7 @@ def dispatch(self, route):
         return self._reply(200, contents, mime=mime)
     if route == "/api/media/studio-images":
         # Film Studio only: report already imported generic image/video jobs.
-        # No Website Builder DB reads, network calls, or GPU execution.
+        # Inventory only; no network or GPU activity from this GET.
         from agentforge.features.media import visual_jobs
         rows = visual_jobs.report()["jobs"]
         images = [{

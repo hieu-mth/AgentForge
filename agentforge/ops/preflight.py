@@ -1,4 +1,4 @@
-"""M9: bounded, read-only environment inspection for local Owner setup.
+"""Bounded, read-only environment inspection for local Owner setup.
 
 No subprocess, network call, provider probing, import of optional model
 libraries, state creation, dependency installation or inspection of secrets.
