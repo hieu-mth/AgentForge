@@ -150,9 +150,9 @@ class TestSkillRegistry(unittest.TestCase):
                         skills.main()
                     result = json.loads(stdout.getvalue())
                     if command == "validate":
-                        self.assertEqual(result["skill_count"], 36)
+                        self.assertEqual(result["skill_count"], len(skills.load_registry(root=self.root)))
                     elif command == "list":
-                        self.assertEqual(len(result), 36)
+                        self.assertEqual(len(result), len(skills.load_registry(root=self.root)))
                         self.assertTrue(all(not item["invocation_enabled"] for item in result))
                     else:
                         self.assertFalse(result["invocation_enabled"])

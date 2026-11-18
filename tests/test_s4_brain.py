@@ -286,10 +286,16 @@ class TestS4Brain(unittest.TestCase):
     def test_retired_schedule_cannot_spawn_goal_or_consume_due_slot(self):
         due = datetime(2026, 11, 6, 9, 0, tzinfo=timezone.utc)
         archived = scheduler.create_schedule(
-            "Archived growth review", "growth.review",
-            {"campaign": "old-growth"}, due.isoformat(), 60,
+            "Periodic analytics review", "campaign.review",
+            {"dataset": "demo-test"}, due.isoformat(), 60,
             confirm_schedule=True, db_path=self.brain_db,
             now=due - timedelta(hours=1))
+        # An existing, approved schedule may predate retirement. Simulate the
+        # persisted historical row without allowing new legacy schedule intake.
+        with closing(sqlite3.connect(self.brain_db)) as conn, conn:
+            conn.execute("UPDATE schedules SET template=?,inputs_json=? WHERE schedule_id=?",
+                         ("growth.review", json.dumps({"campaign": "old-growth"}),
+                          archived["schedule_id"]))
         with patch.object(runner, "execute") as execute:
             with self.assertRaisesRegex(PermissionError, "RETIRED_SCHEDULE_TEMPLATE"):
                 scheduler.tick(confirm_tick=True, db_path=self.brain_db,
