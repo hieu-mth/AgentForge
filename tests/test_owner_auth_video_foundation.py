@@ -100,8 +100,8 @@ class OwnerAuthVideoFoundationTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 self.assertEqual(self.request("POST", path, data)[0], 400)
-        self.assertFalse(self.brain.exists())
-        self.assertFalse(self.tasks.exists())
+        self.assertFalse(self.server.brain_db_path.exists())
+        self.assertFalse(self.server.task_db_path.exists())
 
     def test_film_inventory_requires_authentication(self):
         self.assertEqual(self.request("GET", "/api/film/productions")[0], 401)
