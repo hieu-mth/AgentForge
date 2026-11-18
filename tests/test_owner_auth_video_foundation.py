@@ -70,6 +70,20 @@ class OwnerAuthVideoFoundationTests(unittest.TestCase):
         self.assertEqual(self.request("POST", "/api/logout", {})[0], 200)
         self.assertEqual(self.request("GET", "/api/session")[0], 401)
 
+    def test_dashboard_redirect_and_retired_routes_are_not_exposed(self):
+        status, _, headers = self.request("GET", "/")
+        self.assertEqual(status, 302)
+        self.assertEqual(headers.get("Location"), "/dashboard/")
+        status, result, headers = self.request("POST", "/api/login", {"code": self.code})
+        self.assertEqual(status, 200)
+        self.cookie = headers["Set-Cookie"].split(";", 1)[0]
+        self.csrf = result["csrf"]
+        for route in ("/api/mattress", "/api/growth/old",
+                      "/api/webapps/old", "/api/proposals/old",
+                      "/api/visuals/website/old"):
+            with self.subTest(route=route):
+                self.assertEqual(self.request("GET", route)[0], 404)
+
     def test_film_inventory_requires_authentication(self):
         self.assertEqual(self.request("GET", "/api/film/productions")[0], 401)
         self.assertEqual(self.request("GET", "/api/characters")[0], 401)
