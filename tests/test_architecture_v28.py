@@ -1,4 +1,4 @@
-"""Repository V2.8 architecture and backwards-compatibility contract tests."""
+"""Canonical Video Studio architecture and shared compatibility-boundary tests."""
 import importlib
 import inspect
 import re
@@ -14,7 +14,7 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         self.assertTrue((root / "pyproject.toml").is_file())
         self.assertEqual(root / "agentforge", architecture.PACKAGE_ROOT)
         self.assertTrue((root / "dashboard" / "package.json").is_file())
-        for key in ("ai", "core", "website_domain", "storage"):
+        for key in ("ai", "core", "media_feature", "film_studio_feature", "storage"):
             package = root / architecture.LAYOUT[key]
             self.assertTrue((package / "__init__.py").is_file(), key)
         self.assertEqual({"data", "workspace"}, set(architecture.PERSISTENT_DIRS))
@@ -30,8 +30,6 @@ class ArchitectureBoundaryTests(unittest.TestCase):
                 symbols = {
                     "agentforge.prompt_intake": "plan_request",
                     "agentforge.result_view": "present",
-                    "agentforge.website_preview": "from_proposal",
-                    "agentforge.website_feedback": "request_revision",
                     "agentforge.artifact_catalog": "report",
                     "agentforge.model_health": "check",
                 }
