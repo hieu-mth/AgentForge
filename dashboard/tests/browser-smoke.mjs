@@ -46,8 +46,7 @@ try {
     'Missing JS/CSS bundle: '+JSON.stringify(responses.filter(r=>r.status!==200)));
   if(!responses.some(r=>r.url.endsWith('.js'))) throw new Error('No JS bundle requested');
   console.log('React production boot: PASS; '+responses.length+' assets fetched');
-  // Real rendering with explicit API fixtures; this is not a real login test.
-  const states=['NEEDS_REVISION','NEEDS_VALIDATION','READY_FOR_REVIEW','ACCEPTED'];
+  // Video-first routing: retired Workspace deep links must not reopen legacy screens.
   const acceptancePage=await browser.newPage({viewport:{width:1440,height:1000}});
   acceptancePage.on('pageerror',error=>errors.push(error.message));
   await acceptancePage.route('**/api/**',route=>{
@@ -55,39 +54,21 @@ try {
     const body=path==='/api/session'?{csrf:'fixture-only-csrf'}
       :path==='/api/model-hub'?{
         revision:0,cloud_fallback:false,gpu_auto_start:false,
-        profiles:[
-          {id:'local_primary',provider:'ollama',model:'qwen3:8b',enabled:true,
-           source:'git',health:'UNVERIFIED'},
-          {id:'cloud_primary',provider:'anthropic',model:'claude-demo',enabled:true,
-           source:'git',health:'UNVERIFIED'},
-        ],
-        routes:[
-          {id:'web.create',label:'Tạo Website',kind:'text',model_ref:'local_primary',
-           source:'default',runtime_wired:true,status:'ROUTED'},
-          {id:'film.motion',label:'Tạo video chuyển động',kind:'video',model_ref:null,
-           source:'default',runtime_wired:false,status:'UNCONFIGURED'},
+        profiles:[{id:'local_primary',provider:'ollama',model:'qwen3:8b',enabled:true,
+          source:'git',health:'UNVERIFIED'}],
+        routes:[{id:'film.motion',label:'Tạo video chuyển động',kind:'video',model_ref:null,
+          source:'default',runtime_wired:false,status:'UNCONFIGURED'},
           {id:'ops.monitor',label:'Theo dõi hệ thống',kind:'rules',model_ref:null,
-           source:'default',runtime_wired:false,status:'DETERMINISTIC'},
-        ],
-      }:{
-      goals:states.map((status,index)=>({goal_id:String(index+1).repeat(32),
-        title:'Acceptance fixture '+status,template:'webapp.company',status:'SUCCEEDED',
-        artifact_acceptance:{status}})),tasks:[],stats:{},
-      external_actions_enabled:false,
-    };
+          source:'default',runtime_wired:false,status:'DETERMINISTIC'}],
+      }:{goals:[],tasks:[],stats:{},external_actions_enabled:false};
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(body)});
   });
   await acceptancePage.goto(origin+'/dashboard/#/workspace',{waitUntil:'networkidle'});
-  const rows=acceptancePage.locator('.workspace-recent-row');
-  for(const [index,label] of ['Sản phẩm cần chỉnh sửa','Sản phẩm cần kiểm tra',
-    'Đủ điều kiện Owner nghiệm thu','Owner đã chấp nhận'].entries()){
-    const row=rows.filter({hasText:'Acceptance fixture '+states[index]});
-    await row.getByText('Đã thực thi · '+label,{exact:true}).waitFor();
-    await row.getByRole('button',{name:'Xem kết quả',exact:true}).waitFor();
-  }
-  if(await rows.count()!==4)throw new Error('Expected all four acceptance fixtures');
-  if(errors.length)throw new Error('React runtime errors: '+errors.join(' | '));
-  console.log('React acceptance states: PASS (API fixtures; execution separate from Owner acceptance)');
+  await acceptancePage.locator('.app-shell').waitFor();
+  if(!acceptancePage.url().includes('#/workspace'))
+    throw new Error('Unexpected hash mutation during legacy route fallback');
+  await acceptancePage.getByText('Tổng quan',{exact:true}).first().waitFor();
+  console.log('Video-first legacy deep link fallback: PASS');
   // Read-only Model Hub browser contract, with explicit mock data. Do not test
   // paid inference or pretend that a model is installed/online.
   await acceptancePage.goto(origin+'/dashboard/#/models',{waitUntil:'networkidle'});
