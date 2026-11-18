@@ -76,7 +76,7 @@ class FilmPublishingTests(unittest.TestCase):
         listed=publishing.summary(db_path=self.db,film_root=self.films)
         self.assertEqual(len(listed["releases"]),1)
         self.assertFalse(listed["auto_publish"])
-        self.assertIsNone(listed["verified_net_profit_vnd"])
+        self.assertNotIn("verified_net_profit_vnd", listed)
         handed=publishing.handoff(result["release_id"], db_path=self.db,film_root=self.films)
         self.assertEqual(handed["metadata"]["privacy"], "private")
         self.assertTrue(handed["video_file"].endswith("episode.mp4"))
