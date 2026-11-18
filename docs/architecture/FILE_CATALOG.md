@@ -388,3 +388,5 @@ Mỗi lần migration thực sự được merge, cập nhật đường dẫn t
 | Module | Vai trò |
 | --- | --- |
 | `video_projects.py` | Danh sách dự án Film Studio; không phụ thuộc NovaMart hoặc Media V1.5. |
+
+| `features/media/comfy_image.py` | ComfyUI image transport cố định, độc lập Website Builder; xác thực checkpoint và giới hạn loopback. |
