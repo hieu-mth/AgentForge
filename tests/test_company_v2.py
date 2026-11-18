@@ -50,26 +50,12 @@ class V2CompanyTests(unittest.TestCase):
         self.assertIn("CREATE_REAL_CAMPAIGN", result["launch_blockers"])
         self.assertIn("OPERATIONS_PAUSED", result["launch_blockers"])
 
-    def test_autopilot_configuration_requires_exact_ack(self):
-        with patch("agentforge.autopilot_v13.configure", return_value={
-            "enabled": False, "daily_cap": 0
-        }) as configure:
-            with self.assertRaises(PermissionError):
+    def test_retired_autopilot_api_cannot_reconfigure_policy(self):
+        with patch("agentforge.autopilot_v13.configure") as configure:
+            with self.assertRaisesRegex(ValueError, "Unknown mutation route"):
                 _owner_action(None, "/api/autopilot/configure", {
-                    "ack": "WRONG", "enabled": False, "daily_cap": 0
-                })
-            with self.assertRaises(ValueError):
-                _owner_action(None, "/api/autopilot/configure", {
-                    "ack": "SET_DAILY_MODEL_POLICY", "enabled": False,
-                    "daily_cap": 0, "secret": "leak"
-                })
-            output = _owner_action(None, "/api/autopilot/configure", {
-                "ack": "SET_DAILY_MODEL_POLICY", "enabled": False,
-                "daily_cap": 0
-            })
-            self.assertEqual(0, output["daily_cap"])
-            configure.assert_called_once_with(
-                enabled=False, daily_cap=0, confirm=True)
+                    "ack": "SET_DAILY_MODEL_POLICY", "enabled": False, "daily_cap": 0})
+            configure.assert_not_called()
 
     def test_ai_draft_approval_requires_reviewed_sha(self):
         with patch("agentforge.quality_v14.decide", return_value={

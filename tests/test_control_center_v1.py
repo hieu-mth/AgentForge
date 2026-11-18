@@ -173,23 +173,16 @@ class TestControlCenterV1(unittest.TestCase):
             self.assertIn("checked_at", receipt)
             inference.assert_called_once()
 
-    def test_long_unicode_website_brief_over_authenticated_http(self):
+    def test_retired_workspace_intake_does_not_write_or_invoke_model(self):
         self.login()
-        brief = ("Tạo website tư vấn nệm cho gia đình Việt Nam. "
-                 + "Thiết kế tinh tế và rõ ràng trên điện thoại. " * 125)
-        self.assertGreater(len(brief), 600)
-        self.assertLess(len(brief), 6000)
-        code, submitted, _ = self.req("POST", "/api/workspace/request", {
-            "ack": "PLAN_ONLY", "prompt": brief, "max_model_calls": 1})
-        self.assertEqual(code, 200, submitted)
-        saved = brain_store.get_goal(submitted["goal_id"], db_path=self.brain)
-        self.assertEqual(saved["inputs"]["brief"], brief.strip())
-        self.assertEqual(saved["status"], "PLANNED")
+        brief = "Tạo website " + "viết nội dung tiếng Việt " * 125
+        with patch("agentforge.model.generate_json") as model:
+            code, _, _ = self.req("POST", "/api/workspace/request", {
+                "ack": "PLAN_ONLY", "prompt": brief, "max_model_calls": 1})
+            self.assertEqual(code, 400)
+            model.assert_not_called()
+        self.assertFalse(self.brain.exists())
         self.assertFalse(self.taskdb.exists())
-        code, _, _ = self.req("POST", "/api/workspace/request", {
-            "ack": "PLAN_ONLY", "prompt": "Tạo website " + "x" * 6000,
-            "max_model_calls": 1})
-        self.assertEqual(code, 400)
 
     def test_csrf_origin_host_and_body_guards(self):
         self.login()
@@ -349,37 +342,13 @@ class TestControlCenterV1(unittest.TestCase):
         self.assertEqual(self.req("POST", path + "/run", {**approval, "ack": "RUN"})[0], 400)
         self.assertFalse(self.taskdb.exists())
 
-    def test_resume_requires_current_inspected_revision_and_rejects_replay(self):
+    def test_removed_workspace_intake_cannot_create_resumable_goal(self):
         self.login()
         self.server.allow_external_actions = True
-        code, goal, _ = self.req("POST", "/api/workspace/request", {
-            "ack": "PLAN_ONLY", "prompt": "Tạo storyboard video quảng cáo cửa hàng nệm",
-            "max_model_calls": 1,
-        })
-        self.assertEqual(code, 200)
-        path = "/api/goals/" + goal["goal_id"]
-        code, detail, _ = self.req("GET", path)
-        self.assertEqual(code, 200)
-        approval = {"plan_sha256": detail["plan_sha256"]}
-        code, _, _ = self.req("POST", path + "/approve", {**approval, "ack": "APPROVE"})
-        self.assertEqual(code, 200)
-        # Withhold model permission to reach WAITING_APPROVAL without inference.
-        code, waiting, _ = self.req("POST", path + "/run", {
-            **approval, "ack": "RUN", "ack_external": "AUTHORIZE_EXTERNAL_TOOLS",
-        })
-        self.assertEqual(code, 200)
-        self.assertEqual(waiting["status"], "WAITING_APPROVAL")
-        code, inspected, _ = self.req("GET", path)
-        self.assertEqual(code, 200)
-        resume = {**approval, "ack": "RESUME", "ack_external": "AUTHORIZE_EXTERNAL_TOOLS"}
-        self.assertEqual(self.req("POST", path + "/resume", resume)[0], 400)
-        resume["goal_updated_at"] = inspected["updated_at"]
-        self.assertEqual(self.req("POST", path + "/resume", resume)[1]["status"],
-                         "WAITING_APPROVAL")
-        code, rejection, _ = self.req("POST", path + "/resume", resume)
+        code, _, _ = self.req("POST", "/api/workspace/request", {
+            "ack": "PLAN_ONLY", "prompt": "Tạo storyboard", "max_model_calls": 1})
         self.assertEqual(code, 400)
-        self.assertIn("Goal changed", rejection["message"])
-        self.assertEqual(self.req("GET", path)[1]["current_step"], 0)
+        self.assertFalse(self.brain.exists())
 
     def test_dashboard_read_routes_return_authenticated_json(self):
         self.login()
@@ -461,68 +430,14 @@ class TestControlCenterV1(unittest.TestCase):
         self.assertEqual(code,200)
         self.assertEqual(len(tick["claimed"]),0)
 
-    def test_website_draft_contract_and_proposal_apply_requires_prior_review(self):
-        from agentforge import brain_planner
-        with self.assertRaisesRegex(brain_store.BrainError, "cap"):
-            brain_planner.propose(
-                "Create test website", "website.draft", {
-                    "slug": "nem-test", "brief": "Tạo landing page tư vấn nệm Việt Nam."
-                }, db_path=self.brain)
-        self.assertFalse(self.brain.exists())
-        plan = brain_planner.propose(
-            "Create test website", "website.draft", {
-                "slug": "nem-test", "brief": "Tạo landing page tư vấn nệm Việt Nam."
-            }, max_model_calls=1, db_path=self.brain)
-        self.assertEqual(plan["step_count"], 1)
-        self.assertEqual(plan["plan"][0]["skill_id"], "web.create")
+    def test_retired_website_proposal_is_not_exposed_or_applied(self):
         self.login()
-        fake_id, fake_sha = "b" * 32, "c" * 64
-        task_id = task_history.create_task(
-            "skill", "web.create", {"slug": "nem-test"},
-            db_path=self.taskdb)
-        task_history.transition(task_id, "RUNNING", db_path=self.taskdb)
-        task_history.transition(task_id, "SUCCEEDED", result={
-            "proposal_id": fake_id, "sha256": fake_sha,
-            "project_slug": "nem-test",
-        }, db_path=self.taskdb)
-        code, data, _ = self.req("GET", "/api/bootstrap")
-        self.assertEqual(code, 200)
-        self.assertEqual(data["tasks"][0]["web_proposal"]["proposal_id"], fake_id)
-        document = {
-            "proposal_id": fake_id, "status": "PROPOSED_NOT_APPLIED",
-            "project_slug": "nem-test", "sha256": fake_sha,
-            "summary": "Local static website for owner review",
-            "files": [{"path": "index.html",
-                       "content": "<html><body>Untrusted source</body></html>"}],
-        }
-        with patch("agentforge.product_builder._read_proposal",
-                   return_value=(document, self.root / "proposal.json")):
-            with patch("agentforge.product_builder.inspect",
-                       return_value={"sha256": fake_sha}) as inspect:
-                with patch("agentforge.product_builder.apply",
-                           return_value={"status": "FILES_WRITTEN_NOT_EXECUTED",
-                                         "files":["index.html"],
-                                         "project_path": "workspace/products/nem-test"}) as apply:
-                    action = "/api/proposals/" + fake_id + "/apply"
-                    code, _, _ = self.req("POST", action, {
-                        "ack": "APPLY_PROPOSAL", "sha256": fake_sha})
-                    self.assertEqual(code, 400)
-                    apply.assert_not_called()
-                    code, proposal, _ = self.req("GET", "/api/proposals/"+fake_id)
-                    self.assertEqual(code, 200)
-                    self.assertEqual(proposal["sha256"], fake_sha)
-                    self.assertIn("Untrusted source", proposal["files"][0]["content"])
-                    code, _, _ = self.req("POST", action, {
-                        "ack": "APPLY_PROPOSAL", "sha256": "0" * 64})
-                    self.assertEqual(code, 400)
-                    apply.assert_not_called()
-                    code, result, _ = self.req("POST", action, {
-                        "ack": "APPLY_PROPOSAL", "sha256": fake_sha})
-                    self.assertEqual(code, 200)
-                    self.assertEqual(result["status"], "FILES_WRITTEN_NOT_EXECUTED")
-                    inspect.assert_called()
-                    apply.assert_called_once_with(
-                        fake_id, confirm_write=True, sha256=fake_sha)
+        ident = "b" * 32
+        with patch("agentforge.product_builder.apply") as apply:
+            self.assertEqual(self.req("GET", "/api/proposals/" + ident)[0], 404)
+            self.assertEqual(self.req("POST", "/api/proposals/" + ident + "/apply",
+                                      {"ack": "APPLY_PROPOSAL", "sha256": "c"*64})[0], 400)
+            apply.assert_not_called()
 
     def test_maximum_json_body_and_no_arbitrary_routes(self):
         self.login()

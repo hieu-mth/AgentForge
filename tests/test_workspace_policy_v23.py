@@ -68,23 +68,13 @@ class WorkspacePolicyTests(unittest.TestCase):
                                        policy_db_path=self.db)
         self.assertFalse(self.goals.exists())
 
-    def test_workspace_policy_api_is_allowlisted(self):
-        with patch("agentforge.workspace_policy.configure", return_value={
-            "max_estimated_model_calls": 0
-        }) as saved:
-            data = {"ack": "UPDATE_WORKSPACE_POLICY",
-                    "max_estimated_model_calls": 0,
-                    "website_enabled": False, "storyboard_enabled": False}
-            with self.assertRaises(PermissionError):
-                _owner_action(None, "/api/workspace/policy", {**data, "ack": "RUN"})
-            with self.assertRaises(PermissionError):
-                _owner_action(None, "/api/workspace/policy", {**data, "danger": "process"})
-            result = _owner_action(None, "/api/workspace/policy", data)
-            self.assertEqual(0, result["max_estimated_model_calls"])
-            saved.assert_called_once_with(max_estimated_model_calls=0,
-                                          website_enabled=False,
-                                          storyboard_enabled=False,
-                                          confirm=True)
+    def test_retired_workspace_policy_api_cannot_mutate_policy(self):
+        with patch("agentforge.workspace_policy.configure") as saved:
+            with self.assertRaisesRegex(ValueError, "Unknown mutation route"):
+                _owner_action(None, "/api/workspace/policy", {
+                    "ack": "UPDATE_WORKSPACE_POLICY", "max_estimated_model_calls": 0,
+                    "website_enabled": False, "storyboard_enabled": False})
+            saved.assert_not_called()
 
 
 if __name__ == "__main__":

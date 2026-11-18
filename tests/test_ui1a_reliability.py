@@ -93,44 +93,22 @@ class PromptBudgetTests(unittest.TestCase):
 
 
 class PromptBudgetHttpTests(unittest.TestCase):
-    def test_owner_http_rejects_oversized_plan_without_write_or_model(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root=Path(tmp)
-            server=create_server(port=0,owner_code='synthetic-owner-code',
-                task_db_path=root/'tasks.db',brain_db_path=root/'brain.db',
-                analytics_db_path=root/'analytics.db',growth_db_path=root/'growth.db',
-                mattress_db_path=root/'mattress.db')
-            thread=threading.Thread(target=server.serve_forever,daemon=True)
-            thread.start()
-            def request(route,body,cookie=None,csrf=None):
-                connection=http.client.HTTPConnection('127.0.0.1',server.server_port,timeout=5)
-                headers={'Origin':f'http://127.0.0.1:{server.server_port}', 'Content-Type':'application/json'}
-                if cookie:headers['Cookie']=cookie
-                if csrf:headers['X-CSRF-Token']=csrf
-                connection.request('POST',route,json.dumps(body,ensure_ascii=False).encode(),headers)
-                response=connection.getresponse()
-                result=response.status,dict(response.getheaders()),json.loads(response.read())
-                connection.close()
-                return result
-            try:
-                status,headers,login=request('/api/login',{'code':'synthetic-owner-code'})
-                self.assertEqual(status,200)
-                cookie=headers['Set-Cookie'].split(';')[0]
-                payload={'ack':'PLAN_ONLY','prompt':'Tạo website '+'ệ'*5900,'max_model_calls':1}
-                self.assertEqual(request('/api/workspace/request',payload,cookie)[0],403)
-                with patch('agentforge.workspace_policy.read',return_value={
-                    'website_enabled':True,'storyboard_enabled':True,'max_estimated_model_calls':3}), \
-                     patch('agentforge.goal_preflight.require_ready'), \
-                     patch('agentforge.model.generate_json') as model:
-                    status,_,error=request('/api/workspace/request',payload,cookie,login['csrf'])
-                    self.assertEqual(status,400)
-                    self.assertIn('PLAN_UTF8_BUDGET',error['message'])
-                    self.assertIn('chia nhỏ',error['message'])
-                    model.assert_not_called()
-                self.assertFalse((root/'brain.db').exists())
-                self.assertFalse((root/'tasks.db').exists())
-            finally:
-                server.shutdown();server.server_close();thread.join(5)
+    def test_retired_owner_workspace_endpoint_fails_closed_without_model(self):
+        from tests.owner_http_fixture import OwnerHttpFixture
+        fixture = OwnerHttpFixture("test_noop")
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        fixture.login()
+        payload = {"ack": "PLAN_ONLY", "prompt": "Tạo website " + "ệ"*5900,
+                   "max_model_calls": 1}
+        with patch("agentforge.model.generate_json") as model:
+            self.assertEqual(fixture.req("POST", "/api/workspace/request",
+                                         payload, csrf=False)[0], 403)
+            self.assertEqual(fixture.req("POST", "/api/workspace/request",
+                                         payload)[0], 400)
+            model.assert_not_called()
+        self.assertFalse(fixture.brain.exists())
+        self.assertFalse(fixture.tasks.exists())
 
 
 if __name__ == "__main__":

@@ -8,63 +8,20 @@ from tests import test_control_center_v1
 
 
 class FilesystemWorkflowTests(unittest.TestCase):
-    def test_request_approval_write_and_artifact_evidence(self):
-        test = test_control_center_v1.TestControlCenterV1()
-        test.setUp()
-        try:
-            test.login()
-            workspace = test.root / "workspace"
-            raw = "# Báo cáo\n\nDữ liệu kiểm thử.".encode()
-            with patch.object(gateway, "WORKSPACE", workspace):
-                code, result, _ = test.req("POST", "/api/workspace/request", {
-                    "ack": "PLAN_ONLY", "max_model_calls": 0,
-                    "prompt": "Tạo báo cáo workspace/e2e-test/report.md với nội dung: " + raw.decode(),
-                })
-                self.assertEqual(code, 200, result)
-                path = "/api/goals/" + result["goal_id"]
-                goal = test.req("GET", path)[1]
-                auth = {"plan_sha256": goal["plan_sha256"]}
-                self.assertEqual(goal["plan"][0]["skill_id"], "filesystem.report")
-                self.assertFalse(workspace.exists())
-                self.assertEqual(test.req("POST", path + "/approve", {**auth, "ack": "APPROVE"})[0], 200)
-                self.assertFalse(workspace.exists())
-                code, blocked, _ = test.req("POST", path + "/run", {**auth, "ack": "RUN", "grants": []})
-                self.assertEqual((code, blocked["status"]), (200, "WAITING_APPROVAL"))
-                self.assertFalse(workspace.exists())
-                observed = test.req("GET", path)[1]
-                code, outcome, _ = test.req("POST", path + "/resume", {
-                    **auth, "ack": "RESUME", "goal_updated_at": observed["updated_at"],
-                    "grants": ["workspace.write"],
-                })
-                self.assertEqual((code, outcome["status"]), (200, "SUCCEEDED"))
-                self.assertEqual((workspace / "e2e-test" / "report.md").read_bytes(), raw)
-                final = test.req("GET", path)[1]
-                step = final["step_runs"][0]
-                task = test.req("GET", "/api/tasks/" + step["child_task_id"])[1]
-                self.assertEqual(task["report"]["report_path"], "workspace/e2e-test/report.md")
-                self.assertEqual(task["report"]["sha256"], hashlib.sha256(raw).hexdigest())
-                self.assertEqual(task["report"]["status"], "VERIFIED")
-                self.assertEqual(final["artifact_acceptance"]["status"], "READY_FOR_REVIEW")
-                acceptance = final["artifact_acceptance"]
-                decision = {"ack": "ACCEPT_ARTIFACT", "sha256": acceptance["source_sha"],
-                            "expected_revision": acceptance["revision"],
-                            "evidence_sha": acceptance["evidence_sha"]}
-                report_path = "/api/artifacts/reports/" + step["child_task_id"]
-                self.assertEqual(test.req("POST", report_path + "/decision", decision)[0], 400)
-                code, reviewed, _ = test.req("GET", report_path)
-                self.assertEqual(code, 200, reviewed)
-                self.assertEqual(reviewed["content"], raw.decode())
-                file = workspace / "e2e-test" / "report.md"
-                file.write_bytes(b"changed")
-                self.assertEqual(test.req("POST", report_path + "/decision", decision)[0], 400)
-                self.assertEqual(test.req("GET", path)[1]["artifact_acceptance"]["status"],
-                                 "NEEDS_VALIDATION")
-                file.write_bytes(raw)
-                code, accepted, _ = test.req("POST", report_path + "/decision", decision)
-                self.assertEqual((code, accepted["status"]), (200, "ACCEPTED"))
-                self.assertEqual(test.req("GET", path)[1]["artifact_acceptance"]["status"], "ACCEPTED")
-        finally:
-            test.tearDown()
+    def test_retired_workspace_intake_cannot_write_or_start_task(self):
+        from tests.owner_http_fixture import OwnerHttpFixture
+        fixture = OwnerHttpFixture("test_noop")
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        fixture.login()
+        folder = fixture.brain.parent / "workspace"
+        with patch.object(gateway, "WORKSPACE", folder):
+            code, _, _ = fixture.req("POST", "/api/workspace/request", {
+                "ack": "PLAN_ONLY", "max_model_calls": 0,
+                "prompt": "Tạo báo cáo workspace/e2e-test/report.md"})
+        self.assertEqual(code, 400)
+        self.assertFalse(folder.exists())
+        self.assertFalse(fixture.tasks.exists())
 
     def test_no_overwrite_and_no_link_or_path_escape(self):
         import tempfile

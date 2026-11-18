@@ -155,15 +155,15 @@ class PromptWorkspaceTests(unittest.TestCase):
             self.assertTrue(output.startswith(code), output)
             self.assertNotIn(marker, output)
 
-    def test_api_rejects_invalid_ack_and_extra_fields(self):
-        with self.assertRaises(PermissionError):
-            _owner_action(None, "/api/workspace/request",
-                          {"ack": "RUN", "prompt": "Tạo landing page cho nệm ngủ",
-                           "max_model_calls": 1})
-        with self.assertRaises(PermissionError):
-            _owner_action(None, "/api/workspace/request",
-                          {"ack": "PLAN_ONLY", "prompt": "Tạo landing page cho nệm ngủ",
-                           "max_model_calls": 1, "grants": ["model.invoke"]})
+    def test_retired_workspace_api_cannot_dispatch_owner_model(self):
+        for payload in (
+            {"ack": "RUN", "prompt": "Tạo landing page", "max_model_calls": 1},
+            {"ack": "PLAN_ONLY", "prompt": "Tạo landing page",
+             "max_model_calls": 1, "grants": ["model.invoke"]},
+        ):
+            with self.subTest(payload=payload), self.assertRaisesRegex(
+                    ValueError, "Unknown mutation route"):
+                _owner_action(None, "/api/workspace/request", payload)
 
 
 if __name__ == "__main__":
