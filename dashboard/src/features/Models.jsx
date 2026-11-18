@@ -11,7 +11,7 @@ const { Text, Paragraph } = Typography;
 const PROVIDER_LABELS = Object.fromEntries(PROVIDERS.map(p=>[p.value,p.label]));
 
 function stateTag(status) {
-  const tone = status==='ROUTED'||status==='DETERMINISTIC'?'green'
+  const tone = status==='DETERMINISTIC'?'green'
     :status==='INCOMPATIBLE'||status==='INVALID_CONFIG'?'red'
       :status==='UNCONFIGURED'?'default':'blue';
   return <Tag color={tone}>{STATUS_LABELS[status]||status}</Tag>;
@@ -109,7 +109,7 @@ export function ModelHub({mutate}) {
   const profiles=hub?.profiles||[];
   const profileById=useMemo(()=>Object.fromEntries(profiles.map(p=>[p.id,p])),[profiles]);
   const routes=hub?.routes||[];
-  const configured=routes.filter(r=>r.status==='ROUTED'||r.status==='CONFIG_ONLY').length;
+  const configured=routes.filter(r=>r.status==='CONFIG_ONLY').length;
   const localProfiles=profiles.filter(p=>p.provider!=='anthropic').length;
 
   const update=(path,body,title,description,onSuccess)=>{
@@ -172,9 +172,7 @@ export function ModelHub({mutate}) {
       ack:'SET_MODEL_ROUTE',expected_revision:hub.revision,
       task_id:route.id,model_ref,
     },'Gán model cho '+route.label+'?',
-    exposureFor(selected)+(route.runtime_wired
-      ? ' Route này được LLM runtime sử dụng ở lần thực thi kế tiếp; công việc đã chạy không bị thay đổi.'
-      : ' Route hiện CHỈ là cấu hình, chưa nối vào engine render.'),
+    exposureFor(selected)+' Route này chỉ lưu cấu hình; chưa nối vào inference.',
     null);
   };
 
@@ -272,7 +270,7 @@ export function ModelHub({mutate}) {
                 value={drafts[r.id]??r.model_ref??undefined}
                 onChange={v=>setDrafts(x=>({...x,[r.id]:v}))}/>
               <Text type="secondary" style={{fontSize:11}}>
-                {r.source==='owner'?'Owner override':'Default'} · {r.runtime_wired?'Runtime đã nối':'Config-only'}
+                {r.source==='owner'?'Owner override':'Default'} · {'Config-only'}
               </Text>
             </Space>;
           }},

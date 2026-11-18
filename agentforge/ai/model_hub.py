@@ -218,7 +218,7 @@ def catalog(*, db_path=None):
         routes.append({**route, "model_ref": selected,
                         "source": ("owner" if key in state["routes"] else "default"),
                        "status": status,
-                       "runtime_wired": False})
+                       })
     return {
         "revision": revision,
         "profiles": [{"id": k, **v, "source": (

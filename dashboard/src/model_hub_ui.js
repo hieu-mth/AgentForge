@@ -5,7 +5,6 @@ export const PROVIDERS = Object.freeze([
   {value:'comfyui',label:'ComfyUI (local media · cấu hình)' },
 ]);
 export const STATUS_LABELS = Object.freeze({
-  ROUTED:'Đã gán · có runtime',
   CONFIG_ONLY:'Đã gán · chưa nối runtime',
   UNCONFIGURED:'Chưa gán model',
   DETERMINISTIC:'Python rules · không cần AI',
