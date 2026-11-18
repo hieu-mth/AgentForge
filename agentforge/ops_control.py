@@ -20,7 +20,7 @@ MODES = {"ACTIVE", "PAUSED"}
 def read(*, path=None):
     try:
         target = _safe(Path(path) if path is not None else STATE_FILE)
-    except (ValueError, OSError):
+    except (ValueError, OSError, PermissionError):
         return {"mode": "PAUSED", "reason": "INVALID_STATE", "persisted": True}
     if not target.exists():
         return {"mode": "ACTIVE", "reason": "DEFAULT_LOCAL", "persisted": False}

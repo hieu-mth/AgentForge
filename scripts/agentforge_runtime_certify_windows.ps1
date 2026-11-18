@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Đợt 5: kiểm tra runtime AgentForge trên máy Owner (PowerShell 5.1+).
+  Kiểm tra runtime AgentForge Video Studio (PowerShell 5.1+).
 .DESCRIPTION
   Mặc định: chỉ đọc localhost, trạng thái tool và cấu hình.
   Những phép thử tạo tải thực bắt buộc có cờ xác nhận riêng:

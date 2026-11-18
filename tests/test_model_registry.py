@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from agentforge.model_registry import ModelConfigError, load_models
+from agentforge.ai.model_registry import ModelConfigError, load_models
 
 
 class TestModelRegistry(unittest.TestCase):

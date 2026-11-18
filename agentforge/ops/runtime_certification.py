@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import http.client
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -265,9 +266,10 @@ def inspect(*, model_ref="local_primary", run_ollama=False,
         "dashboard_owner_login_and_workflow": _result("OWNER_RUNTIME_PENDING"),
     })
     failed_opt_in = any(
-        checks[key]["status"] != "PASS_RUNTIME" for key, run in (
-            ("ollama_inference", run_ollama), ("ffmpeg_encode_decode", run_ffmpeg),
-            ) if run)
+        checks[key]["status"] != "PASS_RUNTIME"
+        for key, run in (("ollama_inference", run_ollama), ("ffmpeg_encode_decode", run_ffmpeg))
+        if run
+    )
     report = {
         "format": REPORT_FORMAT,
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -281,7 +283,6 @@ def inspect(*, model_ref="local_primary", run_ollama=False,
         "cloud_requests": 0, "model_downloads": 0,
         "gpu_jobs_submitted": 0, "youtube_uploads": 0,
         "existing_owner_data_modified_by_design": False,
-        "generated_app_browser_verified": False,
         "real_gpu_video_verified": False,
         "production_go": False,
     }
@@ -317,8 +318,7 @@ def main(argv=None):
     parser.add_argument("--save-report", action="store_true")
     args = parser.parse_args(argv)
     if (args.run_ollama and not args.confirm_inference
-            or args.run_ffmpeg and not args.confirm_local_exec
-):
+            or args.run_ffmpeg and not args.confirm_local_exec):
         parser.error("Every active probe requires its matching explicit confirmation flag")
     report = inspect(model_ref=args.model_ref, run_ollama=args.run_ollama,
                      run_ffmpeg=args.run_ffmpeg)
