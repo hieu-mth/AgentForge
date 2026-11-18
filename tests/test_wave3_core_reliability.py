@@ -224,7 +224,7 @@ class Wave3AuthenticatedReadTests(unittest.TestCase):
     def test_owner_bootstrap_does_not_initialize_missing_task_or_quality_storage(self):
         from tests.owner_http_fixture import OwnerHttpFixture
         case = OwnerHttpFixture(
-            "test_get_requires_login_and_allows_signed_source_review")
+            "test_noop")
         case.setUp()
         self.addCleanup(case.doCleanups)
         autopilot_db = case.brain.parent / "missing-autopilot.sqlite3"

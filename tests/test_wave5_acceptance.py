@@ -117,7 +117,7 @@ class Wave5BaseAcceptanceTests(unittest.TestCase):
     def test_owner_api_requires_real_session_for_health_and_models(self):
         from tests.owner_http_fixture import OwnerHttpFixture
         fixture = OwnerHttpFixture(
-            "test_get_requires_login_and_allows_signed_source_review")
+            "test_noop")
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)
         for endpoint in ("/api/bootstrap", "/api/model-hub",
