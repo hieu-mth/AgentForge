@@ -1,95 +1,36 @@
-# AgentForge
+# AgentForge — Local AI Video Studio
 
-**Local-first AI Product Studio** — hệ thống Python + React để Owner giao việc cho AI, tạo bản nháp sản phẩm, quản lý workflow và xét duyệt artifact theo bằng chứng.
+AgentForge là ứng dụng local-first (Python 3.13 + React) cho một Owner, tập trung vào sản xuất video AI và kiểm duyệt trước khi xuất bản. Đây là bản thử nghiệm; GPU, ComfyUI và chất lượng video thực tế chưa được chứng nhận trên máy Owner.
 
-> **Trạng thái: bản thử nghiệm dùng nội bộ.** CI xác minh code đáng tin cậy; không có bằng chứng rằng mọi ứng dụng/phim do AI sinh ra đều chạy đúng, sẵn sàng thương mại hoặc đã tạo doanh thu.
+## Chạy trên Windows
 
-## Setup an toàn (M9)
-
-Chạy kiểm tra read-only trước: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1`. Để cài dependency và build Dashboard, dùng `-Install -AllowNetwork` (cho phép pip/npm truy cập registry), xem [hướng dẫn](docs/DEVELOPMENT.md). Xem kết quả trong Dashboard → Cài đặt → Vận hành; các checks không tự gọi model/GPU.
-
-## Bắt đầu nhanh trên Windows
-
-Yêu cầu: **Python 3.13+**, Node.js 22 và npm. Mở PowerShell tại repository:
-
-~~~powershell
+```powershell
 cd D:\AgentForge
 py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[media]"
 npm.cmd ci --prefix dashboard --ignore-scripts --no-audit --no-fund
 npm.cmd run build --prefix dashboard
 .\.venv\Scripts\python.exe -m agentforge --port 8780
-~~~
+```
 
-Mở **http://127.0.0.1:8780/** (chuyển đến `/dashboard/`), sau đó sử dụng mã Owner in ra trong PowerShell. Giữ cửa sổ chạy server, nhấn `Ctrl+C` để dừng.
+Mở http://127.0.0.1:8780/ và đăng nhập bằng mã Owner hiển thị trong PowerShell.
 
-Nếu báo không tìm thấy `.venv\Scripts\python.exe`, chạy `py -0p` để kiểm tra phiên bản Python trước khi tạo lại môi trường. Không bắt buộc Docker cho việc phát triển thông thường.
+## Phạm vi đang giữ
 
-## Nghiệm thu runtime thực tế — Đợt 5
+- Film Studio: episode, shot, motion receipt, FFmpeg assembly, Owner review.
+- Character Registry, Model Hub, môi trường chạy và lưu trữ local.
+- Publishing handoff có xác nhận Owner, không tự public.
+- Dashboard video-first; một số backend và kiểm thử legacy còn đang được loại bỏ.
 
-Sau CI, trên **chính máy Windows có GPU/model**, chạy preflight (mặc định
-không inference hoặc khởi tạo Docker container):
+Không coi CI fixture là bằng chứng model/GPU/video thực tế chạy thành công.
 
-~~~powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\agentforge_runtime_certify_windows.ps1 -SaveReport
-~~~
+## Tài liệu
 
-Khi Owner cho phép, dùng riêng các cặp `-RunFFmpeg -ConfirmLocalExec`,
-`-RunOllama -ConfirmInference`, `-RunDocker -ConfirmDockerRun`.
-Chúng kiểm tra **runtime thật trong phạm vi nhỏ**, không auto tạo GPU clip
-hoặc biến CI PASS thành production GO. Quy trình từng bước tại
-[Owner Runtime Certification](docs/verification/runtime_2026_11/README.md).
+- [Hướng dẫn phát triển](docs/DEVELOPMENT.md)
+- [Trạng thái cleanup](docs/STATUS.md)
+- [Định hướng cleanup](docs/ROADMAP.md)
+- [Film Studio](docs/architecture/LONG_FORM_AI_FILM_STUDIO.md)
+- [Motion GPU](docs/architecture/FILM_MOTION_12GB_PILOT.md)
+- [Nghiệm thu Owner](docs/verification/OWNER_PRODUCTION_GATE.md)
 
-## Đợt 6 — MVP bán nệm gia đình
-
-Trong Dashboard: **Kinh doanh → Bán nệm**. Đã có sổ lead đã đồng ý liên hệ,
-báo giá, xác minh phí/khu vực vận chuyển với người giao, Owner chốt đơn và
-notification outbox. Website giới thiệu contact-first có thể xuất HTML local,
-không yêu cầu AI. Không có checkout, public form hoặc tự gửi Zalo OA; kênh
-Telegram chỉ hoạt động khi Owner cấu hình và bật một lượt gửi có xác nhận.
-Xem [hướng dẫn triển khai nệm](docs/milestones/WAVE6_MATTRESS_BUSINESS_MVP.md).
-
-## Hiện có những gì?
-
-| Mảng | Khả năng đang có | Giới hạn quan trọng |
-| --- | --- | --- |
-| **Dashboard & workflow** | React Dashboard, task/goal, Owner approval, SQLite, lịch sử và SHA | Chỉ vận hành local cho một Owner; không phải SaaS |
-| **Model Hub** | Chọn model text/code theo tác vụ, lưu SQLite revision/rollback; Dashboard quản lý profiles | Video/Image chỉ config-only, cloud cần quyền Owner |
-| **Website Builder** | Thiết kế website theo schema có giới hạn; feedback sinh phiên bản đề xuất | Không phải công cụ tạo full-stack tùy ý |
-| **Marketplace** | NovaMart demo, lọc/tìm kiếm/giỏ hàng, catalog do AI đề xuất | Không có thanh toán, backend bán hàng thật |
-| **AI React Developer** | Đề xuất source JSX/CSS và kiểm tra cú pháp | Source AI có revision/diff/rollback theo feedback; model thật và build/browser QA AI chưa xác minh |
-| **AI Film Studio** | Lập kế hoạch phim, ComfyUI shot, continuity, SRT/TTS và ghép 60–90 giây theo quyền Owner | GPU 12 GB và phim thực chưa nghiệm thu; ghép phim dài 15–30 phút chưa triển khai |
-| **Bán nệm referral-first** | Leads có consent, Owner báo giá/xác minh giao, lưu đơn và hàng đợi thông báo, xuất site tĩnh | Không tự nhận lead Internet, không tự Zalo/giao/thu tiền, chưa có giá/khu vực giao thực |
-| **Media / Growth** | Ảnh tĩnh, SRT, TTS tùy chọn, FFmpeg MP4, gói bàn giao | Có handoff thủ công và CLI OAuth private-only tùy chọn; không tự public hay xác minh doanh thu |
-
-Chi tiết và định nghĩa trạng thái: **[Current Status](docs/STATUS.md)**. Base V1 technical readiness: [Wave 5 Owner acceptance](docs/verification/base_v1/README.md); CI PASS không có nghĩa máy/model thật đã nghiệm thu.
-
-## Điều hướng tài liệu
-
-- **[Nghiệm thu vận hành trên máy Owner](docs/verification/OWNER_PRODUCTION_GATE.md)** — bằng chứng cần có cho từng luồng trước khi đưa vào sử dụng.
-
-- **[Kiểm toán cuối trước runtime](docs/verification/final_pre_runtime/README.md)** — bằng chứng CI, mức sẵn sàng và blocker Owner.
-- **[Trung tâm tài liệu](docs/README.md)** — bắt đầu từ đây, phân biệt docs hiện hành và lịch sử.
-- **[Hướng dẫn Windows & kiểm thử](docs/DEVELOPMENT.md)** — setup, build, chạy Dashboard và các giới hạn an toàn.
-- **[Roadmap hiện hành](docs/ROADMAP.md)** — ưu tiên nghiệm thu AI Source Revision, Film Studio và Publishing.
-- **[Kiến trúc repository đang chạy](docs/architecture/REPOSITORY_STRUCTURE.md)** — module nào thực sự đang chạy.
-- **[Model Hub M6/M7](docs/architecture/MODEL_HUB.md)** — cấu hình provider/model/task routing trên Dashboard.
-- **[Skill Engine M8](docs/architecture/SKILL_ENGINE.md)** — code-owned permissions và adapter theo domain.
-- **[Feature Boundaries M4](docs/architecture/FEATURE_BOUNDARIES.md)** — nơi đặt code mới, compatibility và tích hợp ComfyUI.
-- **[Compatibility M5](docs/architecture/COMPATIBILITY_POLICY.md)** — root aliases tới features và quy tắc cleanup an toàn.
-- **[API contract M0/M3](docs/architecture/API_CONTRACT_V1.md)** — Owner login, CSRF, routes và compatibility.
-- **[Cấu trúc đã chốt (M1–M4)](docs/architecture/TARGET_STRUCTURE.md)** — Python/React ở root, các feature canonical đã chuyển.
-- **[Giải thích từng file Python/React](docs/architecture/FILE_CATALOG.md)** — inventory các module Python và Dashboard.
-- **[Templates](templates/README.md)** và **[Examples](examples/README.md)** — phân biệt template runtime với file JSON mẫu.
-- **[AI Film Studio 12 GB](docs/architecture/FILM_MOTION_12GB_PILOT.md)** — điều kiện cần trước khi tạo clip thật.
-- **[Bằng chứng Phase 1](docs/verification/phase1/README.md)** — snapshot kiểm thử, không phải trạng thái live.
-
-## Nguyên tắc vận hành
-
-- Chỉ phục vụ Dashboard ở localhost; `/` redirect tới `/dashboard/`. Giao diện HTML/JS V0 đã xóa.
-- **Không thực thi source do AI sinh ra trên Windows host** khi chưa có sandbox được kiểm chứng.
-- Không tự sử dụng API trả phí, đăng YouTube hay public sản phẩm khi chưa có quyền và bằng chứng.
-- `data/`, `workspace/`, `.env`, các model và backup là dữ liệu của Owner: **không dọn/xóa tự động**.
-- Chỉ xem một lần test PASS là xác minh đúng phạm vi của test, không phải nghiệm thu phim/app ngoài thực tế.
-
-Mã nguồn: `agentforge/` (backend), `dashboard/` (frontend), `skills/`, `workers/`, `tests/`. Repository đã loại bỏ frontend V0; những compatibility module còn được sử dụng vẫn phải được giữ.
+Dữ liệu và model trên máy Owner không được xóa bởi thao tác cleanup Git.
