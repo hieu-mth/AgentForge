@@ -1,64 +1,49 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { NAV_GROUPS, DEFAULT_TAB, groupFor, defaultSection,
-  tabsFor, parseSection, hashFor, labelFor } from '../src/navigation.js';
+import { NAV_GROUPS, groupFor, defaultSection, tabsFor, parseSection, hashFor, labelFor } from '../src/navigation.js';
 
-const originalScreens=[
-  'workspace','overview','media-studio','characters','goals','tasks','reviews','websites','projects','retention',
-  'team','intelligence','growth','mattress','schedules','operations','channels','finance','settings','memory','models','environment',
+const videoScreens = [
+  'overview','media-studio','characters','projects','reviews','channels',
+  'settings','environment','models','operations','retention',
 ];
-test('sidebar contains eight owner workflow groups',()=>{
+const retiredScreens = ['websites','workspace','mattress','growth','finance','team','goals','tasks','intelligence','memory','schedules'];
+
+test('navigation exposes only video studio workflows and operational settings',()=>{
   assert.deepEqual(NAV_GROUPS.map(x=>x.label),[
-    'Tổng quan','Giao việc','AI Media Studio','Nhân vật','Sản phẩm','Kinh doanh','Đội ngũ AI','Cài đặt'
+    'Tổng quan','Studio video','Nhân vật','Thành phẩm','Phân phối','Cài đặt',
   ]);
-});
-test('every original screen is present once; no accidental deletion',()=>{
   const leaves=NAV_GROUPS.flatMap(g=>g.tabs.map(([key])=>key));
-  assert.equal(leaves.length,originalScreens.length);
-  assert.deepEqual([...new Set(leaves)].sort(),[...originalScreens].sort());
+  assert.deepEqual([...leaves].sort(),[...videoScreens].sort());
+  assert.equal(new Set(leaves).size,leaves.length);
 });
-test('every group selects a real initial tab',()=>{
-  for(const group of NAV_GROUPS){
+
+test('each group has a real initial tab',()=>{
+  for(const group of NAV_GROUPS)
     assert.ok(tabsFor(group.key).some(x=>x.key===defaultSection(group.key)));
-  }
+  assert.equal(defaultSection('products'),'projects');
+  assert.equal(defaultSection('business'),'channels');
 });
-test('deep links preserve each feature and recover from invalid input',()=>{
-  for(const name of originalScreens){
+
+test('video-first deep links work, retired links fail closed',()=>{
+  for(const name of videoScreens){
     assert.equal(parseSection(hashFor(name)),name);
     assert.ok(groupFor(name));
     assert.ok(labelFor(name));
   }
-  for(const invalid of ['','#/invalid','#/../../data','#/websites?x=1','#/WEBsites','#/']) {
-    assert.equal(parseSection(invalid),'overview');
+  for(const name of retiredScreens){
+    assert.equal(parseSection('#/'+name),'overview');
+    assert.equal(hashFor(name),'#/overview');
   }
-});
-test('business and owner tools remain reachable in expected groups',()=>{
-  assert.equal(groupFor('media-studio'),'studio');
-  assert.equal(groupFor('characters'),'characters');
-  assert.equal(parseSection('#/characters'),'characters');
-  assert.equal(defaultSection('studio'),'media-studio');
-  assert.equal(defaultSection('characters'),'characters');
-  assert.equal(defaultSection('products'),'websites');
-  assert.equal(groupFor('websites'),'products');
-  assert.equal(groupFor('reviews'),'products');
-  assert.equal(groupFor('retention'),'settings');
-  assert.equal(groupFor('growth'),'business');
-  assert.equal(groupFor('mattress'),'business');
-  assert.equal(parseSection('#/mattress'),'mattress');
-  assert.equal(groupFor('finance'),'business');
-  assert.equal(groupFor('goals'),'team');
-  assert.equal(groupFor('tasks'),'team');
-  assert.equal(groupFor('operations'),'settings');
-  assert.equal(groupFor('memory'),'settings');
-  assert.equal(groupFor('models'),'settings');
-  assert.equal(parseSection('#/models'),'models');
-  assert.equal(defaultSection('unknown'),'overview');
+  for(const invalid of ['','#/invalid','#/../../data','#/websites?x=1','#/WEBsites','#/'])
+    assert.equal(parseSection(invalid),'overview');
 });
 
-test('overview is the initial landing, while existing deep links stay stable',()=>{
+test('studio and settings remain reachable',()=>{
+  assert.equal(groupFor('media-studio'),'studio');
+  assert.equal(groupFor('characters'),'characters');
+  assert.equal(groupFor('reviews'),'products');
+  assert.equal(groupFor('channels'),'business');
+  assert.equal(groupFor('models'),'settings');
+  assert.equal(groupFor('retention'),'settings');
   assert.equal(parseSection(''),'overview');
-  assert.equal(parseSection('#/'),'overview');
-  assert.equal(parseSection('#/workspace'),'workspace');
-  assert.equal(hashFor('overview'),'#/overview');
-  assert.equal(NAV_GROUPS[0].key,'overview');
 });
