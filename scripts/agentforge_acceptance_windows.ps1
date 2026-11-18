@@ -64,14 +64,18 @@ Invoke-LocalCheck -Label "Base V1 readiness (not hardware acceptance)" -PythonAr
 
 if ($RunContractTests) {
     Write-Host ""
-    Write-Host "=== Isolated trusted contract suite (no real model or GPU) ==="
-    Invoke-LocalCheck -Label "Base V1 contracts" -PythonArguments @(
+    Write-Host "=== Video Studio isolated contract suite (no real model or GPU) ==="
+    Invoke-LocalCheck -Label "Video Studio contracts" -PythonArguments @(
         "-B","-m","unittest","-q",
         "tests.test_wave5_acceptance",
         "tests.test_model_hub",
         "tests.test_s4_brain",
-        "tests.test_artifact_acceptance",
-        "tests.test_acceptance_http",
+        "tests.test_owner_auth_video_foundation",
+        "tests.test_video_projects",
+        "tests.test_character_registry",
+        "tests.test_wave8_film_runtime",
+        "tests.test_wave9_film_production",
+        "tests.test_wave10_publishing",
         "tests.test_ops_reliability",
         "tests.test_ops_control"
     )
