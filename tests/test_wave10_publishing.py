@@ -21,7 +21,7 @@ METADATA = {
     "description": "Original cinematic film made with Owner-reviewed media.",
     "synthetic_media": True, "made_for_kids": False,
     "rights_attested": True, "owner_watched": True,
-    "planned_utc": None, "campaign": None,
+    "planned_utc": None,
 }
 VIDEO_ID = "AbCdef123_-"
 
@@ -266,12 +266,10 @@ class Wave10PublishingHttpTests(unittest.TestCase):
             "youtube_video_id":None,"title":"Owner release",
         }
 
-    def test_campaign_linkage_is_retired_without_accessing_growth(self):
+    def test_business_metadata_is_rejected(self):
         from agentforge.features.film_studio.publishing import PublishingError, _validated_payload
-        with patch("agentforge.features.growth.store.campaign_info") as db_reader:
-            with self.assertRaisesRegex(PublishingError, "no longer supported"):
-                _validated_payload({**METADATA, "campaign": "legacy-demo"})
-            db_reader.assert_not_called()
+        with self.assertRaisesRegex(PublishingError, "metadata schema"):
+            _validated_payload({**METADATA, "campaign": "not_supported"})
 
     def test_authenticated_reviewed_sha_and_csrf_are_required(self):
         from agentforge.features.film_studio import production

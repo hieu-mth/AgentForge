@@ -4,7 +4,7 @@ import { NAV_GROUPS, groupFor, defaultSection, tabsFor, parseSection, hashFor, l
 
 const videoScreens = [
   'overview','media-studio','characters','projects','reviews','channels',
-  'settings','environment','models','operations','retention',
+  'environment','models',
 ];
 const retiredScreens = ['websites','workspace','mattress','growth','finance','team','goals','tasks','intelligence','memory','schedules'];
 
@@ -44,6 +44,6 @@ test('studio and settings remain reachable',()=>{
   assert.equal(groupFor('reviews'),'products');
   assert.equal(groupFor('channels'),'business');
   assert.equal(groupFor('models'),'settings');
-  assert.equal(groupFor('retention'),'settings');
+  assert.equal(groupFor('models'),'settings');
   assert.equal(parseSection(''),'overview');
 });

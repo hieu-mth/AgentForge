@@ -8,7 +8,6 @@ import {CharacterLibrary} from './features/CharacterLibrary.jsx';
 import {Projects} from './features/Projects.jsx';
 import {ModelHub} from './features/Models.jsx';
 import {Environment} from './features/Environment.jsx';
-import {Retention} from './features/Retention.jsx';
 import {Publishing} from './features/Publishing.jsx';
 
 const {Header,Sider,Content}=Layout;
@@ -78,11 +77,7 @@ export default function App(){
     case 'projects':page=<Projects/>;break;
     case 'models':page=<ModelHub mutate={mutate}/>;break;
     case 'environment':page=<Environment onNavigate={navigate}/>;break;
-    case 'retention':page=<Retention data={{}} mutate={mutate}/>;break;
-    case 'channels':page=<Publishing data={{}} mutate={mutate}/>;break;
-    case 'reviews':page=<Card title="Duyệt video"><Alert type="info" showIcon message="Duyệt video qua production receipt" description="Quy trình duyệt mới đang được hợp nhất với Film Studio. Không tự động phê duyệt hoặc xuất bản."/></Card>;break;
-    case 'operations':page=<Card title="Vận hành"><Button onClick={refresh}>Kiểm tra phiên local</Button></Card>;break;
-    case 'settings':page=<Card title="Cấu hình"><Text>Model và môi trường được cấu hình ở các trang bên cạnh.</Text></Card>;break;
+    case 'channels':page=<Publishing mutate={mutate}/>;break;
     default:page=<Card title="Tổng quan Video Studio"><Space direction="vertical">
       <Text>Pipeline chính: Film Studio · Character Registry · Video Project.</Text>
       <Button type="primary" onClick={()=>navigate('media-studio')}>Mở Video Studio</Button>

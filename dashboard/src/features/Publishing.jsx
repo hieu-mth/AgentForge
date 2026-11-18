@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, App as AntApp, Button, Card, Checkbox, Descriptions, Form,
-  Input, InputNumber, Select, Space, Table, Tag, Typography } from 'antd';
+  Input, InputNumber, Space, Table, Tag, Typography } from 'antd';
 import { api } from '../api.js';
 import {useScreenRefresh} from '../refresh_scope.jsx';
 import {useReadSequence} from '../use_resource.jsx';
@@ -76,7 +76,7 @@ export function Publishing({mutate,data}) {
             made_for_kids:!!values.made_for_kids,
             synthetic_media:!!values.synthetic_media,
             planned_utc:values.planned_utc?.trim()||null,
-            campaign:values.campaign||null},
+},
         });
         if(result){message.success('Đã tạo handoff local; chưa upload');prepareForm.resetFields();setSelected(null);reload();}
       },
@@ -136,8 +136,8 @@ export function Publishing({mutate,data}) {
 
   return <Space orientation="vertical" size={18} style={{width:'100%'}}>
     <Alert type="warning" showIcon
-      message="Wave 10 — không tự public, không tự chi tiền"
-      description="Release metadata và lịch dự kiến chỉ lưu trên máy. YouTube private API upload là CLI opt-in với OAuth Desktop riêng; status/metrics trong Dashboard chủ yếu do Owner khai báo. Growth ledger quản lý VND, không có bank reconciliation hay doanh thu YouTube được xác minh."/>
+      message="Phát hành có kiểm duyệt — không tự public, không tự chi tiền"
+      description="Release metadata và lịch dự kiến chỉ lưu trên máy. YouTube private API upload là CLI opt-in với OAuth Desktop riêng; status/metrics trong Dashboard chủ yếu do Owner khai báo. Không xác minh doanh thu hoặc trạng thái kênh qua API trong bước này."/>
     <Card title="Sổ phát hành Film Studio" loading={busy}
       extra={<Button onClick={reload}>Làm mới</Button>}>
       <Table rowKey="release_id" dataSource={report?.releases||[]}
@@ -178,10 +178,6 @@ export function Publishing({mutate,data}) {
         </Form.Item>
         <Form.Item label="Lịch dự kiến (ISO8601 với múi giờ, chỉ ghi chú local)" name="planned_utc">
           <Input placeholder="2026-12-10T19:00:00+07:00 (không tự đăng)"/>
-        </Form.Item>
-        <Form.Item label="Campaign Growth thật (không bắt buộc)" name="campaign">
-          <Select allowClear options={(data?.growth||[]).filter(x=>!x.synthetic)
-            .map(x=>({label:x.title,value:x.campaign}))}/>
         </Form.Item>
         <Form.Item name="owner_watched" valuePropName="checked">
           <Checkbox>Tôi đã xem MP4 và phụ đề trên máy</Checkbox>

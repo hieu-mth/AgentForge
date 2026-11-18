@@ -51,6 +51,6 @@ test('HTML fallback with HTTP 200 is a terminal API error, not a connected dashb
   const original=globalThis.fetch;
   try {
     globalThis.fetch=async()=>new Response('<html>synthetic fallback</html>',{status:200});
-    await assert.rejects(api('/api/bootstrap'),error=>error.code==='INVALID_API_RESPONSE');
+    await assert.rejects(api('/api/session'),error=>error.code==='INVALID_API_RESPONSE');
   } finally {globalThis.fetch=original;}
 });
