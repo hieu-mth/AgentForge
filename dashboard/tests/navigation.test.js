@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import { NAV_GROUPS, groupFor, defaultSection, tabsFor, parseSection, hashFor, labelFor } from '../src/navigation.js';
 
 const videoScreens = [
@@ -44,4 +45,12 @@ test('studio and settings remain reachable',()=>{
   assert.equal(groupFor('channels'),'business');
   assert.equal(groupFor('models'),'settings');
   assert.equal(parseSection(''),'overview');
+});
+
+test('current video shell has no retired UI styles',()=>{
+  const css=readFileSync(new URL('../src/styles.css',import.meta.url),'utf8');
+  assert.match(css,/\.app-shell\{/);
+  assert.match(css,/\.status-pill\{/);
+  for(const obsolete of ['workspace-owner','goal-owner','prompt-composer','visual-picker','overview-chart'])
+    assert.equal(css.includes('.'+obsolete),false,obsolete);
 });
