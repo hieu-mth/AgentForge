@@ -25,7 +25,7 @@ git pull --ff-only origin main
 .\.venv\Scripts\python.exe -m agentforge.features.film_studio.long_form plan --spec .\examples\film_studio\film_60s.json --output-root .\workspace\films --slug fox-pilot
 ~~~
 
-These commands create a SHA-bound film-plan.json once per slug. Use the [Motion checklist](../MOTION.md) to individually submit, reconcile, import and verify a real MP4 for EVERY shot in the same plan. Do not proceed until all source receipts exist.
+These commands create a SHA-bound film-plan.json once per slug. Use the [Motion checklist](MOTION.md) to individually submit, reconcile, import and verify a real MP4 for EVERY shot in the same plan. Do not proceed until all source receipts exist.
 
 ## Step 2 — Auto-draft edit worksheet from actual receipts
 

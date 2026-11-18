@@ -29,7 +29,7 @@ Script dùng một prompt cố định, không truyền dữ liệu riêng tư, 
 
 ## 4. ComfyUI, shot thật và Film Studio
 
-Dùng [Motion 12 GiB](../../architecture/FILM_MOTION_12GB_PILOT.md) và [Film Studio](../../architecture/LONG_FORM_AI_FILM_STUDIO.md).
+Dùng [Motion 12 GiB](../architecture/FILM_MOTION_12GB_PILOT.md) và [Film Studio](../../architecture/LONG_FORM_AI_FILM_STUDIO.md).
 
 - Xác nhận ComfyUI chỉ phục vụ loopback; workflow và weights được Owner xem, pin SHA.
 - Chạy một shot được phép; không retry nếu trạng thái submit chưa chắc chắn.
