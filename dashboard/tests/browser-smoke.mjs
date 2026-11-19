@@ -266,6 +266,11 @@ try {
     data:{ack:'SAVE_ORCHESTRATOR',expected_revision:2,policy:persisted.orchestrator.policy,
       route_changes:{'film.motion':'local_primary'}}});
   if(invalid.status()!==400)throw new Error('API accepted a text model for video');
+  const assignedDelete=await settings.request.post(policyOrigin+'/api/model-hub/profile/delete',{
+    headers:{Origin:policyOrigin,'X-CSRF-Token':csrf},
+    data:{ack:'DELETE_MODEL_PROFILE',expected_revision:2,profile_id:'local_primary'},
+  });
+  if(assignedDelete.status()!==400)throw new Error('API deleted assigned AI model');
   await settings.getByRole('button',{name:'Đặt lại mặc định'}).click();
   await settings.getByRole('dialog').getByRole('button',{name:'Đặt lại',exact:true}).click();
   await settings.getByText('Mặc định · Phiên bản 3',{exact:true}).waitFor();
@@ -278,6 +283,15 @@ try {
   await settings.waitForFunction(()=>document.documentElement.dataset.theme==='light');
   await settings.getByRole('button',{name:'Tối'}).click();
   await settings.waitForFunction(()=>document.documentElement.dataset.theme==='dark');
+  // Real Model Hub UI can delete an unassigned Owner profile; never touches weights.
+  await settings.goto(policyOrigin+'/dashboard/#/models',{waitUntil:'networkidle'});
+  const modelRow=settings.locator('tr[data-row-key="local_primary"]');
+  await modelRow.getByText('Xóa',{exact:true}).click();
+  await settings.getByRole('dialog').getByRole('button',{name:'Xác nhận'}).click();
+  await settings.getByText('Chưa đăng ký model. Chọn Đăng ký model để bắt đầu.',{exact:true}).waitFor();
+  const cleaned=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
+  if(cleaned.profiles.length!==0||cleaned.revision!==4)
+    throw new Error('Owner profile removal did not persist in SQLite');
   if(settingsErrors.length)throw new Error('Orchestrator runtime errors: '+settingsErrors.join(' | '));
   console.log('Orchestrator authenticated API, SQLite persistence, reset and responsive Edge: PASS');
 } finally {
