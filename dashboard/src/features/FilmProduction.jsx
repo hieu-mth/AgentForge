@@ -2,6 +2,7 @@ import {useState} from 'react';
 import {App as AntApp, Alert, Button, Card, Grid, Input, Select, Space, Table, Typography} from 'antd';
 import {PlayCircleOutlined,ReloadOutlined,VideoCameraOutlined} from '@ant-design/icons';
 import {SectionTitle,SettingsStatus} from '../components/settings.jsx';
+import {StudioPreview} from './StudioPreview.jsx';
 import {api} from '../api.js';
 import {useResource, ResourceStatus} from '../use_resource.jsx';
 import {useScreenRefresh} from '../refresh_scope.jsx';
@@ -70,6 +71,11 @@ export function MotionClips({mutate}){
 
   const clipActions=row=><div className="studio-row-actions">
     <Button size="small" onClick={()=>actionMotion(row,'poll')}>Đối chiếu ComfyUI</Button>
+    {row.mp4_technical_verified&&<Button size="small" onClick={()=>modal.info({
+      title:'Clip '+row.shot_id, width:640, okText:'Đóng',
+      content:<StudioPreview url={'/api/film/motion/job/'+encodeURIComponent(row.job_id)+'/preview'}
+        filename={row.shot_id+'.mp4'} label="Phát clip"/>,
+    })}>Xem clip</Button>}
     {!row.mp4_technical_verified&&row.state==='COMPLETE_UNVERIFIED'&&<>
       <Input size="small" aria-label={'Tên MP4 của cảnh '+row.shot_id}
         value={motionFilename[row.job_id]||''} placeholder="Tên file MP4 trong thư mục output"
