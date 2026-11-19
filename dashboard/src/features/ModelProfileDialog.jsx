@@ -1,5 +1,5 @@
 import {Fragment,useState} from 'react';
-import {Alert,Button,Form,Input,Modal,Radio,Select,Space,Switch} from 'antd';
+import {Alert,Button,Form,Input,InputNumber,Modal,Radio,Select,Space,Switch} from 'antd';
 import {ApiOutlined,CloudOutlined,DesktopOutlined} from '@ant-design/icons';
 import {SectionTitle} from '../components/settings.jsx';
 import {profilePayload} from '../model_hub_ui.js';
@@ -21,9 +21,14 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
   const [form]=Form.useForm();
   const initialAdapter=adapters.find(item=>item.id===profile?.provider)??adapters[0];
   const initial={connection:initialAdapter.connection,provider:initialAdapter.id,
-    enabled:true,...initialAdapter.defaults,...profile};
+    enabled:true,...initialAdapter.defaults,...profile,
+    flux_enabled:Boolean(profile?.flux),flux_settings:{
+      max_resolution:1024,max_steps:4,timeout_seconds:180,output_dir:'visuals',
+      ...profile?.flux,workflow:profile?.flux?JSON.stringify(profile.flux.workflow,null,2):'',
+    }};
   const connection=Form.useWatch('connection',form)??initial.connection;
   const provider=Form.useWatch('provider',form)??initial.provider;
+  const fluxEnabled=Form.useWatch('flux_enabled',form)??initial.flux_enabled;
   const adapter=adapters.find(item=>item.id===provider);
   const [useEnv,setUseEnv]=useState(Boolean(profile?.api_key_env));
   const directCloud=connection==='cloud'&&!useEnv;
@@ -69,7 +74,14 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
     </Space>}>
     <Form hidden={Boolean(review)} form={form} layout="vertical" initialValues={initial}
       requiredMark={false} onValuesChange={changeAdapter}
-      onFinish={values=>setReview(profilePayload(values,{...adapter,defaults:fields}))}>
+      onFinish={values=>{
+        const payload=profilePayload(values,{...adapter,defaults:fields});
+        if(provider==='comfyui'&&values.flux_enabled) {
+          const settings=values.flux_settings;
+          payload.flux={...settings,workflow:JSON.parse(settings.workflow)};
+        }
+        setReview(payload);
+      }}>
       <div className="model-dialog-grid">
         <Form.Item name="connection" label="Loại kết nối">
           <Radio.Group optionType="button" buttonStyle="solid" disabled={editing}
@@ -112,6 +124,30 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
             ?Promise.resolve():Promise.reject(new Error('Nhập API key hợp lệ cho endpoint này.'))})]}>
         <Input.Password autoComplete="new-password"/>
       </Form.Item>}
+      {provider==='comfyui'&&<>
+        <Form.Item name="flux_enabled" label="Workflow FLUX GGUF" valuePropName="checked"><Switch/></Form.Item>
+        {fluxEnabled&&<>
+          <Form.Item name={['flux_settings','workflow']} label="Workflow API JSON" rules={[
+            {required:true},{validator:(_,value)=>{
+              try {
+                const graph=JSON.parse(value);
+                if(graph?.['38']?.class_type==='UnetLoaderGGUF')return Promise.resolve();
+              } catch { /* Show validation below. */ }
+              return Promise.reject(new Error('Dán workflow FLUX ở định dạng ComfyUI API JSON.'));
+            }},
+          ]}><Input.TextArea rows={6} spellCheck={false} maxLength={16000}/></Form.Item>
+          <div className="model-dialog-grid">
+            {[
+              ['max_resolution','Cạnh ảnh tối đa (px)',256,1536],
+              ['max_steps','Số bước tối đa',1,20],
+              ['timeout_seconds','Thời gian chờ (giây)',5,600],
+            ].map(([key,label,min,max])=><Form.Item key={key} name={['flux_settings',key]} label={label}
+              rules={[{required:true,type:'integer',min,max}]}><InputNumber min={min} max={max}/></Form.Item>)}
+            <Form.Item name={['flux_settings','output_dir']} label="Thư mục con trong workspace"
+              rules={[{required:true}]}><Input spellCheck={false}/></Form.Item>
+          </div>
+        </>}
+      </>}
       <div className="model-dialog-divider"/>
       <Form.Item name="id" label="Mã hồ sơ"
         rules={[{required:true,pattern:/^[a-z][a-z0-9_]{2,39}$/,
@@ -135,6 +171,9 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         {Object.keys(fields).map(key=><Fragment key={key}><dt>{directCloud?'Endpoint Cloud':fieldLabels[key]}</dt><dd>{review[key]}</dd></Fragment>)}
         {directCloud&&<><dt>API key</dt><dd>••••••••</dd></>}
         <dt>Trạng thái</dt><dd>{review.enabled?'Đã bật':'Đã tắt'}</dd>
+        {review.flux&&<><dt>Workflow FLUX</dt><dd>{Object.keys(review.flux.workflow).length} node</dd>
+          <dt>Giới hạn</dt><dd>{review.flux.max_resolution} px · {review.flux.max_steps} bước · {review.flux.timeout_seconds} giây</dd>
+          <dt>Đầu ra</dt><dd>workspace/{review.flux.output_dir}</dd></>}
       </dl>
       <p className="model-dialog-help">Hồ sơ được lưu vào SQLite trên máy này. Lượt lưu chỉ cập nhật cấu hình.</p>
       {saveError&&<Alert showIcon type="error" message="Chưa lưu được hồ sơ" description={saveError}/>}

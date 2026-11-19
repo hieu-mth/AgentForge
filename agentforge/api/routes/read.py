@@ -106,6 +106,13 @@ def dispatch(self, route):
     if route == "/api/visuals/jobs":
         from agentforge.features.media import visual_jobs
         return self._reply(200, visual_jobs.report())
+    if route.startswith("/api/visuals/") and route.endswith("/details"):
+        from agentforge.features.media import visual_jobs
+        parts = route.split("/")
+        if len(parts) != 5:
+            raise ValueError("Invalid visual job route")
+        row = visual_jobs._row(parts[3])
+        return self._reply(200, {**row, "runtime": visual_jobs.runtime_details(parts[3])})
     if route.startswith("/api/visuals/") and route.endswith("/preview"):
         from agentforge.features.media import visual_jobs
         parts = route.split("/")

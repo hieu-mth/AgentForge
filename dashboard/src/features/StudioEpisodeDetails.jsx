@@ -6,7 +6,7 @@ import {StudioPreview} from './StudioPreview.jsx';
 
 const {Text}=Typography;
 
-export function StudioEpisodeDetails({project,initialEpisode,onClose,onAssembly}){
+export function StudioEpisodeDetails({project,initialEpisode,onClose,onAssembly,onImages}){
   const priorityState={review:'RENDER_RECEIPT_PRESENT_UNINSPECTED',attention:'INVALID_NEEDS_OWNER_REVIEW'};
   const [id,setId]=useState(()=>initialEpisode??
     project.episodes.find(row=>row.state===priorityState[project.group])?.episode_id??
@@ -19,7 +19,7 @@ export function StudioEpisodeDetails({project,initialEpisode,onClose,onAssembly}
         onChange={setId} options={project.episodes.map(row=>({
           value:row.episode_id,label:`${row.episode_id} · ${episodeNames[row.state]??'Cần kiểm tra'}`,
         }))}/>
-      <EpisodeRecord key={episode.episode_id} episode={episode} onAssembly={onAssembly}/>
+      <EpisodeRecord key={episode.episode_id} episode={episode} onAssembly={onAssembly} onImages={onImages}/>
     </div>
   </Drawer>;
 }
@@ -30,7 +30,7 @@ const episodeNames={
   INVALID_NEEDS_OWNER_REVIEW:'Hồ sơ cần kiểm tra',
 };
 
-function EpisodeRecord({episode,onAssembly}){
+function EpisodeRecord({episode,onAssembly,onImages}){
   const {film_slug:film,episode_id:id,state}=episode;
   const endpoint='/api/film/productions/'+encodeURIComponent(film)+'/'+encodeURIComponent(id);
   const resource=useResource(endpoint);
@@ -51,6 +51,8 @@ function EpisodeRecord({episode,onAssembly}){
               {shot.action_camera&&<div>{shot.action_camera}</div>}
               {shot.caption&&<div className="env-muted">Phụ đề: {shot.caption}</div>}
               {shot.character_ids?.length>0&&<div className="env-muted">Nhân vật: {shot.character_ids.join(', ')}</div>}
+              {onImages&&<Button size="small" onClick={()=>onImages(
+                [film,id,shot.shot_id].join('/'),shot.action_camera??'')}>Tạo ảnh cho cảnh</Button>}
             </li>)}
           </ul>
         </section>

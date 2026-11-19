@@ -61,6 +61,23 @@ def handle(server, path, request, session=None):
         return import_clip(
             job_id=job_id, filename=request["filename"], output_dir=Path(folder),
             confirmed=True)
+    if path == "/api/visuals/flux":
+        if not server.allow_external_actions:
+            raise PermissionError("Local ComfyUI requires external-tools mode")
+        options = {"width", "height", "steps", "seed", "scene"}
+        if (set(request) - options not in ({"prompt"}, {"prompt", "ack"})
+                or ("ack" in request and request["ack"] != "GENERATE_AI_VISUALS")):
+            raise ValueError("Invalid FLUX image request")
+        from agentforge.features.media import flux_runtime
+        return flux_runtime.generate(request["prompt"], automated="ack" not in request,
+                                     **{key: request[key] for key in options & request.keys()})
+    if path == "/api/visuals/approve":
+        if (set(request) != {"job_id", "sha256"} or session is None
+                or not isinstance(request["job_id"], str)
+                or session.get("reviewed_visual_images", {}).get(request["job_id"]) != request["sha256"]):
+            raise PermissionError("Preview the exact image before approving")
+        from agentforge.features.media import visual_jobs
+        return visual_jobs.approve(request["job_id"], request["sha256"])
     if path == "/api/visuals/generate":
         if not server.allow_external_actions:
             raise PermissionError("Local ComfyUI requires external-process mode")

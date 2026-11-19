@@ -80,6 +80,11 @@ export function ModelHub({mutate}) {
   'Danh sách model và chính sách điều phối sẽ được khôi phục cùng nhau. Hệ thống sẽ lưu kết quả thành một phiên bản mới.');
 
   const profileActions=row=><Space wrap size={6}>
+    {row.flux&&<Button size="small" onClick={()=>update('/api/model-hub/check',{
+      ack:'CHECK_LOCAL_MODEL',profile_id:row.id,
+    },'Kiểm tra ComfyUI local?','Đọc thông tin GPU và danh sách model của các node loader.')}>
+      Kiểm tra ComfyUI
+    </Button>}
     {byAdapter[row.provider]?.local_probe&&<>
       <Tooltip title="Đọc danh sách model từ Ollama local">
         <Button size="small" onClick={()=>update('/api/model-hub/check',{
@@ -139,6 +144,12 @@ export function ModelHub({mutate}) {
               {checked[row.id]&&checked[row.id].revision===hub?.revision
                 ?checked[row.id].status==='LOCAL_MODEL_FOUND'?'Đã phát hiện qua Ollama':displayStatus(checked[row.id].status)
                 :'Chưa kiểm tra Ollama'}
+            </Text>}
+            {row.flux&&<Text type="secondary" style={{fontSize:12}}>
+              {checked[row.id]?.revision===hub?.revision
+                ? {READY:'ComfyUI sẵn sàng',GPU_UNAVAILABLE:'Chưa phát hiện CUDA',
+                  MODEL_UNAVAILABLE:'Thiếu model trong ComfyUI',COMFYUI_UNAVAILABLE:'ComfyUI không phản hồi'}[checked[row.id].status]
+                : 'Chưa kiểm tra ComfyUI'}
             </Text>}
             {byAdapter[row.provider]?.connection==='cloud'&&
               <Text type="secondary" className="env-muted">Chưa xác minh kết nối</Text>}

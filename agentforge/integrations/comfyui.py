@@ -66,7 +66,9 @@ def validate_image_route(path, *, has_body=False):
         if path != "/prompt":
             raise ComfyUITransportError("Invalid image POST route")
         return
-    if path in MODEL_ROUTES or IMAGE_HISTORY.fullmatch(path):
+    if (path in MODEL_ROUTES or path in {"/system_stats", "/queue"}
+            or IMAGE_HISTORY.fullmatch(path)
+            or re.fullmatch(r"/object_info/(?:UnetLoaderGGUF|DualCLIPLoaderGGUF|VAELoader)", path)):
         return
     parsed = urlsplit(path)
     if parsed.path != "/view" or parsed.scheme or parsed.netloc or parsed.fragment:

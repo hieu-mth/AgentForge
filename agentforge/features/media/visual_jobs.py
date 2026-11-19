@@ -55,8 +55,33 @@ def _db(path=None, *, create=False):
             prompt TEXT NOT NULL, checkpoint TEXT NOT NULL,
             provider_id TEXT, status TEXT NOT NULL,
             asset_sha TEXT, source_sha TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""")
+        db.execute("""CREATE TABLE IF NOT EXISTS visual_runtime (
+            job_id TEXT PRIMARY KEY REFERENCES visual_jobs(job_id),
+            metadata TEXT NOT NULL, reviewed INTEGER NOT NULL DEFAULT 0)""")
         db.commit()
     return db
+
+
+def runtime_details(job_id, *, db_path=None):
+    db = _db(db_path)
+    if db is None:
+        return None
+    with closing(db):
+        if not db.execute("SELECT 1 FROM sqlite_master WHERE name='visual_runtime'").fetchone():
+            return None
+        row = db.execute("SELECT * FROM visual_runtime WHERE job_id=?", (_id(job_id),)).fetchone()
+    return {**json.loads(row["metadata"]), "approved": bool(row["reviewed"])} if row else None
+
+
+def approve(job_id, sha256, *, db_path=None):
+    row = _row(job_id, db_path=db_path)
+    if row["asset_sha"] != sha256 or row["status"] != "ASSET_READY":
+        raise PermissionError("Visual asset changed")
+    image_for_job(job_id, db_path=db_path)
+    with closing(_db(db_path, create=True)) as db, db:
+        if db.execute("UPDATE visual_runtime SET reviewed=1 WHERE job_id=?", (job_id,)).rowcount != 1:
+            raise ValueError("No FLUX visual to approve")
+    return {"job_id": job_id, "approved": True}
 
 
 def _row(job_id, *, db_path=None):
@@ -209,7 +234,12 @@ def image_for_job(job_id, *, db_path=None, output_root=None):
     row = _row(job_id, db_path=db_path)
     if row["status"] != "ASSET_READY" or not row["asset_sha"]:
         raise PermissionError("AI visual image is not ready")
-    root = Path(output_root) if output_root is not None else OUTPUTS
+    runtime = runtime_details(job_id, db_path=db_path)
+    if runtime is not None:
+        from agentforge.features.media.flux_runtime import output_directory
+        root = output_directory(runtime["output_dir"])
+    else:
+        root = Path(output_root) if output_root is not None else OUTPUTS
     path = root / (_id(job_id) + ".png")
     ensure_local_root(path)
     if not path.is_file() or not 0 < path.stat().st_size <= MAX_IMAGE:
@@ -228,4 +258,18 @@ def report(*, db_path=None):
         rows = [dict(x) for x in db.execute(
             "SELECT job_id,package_id,purpose,scene_index,status,asset_sha,source_sha,checkpoint,"
             "created_at,updated_at FROM visual_jobs ORDER BY created_at DESC LIMIT 80")]
+        runtime_rows = {}
+        if rows and db.execute("SELECT 1 FROM sqlite_master WHERE name='visual_runtime'").fetchone():
+            placeholders = ",".join("?" for _ in rows)
+            runtime_rows = {row["job_id"]: row for row in db.execute(
+                f"SELECT * FROM visual_runtime WHERE job_id IN ({placeholders})",
+                [row["job_id"] for row in rows])}
+    for row in rows:
+        stored = runtime_rows.get(row["job_id"])
+        if stored:
+            runtime = json.loads(stored["metadata"])
+            row.update({key: runtime[key] for key in (
+                "prompt", "seed", "width", "height", "steps", "scene", "workflow_sha256",
+                "duration_seconds")})
+            row["approved"] = bool(stored["reviewed"])
     return {"jobs": rows, "no_auto_publication": True, "auto_retry": False}

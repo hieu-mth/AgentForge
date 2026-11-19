@@ -1,0 +1,136 @@
+"""FLUX graph validation and visual job admission contracts."""
+import copy
+import tempfile
+import threading
+import unittest
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from unittest.mock import patch
+
+from agentforge.ai import model_hub, orchestrator_policy
+from agentforge.features.media import flux_runtime, flux_workflow, visual_jobs
+
+
+def profile():
+    fields = {
+        "6": {"text": "default", "clip": ["39", 0]},
+        "8": {"samples": ["31", 0], "vae": ["40", 0]},
+        "9": {"filename_prefix": "fixture", "images": ["8", 0]},
+        "27": {"width": 768, "height": 768, "batch_size": 1},
+        "31": {"seed": 1, "steps": 4, "cfg": 1, "sampler_name": "euler",
+               "scheduler": "simple", "denoise": 1, "model": ["38", 0],
+               "positive": ["6", 0], "negative": ["33", 0], "latent_image": ["27", 0]},
+        "33": {"text": "", "clip": ["39", 0]},
+        "38": {"unet_name": "fixture.gguf"},
+        "39": {"clip_name1": "clip.safetensors", "clip_name2": "t5.safetensors", "type": "flux"},
+        "40": {"vae_name": "vae.safetensors"},
+    }
+    graph = {key: {"class_type": flux_workflow.NODES[key][0], "inputs": inputs}
+             for key, inputs in fields.items()}
+    return {"id": "fixture_flux", "provider": "comfyui", "enabled": True,
+            "model": "fixture.gguf", "base_url": "http://127.0.0.1:12345",
+            "flux": {"workflow": graph, "max_resolution": 1024, "max_steps": 6,
+                     "timeout_seconds": 5, "output_dir": "frames/flux"}}
+
+
+class FluxRuntimeTests(unittest.TestCase):
+    def test_graph_mapping_and_limits(self):
+        cfg = model_hub.validate_profile(profile())["flux"]
+        original = copy.deepcopy(cfg["workflow"])
+        graph = flux_workflow.bind(cfg, "0" * 32, " new prompt ", 512, 768, 1234, 5)
+        self.assertEqual(cfg["workflow"], original)
+        expected = copy.deepcopy(original)
+        expected["6"]["inputs"]["text"] = "new prompt"
+        expected["27"]["inputs"].update(width=512, height=768)
+        expected["31"]["inputs"].update(seed=1234, steps=5)
+        expected["9"]["inputs"]["filename_prefix"] = "af_" + "0" * 32
+        self.assertEqual(graph, expected)
+        for w, h, s in ((257, 768, 4), (1536, 768, 4), (768, 768, 7)):
+            with self.assertRaises(ValueError):
+                flux_workflow.bind(cfg, "0" * 32, "image", w, h, 1, s)
+        cfg["workflow"]["9"]["inputs"]["images"] = ["40", 0]
+        with self.assertRaises(ValueError):
+            model_hub.validate_profile(profile() | {"flux": cfg})
+
+    def test_output_location(self):
+        for folder in ("C:/owner", "../outside", "frames/../outside", "frames/NUL", "/absolute"):
+            value = profile()
+            value["flux"]["output_dir"] = folder
+            with self.subTest(folder=folder), self.assertRaises(ValueError):
+                model_hub.validate_profile(value)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            outside = root / "outside"
+            outside.mkdir()
+            workspace = root / "workspace"
+            workspace.mkdir()
+            try:
+                (workspace / "alias").symlink_to(outside, target_is_directory=True)
+            except OSError:
+                self.skipTest("Directory symlink unavailable")
+            with patch.object(flux_runtime, "WORKSPACE_DIR", workspace):
+                with self.assertRaises(PermissionError):
+                    flux_runtime.output_directory("alias/images")
+            self.assertEqual(list(outside.iterdir()), [])
+
+    def test_offline_timeout_missing_and_cancelled(self):
+        with patch.object(flux_runtime, "_json", side_effect=ConnectionRefusedError):
+            self.assertEqual(flux_runtime.readiness(profile()["flux"], 12345), "COMFYUI_UNAVAILABLE")
+        with (patch.object(flux_runtime.time, "monotonic", side_effect=[0, 0, 6, 6]),
+              patch.object(flux_runtime.time, "sleep"),
+              patch.object(flux_runtime, "_json", return_value={})):
+            with self.assertRaisesRegex(flux_runtime.JobError, "TIMED_OUT"):
+                flux_runtime._collect("provider", "job", 12345, profile()["flux"], {})
+        with self.assertRaisesRegex(flux_runtime.JobError, "OUTPUT_MISSING"):
+            flux_runtime._output({"status": {"status_str": "success", "completed": True}}, "job")
+        with self.assertRaisesRegex(flux_runtime.JobError, "CANCELLED"):
+            flux_runtime._output({"status": {"messages": [["execution_interrupted"]]}}, "job")
+
+    def test_owner_policy_and_concurrent_gpu_admission(self):
+        try:
+            import PIL
+        except ImportError:
+            self.skipTest("Media extra unavailable")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            hub, db = root / "hub.db", root / "visual.db"
+            model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0, profile=profile(), db_path=hub)
+            model_hub.change("SET_MODEL_ROUTE", expected_revision=1, task_id="image.generate",
+                             model_ref="fixture_flux", db_path=hub)
+            with self.assertRaises(PermissionError):
+                model_hub.image_runtime(automated=True, db_path=hub)
+            policy = orchestrator_policy.defaults()
+            policy["mode"] = "AUTOMATIC"
+            policy["permissions"].update(assign_local=True, call_local=True)
+            model_hub.change("SAVE_ORCHESTRATOR", expected_revision=2, policy=policy,
+                             route_changes={}, db_path=hub)
+            dispatched, release = threading.Event(), threading.Event()
+            calls = []
+
+            def provider(path, **kwargs):
+                calls.append(path)
+                if path == "/queue":
+                    return {"queue_running": [], "queue_pending": []}
+                if path == "/prompt":
+                    dispatched.set()
+                    self.assertTrue(release.wait(5))
+                    return {"prompt_id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}
+                raise AssertionError(path)
+
+            with (patch.object(flux_runtime, "WORKSPACE_DIR", root / "workspace"),
+                  patch.object(flux_runtime, "readiness", return_value="READY"),
+                  patch.object(flux_runtime, "_json", side_effect=provider),
+                  patch.object(flux_runtime, "_collect", side_effect=flux_runtime.JobError("OUTPUT_MISSING")),
+                  ThreadPoolExecutor(max_workers=2) as pool):
+                future = pool.submit(flux_runtime.generate, "first", automated=True, hub_db=hub, db_path=db)
+                try:
+                    self.assertTrue(dispatched.wait(3))
+                    with self.assertRaisesRegex(PermissionError, "outstanding"):
+                        flux_runtime.generate("second", automated=True, hub_db=hub, db_path=db)
+                finally:
+                    release.set()
+                result = future.result(5)
+            self.assertEqual(calls, ["/queue", "/prompt"])
+            self.assertEqual(result["status"], "OUTPUT_MISSING")
+            self.assertEqual(visual_jobs.report(db_path=db)["jobs"][0]["prompt"], "first")
+            self.assertEqual(list((root / "workspace").rglob("*.png")), [])

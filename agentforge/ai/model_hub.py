@@ -112,9 +112,9 @@ def validate_profile(value, *, profile_id=None):
     """Return canonical allowlisted profile; secrets are never accepted."""
     if not isinstance(value, dict):
         raise ModelConfigError("Model profile must be an object")
-    if len(value) > 6 or not set(value).issubset({
+    if len(value) > 7 or not set(value).issubset({
         "id", "provider", "model", "enabled", "base_url",
-        "base_url_env", "api_key_env", "api_key_protected",
+        "base_url_env", "api_key_env", "api_key_protected", "flux",
     }):
         raise ModelConfigError("Unknown or sensitive model profile fields")
     ident = _required_text(value.get("id", profile_id), ID_RE, "model ID")
@@ -131,9 +131,13 @@ def validate_profile(value, *, profile_id=None):
               "enabled": enabled}
     fields = value.keys() - common.keys()
     if ADAPTERS[provider]["connection"] == "local":
-        if fields != {"base_url"}:
+        if fields != {"base_url"} and not (
+                provider == "comfyui" and fields == {"base_url", "flux"}):
             raise ModelConfigError("Fields do not match the selected adapter")
         common["base_url"] = _local_url(value.get("base_url"))
+        if "flux" in fields:
+            from agentforge.features.media.flux_workflow import validate
+            common["flux"] = validate(value["flux"], model, common["base_url"])
     elif fields == {"base_url", "api_key_protected"} and profile_id is not None:
         key = value["api_key_protected"]
         try:
@@ -294,10 +298,12 @@ def _orchestrator_catalog(state, profiles, routes):
                    if orchestrator_policy.compatible(kind, profile)]
         capabilities.append({
             "id": key, "label": label, "kind": kind, "tool": tool,
-            "adapter": ("EXISTING_TOOL" if key in {"film.tts", "film.assemble", "ops.monitor"}
+            "adapter": ("COMFYUI_FLUX" if key == "image.generate" and "flux" in profiles.get(ref, {})
+                        else "EXISTING_TOOL" if key in {"film.tts", "film.assemble", "ops.monitor"}
                         else "NONE"),
             "model_ref": ref, "options": sorted(options),
-            "status": decision["status"],
+            "status": ("LOCAL_RUNTIME" if key == "image.generate"
+                       and "flux" in profiles.get(decision.get("model_ref"), {}) else decision["status"]),
             "existing_route": route is not None and kind != "tool",
             "default_ref": None,
         })
@@ -308,6 +314,22 @@ def _orchestrator_catalog(state, profiles, routes):
 def catalog(*, db_path=None):
     revision, state = _read_state(db_path=db_path)
     return _catalog(revision, state)
+
+
+def image_runtime(*, automated=False, db_path=None):
+    revision, state = _read_state(db_path=db_path)
+    profiles = _profiles(state=state)
+    policy = state.get("orchestrator", orchestrator_policy.defaults())
+    ref = state["routes"].get("image.generate")
+    decision = orchestrator_policy.resolve("image.generate", policy, profiles, ref)
+    profile = profiles.get(decision.get("model_ref"))
+    if not profile or "flux" not in profile:
+        raise ModelConfigError("Assign an enabled FLUX profile to image.generate")
+    permissions = policy["permissions"]
+    if automated and (policy["mode"] == "MANUAL" or not (
+            permissions["assign_local"] and permissions["call_local"])):
+        raise PermissionError("Owner policy does not allow automated local image calls")
+    return revision, profile
 
 
 def _catalog(revision, state):
@@ -325,7 +347,7 @@ def _catalog(revision, state):
         elif not orchestrator_policy.compatible(route["kind"], profiles[selected]):
             status = "INCOMPATIBLE"
         else:
-            status = "CONFIG_ONLY"
+            status = "LOCAL_RUNTIME" if key == "image.generate" and "flux" in profiles[selected] else "CONFIG_ONLY"
         routes.append({**route, "model_ref": selected,
                         "source": ("owner" if key in state["routes"] else "system"),
                        "status": status,
@@ -338,14 +360,14 @@ def _catalog(revision, state):
             "has_api_key": "api_key_protected" in v, "source": (
             "owner"),
             "health": "UNVERIFIED",
-            "runtime_supported": v["provider"] in {"ollama", "anthropic"}}
+            "runtime_supported": v["provider"] in {"ollama", "anthropic"} or "flux" in v}
             for k, v in sorted(profiles.items())],
         "routes": routes,
         "orchestrator": _orchestrator_catalog(state, profiles, routes),
         "cloud_fallback": False,
         "gpu_auto_start": False,
         "provider_billing_verified": False,
-        "configuration_only_warning": "Video/image routing is not wired to inference",
+        "configuration_only_warning": "FLUX image profiles support local inference; video routing is configuration-only",
     }
 
 
@@ -370,11 +392,7 @@ def probe_local_profile(profile_id, *, expected_revision, db_path=None):
 
 
 def check_local_profile(profile_id, *, db_path=None, opener=None):
-    """Owner-invoked, bounded GET to a loopback Ollama tags endpoint ONLY.
-
-    Cloud providers and ComfyUI video checkpoints are not probed by this
-    endpoint. No generation, model download, GPU run or billing is triggered.
-    """
+    """Owner-invoked metadata preflight for supported loopback profiles."""
     import urllib.error
     import urllib.request
 
@@ -384,6 +402,11 @@ def check_local_profile(profile_id, *, db_path=None, opener=None):
         raise ModelConfigError("Unknown model ID")
     if not profile["enabled"]:
         return {"profile_id": profile_id, "status": "DISABLED",
+                "inference_invoked": False}
+    if "flux" in profile:
+        from agentforge.features.media.flux_runtime import readiness
+        return {"profile_id": profile_id,
+                "status": readiness(profile["flux"], urlsplit(profile["base_url"]).port),
                 "inference_invoked": False}
     if profile["provider"] != "ollama":
         return {"profile_id": profile_id, "status": "NOT_CHECKED",

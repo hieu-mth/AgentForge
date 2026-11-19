@@ -165,7 +165,8 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
       'Không dùng dự phòng',undefined,'Model dự phòng · '+row.label):'—';
   const capabilityStatus=row=><Space direction="vertical" size={4}>
     <SettingsStatus tone={({DETERMINISTIC:'good',UNAVAILABLE:'warn'})[row.status]}>
-      {({DETERMINISTIC:'Theo quy tắc',CONFIG_ONLY:'Chỉ cấu hình',UNAVAILABLE:'Không khả dụng'})[row.status]}
+      {({DETERMINISTIC:'Theo quy tắc',CONFIG_ONLY:'Chỉ cấu hình',LOCAL_RUNTIME:'Có runtime local',
+        UNAVAILABLE:'Không khả dụng'})[row.status]}
     </SettingsStatus>
     {row.adapter==='EXISTING_TOOL'&&<Text className="env-muted">Có công cụ riêng</Text>}
   </Space>;
@@ -265,7 +266,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
           </div>
         </RuleRow>
       </div>
-      <p className="env-muted orchestrator-rule-note">Đối chiếu tác vụ ComfyUI chưa rõ kết quả trước khi thử lại. Giới hạn GPU và số lần thử lại hiện ở mức cấu hình.</p>
+      <p className="env-muted orchestrator-rule-note">FLUX tạo từng ảnh qua hàng đợi ComfyUI. Hãy đối chiếu tác vụ chưa rõ kết quả trước khi gửi lại.</p>
     </Card>
     <Card className="env-panel" title={<SectionTitle icon={<SafetyCertificateOutlined/>}
       title="Quyền hạn & giới hạn" description="Các quyền và hạn mức mục tiêu cho AI điều phối"/>}>

@@ -7,6 +7,7 @@ import {useResource,ResourceStatus} from '../use_resource.jsx';
 import {useScreenRefresh} from '../refresh_scope.jsx';
 import {FilmProduction,MotionClips} from './FilmProduction.jsx';
 import {StudioEpisodeDetails} from './StudioEpisodeDetails.jsx';
+import {StudioImages} from './StudioImages.jsx';
 
 const groups={
   attention:{label:'Cần xử lý',tone:'bad',next:'Kiểm tra lại hồ sơ tập và các clip nguồn.'},
@@ -38,6 +39,7 @@ export function MediaStudio({onNavigate,mutate}){
   const [tool,setTool]=useState(null);
   const [filter,setFilter]=useState('all');
   const [selected,setSelected]=useState(null);
+  const [imageScene,setImageScene]=useState(null);
   const toolsHeading=useRef(null);
   const episodes=episodesResource.data?.episodes;
   const projects=episodes&&groupProjects(episodes);
@@ -114,14 +116,23 @@ export function MediaStudio({onNavigate,mutate}){
             onClick={()=>setTool(tool==='episode'?null:'episode')}>
             {tool==='episode'?'Đóng khu vực dựng':'Mở khu vực dựng'}
           </Button>
+          <Button aria-expanded={tool==='images'} onClick={()=>{
+            setImageScene(null);setTool(tool==='images'?null:'images');
+          }}>Ảnh theo cảnh</Button>
           <Button type="text" icon={<SettingOutlined/>} onClick={()=>onNavigate('models')}>Cấu hình Model AI</Button>
         </Space>
       </Card>
       {tool==='motion'&&<MotionClips mutate={mutate}/>}
+      {tool==='images'&&<StudioImages key={imageScene?.id??'all'} mutate={mutate}
+        scene={imageScene?.id} initialPrompt={imageScene?.prompt}/>}
       {tool==='episode'&&<FilmProduction mutate={mutate} resource={episodesResource}
         onInspect={row=>setSelected({film:row.film_slug,episode:row.episode_id})}/>}
     </section>
     {selectedProject&&<StudioEpisodeDetails key={selectedProject.film} project={selectedProject}
-      initialEpisode={selected.episode} onClose={()=>setSelected(null)} onAssembly={openAssembly}/>}
+      initialEpisode={selected.episode} onClose={()=>setSelected(null)} onAssembly={openAssembly}
+      onImages={(id,prompt)=>{
+        setSelected(null);setImageScene({id,prompt});setTool('images');
+        requestAnimationFrame(()=>toolsHeading.current?.focus());
+      }}/>}
   </div>;
 }
