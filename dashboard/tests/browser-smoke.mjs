@@ -213,6 +213,12 @@ try {
   await settings.getByText('Không khả dụng',{exact:true}).first().waitFor();
   const savePolicy=settings.locator('.orchestrator-header').getByRole('button',{name:'Lưu cấu hình'});
   const openOptions=settings.locator('.ant-select-dropdown:visible .ant-select-item-option-content');
+  const motionModel=settings.getByRole('combobox',{name:'Model chính · Tạo chuyển động'});
+  await motionModel.click();
+  await openOptions.filter({hasText:'Chưa gán'}).waitFor();
+  if(await openOptions.filter({hasText:/local_primary|cloud_primary/}).count())
+    throw new Error('Video binding offers incompatible text models');
+  await motionModel.press('Escape');
   const selection=settings.getByRole('combobox',{name:'Lựa chọn model'});
   await selection.click();
   await openOptions.filter({hasText:/^AI đề xuất từ danh sách cho phép$/}).click();

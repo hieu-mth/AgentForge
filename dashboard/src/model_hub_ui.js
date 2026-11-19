@@ -4,23 +4,6 @@ export const PROVIDERS = Object.freeze([
   {value:'anthropic',label:'Anthropic-compatible cloud (env only)'},
   {value:'comfyui',label:'ComfyUI (local media · cấu hình)' },
 ]);
-export const STATUS_LABELS = Object.freeze({
-  CONFIG_ONLY:'Đã gán · chưa nối runtime',
-  UNCONFIGURED:'Chưa gán model',
-  DETERMINISTIC:'Python rules · không cần AI',
-  INCOMPATIBLE:'Không tương thích',
-  INVALID_CONFIG:'Cấu hình không hợp lệ',
-});
-export const KIND_LABELS = Object.freeze({
-  text:'Text / Code',video:'Video',image:'Image',rules:'Python rules',
-});
-export function compatibleProfiles(route, profiles=[]) {
-  if(!route || route.kind==='rules') return [];
-  return profiles.filter(p=>p.enabled && (
-    route.kind==='text' ? ['ollama','anthropic'].includes(p.provider)
-      : ['video','image'].includes(route.kind) && p.provider==='comfyui'
-  ));
-}
 export function exposureFor(profile) {
   if(!profile) return 'Chưa chọn model';
   if(profile.provider==='anthropic') return 'Cloud: gửi dữ liệu ra ngoài và có thể phát sinh phí; mỗi lượt chạy vẫn cần quyền Owner.';
