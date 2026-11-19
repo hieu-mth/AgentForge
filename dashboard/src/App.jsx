@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {Alert,App as AntApp,Button,Card,Drawer,Form,Input,Layout,Menu,Space,Spin,Tabs,Typography} from 'antd';
+import {Alert,App as AntApp,Button,Drawer,Form,Input,Layout,Menu,Space,Spin,Tabs,Typography} from 'antd';
 import {AppstoreOutlined,ArrowRightOutlined,CodeOutlined,DashboardOutlined,LockOutlined,MenuOutlined,MoonOutlined,
   PlayCircleOutlined,ReloadOutlined,SendOutlined,SettingOutlined,
   SunOutlined,UserOutlined,VideoCameraOutlined} from '@ant-design/icons';
@@ -13,6 +13,7 @@ import {ModelHub} from './features/Models.jsx';
 import {Orchestrator} from './features/Orchestrator.jsx';
 import {Environment} from './features/Environment.jsx';
 import {Publishing} from './features/Publishing.jsx';
+import {Overview} from './features/Overview.jsx';
 
 const {Header,Sider,Content}=Layout;
 const {Text}=Typography;
@@ -163,11 +164,7 @@ export default function App(){
     case 'orchestrator':page=<Orchestrator mutate={mutate} dirty={draftDirty} setDirty={setDraftDirty}/>;break;
     case 'environment':page=<Environment onNavigate={navigate}/>;break;
     case 'channels':page=<Publishing mutate={mutate}/>;break;
-    default:page=<Card title="Tổng quan Video Studio"><Space direction="vertical">
-      <Text>Pipeline chính: Film Studio · Character Registry · Video Project.</Text>
-      <Button type="primary" onClick={()=>navigate('media-studio')}>Mở Video Studio</Button>
-      <Button onClick={()=>navigate('projects')}>Xem dự án video</Button>
-    </Space></Card>;
+    default:page=<Overview onNavigate={navigate}/>;break;
   }
   const sidebar=<>
     <div className="af-brand">

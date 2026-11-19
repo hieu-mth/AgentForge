@@ -315,8 +315,9 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
   .env-mobile-details summary{color:var(--primary);cursor:pointer}
   .env-mobile-details[open] > div{margin-top:5px}
 }
-.model-stat-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
-.model-stat-grid .env-stat{min-height:120px}
+.model-stat-grid,.overview-stats{grid-template-columns:repeat(3,minmax(0,1fr))}
+.model-stat-grid .env-stat,.overview-stats .env-stat{min-height:120px}
+.overview-table .env-status{white-space:normal}
 .model-history{display:flex;justify-content:flex-end}
 .env-status.tone-neutral{color:var(--muted);background:var(--env-raised)}
 .orchestrator-page > .ant-form{display:grid;gap:18px;min-width:0}
@@ -360,8 +361,8 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
   border:1px solid var(--line);border-radius:10px}
 .orchestrator-capabilities h5.ant-typography{margin:0}
 @media(width < 576px){
-  .orchestrator-fields,.model-stat-grid{grid-template-columns:1fr}
-  .model-stat-grid .env-stat{min-height:0}
+  .orchestrator-fields,.model-stat-grid,.overview-stats{grid-template-columns:1fr}
+  .model-stat-grid .env-stat,.overview-stats .env-stat{min-height:0}
 }
 .hub-details{font-size:12px;color:var(--muted)}
 .hub-details summary{color:var(--primary);cursor:pointer}

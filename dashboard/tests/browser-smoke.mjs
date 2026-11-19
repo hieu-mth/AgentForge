@@ -85,11 +85,12 @@ try {
       {id:'local_primary',name:'qwen3:8b',provider:'ollama',status:'INSTALLED'},
     ],
   };
+  let projectRows=[];
   await page2.route('**/api/**',route=>{
     const p=new URL(route.request().url()).pathname;
     if(p==='/api/ops/discovery')environmentRequests++;
     const payload=p==='/api/session'?{csrf:'fixture-only-csrf'}:
-      p==='/api/video-studio/projects'?{projects:[],canonical_engine:'film_studio'}:
+      p==='/api/video-studio/projects'?{projects:projectRows,canonical_engine:'film_studio'}:
       p==='/api/characters'?{characters:[]}:
       p==='/api/model-hub'?{revision:2,
         profiles:[{id:'local-text',provider:'ollama',model:'qwen3:8b',enabled:true,source:'git'}],
@@ -178,8 +179,28 @@ try {
   console.log('Environment layout, live discovery data and refresh: PASS');
   await page2.goto(origin+'/dashboard/#/workspace',{waitUntil:'networkidle'});
   await page2.getByText('Tổng quan Video Studio',{exact:true}).waitFor();
+  const overview=page2.locator('.overview-page');
+  await overview.getByText('Chưa tìm thấy tập phim trong workspace',{exact:true}).waitFor();
+  await overview.getByRole('button',{name:'Mở Video Studio'}).click();
+  await page2.waitForURL('**/#/media-studio');
+  projectRows=[
+    {project_id:'film:demo:ep01',film_slug:'demo',episode_id:'ep01',state:'PREPARED_NOT_RENDERED'},
+    {project_id:'film:demo:ep02',film_slug:'demo',episode_id:'ep02',state:'RENDER_RECEIPT_PRESENT_UNINSPECTED'},
+    {project_id:'film:demo:ep03',film_slug:'demo',episode_id:'ep03',state:'INVALID_NEEDS_OWNER_REVIEW'},
+  ];
+  await page2.setViewportSize({width:390,height:850});
+  await page2.goto(origin+'/dashboard/#/overview',{waitUntil:'networkidle'});
+  await overview.getByText('Cần Owner xem bản dựng',{exact:true}).waitFor();
+  await overview.getByText('Cần kiểm tra hồ sơ tập',{exact:true}).waitFor();
+  if((await overview.locator('.env-stat-value').allTextContents()).join(',')!=='3,1,1')
+    throw new Error('Overview counters do not match project states');
+  const overviewOverflow=await overview.locator('.ant-table-content').evaluate(
+    table=>table.scrollWidth>table.clientWidth+2);
+  if(overviewOverflow)throw new Error('Overview table overflows on mobile');
+  await overview.getByRole('button',{name:'Xem dự án',exact:true}).click();
+  await page2.waitForURL('**/#/projects');
   if(errors2.length)throw new Error('Video Studio runtime errors: '+errors2.join(' | '));
-  console.log('Video-only project and retired route smoke: PASS');
+  console.log('Overview data, mobile layout and Studio navigation: PASS');
 
   // Serve the built dashboard and real authenticated API against isolated SQLite.
   policyTemp=await mkdtemp(join(tmpdir(),'agentforge-policy-'));
