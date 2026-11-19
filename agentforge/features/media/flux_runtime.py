@@ -120,9 +120,11 @@ def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=No
     ident = uuid4().hex
     bound = flux_workflow.bind(config, ident, prompt, width, height, seed, steps)
     directory = output_directory(config["output_dir"])
-    directory.mkdir(parents=True, exist_ok=True)
     target = ensure_local_root(directory / (ident + ".png"))
-    from PIL import Image  # Fail before dispatch when the media extra is absent.
+    try:
+        import PIL.Image  # Require the decoder before submitting GPU work.
+    except ImportError:
+        raise ValueError("FLUX image verification requires the AgentForge media extra") from None
     ready = readiness(config, port)
     if ready != "READY":
         raise ValueError(ready)
@@ -141,9 +143,16 @@ def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=No
         if db.execute("""SELECT 1 FROM visual_jobs WHERE status IN
                       ('SUBMITTING','SUBMITTED','COLLECTING') LIMIT 1""").fetchone():
             raise PermissionError("An AgentForge visual job is already outstanding")
-        queue = _json("/queue", port=port)
-        if queue["queue_running"] or queue["queue_pending"]:
+        try:
+            queue = _json("/queue", port=port)
+            active, pending = queue["queue_running"], queue["queue_pending"]
+            if not isinstance(active, list) or not isinstance(pending, list):
+                raise ValueError("Invalid ComfyUI queue")
+        except (OSError, RuntimeError, ValueError, KeyError, TypeError):
+            raise ValueError("COMFYUI_QUEUE_UNAVAILABLE") from None
+        if active or pending:
             raise PermissionError("ComfyUI GPU queue is busy")
+        ensure_local_root(directory).mkdir(parents=True, exist_ok=True)
         now = visual_jobs._now()
         db.execute("INSERT INTO visual_jobs VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", (
             ident, ident, "video" if scene else "image", 0, prompt.strip(), profile["model"],

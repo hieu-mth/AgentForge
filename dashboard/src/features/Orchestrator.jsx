@@ -9,7 +9,7 @@ const {Title,Text}=Typography;
 const modeOptions=[
   {value:'MANUAL',label:'Thủ công'},
   {value:'SUPERVISED',label:'Có giám sát'},
-  {value:'AUTOMATIC',label:'Tự động · chỉ cấu hình'},
+  {value:'AUTOMATIC',label:'Tự động'},
 ];
 const toolOptions=[
   {value:'local_tts',label:'Tạo thoại local'},
@@ -98,7 +98,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
     modal.confirm({
       title:reset?'Đặt lại chính sách điều phối?':'Lưu chính sách điều phối?',
       content:reset?'Chính sách và các mapping điều phối sẽ trở về mặc định.':
-        'Lưu cấu hình mục tiêu cho phiên bản '+snapshot.revision+'. Các lựa chọn này chưa được áp dụng vào thực thi.',
+        'Lưu cấu hình cho phiên bản '+snapshot.revision+'. Quyền local và model được gán sẽ áp dụng cho các yêu cầu tạo ảnh FLUX.',
       okText:reset?'Đặt lại':'Lưu cấu hình',cancelText:'Hủy',
       onOk:async()=>{
         setSaving(true);
