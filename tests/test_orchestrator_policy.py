@@ -1,5 +1,6 @@
 """DB-only policy persistence, guardrails, compatibility and rollback."""
 import copy
+import json
 from contextlib import closing
 from pathlib import Path
 import sqlite3
@@ -43,6 +44,7 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual(result["profiles"], [])
         self.assertEqual(config["status"], "CONFIG_ONLY")
         self.assertEqual(config["policy"]["mode"], "SUPERVISED")
+        self.assertEqual(config["policy"]["paid_api_daily_limit"], 10)
         self.assertEqual(len(config["capabilities"]), 9)
         self.assertFalse(config["owner_override"])
 
@@ -55,6 +57,8 @@ class OrchestratorTests(unittest.TestCase):
             {"mappings": {"ops.monitor": "local_primary"}}, {"token": "unexpected"},
             {"fallbacks": {"general.text": "cloud_primary"}},
             {"primary": "missing"}, {"mappings": {"vision.qa": "local_primary"}},
+            {"paid_api_daily_limit": -1}, {"paid_api_daily_limit": 1.5},
+            {"paid_api_daily_limit": True},
         ):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 self.save({**policy.defaults(), **change})
@@ -78,6 +82,25 @@ class OrchestratorTests(unittest.TestCase):
                                     target_revision=3, db_path=self.db)
         self.assertEqual(restored["orchestrator"]["policy"], values)
         self.assertEqual(model_hub.catalog(db_path=self.db), restored)
+
+    def test_paid_api_limit_loads_legacy_policy_then_persists_owner_value(self):
+        self.save(policy.defaults())
+        old_policy = policy.defaults()
+        del old_policy["paid_api_daily_limit"]
+        old_state = {"profiles": {}, "routes": {}, "orchestrator": old_policy}
+        with closing(sqlite3.connect(self.db)) as conn, conn:
+            conn.execute("UPDATE hub_state SET payload=?", (json.dumps(old_state),))
+        current = model_hub.catalog(db_path=self.db)
+        self.assertEqual(current["revision"], 1)
+        self.assertEqual(current["orchestrator"]["policy"]["paid_api_daily_limit"], 10)
+        with closing(sqlite3.connect(self.db)) as conn:
+            self.assertEqual(json.loads(conn.execute("SELECT payload FROM hub_state").fetchone()[0]),
+                             old_state)
+        values = {**current["orchestrator"]["policy"], "paid_api_daily_limit": 37}
+        self.save(values, revision=1)
+        updated = model_hub.catalog(db_path=self.db)["orchestrator"]["policy"]
+        self.assertEqual(updated["paid_api_daily_limit"], 37)
+        self.assertTrue(updated["approvals"]["cloud"])
 
     def test_invalid_later_binding_rolls_back_policy_and_first_binding(self):
         self.seed()

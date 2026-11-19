@@ -8,7 +8,7 @@ CAPABILITIES = (
     ("character.select", "Chọn nhân vật", "text", None),
     ("image.generate", "Tạo ảnh", "image", None),
     ("film.motion", "Tạo chuyển động", "video", None),
-    ("vision.qa", "Vision QA", "vision", None),
+    ("vision.qa", "Kiểm tra chất lượng hình ảnh", "vision", None),
     ("film.tts", "Tạo thoại", "tool", "Local TTS"),
     ("film.assemble", "Dựng video", "tool", "FFmpeg"),
     ("ops.monitor", "Giám sát hệ thống", "tool", "Python rules"),
@@ -42,6 +42,7 @@ def defaults():
         "tools": [],
         "approvals": dict.fromkeys(APPROVALS, True),
         "task_budget": 1,
+        "paid_api_daily_limit": 10,
     }
 
 
@@ -59,8 +60,10 @@ def validate(policy, *, id_pattern, extra_routes):
             raise ModelConfigError(message)
 
     default = defaults()
-    require(isinstance(policy, dict) and policy.keys() == default.keys(),
+    require(isinstance(policy, dict) and policy.keys() in
+            (default.keys(), default.keys() - {"paid_api_daily_limit"}),
             "Cấu trúc chính sách không hợp lệ")
+    policy = {"paid_api_daily_limit": default["paid_api_daily_limit"], **policy}
     for key, value in default.items():
         if key != "primary":
             require(type(policy[key]) is type(value), f"Sai kiểu dữ liệu: {key}")
@@ -102,6 +105,9 @@ def validate(policy, *, id_pattern, extra_routes):
                 len(set(entries)) == len(entries), f"Danh sách không hợp lệ: {key}")
     require(policy["selection"] != "SUGGEST" or policy["allowed_profiles"],
             "Chọn ít nhất một model được phép đề xuất")
+    require(0 <= policy["paid_api_daily_limit"] <= 2**53 - 1,
+            "Giới hạn lượt gọi API trả phí phải là số nguyên không âm")
+    return policy
 
 
 def resolve(capability, policy, available_profiles, primary_ref, *, allow_fallback=False):

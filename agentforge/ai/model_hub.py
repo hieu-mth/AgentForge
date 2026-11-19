@@ -283,7 +283,7 @@ def _extra_capabilities(routes):
 
 
 def _orchestrator_catalog(state, profiles, routes):
-    policy = state.get("orchestrator", orchestrator_policy.defaults())
+    policy = {**orchestrator_policy.defaults(), **state.get("orchestrator", {})}
     by_route = {row["id"]: row for row in routes}
     capabilities = []
     for key, label, kind, tool in orchestrator_policy.CAPABILITIES:
@@ -436,7 +436,7 @@ def _tables(conn):
 
 def _save_orchestrator(updated, policy, route_changes):
     routes = route_catalog()
-    orchestrator_policy.validate(
+    policy = orchestrator_policy.validate(
         policy, id_pattern=ID_RE, extra_routes=_extra_capabilities(routes))
     editable = {key for key in routes if orchestrator_policy.KINDS.get(key)
                 in {"text", "image", "video"}}
