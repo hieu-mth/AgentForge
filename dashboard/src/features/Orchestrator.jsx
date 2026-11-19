@@ -1,5 +1,5 @@
 import {useEffect,useState} from 'react';
-import {Alert,App as AntApp,Button,Card,Checkbox,Form,Grid,InputNumber,Select,Space,Table,Typography} from 'antd';
+import {App as AntApp,Button,Card,Checkbox,Form,Grid,InputNumber,Radio,Select,Space,Switch,Table,Typography} from 'antd';
 import {ApartmentOutlined,ControlOutlined,RollbackOutlined,SafetyCertificateOutlined,SaveOutlined,TeamOutlined} from '@ant-design/icons';
 import {SectionTitle,SettingsHeading,SettingsStatus} from '../components/settings.jsx';
 import {useResource,ResourceStatus} from '../use_resource.jsx';
@@ -11,12 +11,6 @@ const modeOptions=[
   {value:'SUPERVISED',label:'Có giám sát'},
   {value:'AUTOMATIC',label:'Tự động · chỉ cấu hình'},
 ];
-const permissions={
-  plan:'Tự phân tích và lập kế hoạch',
-  assign_local:'Tự phân công tác vụ local an toàn',
-  call_local:'Gọi model local đã được phép',
-  run_tools:'Chạy công cụ local trong danh sách cho phép',
-};
 const toolOptions=[
   {value:'local_tts',label:'Tạo thoại local'},
   {value:'ffmpeg',label:'FFmpeg'},
@@ -24,6 +18,33 @@ const toolOptions=[
 ];
 const unset='';
 const fallbackCapabilities=['general.text','film.storyboard'];
+
+function RuleRow({title,description,children}){
+  return <section className="orchestrator-rule-row">
+    <div className="orchestrator-rule-copy">
+      <h3>{title}</h3>
+      <div>{description}</div>
+    </div>
+    <div className="orchestrator-rule-controls">{children}</div>
+  </section>;
+}
+
+function PermissionToggle({field,label,description}){
+  return <div className="orchestrator-permission">
+    <div><strong>{label}</strong><span>{description}</span></div>
+    <Form.Item name={['permissions',field]} valuePropName="checked">
+      <Switch aria-label={label}/>
+    </Form.Item>
+  </div>;
+}
+
+function LimitField({name,label,min,max,unit,note}){
+  return <Form.Item name={name} label={label} extra={note}
+    rules={[{required:true,type:'integer',min,max,message:
+      max===Number.MAX_SAFE_INTEGER?'Nhập số nguyên không âm.':`Nhập số nguyên từ ${min} đến ${max}.`}]}>
+    <InputNumber aria-label={label} min={min} max={max} precision={0} addonAfter={unit}/>
+  </Form.Item>;
+}
 
 export function Orchestrator({mutate}){
   const resource=useResource('/api/model-hub');
@@ -45,7 +66,11 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
   const {policy,capabilities,owner_override}=snapshot.orchestrator;
   const selection=Form.useWatch('selection',form)??policy.selection;
   const exclusive=Form.useWatch('gpu_exclusive',form)??policy.gpu_exclusive;
+  const fallbackMode=Form.useWatch('fallback',form)??policy.fallback;
+  const draftFallbacks=Form.useWatch('fallbacks',form)??policy.fallbacks;
+  const draftBindings=Form.useWatch('bindings',form);
   const primary=Form.useWatch('primary',form)??policy.primary;
+  const runTools=Form.useWatch(['permissions','run_tools'],form)??policy.permissions.run_tools;
   const profiles=snapshot.profiles;
   const options=profiles.filter(p=>p.enabled).map(p=>({value:p.id,label:p.id+' · '+p.model}));
   const textOptions=options.filter(option=>profiles.some(
@@ -55,6 +80,12 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
     fallbacks:Object.fromEntries(fallbackCapabilities.map(id=>[id,policy.fallbacks[id]??unset])),
     bindings:Object.fromEntries(capabilities.filter(row=>!row.tool)
       .map(row=>[row.id,row.model_ref??unset]))};
+  const fallbackLabels=capabilities.filter(row=>{
+    const fallback=draftFallbacks[row.id];
+    const binding=draftBindings?.[row.id]??initial.bindings[row.id];
+    return fallback&&fallback!==(binding||row.default_ref)
+      &&localOptions.some(option=>option.value===fallback);
+  }).map(row=>row.label);
 
   useEffect(()=>{
     if(!dirty)return;
@@ -101,7 +132,13 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
       }
       if(fallback)fallbacks[row.id]=fallback;
     }
-    const next={...policy,...values,primary:values.primary||null,mappings,fallbacks};
+    const next={...policy,...values,primary:values.primary||null,mappings,fallbacks,
+      tools:form.getFieldValue('tools')??policy.tools};
+    if(next.gpu_exclusive)next.gpu_concurrency=1;
+    if(next.selection==='FIXED'){
+      next.allowed_profiles=(form.getFieldValue('allowed_profiles')??[])
+        .filter(ref=>options.some(option=>option.value===ref));
+    }
     delete next.bindings;
     confirm('SAVE_ORCHESTRATOR',{policy:next,route_changes});
   }
@@ -135,17 +172,25 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
   </Space>;
 
   return <Form form={form} layout="vertical" initialValues={initial}
-    onValuesChange={(_,values)=>{
-      if(values.gpu_exclusive)form.setFieldValue('gpu_concurrency',1);
+    onValuesChange={changed=>{
+      if(changed.gpu_exclusive===false&&form.getFieldValue('gpu_concurrency')===1)
+        form.setFieldValue('gpu_concurrency',2);
       setDirty(true);
     }} onFinish={save} disabled={saving}>
     <SettingsHeading className="orchestrator-header" title="AI điều phối tác vụ" eyebrow="CHÍNH SÁCH OWNER"
-      description="Chọn model điều phối, phân công theo năng lực và đặt giới hạn cho từng tác vụ."
+      description={<>
+        Chọn model điều phối, phân công theo năng lực và đặt giới hạn cho từng tác vụ.
+        <span className="orchestrator-edit-status" role="status">
+          <SettingsStatus tone={dirty?'warn':'neutral'}>
+            {dirty?'Có thay đổi chưa lưu':'Không có thay đổi'}
+          </SettingsStatus>
+        </span>
+      </>}
       actions={<>
-        {dirty&&<Button onClick={()=>{form.resetFields();setDirty(false);}}>Hủy thay đổi</Button>}
+        <Button className={!dirty?'orchestrator-cancel-idle':undefined} disabled={!dirty}
+          onClick={()=>{form.resetFields();setDirty(false);}}>Hủy thay đổi</Button>
         <Button type="primary" icon={<SaveOutlined/>} htmlType="submit" disabled={!dirty} loading={saving}>Lưu cấu hình</Button>
       </>}/>
-    {dirty&&<Alert showIcon type="warning" message="Có thay đổi chưa lưu"/>}
     <Card className="env-panel" title={<SectionTitle icon={<ApartmentOutlined/>}
       title="AI điều phối chính" description="Phân tích yêu cầu và đề xuất cách phân công"/>}>
       <div className="orchestrator-meta">
@@ -178,47 +223,85 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
     </Card>
     <Card className="env-panel" title={<SectionTitle icon={<ControlOutlined/>}
       title="Quy tắc tự động điều phối" description="Chính sách lựa chọn model, dự phòng và tài nguyên GPU"/>}>
-      <div className="orchestrator-fields">
-        <Form.Item name="selection" label="Lựa chọn model"><Select options={[
-          {value:'FIXED',label:'Theo mapping cố định'},{value:'SUGGEST',label:'AI đề xuất từ danh sách cho phép'},
-        ]}/></Form.Item>
-        <Form.Item name="allowed_profiles" label="Model được phép đề xuất"
-          rules={[{validator:(_,value)=>(selection!=='SUGGEST'||value?.length)&&
-            (value||[]).every(ref=>options.some(option=>option.value===ref))
-            ?Promise.resolve():Promise.reject(new Error('Chọn model khả dụng cho danh sách đề xuất.'))}]}>
-          <Select mode="multiple" options={options}/>
-        </Form.Item>
-        <Form.Item name="fallback" label="Khi model chính không khả dụng"><Select options={[
-          {value:'STOP',label:'Dừng và báo Owner'},{value:'LOCAL',label:'Dùng model local dự phòng đã gán'},
-        ]}/></Form.Item>
-        <Form.Item name="unavailable" label="Khi thiếu VRAM hoặc tài nguyên"><Select options={[
-          {value:'STOP',label:'Dừng và báo Owner'},{value:'WAIT_OWNER',label:'Chờ Owner xử lý'},
-        ]}/></Form.Item>
-        <Form.Item name="gpu_exclusive" valuePropName="checked"><Checkbox>GPU độc quyền</Checkbox></Form.Item>
-        <Form.Item name="gpu_concurrency" label="Tác vụ GPU đồng thời"
-          rules={[{required:true,type:'integer',min:1,max:8,message:'Nhập số nguyên từ 1 đến 8.'}]}>
-          <InputNumber min={1} max={8} precision={0} disabled={exclusive||saving}/>
-        </Form.Item>
+      <div className="orchestrator-rules">
+        <RuleRow title="Chọn model" description="Quy định cách chọn model cho từng tác vụ.">
+          <Form.Item name="selection"><Radio.Group aria-label="Lựa chọn model" optionType="button" buttonStyle="solid" options={[
+            {value:'FIXED',label:'Dùng model đã gán'},{value:'SUGGEST',label:'AI đề xuất'},
+          ]}/></Form.Item>
+          {selection==='SUGGEST'&&<Form.Item name="allowed_profiles" label="Model được phép đề xuất"
+            rules={[{validator:(_,value)=>value?.length&&
+              value.every(ref=>options.some(option=>option.value===ref))
+              ?Promise.resolve():Promise.reject(new Error('Chọn model khả dụng cho danh sách đề xuất.'))}]}>
+            <Select mode="multiple" options={options}/>
+          </Form.Item>}
+        </RuleRow>
+        <RuleRow title="Khi gặp sự cố" description="Chọn cách xử lý khi model hoặc tài nguyên không khả dụng.">
+          <Form.Item name="fallback" label="Model không khả dụng"><Select options={[
+            {value:'STOP',label:'Dừng và báo Owner'},{value:'LOCAL',label:'Dùng model local dự phòng đã gán'},
+          ]}/></Form.Item>
+          <Form.Item name="unavailable" label="Thiếu tài nguyên"><Select options={[
+            {value:'STOP',label:'Dừng và báo Owner'},{value:'WAIT_OWNER',label:'Chờ Owner xử lý'},
+          ]}/></Form.Item>
+          {fallbackMode==='LOCAL'&&<p className="env-muted orchestrator-rule-hint" aria-live="polite">
+            {fallbackLabels.length
+              ?'Đã gán dự phòng cho '+fallbackLabels.length+' năng lực: '+fallbackLabels.join(', ')+'.'
+              :'Chưa gán model dự phòng. Hãy chọn model trong bảng Phân công AI theo năng lực.'}
+          </p>}
+        </RuleRow>
+        <RuleRow title="Tài nguyên GPU" description="Đặt số tác vụ nặng GPU có thể chạy cùng lúc.">
+          <div className="orchestrator-gpu-controls">
+            <Form.Item name="gpu_exclusive">
+              <Radio.Group aria-label="Cách chạy tác vụ GPU" optionType="button" buttonStyle="solid" options={[
+                {value:true,label:'Chạy lần lượt'},
+                {value:false,label:'Chạy đồng thời'},
+              ]}/>
+            </Form.Item>
+            {!exclusive&&<div className="orchestrator-gpu-count">
+              <Form.Item name="gpu_concurrency"
+                rules={[{required:true,type:'integer',min:1,max:8,message:'Nhập số nguyên từ 1 đến 8.'}]}>
+                <InputNumber aria-label="Tác vụ GPU đồng thời" min={1} max={8} precision={0}/>
+              </Form.Item>
+              <span aria-hidden="true">tác vụ</span>
+            </div>}
+          </div>
+        </RuleRow>
       </div>
-      <Text type="secondary">Tác vụ ComfyUI chưa rõ kết quả phải được đối chiếu trước khi thử lại. Các giới hạn GPU và retry là cấu hình mục tiêu.</Text>
+      <p className="env-muted orchestrator-rule-note">Đối chiếu tác vụ ComfyUI chưa rõ kết quả trước khi thử lại. Giới hạn GPU và số lần thử lại hiện ở mức cấu hình.</p>
     </Card>
     <Card className="env-panel" title={<SectionTitle icon={<SafetyCertificateOutlined/>}
-      title="Quyền hạn & giới hạn" description="Phạm vi được phép, giới hạn thử lại và ngân sách tác vụ"/>}>
-      <div className="orchestrator-fields">
-        {Object.entries(permissions).map(([key,label])=><Form.Item key={key}
-          name={['permissions',key]} valuePropName="checked"><Checkbox>{label}</Checkbox></Form.Item>)}
-        <Form.Item name="tools" label="Công cụ local được phép"><Select mode="multiple" options={toolOptions}/></Form.Item>
-        <Form.Item name="retry_limit" label="Số lần thử lại tối đa"
-          rules={[{required:true,type:'integer',min:0,max:5,message:'Nhập số nguyên từ 0 đến 5.'}]}>
-          <InputNumber min={0} max={5} precision={0}/>
-        </Form.Item>
-        <Form.Item name="task_budget" label="Ngân sách mỗi yêu cầu (số tác vụ)"
-          rules={[{required:true,type:'integer',min:1,max:100,message:'Nhập số nguyên từ 1 đến 100.'}]}>
-          <InputNumber min={1} max={100} precision={0}/>
-        </Form.Item>
+      title="Quyền hạn & giới hạn" description="Các quyền và hạn mức mục tiêu cho AI điều phối"/>}>
+      <div>
+        <RuleRow title="AI được tự làm gì" description="Chọn từng bước AI được phép tự thực hiện.">
+          <PermissionToggle field="plan" label="Lập kế hoạch"
+            description="Phân tích yêu cầu và chia thành các bước."/>
+          <PermissionToggle field="assign_local" label="Giao việc local"
+            description="Phân công mỗi bước cho model hoặc công cụ local phù hợp."/>
+          <PermissionToggle field="call_local" label="Gọi model local"
+            description="Gửi yêu cầu thực thi đến model đã được cấp quyền."/>
+        </RuleRow>
+        <RuleRow title="Công cụ local" description="Chọn những công cụ AI được phép chạy trên máy này.">
+          <PermissionToggle field="run_tools" label="Chạy công cụ local"
+            description="Giới hạn theo danh sách công cụ bạn cho phép."/>
+          {runTools&&<Form.Item name="tools" label="Công cụ local được phép">
+            <Select mode="multiple" options={toolOptions} placeholder="Chọn công cụ"/>
+          </Form.Item>}
+        </RuleRow>
+        <RuleRow title="Giới hạn sử dụng" description="Đặt ngưỡng cho mỗi yêu cầu và số lượt gọi API trong ngày.">
+          <div className="orchestrator-limit-fields">
+            <LimitField name="retry_limit" label="Số lần thử lại tối đa" min={0} max={5} unit="lần"/>
+            <LimitField name="task_budget" label="Số tác vụ tối đa mỗi yêu cầu" min={1} max={100} unit="tác vụ"/>
+            <LimitField name="paid_api_daily_limit" label="Lượt gọi API trả phí mỗi ngày"
+              min={0} max={Number.MAX_SAFE_INTEGER} unit="lượt/ngày"
+              note="Chưa áp dụng khi chạy. API trả phí vẫn cần Owner duyệt."/>
+          </div>
+        </RuleRow>
       </div>
-      <Alert type="info" showIcon message="Luôn cần Owner duyệt"
-        description="Gọi cloud hoặc API trả phí, tải model, thay đổi dữ liệu quan trọng, xuất bản và thay đổi quyền riêng tư."/>
+      <div className="orchestrator-approval-note">
+        <SafetyCertificateOutlined aria-hidden="true"/>
+        <div><strong>Luôn cần Owner duyệt</strong>
+          <div>Gọi cloud hoặc API trả phí, tải model, thay đổi dữ liệu quan trọng, xuất bản và thay đổi quyền riêng tư.</div>
+        </div>
+      </div>
     </Card>
     <div className="model-history">
       <Button type="text" icon={<RollbackOutlined/>} onClick={()=>confirm('RESET_ORCHESTRATOR')}>
