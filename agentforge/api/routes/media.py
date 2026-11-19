@@ -17,13 +17,15 @@ def handle(server, path, request, session=None):
         identifier, action = parts[4:]
         if action == "resume" and not server.allow_external_actions:
             raise PermissionError("Draft production requires external-tools mode")
-        if action in {"approve", "reject"} and (
-                session is None or session.get("draft_previews", {}).get(identifier) != request.get("sha256")):
-            raise PermissionError("Preview the current draft before reviewing")
         required = {"sha256"} if action in {"approve", "reject"} else (
             {"index", "description", "image_prompt"} if action == "edit" else set())
         if request.keys() != required:
             raise ValueError("Invalid draft action fields")
+        if action in {"approve", "reject"}:
+            draft_pipeline._read(identifier)
+            if (session is None or not isinstance(request["sha256"], str)
+                    or session.get("draft_previews", {}).get(identifier) != request["sha256"]):
+                raise PermissionError("Preview the current draft before reviewing")
         return draft_pipeline.act(identifier, action, request)
     if path in {"/api/film/productions/render", "/api/film/productions/voice"}:
         if not server.allow_external_actions:

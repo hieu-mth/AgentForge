@@ -25,6 +25,15 @@ ACTIVE = None
 IMG_RETRIES = 3
 
 
+class DraftNotFound(KeyError):
+    """A valid production identifier has no persisted record."""
+
+
+class DraftStoreUnavailable(RuntimeError):
+    def __init__(self, message="Không truy cập được SQLite của bản nháp."):
+        super().__init__(message)
+
+
 def _text(value, max_length):
     if not isinstance(value, str) or not 1 <= len(value.strip()) <= max_length:
         raise ValueError("Invalid draft text")
@@ -37,16 +46,40 @@ def _number(value, low, high):
     return value
 
 
+@contextmanager
 def _db(create=False):
-    path = ensure_local_root(DB)
-    if not create and not path.is_file():
-        return None
-    if create:
-        path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
-    if create:
-        conn.execute("CREATE TABLE IF NOT EXISTS drafts (id TEXT PRIMARY KEY, body TEXT NOT NULL)")
-    return conn
+    try:
+        path = ensure_local_root(DB)
+        if not create and not path.exists():
+            yield None
+            return
+        if create:
+            path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(path if create else path.as_uri() + "?mode=ro", uri=not create, timeout=3)
+        with closing(conn), conn:
+            if create:
+                conn.execute("CREATE TABLE IF NOT EXISTS drafts (id TEXT PRIMARY KEY, body TEXT NOT NULL)")
+            yield conn
+    except sqlite3.DatabaseError as exc:
+        code = getattr(exc, "sqlite_errorcode", 0) & 0xff
+        if code in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}:
+            raise DraftStoreUnavailable("SQLite của bản nháp đang bận. Hãy thử lại.") from exc
+        if code in {sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB}:
+            raise DraftStoreUnavailable("Tệp SQLite của bản nháp bị hỏng hoặc sai định dạng.") from exc
+        raise DraftStoreUnavailable() from exc
+    except OSError as exc:
+        raise DraftStoreUnavailable() from exc
+
+
+def _decode_row(row):
+    try:
+        job = json.loads(row[0])
+        if (not isinstance(job, dict) or not isinstance(job.get("id"), str)
+                or not isinstance(job.get("brief"), dict) or not isinstance(job.get("status"), str)):
+            raise ValueError("Invalid draft record")
+        return job
+    except (ValueError, TypeError) as exc:
+        raise DraftStoreUnavailable("Bản ghi bản nháp trong SQLite bị lỗi.") from exc
 
 
 def _id(value):
@@ -61,29 +94,25 @@ def _folder(ident):
 
 def _read(ident):
     _id(ident)
-    conn = _db()
-    if conn is None:
-        raise KeyError("Draft not found")
-    with closing(conn):
-        row = conn.execute("SELECT body FROM drafts WHERE id=?", (ident,)).fetchone()
-    if row is None:
-        raise KeyError("Draft not found")
-    return json.loads(row[0])
+    with _db() as conn:
+        row = conn.execute("SELECT body FROM drafts WHERE id=?", (ident,)).fetchone() if conn else None
+        if row is None:
+            raise DraftNotFound(ident)
+        return _decode_row(row)
 
 
 def _save(job):
     job["updated_at"] = visual_jobs._now()
-    with closing(_db(True)) as conn, conn:
+    with _db(True) as conn:
         conn.execute("INSERT INTO drafts(id,body) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body",
                      (job["id"], json.dumps(job, ensure_ascii=False)))
 
 
 def list_drafts():
-    conn = _db()
-    if conn is None:
-        return []
-    with closing(conn):
-        jobs = [json.loads(row[0]) for row in conn.execute("SELECT body FROM drafts ORDER BY rowid DESC LIMIT 30")]
+    with _db() as conn:
+        if conn is None:
+            return []
+        jobs = [_decode_row(row) for row in conn.execute("SELECT body FROM drafts ORDER BY rowid DESC LIMIT 30")]
     return [{**job, "worker_active": job["id"] == ACTIVE} for job in jobs]
 
 

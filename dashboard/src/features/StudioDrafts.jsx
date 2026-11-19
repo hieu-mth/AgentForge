@@ -1,11 +1,17 @@
 ﻿import {useEffect,useRef,useState} from 'react';
-import {Alert,Button,Card,Collapse,Form,Image,Input,InputNumber,Modal,Select,Space,Tag} from 'antd';
+import {Alert,Button,Card,Collapse,Empty,Form,Image,Input,InputNumber,Modal,Select,Space,Tag} from 'antd';
 import {useResource,ResourceStatus} from '../use_resource.jsx';
 import {useScreenRefresh} from '../refresh_scope.jsx';
 import {requestError} from '../api.js';
 import {StudioPreview} from './StudioPreview.jsx';
 
 const API='/api/film/drafts';
+function draftError(failure) {
+  if(failure.code==='draft_storage_unavailable')return failure.message;
+  if(failure.code==='draft_not_found')return 'Bản nháp này không còn tồn tại. Bạn có thể tạo bản nháp mới.';
+  if(failure.status===404)return 'Backend đang chạy chưa hỗ trợ bản nháp. Hãy khởi động lại AgentForge bằng phiên bản mới rồi thử lại.';
+  return requestError(failure);
+}
 const labels={QUEUED:'Đã tiếp nhận',PLANNING:'Đang lập kế hoạch',STORYBOARD:'Đang viết storyboard',
   IMAGES:'Đang tạo ảnh từng cảnh',RENDER:'Đang dựng và kiểm tra MP4',REVIEW:'Chờ Owner duyệt',
   FAILED:'Cần xử lý',APPROVED:'Đã duyệt',REJECTED:'Đã từ chối'};
@@ -18,13 +24,16 @@ export function StudioDrafts({mutate,onCharacters}) {
   const [pending,setPending]=useState(false);
   const [error,setError]=useState(null);
   const [editor,setEditor]=useState(null);
-  const drafts=data?.drafts??[];
-  const running=drafts.some(job=>job.status==='RUNNING'&&job.worker_active);
+  const [missing,setMissing]=useState([]);
+  const drafts=Array.isArray(data?.drafts)?data.drafts.filter(job=>!missing.includes(job.id)):[];
+  const listError=resource.error?draftError(resource.error):
+    data&&!Array.isArray(data.drafts)?'API bản nháp trả dữ liệu không hợp lệ.':null;
+  const running=!listError&&drafts.some(job=>job.status==='RUNNING'&&job.worker_active);
   useEffect(()=>{
-    if(!running)return;
-    const timer=setInterval(reload,2500);
-    return ()=>clearInterval(timer);
-  },[reload,running]);
+    if(!running||resource.loading)return;
+    const timer=setTimeout(reload,2500);
+    return ()=>clearTimeout(timer);
+  },[reload,running,resource.loading]);
 
   async function run(path,body,done) {
     if(busy.current)return;
@@ -36,8 +45,13 @@ export function StudioDrafts({mutate,onCharacters}) {
       done?.();
       await reload();
     } catch(failure) {
-      setError(requestError(failure));
-      await reload();
+      setError(draftError(failure));
+      if(failure.code==='draft_not_found'&&path!=='/start') {
+        setMissing(ids=>[...ids,path.split('/')[1]]);
+        setEditor(null);
+      }
+      if(path==='/start'&&failure.status>=400&&failure.status<500)request.current=null;
+      if(failure.code==='draft_not_found'||!failure.status)await reload();
     } finally {
       busy.current=false;
       setPending(false);
@@ -51,7 +65,7 @@ export function StudioDrafts({mutate,onCharacters}) {
   }
 
   return <Card className="env-panel" title="Tạo video từ ý tưởng"
-    extra={<Button onClick={reload}>Tải lại bản nháp</Button>}>
+    extra={!listError&&<Button onClick={reload}>Tải lại bản nháp</Button>}>
     <Form layout="vertical" onFinish={submit} initialValues={{seconds:12,scene_count:3,ratio:'9:16'}}>
       <Form.Item label="Ý tưởng video" name="idea" rules={[{required:true,whitespace:true}]}>
         <Input.TextArea rows={3} maxLength={500}
@@ -75,8 +89,12 @@ export function StudioDrafts({mutate,onCharacters}) {
     <p className="env-muted">Bản nháp dùng ảnh tĩnh với pan/zoom, không có nhạc. Tính nhất quán của nhân vật dựa trên prompt.</p>
     <Button type="link" onClick={onCharacters}>Thư viện nhân vật</Button>
     {error&&<Alert showIcon type="error" message={error}/>}
-    <ResourceStatus resource={{...resource,data,reload}} label="bản nháp"/>
-    <Collapse items={drafts.map(job=>({key:job.id,
+    {listError?<Alert showIcon type="error" message="Không đọc được bản nháp"
+      description={listError} action={<Button onClick={reload}>Thử lại bản nháp</Button>}/>:
+      <ResourceStatus resource={{...resource,data,reload}} label="bản nháp"/>}
+    {!resource.loading&&!listError&&data&&drafts.length===0&&
+      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Chưa có bản nháp"/>}
+    {drafts.length>0&&<Collapse items={drafts.map(job=>({key:job.id,
       label:<Space wrap><span>{job.board?.title??job.brief.idea}</span>
         <Tag>{job.status==='RUNNING'&&!job.worker_active?'Đã gián đoạn':
           labels[job.status==='RUNNING'?job.stage:job.status]??job.status}</Tag>
@@ -106,7 +124,7 @@ export function StudioDrafts({mutate,onCharacters}) {
             onClick={()=>run('/'+job.id+'/reject',{sha256:job.video_sha})}>Từ chối</Button>
         </Space>}
       </>,
-    }))}/>
+    }))}/>}
     {editor&&<Modal open title={'Sửa cảnh '+(editor.index+1)} footer={null}
       onCancel={()=>setEditor(null)}>
       <Form layout="vertical" initialValues={editor.scene} onFinish={values=>run(
