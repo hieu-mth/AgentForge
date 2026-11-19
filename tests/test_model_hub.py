@@ -2,6 +2,7 @@
 from pathlib import Path
 import json
 import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -52,7 +53,7 @@ class ModelHubTests(unittest.TestCase):
                              "studio_local")
             self.assertEqual(route, model_hub.catalog(db_path=db))
             self.assertTrue(db.is_file())
-            with sqlite3.connect(db) as conn:
+            with closing(sqlite3.connect(db)) as conn:
                 record = json.loads(conn.execute("SELECT payload FROM hub_state").fetchone()[0])
             self.assertEqual(record["profiles"]["studio_local"]["model"], "example-local:8b")
             with self.assertRaisesRegex(ValueError, "REVISION_CONFLICT"):

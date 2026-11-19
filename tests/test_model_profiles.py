@@ -1,5 +1,6 @@
 """Owner explicitly registers profiles; no TOML defaults, secrets or hidden provider calls."""
 import sqlite3
+from contextlib import closing
 import tempfile
 import unittest
 from pathlib import Path
@@ -63,7 +64,7 @@ class ModelProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unassign"):
             model_hub.change("DELETE_MODEL_PROFILE", db_path=self.db,
                              expected_revision=2, profile_id="studio_local")
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn:
             self.assertEqual(conn.execute("SELECT max(revision) FROM hub_history").fetchone()[0], 2)
         model_hub.change("RESET_ORCHESTRATOR", db_path=self.db, expected_revision=2)
         self.assertEqual(model_hub.change("DELETE_MODEL_PROFILE", db_path=self.db,
