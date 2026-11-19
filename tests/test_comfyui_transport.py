@@ -45,6 +45,18 @@ class ComfyUIIntegrationTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 comfyui.request_json("/system_stats")
 
+    def test_image_download_rejects_oversized_body(self):
+        filename = "af_" + "a" * 32 + "_00001_.png"
+        path = f"/view?filename={filename}&subfolder=&type=output"
+        with patch.object(comfyui.http.client, "HTTPConnection") as connect:
+            response = connect.return_value.getresponse.return_value
+            response.status = 200
+            response.read.return_value = b"12345"
+            with self.assertRaisesRegex(comfyui.ComfyUITransportError, "size limit"):
+                comfyui.request_image_bytes(path, max_response_bytes=4)
+            response.read.assert_called_once_with(5)
+            connect.return_value.close.assert_called_once()
+
     def test_motion_errors_and_http_mock_point_remain_compatible(self):
         with patch.object(comfyui, "request_json", side_effect=comfyui.ComfyUITransportError("bad")) as api:
             with self.assertRaises(motion.MotionError):
