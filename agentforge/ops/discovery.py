@@ -171,7 +171,7 @@ def inspect():
         profiles = model_hub.catalog()["profiles"]
         config_error = None
     except PROBE_ERRORS:
-        profiles, config_error = [], "MODEL_CONFIG_UNAVAILABLE"
+        profiles, config_error = [], "MODEL_HUB_UNAVAILABLE"
     ollama = sorted({p["base_url"] for p in profiles if p["provider"] == "ollama"})
     comfy = sorted({probes._local_endpoint(p["base_url"])[1]
                     for p in profiles if p["provider"] == "comfyui"})
