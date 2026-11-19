@@ -66,7 +66,7 @@ export function FluxProbeDialog({profile,revision,mutate,onCancel}) {
           <InputNumber min={0} max={Number.MAX_SAFE_INTEGER} placeholder="Ngẫu nhiên"/>
         </Form.Item>
       </Space>
-      <Button type="primary" htmlType="submit" loading={pending}>Tạo ảnh</Button>
+      <Button type="primary" htmlType="submit" aria-label="Tạo ảnh" loading={pending}>Tạo ảnh</Button>
     </Form>
     <Space direction="vertical" style={{marginTop:16,width:'100%'}}>
       {pending&&<Alert type="info" showIcon message={'Đang tạo và xác minh ảnh · giới hạn theo dõi '+timeout_seconds+' giây'}/>}

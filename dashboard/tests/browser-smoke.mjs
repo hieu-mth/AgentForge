@@ -560,7 +560,7 @@ try {
   await fluxPage.getByRole('button',{name:'Chạy thử',exact:true}).click();
   const fluxDialog=fluxPage.getByRole('dialog',{name:'Chạy thử · fixture_flux'});
   await fluxDialog.getByLabel('Prompt',{exact:true}).fill('An image fixture');
-  const createImage=fluxDialog.getByRole('button',{name:'Tạo ảnh',exact:true});
+  const createImage=fluxDialog.locator('button[type="submit"]');
   await createImage.click();
   await fluxDialog.getByText('ComfyUI phản hồi quá chậm',{exact:true}).waitFor();
   await createImage.click();
