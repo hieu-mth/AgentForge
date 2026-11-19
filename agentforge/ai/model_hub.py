@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from agentforge.ai import orchestrator_policy
 from agentforge.ai.model_registry import (
     DEFAULT_CONFIG, ENV_NAME, ModelConfigError, load_models,
 )
@@ -151,7 +152,8 @@ def _read_record(conn):
 
 
 def _validate_state(doc):
-    if not isinstance(doc, dict) or set(doc) != {"profiles", "routes"}:
+    if not isinstance(doc, dict) or set(doc) not in (
+            {"profiles", "routes"}, {"profiles", "routes", "orchestrator"}):
         raise ModelConfigError("Model Hub state has invalid schema")
     if (not isinstance(doc["profiles"], dict)
             or len(doc["profiles"]) > MAX_PROFILE_COUNT
@@ -163,6 +165,9 @@ def _validate_state(doc):
     # Unknown keys in older Owner SQLite are inert archival data, not routes.
     # Read safely without rewriting the Owner database during GET.
     defaults = _defaults()
+    if "orchestrator" in doc:
+        orchestrator_policy.validate(
+            doc["orchestrator"], id_pattern=ID_RE, extra_routes=_extra_capabilities(defaults))
     for key, ref in doc["routes"].items():
         _required_text(key, TASK_RE, "stored task key")
         _required_text(ref, ID_RE, "stored model ID")
@@ -177,7 +182,7 @@ def _read_state(*, db_path=None):
     if not path.is_file():
         return 0, _empty()
     ensure_local_root(path)
-    with closing(sqlite3.connect(path, timeout=5)) as conn:
+    with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=5)) as conn:
         return _read_record(conn)
 
 
@@ -205,8 +210,40 @@ def effective_models(*, db_path=None):
             if value["provider"] in {"ollama", "anthropic"}}
 
 
+def _extra_capabilities(routes):
+    return {key for key, kind in orchestrator_policy.KINDS.items()
+            if key not in routes and kind != "tool"}
+
+
+def _orchestrator_catalog(state, profiles, routes):
+    policy = state.get("orchestrator", orchestrator_policy.defaults())
+    by_route = {row["id"]: row for row in routes}
+    capabilities = []
+    for key, label, kind, tool in orchestrator_policy.CAPABILITIES:
+        route = by_route.get(key)
+        ref = route["model_ref"] if route else policy["mappings"].get(key)
+        decision = orchestrator_policy.resolve(key, policy, profiles, ref)
+        options = [ident for ident, profile in profiles.items()
+                   if orchestrator_policy.compatible(kind, profile)]
+        capabilities.append({
+            "id": key, "label": label, "kind": kind, "tool": tool,
+            "adapter": ("EXISTING_TOOL" if key in {"film.tts", "film.assemble", "ops.monitor"}
+                        else "NONE"),
+            "model_ref": ref, "options": sorted(options),
+            "status": decision["status"],
+            "existing_route": route is not None and kind != "tool",
+            "default_ref": route["default_model"] if route else None,
+        })
+    return {"policy": policy, "capabilities": capabilities,
+            "status": "CONFIG_ONLY", "owner_override": "orchestrator" in state}
+
+
 def catalog(*, db_path=None):
     revision, state = _read_state(db_path=db_path)
+    return _catalog(revision, state)
+
+
+def _catalog(revision, state):
     profiles = _profiles(state=state)
     routes = []
     for key, route in _defaults().items():
@@ -218,11 +255,7 @@ def catalog(*, db_path=None):
             status = "UNCONFIGURED"
         elif selected not in profiles or not profiles[selected]["enabled"]:
             status = "INVALID_CONFIG"
-        elif (route["kind"] == "text") != (
-                profiles[selected]["provider"] in {"ollama", "anthropic"}):
-            status = "INCOMPATIBLE"
-        elif route["kind"] in {"video", "image"} and (
-                profiles[selected]["provider"] != "comfyui"):
+        elif not orchestrator_policy.compatible(route["kind"], profiles[selected]):
             status = "INCOMPATIBLE"
         else:
             status = "CONFIG_ONLY"
@@ -238,6 +271,7 @@ def catalog(*, db_path=None):
             "runtime_supported": v["provider"] in {"ollama", "anthropic"}}
             for k, v in sorted(profiles.items())],
         "routes": routes,
+        "orchestrator": _orchestrator_catalog(state, profiles, routes),
         "cloud_fallback": False,
         "gpu_auto_start": False,
         "provider_billing_verified": False,
@@ -330,13 +364,54 @@ def _tables(conn):
         at TEXT NOT NULL)""")
 
 
+def _save_orchestrator(updated, policy, route_changes):
+    routes = _defaults()
+    orchestrator_policy.validate(
+        policy, id_pattern=ID_RE, extra_routes=_extra_capabilities(routes))
+    editable = {key for key in routes if orchestrator_policy.KINDS.get(key)
+                in {"text", "image", "video"}}
+    if not isinstance(route_changes, dict) or not route_changes.keys() <= editable:
+        raise ModelConfigError("Danh sách tuyến điều phối không hợp lệ")
+    profiles = _profiles(state=updated)
+
+    def validate_ref(ref, kind, *, local=False):
+        if not isinstance(ref, str) or not ID_RE.fullmatch(ref):
+            raise ModelConfigError("Mã model không hợp lệ")
+        profile = profiles.get(ref)
+        if not orchestrator_policy.compatible(kind, profile):
+            raise ModelConfigError("Model không khả dụng hoặc không tương thích")
+        if local and profile["provider"] != "ollama":
+            raise ModelConfigError("Model dự phòng phải là Ollama local")
+
+    if policy["primary"] is not None:
+        validate_ref(policy["primary"], "text")
+    for ref in policy["allowed_profiles"]:
+        if not profiles.get(ref, {}).get("enabled"):
+            raise ModelConfigError("Danh sách đề xuất chứa model không khả dụng")
+    for key, ref in policy["mappings"].items():
+        validate_ref(ref, orchestrator_policy.KINDS[key])
+    for key, ref in policy["fallbacks"].items():
+        validate_ref(ref, "text", local=True)
+        primary = route_changes.get(key, updated["routes"].get(key, routes[key]["default_model"]))
+        if ref == (primary or routes[key]["default_model"]):
+            raise ModelConfigError("Model dự phòng phải khác model chính")
+    for key, ref in route_changes.items():
+        if ref is None:
+            updated["routes"].pop(key, None)
+        else:
+            validate_ref(ref, routes[key]["kind"])
+            updated["routes"][key] = ref
+    updated["orchestrator"] = policy
+
+
 def change(action, *, expected_revision, db_path=None, profile=None,
-           task_id=None, model_ref=None, target_revision=None):
+           task_id=None, model_ref=None, target_revision=None, policy=None, route_changes=None):
     """CAS-guarded Owner mutation; snapshot history supports explicit rollback."""
     if type(expected_revision) is not int or expected_revision < 0:
         raise ValueError("Expected non-negative revision")
     if action not in {"SAVE_MODEL_PROFILE", "SET_MODEL_ROUTE",
-                      "RESET_MODEL_ROUTE", "ROLLBACK_MODEL_HUB"}:
+                      "RESET_MODEL_ROUTE", "ROLLBACK_MODEL_HUB",
+                      "SAVE_ORCHESTRATOR", "RESET_ORCHESTRATOR"}:
         raise PermissionError("Unknown Model Hub action")
     path = _database(db_path)
     ensure_local_root(path)
@@ -365,13 +440,18 @@ def change(action, *, expected_revision, db_path=None, profile=None,
                 if model_ref not in profiles or not profiles[model_ref]["enabled"]:
                     raise ModelConfigError("Model is missing or disabled")
                 kind = routes[task_id]["kind"]
-                provider = profiles[model_ref]["provider"]
-                if ((kind == "text" and provider not in {"ollama", "anthropic"})
-                        or (kind in {"video", "image"} and provider != "comfyui")):
+                if not orchestrator_policy.compatible(kind, profiles[model_ref]):
                     raise ModelConfigError("Selected model does not support task")
                 updated["routes"][task_id] = model_ref
             else:
                 updated["routes"].pop(task_id, None)
+        elif action == "SAVE_ORCHESTRATOR":
+            _save_orchestrator(updated, policy, route_changes)
+        elif action == "RESET_ORCHESTRATOR":
+            updated.pop("orchestrator", None)
+            for key in _defaults():
+                if orchestrator_policy.KINDS.get(key) in {"text", "image", "video"}:
+                    updated["routes"].pop(key, None)
         else:
             if (type(target_revision) is not int or target_revision < 0
                     or target_revision >= revision):
@@ -395,4 +475,5 @@ def change(action, *, expected_revision, db_path=None, profile=None,
                      (next_revision, payload))
         conn.execute("INSERT INTO hub_history VALUES(?,?,?,?)",
                      (next_revision, payload, action, moment))
-    return catalog(db_path=db_path)
+        result = _catalog(next_revision, updated)
+    return result

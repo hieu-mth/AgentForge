@@ -6,7 +6,7 @@ export const NAV_GROUPS = Object.freeze([
   {key:'products',label:'Thành phẩm',tabs:[['projects','Dự án video']]},
   {key:'business',label:'Phân phối',tabs:[['channels','Kênh xuất bản']]},
   {key:'settings',label:'Cài đặt',tabs:[
-    ['models','Model AI & Điều phối'],['environment','Môi trường & Tài nguyên']]},
+    ['models','Model AI'],['orchestrator','AI điều phối tác vụ'],['environment','Môi trường & Tài nguyên']]},
 ]);
 export const DEFAULT_TAB = Object.freeze({
   overview:'overview',studio:'media-studio',characters:'characters',

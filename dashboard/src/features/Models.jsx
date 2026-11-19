@@ -1,22 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { App as AntApp, Alert, Button, Card, Col, Empty, Form, Grid, Input,
   Modal, Row, Select, Space, Switch, Table, Tag, Tooltip, Typography } from 'antd';
 import {useResource, ResourceStatus} from '../use_resource.jsx';
 import {useScreenRefresh} from '../refresh_scope.jsx';
 import {displayStatus} from '../environment_format.js';
-import { compatibleProfiles, exposureFor, KIND_LABELS, profilePayload,
-  PROVIDERS, STATUS_LABELS } from '../model_hub_ui.js';
+import { exposureFor, profilePayload, PROVIDERS } from '../model_hub_ui.js';
 
 const { Text, Title, Paragraph } = Typography;
 const PROVIDER_LABELS = Object.fromEntries(PROVIDERS.map(p=>[p.value,p.label]));
 const desktopColumns=['md'];
-
-function stateTag(status) {
-  const tone = status==='DETERMINISTIC'?'green'
-    :status==='INCOMPATIBLE'||status==='INVALID_CONFIG'?'red'
-      :status==='UNCONFIGURED'?'default':'blue';
-  return <Tag color={tone}>{STATUS_LABELS[status]||status}</Tag>;
-}
 
 export function ModelHub({mutate}) {
   const {message,modal}=AntApp.useApp();
@@ -25,7 +17,6 @@ export function ModelHub({mutate}) {
   const setHub=hubResource.setData;
   const hub=hubResource.data;
   const loading=hubResource.loading;
-  const [drafts,setDrafts]=useState({});
   const [checked,setChecked]=useState({});
   const [probes,setProbes]=useState({});
   const [editorOpen,setEditorOpen]=useState(false);
@@ -37,9 +28,6 @@ export function ModelHub({mutate}) {
   useScreenRefresh(reload);
 
   const profiles=hub?.profiles||[];
-  const profileById=useMemo(()=>Object.fromEntries(profiles.map(p=>[p.id,p])),[profiles]);
-  const routes=hub?.routes||[];
-  const configured=routes.filter(r=>r.status==='CONFIG_ONLY').length;
   const localProfiles=profiles.filter(p=>p.provider!=='anthropic').length;
 
   const update=(path,body,title,description,onSuccess)=>{
@@ -58,7 +46,7 @@ export function ModelHub({mutate}) {
           }else if(path==='/api/model-hub/probe') {
             setProbes(old=>({...old,[body.profile_id]:result}));
           }else {
-            setHub(result);setDrafts({});setChecked({});setProbes({});
+            setHub(result);setChecked({});setProbes({});
           }
           if(path!=='/api/model-hub/probe') {
             message.success(path==='/api/model-hub/check'?'Đã kiểm tra metadata local':'Đã lưu cấu hình local');
@@ -95,25 +83,10 @@ export function ModelHub({mutate}) {
     ()=>setEditorOpen(false));
   };
 
-  const saveRoute=(route)=>{
-    const model_ref=drafts[route.id]??route.model_ref;
-    const selected=profileById[model_ref];
-    update('/api/model-hub/route',{
-      ack:'SET_MODEL_ROUTE',expected_revision:hub.revision,
-      task_id:route.id,model_ref,
-    },'Gán model cho '+route.label+'?',
-    exposureFor(selected)+' Route này chỉ lưu cấu hình; chưa nối vào inference.',
-    null);
-  };
-
-  const resetRoute=(route)=>update('/api/model-hub/reset',{
-    ack:'RESET_MODEL_ROUTE',expected_revision:hub.revision,task_id:route.id,
-  },'Khôi phục route mặc định?','Chỉ xóa override của một tác vụ; mặc định config/task_routes.toml được áp dụng trở lại.');
-
   const rollback=()=>update('/api/model-hub/rollback',{
     ack:'ROLLBACK_MODEL_HUB',expected_revision:hub.revision,target_revision:hub.revision-1,
   },'Khôi phục cấu hình về phiên bản '+(hub.revision-1)+'?',
-  'Danh sách model và thiết lập điều phối sẽ được khôi phục cùng nhau. Hệ thống sẽ lưu kết quả thành một phiên bản mới.');
+  'Danh sách model và chính sách điều phối sẽ được khôi phục cùng nhau. Hệ thống sẽ lưu kết quả thành một phiên bản mới.');
 
   const profileActions=row=><Space wrap size={6}>
     {row.provider==='ollama'&&<>
@@ -136,8 +109,8 @@ export function ModelHub({mutate}) {
 
   return <Space className="model-hub" direction="vertical" size={18} style={{width:'100%'}}>
     <div className="hub-toolbar">
-      <div><Title level={2}>Model AI &amp; Điều phối</Title>
-        <Text type="secondary">Quản lý model và gán model cho từng công việc.</Text>
+      <div><Title level={2}>Model AI</Title>
+        <Text type="secondary">Quản lý hồ sơ model, nhà cung cấp và trạng thái kiểm tra.</Text>
       </div>
       <Space wrap>
         <Button onClick={reload} loading={loading}>Làm mới</Button>
@@ -146,13 +119,11 @@ export function ModelHub({mutate}) {
     </div>
     <ResourceStatus resource={hubResource} label="cấu hình model"/>
     <Row gutter={[12,12]}>
-      <Col xs={12} md={6}><Card size="small"><Text type="secondary">Model đã đăng ký</Text>
+      <Col xs={12} md={8}><Card size="small"><Text type="secondary">Model đã đăng ký</Text>
         <div className="hub-stat">{hub?profiles.length:'—'}</div></Card></Col>
-      <Col xs={12} md={6}><Card size="small"><Text type="secondary">Profile chạy local</Text>
+      <Col xs={12} md={8}><Card size="small"><Text type="secondary">Profile chạy local</Text>
         <div className="hub-stat">{hub?localProfiles:'—'}</div></Card></Col>
-      <Col xs={12} md={6}><Card size="small"><Text type="secondary">Đã gán · chưa nối runtime</Text>
-        <div className="hub-stat">{hub?configured:'—'}</div></Card></Col>
-      <Col xs={12} md={6}><Card size="small"><Text type="secondary">Phiên bản cấu hình</Text>
+      <Col xs={12} md={8}><Card size="small"><Text type="secondary">Phiên bản cấu hình</Text>
         <div className="hub-stat">{hub?.revision??'—'}</div></Card></Col>
     </Row>
     <Card title="Danh sách model" loading={loading}
@@ -186,44 +157,6 @@ export function ModelHub({mutate}) {
             </Text>}
           </Space>},
           {title:'Thao tác',width:250,responsive:desktopColumns,render:(_,row)=>profileActions(row)},
-        ]}/>
-    </Card>
-    <Card title="Điều phối tác vụ" loading={loading}>
-      <Alert showIcon type="warning" style={{marginBottom:16}}
-        message="Gán model không phải cấp quyền chạy"
-        description="Cloud cần Owner duyệt từng lượt. Tuyến video và ảnh chỉ lưu cấu hình."/>
-      <Table className="hub-table" size="middle" rowKey="id" dataSource={routes} scroll={desktop?{x:840}:undefined}
-        pagination={false}
-        columns={[
-          {title:'Công việc',dataIndex:'label',width:225,render:(v,r)=><Space direction="vertical" size={2}>
-            <Text strong>{v}</Text>
-            {desktop?<Text code type="secondary">{r.id}</Text>:<>
-              {stateTag(r.status)}
-              <details className="hub-details"><summary>Chi tiết</summary>
-                <div>{KIND_LABELS[r.kind]||r.kind}</div><div>{r.id}</div>
-              </details>
-            </>}
-          </Space>},
-          {title:'Loại',dataIndex:'kind',width:115,responsive:desktopColumns,render:v=>KIND_LABELS[v]||v},
-          {title:'Trạng thái',dataIndex:'status',width:200,responsive:desktopColumns,render:stateTag},
-          {title:'Model được gán',width:295,render:(_,r)=>{
-            if(r.kind==='rules')return <Text type="secondary">—</Text>;
-            const options=compatibleProfiles(r,profiles).map(p=>({
-              label:p.id+' · '+p.provider,value:p.id,
-            }));
-            return <Space direction="vertical" style={{width:'100%'}} size={2}>
-              <Select style={{width:'100%'}} size="middle" allowClear={false}
-                placeholder="Chọn model..." options={options}
-                value={drafts[r.id]??r.model_ref??undefined}
-                onChange={v=>setDrafts(x=>({...x,[r.id]:v}))}/>
-              <Space wrap size={6}>
-                <Button size="small" type="primary"
-                  disabled={!drafts[r.id]||drafts[r.id]===r.model_ref}
-                  onClick={()=>saveRoute(r)}>Lưu</Button>
-                {r.source==='owner'&&<Button size="small" onClick={()=>resetRoute(r)}>Về mặc định</Button>}
-              </Space>
-            </Space>;
-          }},
         ]}/>
     </Card>
     <Modal open={editorOpen} title={editing?'Chỉnh sửa model profile':'Đăng ký model mới'}
