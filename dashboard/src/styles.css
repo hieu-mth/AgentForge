@@ -233,15 +233,15 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
   font-size:12px;font-weight:720;margin:0 0 12px;color:var(--text)}
 .env-subheading span{font-size:11px;font-weight:500;color:var(--muted)}
 .env-subheading-separated{margin-top:26px;padding-top:22px;border-top:1px solid var(--env-border)}
-.env-table .ant-table {
+:is(.env-table,.hub-table) .ant-table {
   overflow: hidden;
   border: 1px solid var(--env-border);
   border-radius: 12px;
   background: var(--env-card);
   font-size: 13px;
 }
-.env-table .ant-table-thead > tr > th,
-.env-table .ant-table-thead > tr > th:hover {
+:is(.env-table,.hub-table) .ant-table-thead > tr > th,
+:is(.env-table,.hub-table) .ant-table-thead > tr > th:hover {
   padding: 12px 16px;
   border-bottom: 1px solid var(--env-border);
   background: var(--env-raised);
@@ -250,12 +250,12 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
   font-weight: 650;
   cursor: default;
 }
-.env-table .ant-table-thead > tr > th::before {display:none}
-.env-table .ant-table-tbody > tr > td {
+:is(.env-table,.hub-table) .ant-table-thead > tr > th::before {display:none}
+:is(.env-table,.hub-table) .ant-table-tbody > tr > td {
   padding: 14px 16px;
   border-bottom-color: var(--env-border);
 }
-.env-table .ant-table-tbody > tr:last-child > td {border-bottom:0}
+:is(.env-table,.hub-table) .ant-table-tbody > tr:last-child > td {border-bottom:0}
 .env-runtime-name{color:var(--text);font-weight:650}
 .env-muted{color:var(--muted);font-size:12px}
 .env-break{overflow-wrap:anywhere;word-break:break-word}
@@ -313,6 +313,18 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
   .env-mobile-details{display:block;color:var(--muted);font-size:12px;margin-top:5px}
   .env-mobile-details summary{color:var(--primary);cursor:pointer}
   .env-mobile-details[open] > div{margin-top:5px}
+}
+.hub-toolbar{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px}
+.hub-toolbar h2.ant-typography{margin:0 0 4px}
+.hub-details{font-size:12px;color:var(--muted)}
+.hub-details summary{color:var(--primary);cursor:pointer}
+.hub-table .ant-table-cell{overflow-wrap:anywhere}
+@media(width < 768px){
+  .hub-table .ant-table-content > table{table-layout:fixed!important}
+  .hub-table col{width:auto!important}
+  .hub-table .ant-table-thead > tr > th,
+  .hub-table .ant-table-tbody > tr > td{padding:10px 8px;vertical-align:top}
+  .hub-table .ant-tag{white-space:normal;margin-inline-end:0}
 }
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;

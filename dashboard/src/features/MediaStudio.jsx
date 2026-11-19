@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Alert, Button, Card, Col, Row, Space, Steps, Tag, Typography } from 'antd';
 import { PictureOutlined, TeamOutlined, SafetyCertificateOutlined, SettingOutlined } from '@ant-design/icons';
+import { FilmProduction } from './FilmProduction.jsx';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -8,13 +10,14 @@ const { Title, Text, Paragraph } = Typography;
 // Only link to routes exposed by the video-first sidebar.
 const WORKFLOW = [
   {title:'Dự án video',description:'Xem những tập phim đã lưu trên máy',route:'projects',action:'Xem dự án video',icon:<PictureOutlined/>},
-  {title:'Kiểm tra bản dựng',description:'Xem receipt kỹ thuật và từng shot trong Model Hub',route:'models',action:'Xem bản dựng',icon:<SafetyCertificateOutlined/>},
+  {title:'Kiểm tra bản dựng',description:'Xem tiến trình chuyển động, kiểm tra clip và dựng phim local',route:'film-production',action:'Xem bản dựng',icon:<SafetyCertificateOutlined/>},
 ];
 const LINKS = [
   {title:'Thư viện nhân vật',description:'Quản lý hồ sơ nhân vật local',route:'characters',icon:<TeamOutlined/>},
   {title:'Model & cấu hình',description:'Xem model đã đăng ký và khả năng kết nối thực tế',route:'models',icon:<SettingOutlined/>},
 ];
-export function MediaStudio({onNavigate}) {
+export function MediaStudio({onNavigate,mutate}) {
+  const [productionOpen,setProductionOpen]=useState(false);
   return <Space direction="vertical" size="large" style={{width:'100%'}}>
     <div>
       <Tag>AI Media Studio</Tag>
@@ -31,12 +34,18 @@ export function MediaStudio({onNavigate}) {
             <Space direction="vertical" style={{width:'100%'}}>
               <Text strong>{item.title}</Text>
               <Text type="secondary">{item.description}</Text>
-              <Button block icon={item.icon} onClick={()=>onNavigate(item.route)}>{item.action}</Button>
+              <Button block icon={item.icon}
+                aria-expanded={item.route==='film-production'?productionOpen:undefined}
+                onClick={()=>item.route==='film-production'
+                  ?setProductionOpen(open=>!open):onNavigate(item.route)}>
+                {item.route==='film-production'&&productionOpen?'Ẩn bản dựng':item.action}
+              </Button>
             </Space>
           </Card>
         </Col>)}
       </Row>
     </Card>
+    {productionOpen&&<FilmProduction mutate={mutate}/>}
     <Row gutter={[12,12]}>
       {LINKS.map(item=><Col xs={24} md={12} key={item.route}>
         <Card title={item.title} extra={item.icon}>

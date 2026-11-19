@@ -86,6 +86,10 @@ try {
     const payload=p==='/api/session'?{csrf:'fixture-only-csrf'}:
       p==='/api/video-studio/projects'?{projects:[],canonical_engine:'film_studio'}:
       p==='/api/characters'?{characters:[]}:
+      p==='/api/model-hub'?{revision:2,
+        profiles:[{id:'local-text',provider:'ollama',model:'qwen3:8b',enabled:true,source:'git'}],
+        routes:[{id:'draft',label:'Soạn nháp',kind:'text',status:'CONFIG_ONLY',model_ref:'local-text'}],
+      }:
       p==='/api/ops/discovery'?environmentSnapshot:{};
     return route.fulfill({status:200,contentType:'application/json',
       body:JSON.stringify(payload)});
@@ -98,7 +102,22 @@ try {
   await page2.getByText('Dự án & tập phim',{exact:true}).waitFor();
   await page2.goto(origin+'/dashboard/#/media-studio',{waitUntil:'networkidle'});
   await page2.getByRole('button',{name:'Xem bản dựng'}).click();
+  await page2.getByText('Film Studio · Continuity & Dựng phim',{exact:true}).waitFor();
+  await page2.getByRole('button',{name:'Mở model & cấu hình'}).click();
   await page2.waitForURL('**/#/models');
+  const hub=page2.locator('.model-hub');
+  await hub.getByText('Đã bật',{exact:true}).waitFor();
+  await hub.getByRole('button',{name:'Khôi phục phiên bản trước'}).click();
+  const restoreDialog=page2.getByRole('dialog',{name:'Khôi phục cấu hình về phiên bản 1?'});
+  await restoreDialog.getByRole('button',{name:'Hủy'}).click();
+  await page2.setViewportSize({width:390,height:850});
+  const modelDetails=hub.locator('.hub-table').first().getByText('Chi tiết',{exact:true});
+  await modelDetails.click();
+  await hub.getByText('qwen3:8b',{exact:true}).waitFor();
+  const hubOverflow=await hub.locator('.ant-table-content').evaluateAll(
+    tables=>tables.some(table=>table.scrollWidth>table.clientWidth+2));
+  if(hubOverflow)throw new Error('Model tables overflow on mobile');
+  await page2.setViewportSize({width:1440,height:900});
   // Environment runs against the actual discovery contract, with no invented READY state.
   await page2.goto(origin+'/dashboard/#/environment',{waitUntil:'networkidle'});
   const env=page2.locator('[data-testid="environment-page"]');

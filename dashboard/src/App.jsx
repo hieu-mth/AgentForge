@@ -115,7 +115,7 @@ export default function App(){
   const tabs=tabsFor(group);
   let page;
   switch(section){
-    case 'media-studio':page=<MediaStudio onNavigate={navigate}/>;break;
+    case 'media-studio':page=<MediaStudio onNavigate={navigate} mutate={mutate}/>;break;
     case 'characters':page=<CharacterLibrary mutate={mutate} onNavigate={navigate}/>;break;
     case 'projects':page=<Projects/>;break;
     case 'models':page=<ModelHub mutate={mutate}/>;break;
