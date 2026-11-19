@@ -15,13 +15,13 @@ def handle(server, path, request, session=None):
             return model_hub.change(action, expected_revision=request["expected_revision"])
         raise PermissionError("Cần xác nhận lưu hoặc đặt lại chính sách điều phối")
     if path == "/api/model-hub/profile":
-        if (set(request) != {"ack", "expected_revision", "profile"} or
+        if (set(request) - {"api_key"} != {"ack", "expected_revision", "profile"} or
                 request["ack"] != "SAVE_MODEL_PROFILE"):
             raise PermissionError("Explicit model profile confirmation required")
         return model_hub.change(
             "SAVE_MODEL_PROFILE",
             expected_revision=request["expected_revision"],
-            profile=request["profile"])
+            profile=request["profile"], api_key=request.get("api_key"))
     if path == "/api/model-hub/profile/delete":
         if (set(request) != {"ack", "expected_revision", "profile_id"} or
                 request["ack"] != "DELETE_MODEL_PROFILE"):

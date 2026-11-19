@@ -60,9 +60,10 @@ export function ModelHub({mutate}) {
   };
 
   const editProfile=profile=>setEditor({profile,revision:hub.revision});
-  const saveProfile=async(profile,revision)=>{
+  const saveProfile=async(profile,revision,apiKey)=>{
     const result=await mutate('/api/model-hub/profile',{
       ack:'SAVE_MODEL_PROFILE',expected_revision:revision,profile,
+      ...(apiKey?{api_key:apiKey}:{}),
     });
     if(!result)return false;
     setHub(result);setChecked({});setProbes({});setEditor(null);

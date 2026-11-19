@@ -9,6 +9,8 @@ consumes their bindings. A saved cloud profile never authorizes a cloud call.
 from __future__ import annotations
 
 import copy
+import base64
+import binascii
 from contextlib import closing
 import json
 import re
@@ -17,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from agentforge.ai import orchestrator_policy
+from agentforge.ai import cloud_credentials, orchestrator_policy
 from agentforge.ai.orchestrator_policy import ModelConfigError
 from agentforge.paths import COMPANY_DATA_DIR, ensure_local_root
 
@@ -59,8 +61,9 @@ ADAPTERS = {
         "label": "Anthropic-compatible", "connection": "cloud", "model_label": "Model ID",
         "model_example": "model-id-da-cap",
         "description": "Lưu cấu hình endpoint tương thích Anthropic. Dashboard chưa hỗ trợ chạy thử cloud.",
-        "defaults": {"base_url_env": "ANTHROPIC_BASE_URL",
-                     "api_key_env": "ANTHROPIC_AUTH_TOKEN"}, "local_probe": False,
+        "defaults": {"base_url": ""},
+        "legacy_defaults": {"base_url_env": "ANTHROPIC_BASE_URL",
+                            "api_key_env": "ANTHROPIC_AUTH_TOKEN"}, "local_probe": False,
     },
 }
 
@@ -89,13 +92,29 @@ def _local_url(value):
     return value.rstrip("/")
 
 
+def _cloud_url(value):
+    if not isinstance(value, str) or len(value) > 512 or any(
+            c.isspace() or ord(c) < 32 or c in "\\?#" for c in value):
+        raise ModelConfigError("Nhập URL HTTPS hợp lệ cho endpoint Cloud")
+    try:
+        parsed = urlsplit(value)
+        valid = (parsed.scheme == "https" and parsed.hostname and
+                 parsed.username is None and parsed.password is None and
+                 (parsed.port is None or 1 <= parsed.port <= 65535))
+    except ValueError:
+        valid = False
+    if not valid:
+        raise ModelConfigError("Nhập URL HTTPS hợp lệ cho endpoint Cloud")
+    return value.rstrip("/")
+
+
 def validate_profile(value, *, profile_id=None):
     """Return canonical allowlisted profile; secrets are never accepted."""
     if not isinstance(value, dict):
         raise ModelConfigError("Model profile must be an object")
     if len(value) > 6 or not set(value).issubset({
         "id", "provider", "model", "enabled", "base_url",
-        "base_url_env", "api_key_env",
+        "base_url_env", "api_key_env", "api_key_protected",
     }):
         raise ModelConfigError("Unknown or sensitive model profile fields")
     ident = _required_text(value.get("id", profile_id), ID_RE, "model ID")
@@ -110,18 +129,50 @@ def validate_profile(value, *, profile_id=None):
         raise ModelConfigError("Invalid enabled state")
     common = {"id": ident, "provider": provider, "model": model,
               "enabled": enabled}
-    fields = ADAPTERS[provider]["defaults"]
-    if set(value) - (common.keys() | fields.keys()):
-        raise ModelConfigError("Fields do not match the selected adapter")
+    fields = value.keys() - common.keys()
     if ADAPTERS[provider]["connection"] == "local":
+        if fields != {"base_url"}:
+            raise ModelConfigError("Fields do not match the selected adapter")
         common["base_url"] = _local_url(value.get("base_url"))
-    else:
+    elif fields == {"base_url", "api_key_protected"} and profile_id is not None:
+        key = value["api_key_protected"]
+        try:
+            valid_key = isinstance(key, str) and len(key) <= 16384 and base64.b64decode(key, validate=True)
+        except (ValueError, binascii.Error):
+            valid_key = False
+        if not valid_key:
+            raise ModelConfigError("Invalid protected API key")
+        common.update(base_url=_cloud_url(value["base_url"]), api_key_protected=key)
+    elif fields == ADAPTERS[provider]["legacy_defaults"].keys():
         for key in fields:
-            env = value.get(key)
-            if not isinstance(env, str) or not ENV_NAME.fullmatch(env):
-                raise ModelConfigError("Cloud credentials must use env references")
-            common[key] = env
+            common[key] = _required_text(value[key], ENV_NAME, "environment variable name")
+    else:
+        raise ModelConfigError("Fields do not match the selected Cloud credentials")
     return common
+
+
+def _save_profile(value, api_key, profiles):
+    if not isinstance(value, dict) or "api_key_protected" in value:
+        raise ModelConfigError("Invalid model profile")
+    if value.get("provider") != "anthropic" or "base_url" not in value:
+        if api_key is not None:
+            raise ModelConfigError("API key chỉ dùng với endpoint Cloud nhập trực tiếp")
+        return validate_profile(value)
+    ident = _required_text(value.get("id"), ID_RE, "model ID")
+    endpoint = _cloud_url(value["base_url"])
+    previous = profiles.get(ident, {})
+    if api_key is None:
+        if previous.get("base_url") != endpoint:
+            raise ModelConfigError("Nhập API key khi thêm hoặc thay đổi endpoint Cloud")
+        protected = previous.get("api_key_protected")
+    else:
+        if not isinstance(api_key, str) or not re.fullmatch(r"[!-~]{1,4096}", api_key):
+            raise ModelConfigError("API key không hợp lệ")
+        protected = cloud_credentials.protect_api_key(api_key)
+    if not protected:
+        raise ModelConfigError("Hãy nhập API key cho endpoint Cloud")
+    return validate_profile({**value, "base_url": endpoint, "api_key_protected": protected},
+                            profile_id=ident)
 
 
 def route_catalog():
@@ -282,7 +333,9 @@ def _catalog(revision, state):
     return {
         "revision": revision,
         "adapters": [{"id": key, **copy.deepcopy(adapter)} for key, adapter in ADAPTERS.items()],
-        "profiles": [{"id": k, **v, "source": (
+        "profiles": [{"id": k, **{field: value for field, value in v.items()
+                                 if field != "api_key_protected"},
+            "has_api_key": "api_key_protected" in v, "source": (
             "owner"),
             "health": "UNVERIFIED",
             "runtime_supported": v["provider"] in {"ollama", "anthropic"}}
@@ -422,7 +475,8 @@ def _save_orchestrator(updated, policy, route_changes):
 
 
 def change(action, *, expected_revision, db_path=None, profile=None, profile_id=None,
-           task_id=None, model_ref=None, target_revision=None, policy=None, route_changes=None):
+           task_id=None, model_ref=None, target_revision=None, policy=None, route_changes=None,
+           api_key=None):
     """CAS-guarded Owner mutation; snapshot history supports explicit rollback."""
     if type(expected_revision) is not int or expected_revision < 0:
         raise ValueError("Expected non-negative revision")
@@ -442,7 +496,7 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
             raise ValueError("MODEL_HUB_REVISION_CONFLICT")
         updated = copy.deepcopy(current)
         if action == "SAVE_MODEL_PROFILE":
-            p = validate_profile(profile)
+            p = _save_profile(profile, api_key, updated["profiles"])
             # Explicit Owner upsert only; no Git-bundled model can reappear.
             if p["id"] not in updated["profiles"] and len(updated["profiles"]) >= MAX_PROFILE_COUNT:
                 raise ModelConfigError("Model registry is full")

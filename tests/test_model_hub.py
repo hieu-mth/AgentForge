@@ -4,6 +4,7 @@ import json
 import sqlite3
 from contextlib import closing
 import tempfile
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -45,7 +46,8 @@ class ModelHubTests(unittest.TestCase):
             with patch("urllib.request.urlopen", side_effect=AssertionError("network")):
                 for revision, adapter in enumerate(catalog):
                     profile = {"id": f"owner_{revision}", "provider": adapter["id"],
-                               "model": "fixture-model", "enabled": True, **adapter["defaults"]}
+                               "model": "fixture-model", "enabled": True,
+                               **adapter.get("legacy_defaults", adapter["defaults"])}
                     model_hub.change("SAVE_MODEL_PROFILE", expected_revision=revision,
                                      db_path=db, profile=profile)
                     with self.assertRaises(model_hub.ModelConfigError):
@@ -53,6 +55,24 @@ class ModelHubTests(unittest.TestCase):
             self.assertEqual(len(model_hub.catalog(db_path=db)["profiles"]), 3)
             with self.assertRaises(model_hub.ModelConfigError):
                 model_hub.validate_profile({**profile, "api_key_env": "Bearer actual-key"})
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows DPAPI")
+    def test_direct_cloud_key_is_encrypted_and_not_returned(self):
+        with tempfile.TemporaryDirectory() as folder:
+            db = Path(folder) / "hub.sqlite3"
+            key = "test-credential-not-a-real-key"
+            profile = {"id": "cloud_test", "provider": "anthropic", "enabled": True,
+                       "model": "fixture-model", "base_url": "https://api.example.com/anthropic"}
+            saved = model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0,
+                                     db_path=db, profile=profile, api_key=key)
+            self.assertTrue(saved["profiles"][0]["has_api_key"])
+            self.assertNotIn("api_key_protected", saved["profiles"][0])
+            self.assertNotIn(key.encode(), db.read_bytes())
+            model_hub.change("SAVE_MODEL_PROFILE", expected_revision=1, db_path=db,
+                             profile={**profile, "model": "updated-model"})
+            with self.assertRaisesRegex(ValueError, "API key"):
+                model_hub.change("SAVE_MODEL_PROFILE", expected_revision=2, db_path=db,
+                                 profile={**profile, "base_url": "https://other.example.com"})
 
     def test_registered_model_and_route_exist_only_in_sqlite(self):
         with tempfile.TemporaryDirectory() as folder:

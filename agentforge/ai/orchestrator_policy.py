@@ -6,7 +6,7 @@ CAPABILITIES = (
     ("general.text", "Lập kế hoạch", "text", None),
     ("film.storyboard", "Sáng tạo kịch bản", "text", None),
     ("character.select", "Chọn nhân vật", "text", None),
-    ("image.generate", "Sinh ảnh", "image", None),
+    ("image.generate", "Tạo ảnh", "image", None),
     ("film.motion", "Tạo chuyển động", "video", None),
     ("vision.qa", "Vision QA", "vision", None),
     ("film.tts", "Tạo thoại", "tool", "Local TTS"),

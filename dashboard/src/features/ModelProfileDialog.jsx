@@ -24,6 +24,9 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
   const connection=Form.useWatch('connection',form)??initial.connection;
   const provider=Form.useWatch('provider',form)??initial.provider;
   const adapter=adapters.find(item=>item.id===provider);
+  const [useEnv,setUseEnv]=useState(Boolean(profile?.api_key_env));
+  const directCloud=connection==='cloud'&&!useEnv;
+  const fields=useEnv&&adapter.legacy_defaults?adapter.legacy_defaults:adapter.defaults;
   const [review,setReview]=useState(null);
   const [saving,setSaving]=useState(false);
   const [failed,setFailed]=useState(false);
@@ -34,7 +37,8 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
     const next=adapters.find(item=>changed.connection
       ?item.connection===changed.connection:item.id===changed.provider);
     if(!next)return;
-    form.resetFields(['model',...Object.keys(fieldLabels)]);
+    form.resetFields(['model','api_key',...Object.keys(fieldLabels)]);
+    setUseEnv(false);
     form.setFieldsValue({provider:next.id,...next.defaults});
   }
 
@@ -42,7 +46,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
     setSaving(true);
     setFailed(false);
     try{
-      if(!await onSave(review,revision))setFailed(true);
+      if(!await onSave(review,revision,directCloud?form.getFieldValue('api_key'):undefined))setFailed(true);
     }finally{setSaving(false);}
   }
 
@@ -61,7 +65,8 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
       </Button>
     </Space>}>
     <Form hidden={Boolean(review)} form={form} layout="vertical" initialValues={initial}
-      requiredMark={false} onValuesChange={changeAdapter} onFinish={values=>setReview(profilePayload(values,adapter))}>
+      requiredMark={false} onValuesChange={changeAdapter}
+      onFinish={values=>setReview(profilePayload(values,{...adapter,defaults:fields}))}>
       <div className="model-dialog-grid">
         <Form.Item name="connection" label="Loại kết nối">
           <Radio.Group optionType="button" buttonStyle="solid" disabled={editing}
@@ -80,18 +85,30 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         <Input placeholder={adapter.model_example}/>
       </Form.Item>
       <div className="model-dialog-divider"/>
-      {Object.entries(adapter.defaults).map(([key,example])=><Form.Item key={key} name={key}
-        label={fieldLabels[key]}
+      {connection==='cloud'&&<Button type="link" className="model-dialog-mode" onClick={()=>{
+        form.setFieldsValue({...(useEnv?adapter.defaults:adapter.legacy_defaults),api_key:undefined});
+        setUseEnv(!useEnv);
+      }}>{useEnv?'Nhập trực tiếp':'Dùng biến môi trường'}</Button>}
+      {Object.entries(fields).map(([key,example])=><Form.Item key={key} name={key}
+        label={directCloud?'Endpoint Cloud':fieldLabels[key]}
         rules={[{required:true,message:'Hãy điền trường này.'},{validator:(_,value)=>{
           if(!value)return Promise.resolve();
           const port=Number(localUrl.exec(value)?.[2]);
-          const valid=key==='base_url'?port>=1&&port<=65535:envName.test(value);
-          return valid?Promise.resolve():Promise.reject(new Error(key==='base_url'
-            ?'Dùng địa chỉ HTTP loopback với cổng từ 1 đến 65535.':'Chỉ nhập tên biến môi trường hợp lệ.'));
+          const valid=directCloud?/^https:\/\/[^\s@?#\\]+$/.test(value)
+            :key==='base_url'?port>=1&&port<=65535:envName.test(value);
+          const error=directCloud?'Nhập URL HTTPS hợp lệ.':key==='base_url'
+            ?'Dùng địa chỉ HTTP loopback với cổng từ 1 đến 65535.':'Chỉ nhập tên biến môi trường hợp lệ.';
+          return valid?Promise.resolve():Promise.reject(new Error(error));
         }}]}>
-        <Input placeholder={example} spellCheck={false}/>
+        <Input placeholder={directCloud?'https://api.example.com':example} spellCheck={false}/>
       </Form.Item>)}
-      {connection==='cloud'&&<p className="model-dialog-help">Nhập tên biến đã thiết lập trên máy chạy AgentForge. Giá trị API key nằm trong môi trường của tiến trình.</p>}
+      {directCloud&&<Form.Item name="api_key" label="API key" dependencies={['base_url']}
+        extra={profile?.has_api_key?'Để trống để giữ API key đã lưu cho endpoint hiện tại.':'API key được mã hóa theo tài khoản Windows.'}
+        rules={[({getFieldValue})=>({validator:(_,value)=>
+          (value?/^[!-~]{1,4096}$/.test(value):profile?.has_api_key&&getFieldValue('base_url')===profile.base_url)
+            ?Promise.resolve():Promise.reject(new Error('Nhập API key hợp lệ cho endpoint này.'))})]}>
+        <Input.Password autoComplete="new-password"/>
+      </Form.Item>}
       <div className="model-dialog-divider"/>
       <Form.Item name="id" label="Mã hồ sơ"
         rules={[{required:true,pattern:/^[a-z][a-z0-9_]{2,39}$/,
@@ -112,7 +129,8 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         <dt>Mã hồ sơ</dt><dd>{review.id}</dd>
         <dt>{connection==='local'?'Runtime':'Nhà cung cấp'}</dt><dd>{adapter.label}</dd>
         <dt>{adapter.model_label}</dt><dd>{review.model}</dd>
-        {Object.keys(adapter.defaults).map(key=><Fragment key={key}><dt>{fieldLabels[key]}</dt><dd>{review[key]}</dd></Fragment>)}
+        {Object.keys(fields).map(key=><Fragment key={key}><dt>{directCloud?'Endpoint Cloud':fieldLabels[key]}</dt><dd>{review[key]}</dd></Fragment>)}
+        {directCloud&&<><dt>API key</dt><dd>••••••••</dd></>}
         <dt>Trạng thái</dt><dd>{review.enabled?'Đã bật':'Đã tắt'}</dd>
       </dl>
       <p className="model-dialog-help">Hồ sơ được lưu vào SQLite trên máy này. Lượt lưu chỉ cập nhật cấu hình.</p>

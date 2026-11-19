@@ -242,7 +242,11 @@ try {
   const registerDialog=settings.getByRole('dialog');
   await registerDialog.getByText('Cloud',{exact:true}).click();
   await registerDialog.getByText('Anthropic-compatible',{exact:true}).waitFor();
+  await registerDialog.getByLabel('Endpoint Cloud',{exact:true}).waitFor();
+  await registerDialog.getByLabel('API key',{exact:true}).waitFor();
+  await registerDialog.getByRole('button',{name:'Dùng biến môi trường'}).click();
   await registerDialog.getByLabel('Biến môi trường chứa API key',{exact:true}).waitFor();
+  await registerDialog.getByRole('button',{name:'Nhập trực tiếp'}).click();
   if(await registerDialog.getByLabel('Địa chỉ runtime local',{exact:true}).count())
     throw new Error('Cloud registration exposed the local endpoint field');
   await registerDialog.getByText('Local',{exact:true}).click();
@@ -321,6 +325,22 @@ try {
   const cleaned=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
   if(cleaned.profiles.length!==0||cleaned.revision!==4)
     throw new Error('Owner profile removal did not persist in SQLite');
+  if(process.platform==='win32'){
+    const fixtureKey='smoke-credential-not-a-real-key';
+    await settings.getByRole('button',{name:'Đăng ký model'}).click();
+    await registerDialog.getByText('Cloud',{exact:true}).click();
+    await registerDialog.getByLabel('Model ID',{exact:true}).fill('fixture-cloud');
+    await registerDialog.getByLabel('Endpoint Cloud',{exact:true}).fill('https://api.example.com');
+    await registerDialog.getByLabel('API key',{exact:true}).fill(fixtureKey);
+    await registerDialog.getByLabel('Mã hồ sơ',{exact:true}).fill('cloud_fixture');
+    await registerDialog.getByRole('button',{name:'Xem lại cấu hình'}).click();
+    await registerDialog.getByText('••••••••',{exact:true}).waitFor();
+    await registerDialog.getByRole('button',{name:'Xác nhận lưu'}).click();
+    await registerDialog.waitFor({state:'hidden'});
+    const cloud=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
+    if(cloud.profiles[0]?.has_api_key!==true||JSON.stringify(cloud).includes(fixtureKey))
+      throw new Error('Direct Cloud registration failed or exposed the key');
+  }
   if(settingsErrors.length)throw new Error('Orchestrator runtime errors: '+settingsErrors.join(' | '));
   console.log('Orchestrator authenticated API, SQLite persistence, reset and responsive Edge: PASS');
 } finally {
