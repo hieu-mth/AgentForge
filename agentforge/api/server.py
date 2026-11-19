@@ -39,9 +39,13 @@ class _Handler(BaseHTTPRequestHandler):
             raw = data
         else:
             raw = str(data).encode("utf-8")
+        self._reply_headers(code, mime, len(raw), headers)
+        self.wfile.write(raw)
+
+    def _reply_headers(self, code, mime, length, headers=()):
         self.send_response(code)
         self.send_header("Content-Type", mime)
-        self.send_header("Content-Length", str(len(raw)))
+        self.send_header("Content-Length", str(length))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
@@ -56,7 +60,6 @@ class _Handler(BaseHTTPRequestHandler):
         for k, v in headers:
             self.send_header(k, v)
         self.end_headers()
-        self.wfile.write(raw)
 
     def _session(self):
         return auth.get_session(self)

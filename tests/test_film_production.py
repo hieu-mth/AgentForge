@@ -4,6 +4,7 @@ These are fixture contracts, not evidence of real ComfyUI film clips or human
 continuity acceptance. No native FFmpeg/voice/model is executed in CI.
 """
 import hashlib
+import http.client
 import json
 import tempfile
 import unittest
@@ -257,6 +258,57 @@ class FilmProductionTests(unittest.TestCase):
         (folder / "episode.mp4").write_bytes(b"tampered")
         with self.assertRaises(production.FilmProductionError):
             production.inspect_render("episode-one", "fox-film", film_root=self.films)
+
+    def test_preview_requires_owner_verified_master_and_supports_byte_ranges(self):
+        from tests.owner_http_fixture import OwnerHttpFixture
+
+        folder = self._render_mock()
+        master = folder / "episode.mp4"
+        expected = master.read_bytes()
+        fixture = OwnerHttpFixture("test_noop")
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        preview = "/api/film/productions/fox-film/episode-one/preview"
+
+        def read(path=preview, byte_range=None):
+            headers = {"Host": fixture.host}
+            if fixture.cookie:
+                headers["Cookie"] = fixture.cookie
+            if byte_range is not None:
+                headers["Range"] = byte_range
+            with closing(http.client.HTTPConnection(fixture.host, timeout=5)) as conn:
+                conn.request("GET", path, headers=headers)
+                res = conn.getresponse()
+                return res.status, dict(res.getheaders()), res.read()
+
+        with patch.object(production, "FILMS", self.films), \
+             patch.object(motion_comfy, "FILMS", self.films), \
+             patch.object(motion_comfy, "DB", self.db):
+            self.assertEqual(read()[0], 401)
+            fixture.login()
+            status, headers, video = read()
+            self.assertEqual((status, video), (200, expected))
+            self.assertEqual(headers["Content-Type"], "video/mp4")
+            self.assertEqual(headers["Cross-Origin-Resource-Policy"], "same-origin")
+            self.assertEqual(headers["Cache-Control"], "no-store")
+            status, headers, video = read(byte_range="bytes=2-11")
+            self.assertEqual((status, video), (206, expected[2:12]))
+            self.assertEqual(headers["Content-Range"], f"bytes 2-11/{len(expected)}")
+            self.assertEqual(read(byte_range="bytes=-8")[2], expected[-8:])
+            self.assertEqual(read(byte_range="bytes=100-")[2], expected[100:])
+            self.assertEqual(read(byte_range="bytes=1-4,6-10")[0], 416)
+            self.assertEqual(read(byte_range=f"bytes={len(expected)}-")[0], 416)
+            self.assertEqual(read("/api/film/productions/%2e%2e/episode-one/preview")[0], 404)
+            self.assertEqual(read(preview + "/episode.mp4")[0], 404)
+            job = self.spec["shots"][0]["job_id"]
+            clip_url = f"/api/film/motion/job/{job}/preview"
+            clip = self.films / "fox-film" / "motion_clips" / job / "clip.mp4"
+            clip_bytes = clip.read_bytes()
+            self.assertEqual(read(clip_url, "bytes=0-15")[2], clip_bytes[:16])
+            clip.write_bytes(b"x" + clip_bytes[1:])
+            self.assertEqual(read(clip_url)[0], 404)
+            master.write_bytes(b"x" + expected[1:])
+            self.assertEqual(read()[0], 404)
 
     def test_render_receipt_rejects_tampered_subtitles_even_rehashed(self):
         folder = self._render_mock()

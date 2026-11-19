@@ -135,7 +135,7 @@ def _dir(row, film_root):
     return folder
 
 
-def inspect_receipt(job_id, *, film_root=motion.FILMS, db_path=motion.DB):
+def inspect_receipt(job_id, *, film_root=motion.FILMS, db_path=motion.DB, video_stream=None):
     row = _job(job_id, db_path)
     folder = _dir(row, film_root)
     report = folder / "receipt.json"
@@ -174,13 +174,11 @@ def inspect_receipt(job_id, *, film_root=motion.FILMS, db_path=motion.DB):
         ensure_local_root(clip)
         if not clip.is_file() or clip.stat().st_size != value["bytes"]:
             raise ValueError("Saved MP4 does not match receipt")
-        digest_clip = hashlib.sha256()
-        with clip.open("rb") as stream:
-            while True:
-                block = stream.read(1024 * 1024)
-                if not block:
-                    break
-                digest_clip.update(block)
+        if video_stream is None:
+            with clip.open("rb") as stream:
+                digest_clip = hashlib.file_digest(stream, "sha256")
+        else:
+            digest_clip = hashlib.file_digest(video_stream, "sha256")
         if digest_clip.hexdigest() != value["clip_sha256"]:
             raise ValueError("Saved MP4 SHA changed")
     except (OSError, TypeError, ValueError, UnicodeError, json.JSONDecodeError) as exc:
