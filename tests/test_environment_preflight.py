@@ -10,7 +10,10 @@ class EnvironmentPreflightTests(unittest.TestCase):
         ids = {item[0] for item in preflight.CHECKS}
         self.assertNotIn("worker_manifests", ids)
         self.assertNotIn("skill_registry", ids)
-        self.assertIn("model_defaults", ids)
+        self.assertNotIn("model_defaults", ids)
+        self.assertNotIn("task_routes", ids)
+        self.assertIn("model_hub", ids)
+        self.assertIn("policy", ids)
 
     def test_missing_checkout_is_blocked_without_creating_files(self):
         with tempfile.TemporaryDirectory() as path:
