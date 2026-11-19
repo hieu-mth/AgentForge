@@ -317,10 +317,38 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .model-history{display:flex;justify-content:flex-end}
 .env-status.tone-neutral{color:var(--muted);background:var(--env-raised)}
 .orchestrator-page > .ant-form{display:grid;gap:18px;min-width:0}
+.orchestrator-edit-status{display:block;margin-top:8px}
+.orchestrator-header .orchestrator-cancel-idle{visibility:hidden}
 .orchestrator-meta{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px}
 .orchestrator-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 20px}
 .orchestrator-fields .ant-form-item,.orchestrator-inline-field.ant-form-item{margin-bottom:0}
 .orchestrator-fields .ant-form-item-label label{font-weight:600}
+.orchestrator-rule-row{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:20px;
+  padding:16px 0}
+.orchestrator-rule-row + .orchestrator-rule-row{border-top:1px solid var(--env-border)}
+.orchestrator-rule-copy{font-size:12px;color:var(--muted)}
+.orchestrator-rule-copy h3{margin:0 0 5px;font-size:14px;font-weight:700;color:var(--text)}
+.orchestrator-rule-controls{display:grid;align-content:start;gap:12px;min-width:0;max-width:520px}
+.orchestrator-rule-controls .ant-form-item{margin:0}
+.orchestrator-rule-hint{margin:0}
+.orchestrator-rule-note{margin:12px 0 0}
+.orchestrator-permission{display:flex;justify-content:space-between;align-items:center;gap:14px;
+  min-width:0;padding:10px 12px;border-radius:10px;background:var(--env-raised)}
+.orchestrator-permission strong{display:block;font-size:13px}
+.orchestrator-permission > div:first-child > span{display:block;margin-top:3px;color:var(--muted);font-size:12px}
+.orchestrator-limit-fields{display:grid;gap:12px}
+.orchestrator-limit-fields .ant-input-number-group-wrapper{width:min(100%,190px)}
+.orchestrator-approval-note{display:flex;gap:10px;align-items:flex-start;
+  border-top:1px solid var(--env-border);padding-top:14px;color:var(--muted);font-size:12px}
+.orchestrator-approval-note > .anticon{color:var(--primary);margin-top:3px}
+.orchestrator-approval-note strong{display:block;color:var(--text);margin-bottom:3px}
+.orchestrator-gpu-controls{display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px}
+.orchestrator-gpu-count{display:flex;align-items:flex-start;gap:8px}
+.orchestrator-gpu-count .ant-input-number{width:64px}
+.orchestrator-gpu-count > span{line-height:38px;color:var(--muted);white-space:nowrap}
+@media(width < 680px){
+  .orchestrator-rule-row{grid-template-columns:1fr;gap:12px;padding:14px 0}
+}
 .orchestrator-toggle.ant-form-item{margin:12px 0 0}
 .orchestrator-fields + .ant-typography{display:block;margin-top:12px}
 .orchestrator-fields + .ant-alert{margin-top:16px}
