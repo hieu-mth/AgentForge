@@ -3,6 +3,28 @@ from agentforge.api.routes._shared import UNHANDLED
 
 
 def handle(server, path, request, session=None):
+    if path == "/api/film/drafts/start":
+        if not server.allow_external_actions or request.keys() != {
+                "id", "idea", "seconds", "ratio", "scene_count"}:
+            raise PermissionError("Draft production requires external-tools mode and a complete brief")
+        from agentforge.features.film_studio import draft_pipeline
+        return draft_pipeline.submit(request)
+    if path.startswith("/api/film/drafts/"):
+        parts = path.split("/")
+        if len(parts) != 6 or parts[5] not in {"approve", "reject", "edit", "resume"}:
+            raise ValueError("Unknown draft action")
+        from agentforge.features.film_studio import draft_pipeline
+        identifier, action = parts[4:]
+        if action == "resume" and not server.allow_external_actions:
+            raise PermissionError("Draft production requires external-tools mode")
+        if action in {"approve", "reject"} and (
+                session is None or session.get("draft_previews", {}).get(identifier) != request.get("sha256")):
+            raise PermissionError("Preview the current draft before reviewing")
+        required = {"sha256"} if action in {"approve", "reject"} else (
+            {"index", "description", "image_prompt"} if action == "edit" else set())
+        if request.keys() != required:
+            raise ValueError("Invalid draft action fields")
+        return draft_pipeline.act(identifier, action, request)
     if path in {"/api/film/productions/render", "/api/film/productions/voice"}:
         if not server.allow_external_actions:
             raise PermissionError("Explicit Owner external-process mode required")
