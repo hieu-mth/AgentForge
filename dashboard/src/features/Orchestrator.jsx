@@ -1,5 +1,7 @@
 import {useEffect,useState} from 'react';
-import {Alert,App as AntApp,Button,Card,Checkbox,Form,Grid,InputNumber,Select,Space,Table,Tag,Typography} from 'antd';
+import {Alert,App as AntApp,Button,Card,Checkbox,Form,Grid,InputNumber,Select,Space,Table,Typography} from 'antd';
+import {ApartmentOutlined,ControlOutlined,RollbackOutlined,SafetyCertificateOutlined,SaveOutlined,TeamOutlined} from '@ant-design/icons';
+import {SectionTitle,SettingsHeading,SettingsStatus} from '../components/settings.jsx';
 import {useResource,ResourceStatus} from '../use_resource.jsx';
 import {useScreenRefresh} from '../refresh_scope.jsx';
 
@@ -21,6 +23,7 @@ const toolOptions=[
   {value:'system_rules',label:'Quy tắc hệ thống'},
 ];
 const unset='';
+const fallbackCapabilities=['general.text','film.storyboard'];
 
 export function Orchestrator({mutate}){
   const resource=useResource('/api/model-hub');
@@ -49,6 +52,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
     p=>p.id===option.value&&['ollama','anthropic'].includes(p.provider)));
   const localOptions=options.filter(option=>profiles.some(p=>p.id===option.value&&p.provider==='ollama'));
   const initial={...policy,primary:policy.primary??unset,
+    fallbacks:Object.fromEntries(fallbackCapabilities.map(id=>[id,policy.fallbacks[id]??unset])),
     bindings:Object.fromEntries(capabilities.filter(row=>!row.tool)
       .map(row=>[row.id,row.model_ref??unset]))};
 
@@ -120,12 +124,14 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
       :row.tool||modelField(['bindings',row.id],
       options.filter(option=>row.options.includes(option.value)),row.model_ref,
       row.default_ref?'Mặc định · '+row.default_ref:'Chưa gán',undefined,'Model chính · '+row.label);
-  const fallbackBinding=row=>['general.text','film.storyboard'].includes(row.id)
+  const fallbackBinding=row=>fallbackCapabilities.includes(row.id)
     ?modelField(['fallbacks',row.id],localOptions,policy.fallbacks[row.id],
       'Không dùng dự phòng',undefined,'Model dự phòng · '+row.label):'—';
   const capabilityStatus=row=><Space direction="vertical" size={4}>
-    <Tag>{({DETERMINISTIC:'Theo quy tắc',CONFIG_ONLY:'Chỉ cấu hình',UNAVAILABLE:'Không khả dụng'})[row.status]}</Tag>
-    <Text type="secondary">{row.adapter==='EXISTING_TOOL'?'Có công cụ riêng':'Chưa có adapter điều phối'}</Text>
+    <SettingsStatus tone={({DETERMINISTIC:'good',UNAVAILABLE:'warn'})[row.status]}>
+      {({DETERMINISTIC:'Theo quy tắc',CONFIG_ONLY:'Chỉ cấu hình',UNAVAILABLE:'Không khả dụng'})[row.status]}
+    </SettingsStatus>
+    {row.adapter==='EXISTING_TOOL'&&<Text className="env-muted">Có công cụ riêng</Text>}
   </Space>;
 
   return <Form form={form} layout="vertical" initialValues={initial}
@@ -133,30 +139,31 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
       if(values.gpu_exclusive)form.setFieldValue('gpu_concurrency',1);
       setDirty(true);
     }} onFinish={save} disabled={saving}>
-    <div className="hub-toolbar orchestrator-header">
-      <div><Title level={2}>AI điều phối tác vụ</Title>
-        <Space wrap><Tag color="blue">Chỉ cấu hình</Tag>
-          <Text type="secondary">{owner_override?'Owner tùy chỉnh':'Mặc định'} · Phiên bản {snapshot.revision}</Text></Space>
-      </div>
-      <Space wrap>
-        <Button onClick={()=>{form.resetFields();setDirty(false);}} disabled={!dirty}>Hủy thay đổi</Button>
-        <Button onClick={()=>confirm('RESET_ORCHESTRATOR')}>Đặt lại mặc định</Button>
-        <Button type="primary" htmlType="submit" disabled={!dirty} loading={saving}>Lưu cấu hình</Button>
-      </Space>
-    </div>
+    <SettingsHeading className="orchestrator-header" title="AI điều phối tác vụ" eyebrow="CHÍNH SÁCH OWNER"
+      description="Chọn model điều phối, phân công theo năng lực và đặt giới hạn cho từng tác vụ."
+      actions={<>
+        {dirty&&<Button onClick={()=>{form.resetFields();setDirty(false);}}>Hủy thay đổi</Button>}
+        <Button type="primary" icon={<SaveOutlined/>} htmlType="submit" disabled={!dirty} loading={saving}>Lưu cấu hình</Button>
+      </>}/>
     {dirty&&<Alert showIcon type="warning" message="Có thay đổi chưa lưu"/>}
-    <Card title="AI điều phối chính">
-      <p>Phân tích yêu cầu và đề xuất cách phân công theo chính sách Owner.</p>
+    <Card className="env-panel" title={<SectionTitle icon={<ApartmentOutlined/>}
+      title="AI điều phối chính" description="Phân tích yêu cầu và đề xuất cách phân công"/>}>
+      <div className="orchestrator-meta">
+        <SettingsStatus>Chỉ cấu hình</SettingsStatus>
+        <span className="env-checked">{owner_override?'Owner tùy chỉnh':'Mặc định'} · Phiên bản {snapshot.revision}</span>
+      </div>
       <div className="orchestrator-fields">
         <div>{modelField('primary',textOptions,policy.primary,'Chưa chọn model','Model điều phối')}
-          <Text type="secondary">{primary
-            ?textOptions.some(option=>option.value===primary)?'Đã cấu hình · Chưa xác minh khả năng chạy':'Model không khả dụng'
-            :'Chưa chọn model'}</Text></div>
+          {primary&&<Text className="env-muted">{textOptions.some(option=>option.value===primary)
+            ?'Đã cấu hình · Chưa xác minh khả năng chạy':'Model không khả dụng'}</Text>}</div>
         <Form.Item name="mode" label="Chế độ hoạt động"><Select options={modeOptions}/></Form.Item>
       </div>
-      <Form.Item name="decompose" valuePropName="checked"><Checkbox>Tự phân tích và chia nhỏ yêu cầu</Checkbox></Form.Item>
+      <Form.Item className="orchestrator-toggle" name="decompose" valuePropName="checked">
+        <Checkbox>Tự phân tích và chia nhỏ yêu cầu</Checkbox>
+      </Form.Item>
     </Card>
-    <Card title="Phân công AI theo năng lực">
+    <Card className="env-panel" title={<SectionTitle icon={<TeamOutlined/>}
+      title="Phân công AI theo năng lực" description="Gán model hoặc công cụ phù hợp cho từng việc. Các tuyến model đang ở mức cấu hình."/>}>
       {desktop?<Table className="hub-table" rowKey="id" pagination={false} dataSource={capabilities}
         columns={[
           {title:'Năng lực',dataIndex:'label',width:'22%'},
@@ -166,10 +173,11 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
         ]}/>:<div className="orchestrator-capabilities">{capabilities.map(row=>
           <section key={row.id}><Title level={5}>{row.label}</Title>{capabilityStatus(row)}
             <div>{mainBinding(row)}</div>
-            {['general.text','film.storyboard'].includes(row.id)&&<div>{fallbackBinding(row)}</div>}
+            {fallbackCapabilities.includes(row.id)&&<div>{fallbackBinding(row)}</div>}
           </section>)}</div>}
     </Card>
-    <Card title="Quy tắc tự động điều phối">
+    <Card className="env-panel" title={<SectionTitle icon={<ControlOutlined/>}
+      title="Quy tắc tự động điều phối" description="Chính sách lựa chọn model, dự phòng và tài nguyên GPU"/>}>
       <div className="orchestrator-fields">
         <Form.Item name="selection" label="Lựa chọn model"><Select options={[
           {value:'FIXED',label:'Theo mapping cố định'},{value:'SUGGEST',label:'AI đề xuất từ danh sách cho phép'},
@@ -194,7 +202,8 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
       </div>
       <Text type="secondary">Tác vụ ComfyUI chưa rõ kết quả phải được đối chiếu trước khi thử lại. Các giới hạn GPU và retry là cấu hình mục tiêu.</Text>
     </Card>
-    <Card title="Quyền hạn & giới hạn">
+    <Card className="env-panel" title={<SectionTitle icon={<SafetyCertificateOutlined/>}
+      title="Quyền hạn & giới hạn" description="Phạm vi được phép, giới hạn thử lại và ngân sách tác vụ"/>}>
       <div className="orchestrator-fields">
         {Object.entries(permissions).map(([key,label])=><Form.Item key={key}
           name={['permissions',key]} valuePropName="checked"><Checkbox>{label}</Checkbox></Form.Item>)}
@@ -211,5 +220,10 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
       <Alert type="info" showIcon message="Luôn cần Owner duyệt"
         description="Gọi cloud hoặc API trả phí, tải model, thay đổi dữ liệu quan trọng, xuất bản và thay đổi quyền riêng tư."/>
     </Card>
+    <div className="model-history">
+      <Button type="text" icon={<RollbackOutlined/>} onClick={()=>confirm('RESET_ORCHESTRATOR')}>
+        Đặt lại mặc định
+      </Button>
+    </div>
   </Form>;
 }

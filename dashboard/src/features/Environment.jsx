@@ -1,4 +1,4 @@
-import {Alert, Button, Card, Empty, Grid, Progress, Table, Tooltip, Typography} from 'antd';
+import {Alert, Button, Card, Empty, Grid, Table, Tooltip, Typography} from 'antd';
 import {AppstoreOutlined, CloudServerOutlined, CodeOutlined, DatabaseOutlined,
   DesktopOutlined, HddOutlined, InfoCircleOutlined, ReloadOutlined,
   SafetyCertificateOutlined, ThunderboltOutlined} from '@ant-design/icons';
@@ -7,32 +7,14 @@ import {useScreenRefresh} from '../refresh_scope.jsx';
 import {formatCapacity, formatMemory, formatVram, percentUsed, formatChecked, displayStatus,
   statusTone} from '../environment_format.js';
 
-const {Text,Title,Paragraph}=Typography;
+import {SectionTitle,SettingsHeading,SettingsStatus,Stat} from '../components/settings.jsx';
 
-function SectionTitle({icon,title,description}){
-  return <div className="env-section-heading">
-    <span className="env-section-icon" aria-hidden="true">{icon}</span>
-    <div><div className="env-section-title">{title}</div>
-      <div className="env-section-description">{description}</div></div>
-  </div>;
-}
+const {Text}=Typography;
 
 function Status({value}){
-  return <span className={'env-status tone-'+statusTone(value)} title={value||'UNKNOWN'}>
-    <span className="env-status-dot" aria-hidden="true"/>{displayStatus(value)}
-  </span>;
-}
-
-function Stat({icon,label,value,sub,progress}){
-  return <div className="env-stat">
-    <div className="env-stat-top"><span className="env-stat-icon" aria-hidden="true">{icon}</span>
-      <span className="env-stat-label">{label}</span></div>
-    <div className="env-stat-value" title={value}>{value}</div>
-    <div className="env-stat-sub">{sub}</div>
-    {progress!==null&&progress!==undefined&&
-      <Progress percent={progress} showInfo={false} size="small" strokeColor="#7776ee"
-        trailColor="var(--env-track)" aria-label={'Đã sử dụng '+progress+'%'} />}
-  </div>;
+  return <SettingsStatus tone={statusTone(value)} title={value||'UNKNOWN'}>
+    {displayStatus(value)}
+  </SettingsStatus>;
 }
 
 function Detail({label,value}){
@@ -125,23 +107,15 @@ export function Environment({onNavigate}){
     services.some(s=>s.truncated));
 
   return <div className="environment-page" data-testid="environment-page">
-    <div className="env-page-heading">
-      <div>
-        <div className="env-eyebrow"><span className="env-eyebrow-dot"/> KIỂM TRA HỆ THỐNG · LOCAL</div>
-        <Title level={2} className="env-page-title">Môi trường & Tài nguyên</Title>
-        <Paragraph className="env-page-subtitle">
-          Tổng quan phần cứng, công cụ và model được phát hiện trên máy này.
-          Thông tin kiểm tra không đồng nghĩa AI đã được benchmark.
-        </Paragraph>
-      </div>
-      <div className="env-page-actions">
+    <SettingsHeading title="Môi trường & Tài nguyên" eyebrow="KIỂM TRA HỆ THỐNG · LOCAL"
+      description="Tổng quan phần cứng, công cụ và model được phát hiện trên máy này. Thông tin kiểm tra không đồng nghĩa AI đã được benchmark."
+      actions={<>
         <span className="env-checked" aria-live="polite">
           {snapshot?'Lần quét: '+formatChecked(snapshot.checked_at):'Chưa có lượt quét'}
         </span>
         <Button type="primary" icon={<ReloadOutlined/>} onClick={scan.reload}
           loading={scan.loading}>Quét lại</Button>
-      </div>
-    </div>
+      </>}/>
 
     <ResourceStatus resource={scan} label="môi trường"/>
     {!snapshot&&<Card className="env-panel">

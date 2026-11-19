@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { App as AntApp, Alert, Button, Card, Col, Empty, Form, Grid, Input,
-  Modal, Row, Select, Space, Switch, Table, Tag, Tooltip, Typography } from 'antd';
+import { App as AntApp, Alert, Button, Card, Empty, Form, Grid, Input,
+  Modal, Select, Space, Switch, Table, Tooltip, Typography } from 'antd';
+import {AppstoreOutlined,DesktopOutlined,HistoryOutlined,PlusOutlined,ReloadOutlined} from '@ant-design/icons';
+import {SectionTitle,SettingsHeading,SettingsStatus,Stat} from '../components/settings.jsx';
 import {useResource, ResourceStatus} from '../use_resource.jsx';
 import {useScreenRefresh} from '../refresh_scope.jsx';
 import {displayStatus} from '../environment_format.js';
 import { exposureFor, profilePayload, PROVIDERS } from '../model_hub_ui.js';
 
-const { Text, Title, Paragraph } = Typography;
+const { Text, Paragraph } = Typography;
 const PROVIDER_LABELS = Object.fromEntries(PROVIDERS.map(p=>[p.value,p.label]));
 const desktopColumns=['md'];
 
@@ -107,32 +109,28 @@ export function ModelHub({mutate}) {
     <Button size="small" onClick={()=>editProfile(row)}>Sửa</Button>
   </Space>;
 
-  return <Space className="model-hub" direction="vertical" size={18} style={{width:'100%'}}>
-    <div className="hub-toolbar">
-      <div><Title level={2}>Model AI</Title>
-        <Text type="secondary">Quản lý hồ sơ model, nhà cung cấp và trạng thái kiểm tra.</Text>
-      </div>
-      <Space wrap>
-        <Button onClick={reload} loading={loading}>Làm mới</Button>
-        <Button disabled={!hub?.revision} onClick={rollback}>Khôi phục phiên bản trước</Button>
-      </Space>
-    </div>
+  return <div className="environment-page model-hub">
+    <SettingsHeading title="Model AI" eyebrow="HỒ SƠ MODEL"
+      description="Quản lý model local và cloud, nhà cung cấp và kết quả kiểm tra."
+      actions={<>
+        <Button icon={<ReloadOutlined/>} onClick={reload} loading={loading}>Làm mới</Button>
+        <Button type="primary" icon={<PlusOutlined/>} disabled={!hub} onClick={()=>editProfile(null)}>
+          Đăng ký model
+        </Button>
+      </>}/>
     <ResourceStatus resource={hubResource} label="cấu hình model"/>
-    <Row gutter={[12,12]}>
-      <Col xs={12} md={8}><Card size="small"><Text type="secondary">Model đã đăng ký</Text>
-        <div className="hub-stat">{hub?profiles.length:'—'}</div></Card></Col>
-      <Col xs={12} md={8}><Card size="small"><Text type="secondary">Profile chạy local</Text>
-        <div className="hub-stat">{hub?localProfiles:'—'}</div></Card></Col>
-      <Col xs={12} md={8}><Card size="small"><Text type="secondary">Phiên bản cấu hình</Text>
-        <div className="hub-stat">{hub?.revision??'—'}</div></Card></Col>
-    </Row>
-    <Card title="Danh sách model" loading={loading}
-      extra={<Button type="primary" disabled={!hub} onClick={()=>editProfile(null)}>Đăng ký model</Button>}>
+    <div className="env-stat-grid model-stat-grid" aria-label="Tổng quan hồ sơ model">
+      <Stat icon={<AppstoreOutlined/>} label="Model đã đăng ký" value={hub?profiles.length:'—'}/>
+      <Stat icon={<DesktopOutlined/>} label="Hồ sơ local" value={hub?localProfiles:'—'}/>
+      <Stat icon={<HistoryOutlined/>} label="Phiên bản cấu hình" value={hub?.revision??'—'}/>
+    </div>
+    <Card className="env-panel" title={<SectionTitle icon={<AppstoreOutlined/>} title="Danh sách model"
+      description="Hồ sơ đã đăng ký và trạng thái kiểm tra gần nhất"/>} loading={loading}>
       <Table className="hub-table" size="middle" rowKey="id" dataSource={profiles} scroll={desktop?{x:980}:undefined}
         pagination={{pageSize:8,hideOnSinglePage:true}} locale={{emptyText:<Empty description="Chưa có model"/>}}
         columns={[
-          {title:'Profile',dataIndex:'id',width:200,render:(id,row)=><Space direction="vertical" size={2}>
-            <Text strong code>{id}</Text>
+          {title:'Hồ sơ',dataIndex:'id',width:170,render:(id,row)=><Space direction="vertical" size={4}>
+            <span className="env-runtime-name">{id}</span>
             {desktop?<Text type="secondary">{row.source==='git'?'Mặc định':'Owner tùy chỉnh'}</Text>:
               <details className="hub-details"><summary>Chi tiết</summary>
                 <div>{PROVIDER_LABELS[row.provider]||row.provider}</div>
@@ -142,10 +140,10 @@ export function ModelHub({mutate}) {
             {!desktop&&profileActions(row)}
           </Space>},
           {title:'Nhà cung cấp',dataIndex:'provider',width:205,responsive:desktopColumns,
-            render:p=><Tag>{PROVIDER_LABELS[p]||p}</Tag>},
+            render:p=><Text type="secondary">{PROVIDER_LABELS[p]||p}</Text>},
           {title:'Model / Checkpoint',dataIndex:'model',width:220,responsive:desktopColumns,render:m=><Text>{m}</Text>},
           {title:'Trạng thái',width:145,render:(_,row)=><Space direction="vertical" size={2}>
-            <Tag color={row.enabled?'blue':'default'}>{row.enabled?'Đã bật':'Đã tắt'}</Tag>
+            <SettingsStatus tone={row.enabled?'info':'neutral'}>{row.enabled?'Đã bật':'Đã tắt'}</SettingsStatus>
             {row.provider==='ollama'&&<Text type="secondary" style={{fontSize:12}}>
               {checked[row.id]&&checked[row.id].revision===hub?.revision
                 ?checked[row.id].status==='LOCAL_MODEL_FOUND'?'Đã phát hiện qua Ollama':displayStatus(checked[row.id].status)
@@ -159,6 +157,11 @@ export function ModelHub({mutate}) {
           {title:'Thao tác',width:250,responsive:desktopColumns,render:(_,row)=>profileActions(row)},
         ]}/>
     </Card>
+    <div className="model-history">
+      <Button type="text" size="small" icon={<HistoryOutlined/>} disabled={!hub?.revision} onClick={rollback}>
+        Khôi phục phiên bản trước
+      </Button>
+    </div>
     <Modal open={editorOpen} title={editing?'Chỉnh sửa model profile':'Đăng ký model mới'}
       onCancel={()=>setEditorOpen(false)} footer={null} destroyOnHidden>
       <Form form={form} layout="vertical" onFinish={saveProfile} requiredMark={false}>
@@ -195,5 +198,5 @@ export function ModelHub({mutate}) {
         </Space>
       </Form>
     </Modal>
-  </Space>;
+  </div>;
 }
