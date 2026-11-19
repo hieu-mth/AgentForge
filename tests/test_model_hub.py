@@ -35,6 +35,25 @@ class ModelHubTests(unittest.TestCase):
             self.assertEqual(result["routes"][-1]["status"], "DETERMINISTIC")
             self.assertFalse(result["cloud_fallback"])
 
+    def test_adapter_catalog_matches_persisted_profile_validation(self):
+        expected = {"ollama": "local", "comfyui": "local", "anthropic": "cloud"}
+        with tempfile.TemporaryDirectory() as folder:
+            db = Path(folder) / "hub.sqlite3"
+            catalog = model_hub.catalog(db_path=db)["adapters"]
+            self.assertFalse(db.exists())
+            self.assertEqual({row["id"]: row["connection"] for row in catalog}, expected)
+            with patch("urllib.request.urlopen", side_effect=AssertionError("network")):
+                for revision, adapter in enumerate(catalog):
+                    profile = {"id": f"owner_{revision}", "provider": adapter["id"],
+                               "model": "fixture-model", "enabled": True, **adapter["defaults"]}
+                    model_hub.change("SAVE_MODEL_PROFILE", expected_revision=revision,
+                                     db_path=db, profile=profile)
+                    with self.assertRaises(model_hub.ModelConfigError):
+                        model_hub.validate_profile({**profile, "api_key": "secret"})
+            self.assertEqual(len(model_hub.catalog(db_path=db)["profiles"]), 3)
+            with self.assertRaises(model_hub.ModelConfigError):
+                model_hub.validate_profile({**profile, "api_key_env": "Bearer actual-key"})
+
     def test_registered_model_and_route_exist_only_in_sqlite(self):
         with tempfile.TemporaryDirectory() as folder:
             db = Path(folder) / "hub.sqlite3"

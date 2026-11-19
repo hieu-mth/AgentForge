@@ -1,15 +1,14 @@
 import { useState } from 'react';
-import { App as AntApp, Alert, Button, Card, Empty, Form, Grid, Input,
-  Modal, Select, Space, Switch, Table, Tooltip, Typography } from 'antd';
+import { App as AntApp, Alert, Button, Card, Empty, Grid,
+  Space, Table, Tooltip, Typography } from 'antd';
 import {AppstoreOutlined,DeleteOutlined,DesktopOutlined,HistoryOutlined,PlusOutlined,ReloadOutlined} from '@ant-design/icons';
 import {SectionTitle,SettingsHeading,SettingsStatus,Stat} from '../components/settings.jsx';
 import {useResource, ResourceStatus} from '../use_resource.jsx';
 import {useScreenRefresh} from '../refresh_scope.jsx';
 import {displayStatus} from '../environment_format.js';
-import { exposureFor, profilePayload, PROVIDERS } from '../model_hub_ui.js';
+import {ModelProfileDialog} from './ModelProfileDialog.jsx';
 
 const { Text, Paragraph } = Typography;
-const PROVIDER_LABELS = Object.fromEntries(PROVIDERS.map(p=>[p.value,p.label]));
 const desktopColumns=['md'];
 
 export function ModelHub({mutate}) {
@@ -21,16 +20,15 @@ export function ModelHub({mutate}) {
   const loading=hubResource.loading;
   const [checked,setChecked]=useState({});
   const [probes,setProbes]=useState({});
-  const [editorOpen,setEditorOpen]=useState(false);
-  const [editing,setEditing]=useState(null);
-  const [form]=Form.useForm();
-  const provider=Form.useWatch('provider',form);
+  const [editor,setEditor]=useState(null);
 
   const reload=hubResource.reload;
   useScreenRefresh(reload);
 
   const profiles=hub?.profiles||[];
-  const localProfiles=profiles.filter(p=>p.provider!=='anthropic').length;
+  const adapters=hub?.adapters||[];
+  const byAdapter=Object.fromEntries(adapters.map(adapter=>[adapter.id,adapter]));
+  const localProfiles=profiles.filter(p=>byAdapter[p.provider]?.connection==='local').length;
 
   const update=(path,body,title,description,onSuccess)=>{
     modal.confirm({
@@ -61,28 +59,15 @@ export function ModelHub({mutate}) {
     });
   };
 
-  const editProfile=(item)=>{
-    setEditing(item||null);
-    form.resetFields();
-    form.setFieldsValue(item?{
-      id:item.id,provider:item.provider,model:item.model,enabled:item.enabled,
-      base_url:item.base_url||'',
-      base_url_env:item.base_url_env||'ANTHROPIC_BASE_URL',
-      api_key_env:item.api_key_env||'ANTHROPIC_AUTH_TOKEN',
-    }:{
-      provider:'ollama',enabled:true,base_url:'http://127.0.0.1:11434',
-      base_url_env:'ANTHROPIC_BASE_URL',api_key_env:'ANTHROPIC_AUTH_TOKEN',
+  const editProfile=profile=>setEditor({profile,revision:hub.revision});
+  const saveProfile=async(profile,revision)=>{
+    const result=await mutate('/api/model-hub/profile',{
+      ack:'SAVE_MODEL_PROFILE',expected_revision:revision,profile,
     });
-    setEditorOpen(true);
-  };
-
-  const saveProfile=(values)=>{
-    const payload=profilePayload(values);
-    update('/api/model-hub/profile',{
-      ack:'SAVE_MODEL_PROFILE',expected_revision:hub.revision,profile:payload,
-    },editing?'Cập nhật model profile?':'Đăng ký model profile?',
-    exposureFor(payload)+' Không lưu token/API key, không tự chạy tác vụ hoặc download model.',
-    ()=>setEditorOpen(false));
+    if(!result)return false;
+    setHub(result);setChecked({});setProbes({});setEditor(null);
+    message.success('?? l?u h? s? model');
+    return true;
   };
 
   const deleteProfile=row=>update('/api/model-hub/profile/delete',{
@@ -96,7 +81,7 @@ export function ModelHub({mutate}) {
   'Danh sách model và chính sách điều phối sẽ được khôi phục cùng nhau. Hệ thống sẽ lưu kết quả thành một phiên bản mới.');
 
   const profileActions=row=><Space wrap size={6}>
-    {row.provider==='ollama'&&<>
+    {byAdapter[row.provider]?.local_probe&&<>
       <Tooltip title="Đọc danh sách model từ Ollama local">
         <Button size="small" onClick={()=>update('/api/model-hub/check',{
           ack:'CHECK_LOCAL_MODEL',profile_id:row.id,
@@ -111,7 +96,7 @@ export function ModelHub({mutate}) {
         Chạy thử
       </Button>
     </>}
-    <Button size="small" onClick={()=>editProfile(row)}>Sửa</Button>
+    <Button size="small" disabled={!byAdapter[row.provider]} onClick={()=>editProfile(row)}>Sửa</Button>
     <Button size="small" danger icon={<DeleteOutlined/>}
       onClick={()=>deleteProfile(row)}>Xóa</Button>
   </Space>;
@@ -121,7 +106,7 @@ export function ModelHub({mutate}) {
       description="Chỉ hiển thị model Owner đã đăng ký trong SQLite; không có model mặc định hoặc tự tải."
       actions={<>
         <Button icon={<ReloadOutlined/>} onClick={reload} loading={loading}>Làm mới</Button>
-        <Button type="primary" icon={<PlusOutlined/>} disabled={!hub} onClick={()=>editProfile(null)}>
+        <Button type="primary" icon={<PlusOutlined/>} disabled={!adapters.length} onClick={()=>editProfile(null)}>
           Đăng ký model
         </Button>
       </>}/>
@@ -140,18 +125,18 @@ export function ModelHub({mutate}) {
             <span className="env-runtime-name">{id}</span>
             {desktop?<Text type="secondary">Owner đăng ký</Text>:
               <details className="hub-details"><summary>Chi tiết</summary>
-                <div>{PROVIDER_LABELS[row.provider]||row.provider}</div>
+                <div>{byAdapter[row.provider]?.label||row.provider}</div>
                 <div>{row.model}</div>
                 <div>Owner đăng ký</div>
               </details>}
             {!desktop&&profileActions(row)}
           </Space>},
           {title:'Nhà cung cấp',dataIndex:'provider',width:205,responsive:desktopColumns,
-            render:p=><Text type="secondary">{PROVIDER_LABELS[p]||p}</Text>},
+            render:p=><Text type="secondary">{byAdapter[p]?.label||p}</Text>},
           {title:'Model / Checkpoint',dataIndex:'model',width:220,responsive:desktopColumns,render:m=><Text>{m}</Text>},
           {title:'Trạng thái',width:145,render:(_,row)=><Space direction="vertical" size={2}>
             <SettingsStatus tone={row.enabled?'info':'neutral'}>{row.enabled?'Đã bật':'Đã tắt'}</SettingsStatus>
-            {row.provider==='ollama'&&<Text type="secondary" style={{fontSize:12}}>
+            {byAdapter[row.provider]?.local_probe&&<Text type="secondary" style={{fontSize:12}}>
               {checked[row.id]&&checked[row.id].revision===hub?.revision
                 ?checked[row.id].status==='LOCAL_MODEL_FOUND'?'Đã phát hiện qua Ollama':displayStatus(checked[row.id].status)
                 :'Chưa kiểm tra Ollama'}
@@ -169,41 +154,7 @@ export function ModelHub({mutate}) {
         Khôi phục phiên bản trước
       </Button>
     </div>
-    <Modal open={editorOpen} title={editing?'Chỉnh sửa model profile':'Đăng ký model mới'}
-      onCancel={()=>setEditorOpen(false)} footer={null} destroyOnHidden>
-      <Form form={form} layout="vertical" onFinish={saveProfile} requiredMark={false}>
-        <Form.Item name="id" label="Profile ID" rules={[{required:true,pattern:/^[a-z][a-z0-9_]{2,39}$/}]}>
-          <Input disabled={!!editing} placeholder="coding_local"/>
-        </Form.Item>
-        <Form.Item name="provider" label="Provider" rules={[{required:true}]}>
-          <Select disabled={!!editing} options={PROVIDERS}/>
-        </Form.Item>
-        <Form.Item name="model" label="Model name / checkpoint ID"
-          rules={[{required:true,max:160,pattern:/^[A-Za-z0-9][A-Za-z0-9._:/+-]*$/}]}>
-          <Input placeholder={provider==='comfyui'?'wan2.2_5b':'qwen3-coder:7b'}/>
-        </Form.Item>
-        {provider==='anthropic'?<>
-          <Alert style={{marginBottom:12}} showIcon type="warning"
-            message="Cloud credentials chỉ tham chiếu tên biến môi trường. Không nhập API key tại đây."/>
-          <Form.Item name="base_url_env" label="Endpoint env" rules={[{required:true,pattern:/^[A-Z_][A-Z0-9_]*$/}]}>
-            <Input placeholder="ANTHROPIC_BASE_URL"/>
-          </Form.Item>
-          <Form.Item name="api_key_env" label="API key env" rules={[{required:true,pattern:/^[A-Z_][A-Z0-9_]*$/}]}>
-            <Input placeholder="ANTHROPIC_AUTH_TOKEN"/>
-          </Form.Item>
-        </>:<Form.Item name="base_url" label="Local endpoint"
-          rules={[{required:true,pattern:/^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):[0-9]{1,5}\/?$/}]}>
-          <Input placeholder={provider==='comfyui'?'http://127.0.0.1:8188':'http://127.0.0.1:11434'}/>
-        </Form.Item>}
-        <Form.Item name="enabled" label="Cho phép lựa chọn profile" valuePropName="checked">
-          <Switch/>
-        </Form.Item>
-        <Alert type="info" showIcon style={{marginBottom:16}} message={exposureFor({provider})}/>
-        <Space style={{justifyContent:'flex-end',width:'100%'}}>
-          <Button onClick={()=>setEditorOpen(false)}>Hủy</Button>
-          <Button type="primary" htmlType="submit">Xem xác nhận & Lưu</Button>
-        </Space>
-      </Form>
-    </Modal>
+    {editor&&<ModelProfileDialog adapters={adapters} profile={editor.profile}
+      profiles={profiles} revision={editor.revision} onCancel={()=>setEditor(null)} onSave={saveProfile}/>}
   </div>;
 }

@@ -335,6 +335,21 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .hub-details{font-size:12px;color:var(--muted)}
 .hub-details summary{color:var(--primary);cursor:pointer}
 .hub-table .ant-table-cell{overflow-wrap:anywhere}
+.model-profile-dialog .ant-modal-header{margin-bottom:20px}
+.model-profile-dialog .ant-form-item{margin-bottom:16px}
+.model-profile-dialog .ant-form-item-label label{font-weight:600}
+.model-dialog-grid{display:grid;grid-template-columns:minmax(150px,.85fr) minmax(0,1.15fr);gap:16px}
+.model-dialog-grid .ant-form-item{margin-bottom:8px}
+.model-dialog-help{margin:0 0 14px;font-size:12px;line-height:1.55;color:var(--muted)}
+.model-dialog-divider{margin:16px 0;border-top:1px solid var(--line)}
+.model-dialog-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  border:1px solid var(--env-border);background:var(--env-raised);border-radius:10px;padding:10px 12px}
+.model-dialog-summary{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  margin:0 0 14px;border:1px solid var(--env-border);background:var(--env-raised);border-radius:10px}
+.model-dialog-summary :is(dt,dd){min-width:0;margin:0;padding:9px 12px;overflow-wrap:anywhere}
+.model-dialog-summary dt{color:var(--muted)}
+.model-dialog-summary dd{font-weight:600}
+@media(width < 480px){.model-dialog-grid{grid-template-columns:1fr;gap:4px}}
 @media(width < 768px){
   .hub-table .ant-table-content > table{table-layout:fixed!important}
   .hub-table col{width:auto!important}
