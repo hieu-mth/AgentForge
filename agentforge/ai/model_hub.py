@@ -102,7 +102,7 @@ def validate_profile(value, *, profile_id=None):
     return common
 
 
-def _defaults():
+def route_catalog():
     """Source-defined capabilities, with NO model/profile defaults.
 
     Model assignment and override live only in Owner SQLite. This read never
@@ -118,7 +118,6 @@ def _defaults():
             "label": label,
             "kind": "rules" if deterministic else kind,
             "execution": "rules" if deterministic else "config_only",
-            "default_model": None,
         }
     if set(catalog) != ROUTE_CAPABILITIES:
         raise ModelConfigError("Capability catalog does not match active routes")
@@ -159,7 +158,7 @@ def _validate_state(doc):
         validate_profile(profile, profile_id=ident)
     # Unknown keys in older Owner SQLite are inert archival data, not routes.
     # Read safely without rewriting the Owner database during GET.
-    defaults = _defaults()
+    defaults = route_catalog()
     if "orchestrator" in doc:
         orchestrator_policy.validate(
             doc["orchestrator"], id_pattern=ID_RE, extra_routes=_extra_capabilities(defaults))
@@ -220,7 +219,7 @@ def _orchestrator_catalog(state, profiles, routes):
             "model_ref": ref, "options": sorted(options),
             "status": decision["status"],
             "existing_route": route is not None and kind != "tool",
-            "default_ref": route["default_model"] if route else None,
+            "default_ref": None,
         })
     return {"policy": policy, "capabilities": capabilities,
             "status": "CONFIG_ONLY", "owner_override": "orchestrator" in state}
@@ -234,9 +233,9 @@ def catalog(*, db_path=None):
 def _catalog(revision, state):
     profiles = _profiles(state=state)
     routes = []
-    for key, route in _defaults().items():
+    for key, route in route_catalog().items():
         selected = (None if route["kind"] == "rules"
-                    else state["routes"].get(key, route["default_model"]))
+                    else state["routes"].get(key))
         if route["kind"] == "rules":
             status = "DETERMINISTIC"
         elif not selected:
@@ -353,7 +352,7 @@ def _tables(conn):
 
 
 def _save_orchestrator(updated, policy, route_changes):
-    routes = _defaults()
+    routes = route_catalog()
     orchestrator_policy.validate(
         policy, id_pattern=ID_RE, extra_routes=_extra_capabilities(routes))
     editable = {key for key in routes if orchestrator_policy.KINDS.get(key)
@@ -380,8 +379,8 @@ def _save_orchestrator(updated, policy, route_changes):
         validate_ref(ref, orchestrator_policy.KINDS[key])
     for key, ref in policy["fallbacks"].items():
         validate_ref(ref, "text", local=True)
-        primary = route_changes.get(key, updated["routes"].get(key, routes[key]["default_model"]))
-        if ref == (primary or routes[key]["default_model"]):
+        primary = route_changes.get(key, updated["routes"].get(key))
+        if ref == primary:
             raise ModelConfigError("Model dự phòng phải khác model chính")
     for key, ref in route_changes.items():
         if ref is None:
@@ -423,7 +422,7 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
             if profile_id not in updated["profiles"]:
                 raise ModelConfigError("Unknown model profile")
             attached = {ref for key, ref in updated["routes"].items()
-                        if key in _defaults()}
+                        if key in route_catalog()}
             current_policy = updated.get("orchestrator", orchestrator_policy.defaults())
             attached.update([current_policy["primary"]])
             attached.update(current_policy["allowed_profiles"])
@@ -433,7 +432,7 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
                 raise ModelConfigError("Model is assigned; unassign it before deleting")
             del updated["profiles"][profile_id]
         elif action in {"SET_MODEL_ROUTE", "RESET_MODEL_ROUTE"}:
-            routes = _defaults()
+            routes = route_catalog()
             if task_id not in routes or routes[task_id]["kind"] == "rules":
                 raise ModelConfigError("Unknown or deterministic task")
             if action == "SET_MODEL_ROUTE":
@@ -451,7 +450,7 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
             _save_orchestrator(updated, policy, route_changes)
         elif action == "RESET_ORCHESTRATOR":
             updated.pop("orchestrator", None)
-            for key in _defaults():
+            for key in route_catalog():
                 if orchestrator_policy.KINDS.get(key) in {"text", "image", "video"}:
                     updated["routes"].pop(key, None)
         else:
