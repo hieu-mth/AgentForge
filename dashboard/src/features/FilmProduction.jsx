@@ -21,7 +21,7 @@ const statusLabels={
   FAILED:'Có lỗi',
 };
 
-function ProductionStatus({state,verified}){
+export function ProductionStatus({state,verified}){
   const warning=['RENDER_RECEIPT_PRESENT_UNINSPECTED','COMPLETE_UNVERIFIED','SUBMITTING_UNCERTAIN'].includes(state);
   const error=state==='FAILED'||state?.includes('REVIEW_REQUIRED')||state==='INVALID_NEEDS_OWNER_REVIEW';
   return <SettingsStatus tone={verified?'good':error?'bad':warning?'warn':'info'} title={state}>
