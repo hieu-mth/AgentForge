@@ -36,6 +36,11 @@ const diagnosticLabels={
   NVIDIA_SMI_NOT_FOUND:'Không tìm thấy công cụ NVIDIA',
   CONNECTION_REFUSED:'Dịch vụ không nhận kết nối',
   TIMEOUT:'Dịch vụ phản hồi quá chậm',
+  COMFYUI_TIMEOUT:'ComfyUI phản hồi quá chậm',
+  COMFYUI_UNAVAILABLE:'Không kết nối được ComfyUI',
+  AUTH_REQUIRED:'ComfyUI yêu cầu xác thực',
+  COMFYUI_HTTP_ERROR:'ComfyUI trả lỗi HTTP',
+  COMFYUI_INVALID_RESPONSE:'Phản hồi ComfyUI không hợp lệ',
   INVALID_OR_UNAVAILABLE_RESPONSE:'Dịch vụ không trả về dữ liệu hợp lệ',
 };
 function Diagnostic({code}){
@@ -50,7 +55,10 @@ const softwareDetails=row=>
   [row.version,row.detail,row.scope].filter(Boolean).join(' · ')||'Chưa có thông tin';
 const serviceDetails=row=><div className="env-service-detail">
   <span className="env-endpoint">{row.endpoint||'—'}</span>
+  {row.checked_at&&<span className="env-muted">Lần kiểm tra: {formatChecked(row.checked_at)}</span>}
   {row.error&&<Diagnostic code={row.error}/>}
+  {Object.keys(row.catalog_errors??{}).length>0&&
+    <span className="env-diagnostic">Chưa đọc được một phần danh mục model</span>}
   {row.truncated&&<span className="env-diagnostic">Danh mục bị giới hạn</span>}
 </div>;
 const modelSize=value=>typeof value==='number'?formatCapacity(value,2):'Chưa rõ';
@@ -69,8 +77,8 @@ const serviceColumns=[
   {title:'Dịch vụ',dataIndex:'id',key:'name',width:170,
     render:(value,row)=><><span className="env-runtime-name env-break">{value}</span>
       <MobileDetails>{serviceDetails(row)}</MobileDetails></>},
-  {title:'Trạng thái',dataIndex:'status',key:'status',width:180,
-    render:value=><Status value={value}/>},
+  {title:'Tại lần kiểm tra',dataIndex:'status',key:'status',width:180,
+    render:(value,row)=>row.scanPending?'Đang kiểm tra…':row.scanFailed?'Bản quét cũ':<Status value={value}/>},
   {title:'Endpoint / chẩn đoán',key:'details',responsive:desktopColumns,
     render:(_,row)=>serviceDetails(row)},
 ];
@@ -107,7 +115,8 @@ export function Environment({onNavigate}){
   const devices=Array.isArray(gpu.devices)?gpu.devices:[];
   const primaryGpu=devices[0];
   const services=Array.isArray(snapshot?.services)?snapshot.services:[];
-  const orderedServices=[...services].sort((a,b)=>servicePriority(a)-servicePriority(b));
+  const orderedServices=services.map(row=>({...row,scanPending:scan.loading,scanFailed:Boolean(scan.error)}))
+    .sort((a,b)=>servicePriority(a)-servicePriority(b));
   const software=Array.isArray(snapshot?.software)?snapshot.software:[];
   const models=Array.isArray(snapshot?.models)?snapshot.models:[];
   const configured=Array.isArray(snapshot?.configured_models)?snapshot.configured_models:[];

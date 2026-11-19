@@ -1,5 +1,6 @@
 """FLUX graph validation and visual job admission contracts."""
 import copy
+import io
 import tempfile
 import threading
 import unittest
@@ -60,6 +61,23 @@ class FluxRuntimeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             model_hub.validate_profile(profile() | {"flux": cfg})
 
+    def test_numbering_changes_preserve_bindings(self):
+        row = profile()
+        original = row["flux"]["workflow"]
+        remapped = {key: str(int(key) + 100) for key in original}
+        graph = {remapped[key]: {**node, "inputs": {
+            name: [remapped[value[0]], value[1]] if isinstance(value, list) else value
+            for name, value in node["inputs"].items()}} for key, node in original.items()}
+        row["flux"]["workflow"] = graph
+        config = model_hub.validate_profile(row)["flux"]
+        bound = flux_workflow.bind(config, "a" * 32, "remapped", 512, 768, 24, 4)
+        self.assertEqual(bound["106"]["inputs"]["text"], "remapped")
+        self.assertEqual(bound["109"]["inputs"]["filename_prefix"], "af_" + "a" * 32)
+        self.assertEqual(graph["106"]["inputs"]["text"], "default")
+        graph["131"]["inputs"]["negative"] = ["106", 0]
+        with self.assertRaisesRegex(ValueError, "Ambiguous"):
+            model_hub.validate_profile(row)
+
     def test_output_location(self):
         for folder in ("C:/owner", "../outside", "frames/../outside", "frames/NUL", "/absolute"):
             value = profile()
@@ -90,9 +108,52 @@ class FluxRuntimeTests(unittest.TestCase):
             with self.assertRaisesRegex(flux_runtime.JobError, "TIMED_OUT"):
                 flux_runtime._collect("provider", "job", 12345, profile()["flux"], {})
         with self.assertRaisesRegex(flux_runtime.JobError, "OUTPUT_MISSING"):
-            flux_runtime._output({"status": {"status_str": "success", "completed": True}}, "job")
+            flux_runtime._output({"status": {"status_str": "success", "completed": True}}, "job", "109")
         with self.assertRaisesRegex(flux_runtime.JobError, "CANCELLED"):
-            flux_runtime._output({"status": {"messages": [["execution_interrupted"]]}}, "job")
+            flux_runtime._output({"status": {"messages": [["execution_interrupted"]]}}, "job", "109")
+
+    def test_profile_probe_without_route_collects_verified_png(self):
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Media extra unavailable")
+        png = io.BytesIO()
+        Image.new("RGB", (256, 256)).save(png, "PNG")
+        pid = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        calls = []
+        filename = None
+
+        def provider(path, **kwargs):
+            nonlocal filename
+            calls.append(path)
+            if path == "/queue":
+                return {"queue_running": [], "queue_pending": []}
+            if path == "/prompt":
+                filename = kwargs["body"]["prompt"]["9"]["inputs"]["filename_prefix"] + "_00001_.png"
+                return {"prompt_id": pid}
+            return {pid: {"status": {"status_str": "success", "completed": True},
+                          "outputs": {"9": {"images": [
+                              {"filename": filename, "subfolder": "", "type": "output"}]}}}}
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            hub, db = root / "hub.db", root / "visual.db"
+            model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0, profile=profile(), db_path=hub)
+            with (patch.object(flux_runtime, "WORKSPACE_DIR", root / "workspace"),
+                  patch.object(flux_runtime, "readiness", return_value="READY"),
+                  patch.object(flux_runtime, "_json", side_effect=provider),
+                  patch.object(flux_runtime.comfyui, "request_image_bytes", return_value=png.getvalue()) as download):
+                with self.assertRaisesRegex(ValueError, "REVISION_CONFLICT"):
+                    flux_runtime.generate("probe", profile_id="fixture_flux", expected_revision=0,
+                                          hub_db=hub, db_path=db)
+                result = flux_runtime.generate("probe", profile_id="fixture_flux", expected_revision=1,
+                                               width=256, height=256, seed=42, hub_db=hub, db_path=db)
+                self.assertTrue(visual_jobs.report(db_path=db)["jobs"][0]["probe"])
+                self.assertEqual(visual_jobs.image_for_job(result["job_id"], db_path=db)[0], png.getvalue())
+            self.assertEqual(calls, ["/queue", "/prompt", "/history/" + pid])
+            self.assertEqual(download.call_args.kwargs["max_response_bytes"], visual_jobs.MAX_IMAGE)
+            self.assertEqual(result["status"], "ASSET_READY")
+            self.assertEqual((root / result["workspace_path"]).read_bytes(), png.getvalue())
 
     def test_owner_policy_and_concurrent_gpu_admission(self):
         try:

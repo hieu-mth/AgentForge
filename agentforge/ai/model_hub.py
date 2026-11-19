@@ -11,7 +11,8 @@ from __future__ import annotations
 import copy
 import base64
 import binascii
-from contextlib import closing
+from contextlib import closing, contextmanager
+from threading import Lock
 import json
 import re
 import sqlite3
@@ -42,6 +43,18 @@ KINDS = {"text", "image", "video", "rules"}
 EXECUTIONS = {"config_only", "rules"}
 MAX_PROFILE_COUNT = 32
 MAX_STATE_BYTES = 65536
+_LOCAL_INFERENCE = Lock()
+
+
+@contextmanager
+def local_inference_slot():
+    """Serialize interactive local inference in the dashboard API process."""
+    if not _LOCAL_INFERENCE.acquire(blocking=False):
+        raise PermissionError("LOCAL_INFERENCE_BUSY")
+    try:
+        yield
+    finally:
+        _LOCAL_INFERENCE.release()
 
 # These are the profile adapters accepted by Model Hub. Registration is
 # configuration only, including for providers with an existing runtime.
@@ -395,6 +408,17 @@ def probe_local_profile(profile_id, *, expected_revision, db_path=None):
             "checked_at": datetime.now(timezone.utc).isoformat()}
 
 
+def flux_probe_profile(profile_id, *, expected_revision, db_path=None):
+    _required_text(profile_id, ID_RE, "model ID")
+    revision, state = _read_state(db_path=db_path)
+    if type(expected_revision) is not int or revision != expected_revision:
+        raise ModelConfigError("MODEL_HUB_REVISION_CONFLICT")
+    profile = _profiles(state=state).get(profile_id)
+    if not profile or not profile["enabled"] or "flux" not in profile:
+        raise ModelConfigError("Probe requires an enabled ComfyUI FLUX profile")
+    return revision, profile
+
+
 def check_local_profile(profile_id, *, db_path=None, opener=None):
     """Owner-invoked metadata preflight for supported loopback profiles."""
     import urllib.error
@@ -409,8 +433,8 @@ def check_local_profile(profile_id, *, db_path=None, opener=None):
                 "inference_invoked": False}
     if "flux" in profile:
         from agentforge.features.media.flux_runtime import readiness
-        return {"profile_id": profile_id,
-                "status": readiness(profile["flux"], urlsplit(profile["base_url"]).port),
+        status = readiness(profile["flux"], urlsplit(profile["base_url"]).port)
+        return {"profile_id": profile_id, "status": status, "checked_at": datetime.now(timezone.utc).isoformat(),
                 "inference_invoked": False}
     if profile["provider"] != "ollama":
         return {"profile_id": profile_id, "status": "NOT_CHECKED",

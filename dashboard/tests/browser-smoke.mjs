@@ -531,6 +531,52 @@ try {
   }
   if(settingsErrors.length)throw new Error('Orchestrator runtime errors: '+settingsErrors.join(' | '));
   console.log('Orchestrator authenticated API, SQLite persistence, reset and responsive Edge: PASS');
+
+  const fluxPage=await browser.newPage({viewport:{width:1280,height:850}});
+  await fluxPage.route('**/api/session',route=>route.fulfill({json:{csrf:'fixture'}}));
+  await fluxPage.route('**/api/model-hub',route=>route.fulfill({json:{
+    revision:4,adapters:[{id:'comfyui',label:'ComfyUI',connection:'local'}],
+    profiles:[{id:'fixture_flux',provider:'comfyui',model:'fixture.gguf',enabled:true,
+      flux:{max_resolution:768,max_steps:4,timeout_seconds:60}}],
+  }}));
+  let probes=0, finishProbe;
+  await fluxPage.route('**/api/model-hub/probe',async route=>{
+    const body=route.request().postDataJSON();
+    if(body.ack!=='RUN_FLUX_MODEL_PROBE'||body.profile_id!=='fixture_flux'||
+        body.expected_revision!==4||body.width!==768||body.height!==768||body.steps!==4||
+        'seed' in body)throw new Error('Unexpected FLUX probe payload');
+    probes++;
+    if(probes===1)return route.fulfill({status:400,json:{message:'COMFYUI_TIMEOUT'}});
+    await new Promise(resolve=>{finishProbe=resolve;});
+    return route.fulfill({json:{status:'ASSET_READY',duration_seconds:1,seed:7,width:768,
+      height:768,steps:4,preview_url:'/api/visuals/fixture/preview',
+      workspace_path:'workspace/visuals/fixture.png'}});
+  });
+  await fluxPage.route('**/api/visuals/fixture/preview',route=>route.fulfill({
+    contentType:'image/png',
+    body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aL4sAAAAASUVORK5CYII=','base64'),
+  }));
+  await fluxPage.goto(origin+'/dashboard/#/models');
+  await fluxPage.getByRole('button',{name:'Chạy thử',exact:true}).click();
+  const fluxDialog=fluxPage.getByRole('dialog',{name:'Chạy thử · fixture_flux'});
+  await fluxDialog.getByLabel('Prompt',{exact:true}).fill('An image fixture');
+  const createImage=fluxDialog.getByRole('button',{name:'Tạo ảnh',exact:true});
+  await createImage.click();
+  await fluxDialog.getByText('ComfyUI phản hồi quá chậm',{exact:true}).waitFor();
+  await createImage.click();
+  await fluxDialog.getByText(/Đang tạo và xác minh ảnh/).waitFor();
+  if(await fluxDialog.getByLabel('Prompt',{exact:true}).isEnabled())
+    throw new Error('FLUX form remains editable during dispatch');
+  for(let i=0;!finishProbe&&i<20;i++)await sleep(50);
+  if(!finishProbe)throw new Error('FLUX probe was not dispatched');
+  finishProbe();
+  const image=fluxDialog.getByRole('img',{name:'Ảnh chạy thử FLUX'});
+  await image.waitFor();
+  await fluxPage.waitForFunction(()=>document.querySelector('img[alt="Ảnh chạy thử FLUX"]')?.naturalWidth===1);
+  await fluxDialog.getByText('workspace/visuals/fixture.png',{exact:true}).waitFor();
+  if(probes!==2)throw new Error('Unexpected number of FLUX submissions');
+  await fluxPage.close();
+  console.log('FLUX Model Hub dialog loading, error, retry and preview UI: PASS');
 } finally {
   if (browser) await browser.close();
   vite.kill();

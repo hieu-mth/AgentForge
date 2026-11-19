@@ -272,4 +272,5 @@ def report(*, db_path=None):
                 "prompt", "seed", "width", "height", "steps", "scene", "workflow_sha256",
                 "duration_seconds")})
             row["approved"] = bool(stored["reviewed"])
+            row["probe"] = runtime.get("probe", False)
     return {"jobs": rows, "no_auto_publication": True, "auto_retry": False}

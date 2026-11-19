@@ -42,6 +42,36 @@ def dimensions(width, height, steps, config):
     return width, height, _integer(steps, 1, config["max_steps"], "steps")
 
 
+def node_ids(graph):
+    """Identify the approved topology by class and sampler conditioning links."""
+    if not isinstance(graph, dict) or len(graph) != len(NODES):
+        raise ValueError("Expected the nine-node FLUX API workflow")
+    by_class = {}
+    for key, node in graph.items():
+        if (not isinstance(key, str) or not re.fullmatch(r"[0-9]{1,12}", key)
+                or not isinstance(node, dict) or not isinstance(node.get("class_type"), str)):
+            raise ValueError("Invalid FLUX API node")
+        by_class.setdefault(node["class_type"], []).append(key)
+    result = {}
+    for role, (kind, _) in NODES.items():
+        if kind == "CLIPTextEncode":
+            continue
+        matches = by_class.get(kind, [])
+        if len(matches) != 1:
+            raise ValueError("Expected exactly one FLUX node of class " + kind)
+        result[role] = matches[0]
+    sampler = graph[result["31"]].get("inputs")
+    for role, field in (("6", "positive"), ("33", "negative")):
+        link = sampler.get(field) if isinstance(sampler, dict) else None
+        if (not isinstance(link, list) or len(link) != 2
+                or link[0] not in by_class.get("CLIPTextEncode", []) or link[1] != 0):
+            raise ValueError("Invalid FLUX text conditioning link")
+        result[role] = link[0]
+    if len(set(result.values())) != len(NODES):
+        raise ValueError("Ambiguous FLUX text conditioning links")
+    return result
+
+
 def validate(config, model, endpoint):
     if not isinstance(config, dict) or set(config) != {
         "workflow", "max_resolution", "max_steps", "timeout_seconds", "output_dir"
@@ -57,10 +87,9 @@ def validate(config, model, endpoint):
             or any(ntpath.isreserved(part) for part in folder.split("/"))):
         raise ValueError("Output folder must be relative to the AgentForge workspace")
     graph = config["workflow"]
-    if not isinstance(graph, dict) or graph.keys() != NODES.keys():
-        raise ValueError("Expected the nine-node FLUX API workflow")
+    ids = node_ids(graph)
     for key, (kind, fields) in NODES.items():
-        node = graph[key]
+        node = graph[ids[key]]
         if (not isinstance(node, dict) or not {"inputs", "class_type"} <= node.keys()
                 or node.keys() - {"inputs", "class_type", "_meta"} or node["class_type"] != kind
                 or not isinstance(node["inputs"], dict) or node["inputs"].keys() != fields):
@@ -70,9 +99,9 @@ def validate(config, model, endpoint):
                 or not isinstance(meta.get("title", ""), str) or len(meta.get("title", "")) > 120):
             raise ValueError("Invalid FLUX node metadata")
         for field, link in LINKS.get(key, {}).items():
-            if node["inputs"][field] != link:
+            if node["inputs"][field] != [ids[link[0]], link[1]]:
                 raise ValueError("Invalid FLUX graph link")
-    inputs = {key: node["inputs"] for key, node in graph.items()}
+    inputs = {role: graph[key]["inputs"] for role, key in ids.items()}
     if (inputs["38"]["unet_name"] != model or not model.lower().endswith(".gguf")
             or inputs["39"]["type"] != "flux"):
         raise ValueError("FLUX loader model must match the registered GGUF")
@@ -106,8 +135,9 @@ def bind(config, job_id, prompt, width, height, seed, steps):
     dimensions(width, height, steps, config)
     _integer(seed, 0, 2**53 - 1, "seed")
     graph = copy.deepcopy(config["workflow"])
-    graph["6"]["inputs"]["text"] = prompt.strip()
-    graph["27"]["inputs"].update(width=width, height=height)
-    graph["31"]["inputs"].update(seed=seed, steps=steps)
-    graph["9"]["inputs"]["filename_prefix"] = "af_" + job_id
+    ids = node_ids(graph)
+    graph[ids["6"]]["inputs"]["text"] = prompt.strip()
+    graph[ids["27"]]["inputs"].update(width=width, height=height)
+    graph[ids["31"]]["inputs"].update(seed=seed, steps=steps)
+    graph[ids["9"]]["inputs"]["filename_prefix"] = "af_" + job_id
     return graph

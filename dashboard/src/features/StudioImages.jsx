@@ -22,7 +22,10 @@ export function StudioImages({mutate,scene,initialPrompt=''}) {
   const binding=hub.data?.routes?.find(route=>route.id==='image.generate')?.model_ref;
   const profile=hub.data?.profiles?.find(item=>item.id===binding&&item.enabled&&item.flux);
   const settings=profile?.flux;
-  const history=(jobs.data?.jobs??[]).filter(row=>row.workflow_sha256&&(!scene||row.scene===scene));
+  const inputsFor=kind=>Object.values(settings?.workflow??{}).find(node=>node.class_type===kind)?.inputs;
+  const latent=inputsFor('EmptySD3LatentImage');
+  const sampler=inputsFor('KSampler');
+  const history=(jobs.data?.jobs??[]).filter(row=>row.workflow_sha256&&!row.probe&&(!scene||row.scene===scene));
 
   async function run(action) {
     if(inFlight.current)return;
@@ -63,11 +66,11 @@ export function StudioImages({mutate,scene,initialPrompt=''}) {
       </Form.Item>
       <Space wrap align="start">
         <Form.Item name="width" label="Rộng (px)"><InputNumber min={256} max={settings.max_resolution}
-          step={16} placeholder={String(settings.workflow['27'].inputs.width)}/></Form.Item>
+          step={16} placeholder={String(latent?.width??'')}/></Form.Item>
         <Form.Item name="height" label="Cao (px)"><InputNumber min={256} max={settings.max_resolution}
-          step={16} placeholder={String(settings.workflow['27'].inputs.height)}/></Form.Item>
+          step={16} placeholder={String(latent?.height??'')}/></Form.Item>
         <Form.Item name="steps" label="Số bước"><InputNumber min={1} max={settings.max_steps}
-          placeholder={String(settings.workflow['31'].inputs.steps)}/></Form.Item>
+          placeholder={String(sampler?.steps??'')}/></Form.Item>
         <Form.Item name="seed" label="Seed"><InputNumber min={0} max={Number.MAX_SAFE_INTEGER}
           placeholder="Ngẫu nhiên"/></Form.Item>
       </Space>
