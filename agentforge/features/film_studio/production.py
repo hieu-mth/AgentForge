@@ -677,7 +677,7 @@ def render(episode_id, film_slug, episode_sha256, *, confirmed=False,
             srt.unlink(missing_ok=True)
 
 
-def inspect_render(episode_id, film_slug, *, film_root=FILMS):
+def inspect_render(episode_id, film_slug, *, film_root=FILMS, video_stream=None):
     plan = inspect(episode_id, film_slug, film_root=film_root)
     folder = _folder(film_slug, episode_id, film_root)
     report = _signed(_read_json(folder / "render-receipt.json"), "receipt_sha256")
@@ -696,6 +696,8 @@ def inspect_render(episode_id, film_slug, *, film_root=FILMS):
     expected_kind = "owner_local_tts" if voice else "silent"
     subtitle = folder / "captions.srt"
     ensure_local_root(subtitle)
+    video_hash = (_file_hash(folder / "episode.mp4") if video_stream is None else
+                  hashlib.file_digest(video_stream, "sha256").hexdigest())
     if (set(report) != keys
             or report.get("format") != OUTPUT_FORMAT
             or report.get("episode_id") != episode_id
@@ -709,7 +711,7 @@ def inspect_render(episode_id, film_slug, *, film_root=FILMS):
             or any(report.get(k) is not False for k in
                    ("video_accepted", "owner_watched", "audio_language_verified",
                     "visual_continuity_verified", "published"))
-            or report.get("video_sha256") != _file_hash(folder / "episode.mp4")
+            or report.get("video_sha256") != video_hash
             or report.get("caption_sha256") != _file_hash(subtitle)
             or subtitle.read_text(encoding="utf-8") != _srt(plan["shots"])):
         raise FilmProductionError("Rendered film receipt/file integrity mismatch")
