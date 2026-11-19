@@ -132,6 +132,13 @@ def _database(path=None):
 
 
 def _read_record(conn):
+    # A rejected first write may leave an empty SQLite container on disk.
+    # Treat a genuinely uninitialized hub as empty without masking corruption.
+    has_table = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='hub_state'"
+    ).fetchone()
+    if not has_table:
+        return 0, _empty()
     row = conn.execute(
         "SELECT revision, payload FROM hub_state WHERE id=1"
     ).fetchone()

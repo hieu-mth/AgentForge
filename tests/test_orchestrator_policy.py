@@ -95,7 +95,8 @@ class OrchestratorTests(unittest.TestCase):
         legacy = model_hub.change("SET_MODEL_ROUTE", expected_revision=2, db_path=self.db,
                                   task_id="general.text", model_ref="cloud_primary")
         self.assertFalse(legacy["orchestrator"]["owner_override"])
-        cloud = copy.deepcopy(model_hub._profiles(state=legacy_state(legacy))["cloud_primary"])
+        cloud = copy.deepcopy(model_hub._profiles(
+            state=model_hub._read_state(db_path=self.db)[1])["cloud_primary"])
         self.save({**policy.defaults(), "primary": "cloud_primary"}, revision=3)
         cloud["enabled"] = False
         result = model_hub.change("SAVE_MODEL_PROFILE", expected_revision=4,
@@ -124,6 +125,3 @@ class OrchestratorTests(unittest.TestCase):
             self.assertEqual(suggested["candidates"], ["local", "cloud"])
             self.assertFalse(suggested["execution_allowed"])
 
-
-def legacy_state(snapshot):
-    return {"profiles": {p["id"]: p for p in snapshot["profiles"]}, "routes": {}}

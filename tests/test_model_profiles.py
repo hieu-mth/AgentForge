@@ -85,7 +85,8 @@ class ModelProfileTests(unittest.TestCase):
         ):
             with self.subTest(profile=profile), self.assertRaises(ValueError):
                 self.save(profile)
-        self.assertFalse(self.db.exists() or model_hub.catalog(db_path=self.db)["profiles"])
+        self.assertEqual(model_hub.catalog(db_path=self.db)["profiles"], [])
+        self.assertEqual(model_hub.catalog(db_path=self.db)["revision"], 0)
 
     def test_cloud_profile_is_metadata_only_and_never_implicitly_selected(self):
         cloud = {"id": "cloud_local", "provider": "anthropic",
