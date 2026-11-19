@@ -41,23 +41,23 @@ export function MotionClips({mutate}){
     const filename=(motionFilename[job.job_id]||'').trim();
     if(action==='collect'&&(!filename.startsWith('af_motion_'+job.job_id+'_')
         || !filename.endsWith('.mp4'))){
-      message.warning('Nhập tên MP4 đúng job trong thư mục ComfyUI output');
+      message.warning('Nhập tên MP4 đúng mã tác vụ trong thư mục đầu ra của ComfyUI');
       return;
     }
     modal.confirm({
       title:action==='collect'?'Kiểm tra và nhập MP4 local?':'Kiểm tra lịch sử ComfyUI?',
       content:<Space direction="vertical">
-        <Text>Shot: {job.film_slug} / {job.shot_id}</Text>
-        <Text code>Plan SHA: {job.plan_sha}</Text>
-        <Text code>Workflow SHA: {job.workflow_sha}</Text>
-        {action==='collect'&&<Text code>File: {filename}</Text>}
+        <Text>Cảnh: {job.film_slug} / {job.shot_id}</Text>
+        <Text code>SHA kế hoạch: {job.plan_sha}</Text>
+        <Text code>SHA quy trình: {job.workflow_sha}</Text>
+        {action==='collect'&&<Text code>Tệp: {filename}</Text>}
         <Alert type="warning" showIcon message="Cần Owner xem video trước khi chấp nhận"
-          description="Lệnh chỉ xác minh history hoặc chạy ffprobe/FFmpeg local; không gọi model, không xuất bản và không tự duyệt chất lượng."/>
+          description="Lệnh kiểm tra lịch sử ComfyUI hoặc xác minh MP4 bằng ffprobe và FFmpeg trên máy."/>
       </Space>,okText:'Xác nhận',cancelText:'Hủy',
       onOk:async()=>{
         const inspected=await api('/api/film/motion/job/'+job.job_id);
         if(inspected.plan_sha!==job.plan_sha || inspected.workflow_sha!==job.workflow_sha)
-          throw new Error('Motion job đã thay đổi; tải lại và kiểm tra SHA');
+          throw new Error('Tác vụ chuyển động đã thay đổi. Hãy tải lại rồi kiểm tra SHA.');
         const result=await mutate('/api/film/motion/'+(action==='collect'?'collect':'poll'),{
           ack:action==='collect'?'IMPORT_LOCAL_COMFY_MP4':'CHECK_LOCAL_COMFY_HISTORY',
           job_id:job.job_id,plan_sha:job.plan_sha,workflow_sha:job.workflow_sha,
@@ -112,59 +112,46 @@ export function MotionClips({mutate}){
     </Card>;
 }
 
-export function FilmProduction({mutate}){
+export function FilmProduction({mutate,resource:productionResource,onInspect}){
   const {message,modal}=AntApp.useApp();
   const {md:desktop}=Grid.useBreakpoint();
-  const productionResource=useResource('/api/film/productions');
   const {data,loading:productionBusy,reload:reloadProductions}=productionResource;
   const productions=data?.episodes||[];
   const [voiceEngine,setVoiceEngine]=useState('windows');
   const [voiceName,setVoiceName]=useState('');
-  useScreenRefresh(reloadProductions);
 
   const filmProductionAction=(episode,action)=>{
     modal.confirm({
       title:action==='render'?'Kiểm tra và dựng MP4 local bằng FFmpeg?':'Tạo thoại offline bằng engine đã cài?',
       content:<Space direction="vertical" style={{width:'100%'}}>
         <Text strong>{episode.film_slug} / {episode.episode_id}</Text>
-        <Text code>Episode SHA: {episode.episode_sha256}</Text>
-        <Text>{episode.shot_count} clips · ~{episode.runtime_seconds} giây</Text>
-        {action==='voice'&&<Text>Engine: {voiceEngine} · voice: {voiceName||'mặc định'}</Text>}
+        <Text code>SHA tập phim: {episode.episode_sha256}</Text>
+        <Text>{episode.shot_count} clip · khoảng {episode.runtime_seconds} giây</Text>
+        {action==='voice'&&<Text>Công cụ: {voiceEngine} · Giọng đọc: {voiceName||'mặc định'}</Text>}
         <Alert showIcon type="warning"
-          message="Thực thi local, cần quyền Owner và xem đầy đủ source manifest"
-          description="Backend sẽ đọc lại SHA của từng clip gốc và chỉ chạy FFmpeg/TTS đã cài. Không gọi model hoặc GPU. Dựng kỹ thuật thành công KHÔNG chứng minh nhân vật đồng nhất hay phim đạt chất lượng."/>
+          message="Cần Owner xác nhận trước khi thực thi"
+          description="AgentForge kiểm tra lại SHA của từng clip gốc rồi dùng FFmpeg hoặc công cụ giọng đọc đã cài. Owner cần xem bản dựng để đánh giá chất lượng."/>
       </Space>,okText:'Kiểm tra SHA và xác nhận',cancelText:'Hủy',
       onOk:async()=>{
         const detail=await api('/api/film/productions/'+episode.film_slug+'/'+episode.episode_id);
         if(detail.proposal.episode_sha256!==episode.episode_sha256)
-          throw new Error('Episode SHA đã thay đổi; không thực thi');
+          throw new Error('SHA tập phim đã thay đổi. Hãy tải lại hồ sơ rồi thử lại.');
         const result=await mutate('/api/film/productions/'+action,{
           ack:action==='render'?'ASSEMBLE_LOCAL_FILM':'SYNTHESIZE_LOCAL_VOICE',
           film_slug:episode.film_slug,episode_id:episode.episode_id,
           episode_sha:episode.episode_sha256,
           ...(action==='voice'?{engine:voiceEngine,voice_name:voiceName.trim()||null}:{}),
         });
-        if(result){message.success(action==='render'?'Đã dựng MP4; Owner vẫn cần xem phim':'Tạo audio offline; chưa QA ngôn ngữ');await reloadProductions();}
+        if(result){message.success(action==='render'?'Đã dựng MP4. Owner cần xem lại bản phim.':'Đã tạo lời thoại. Owner cần nghe lại để kiểm tra.');await reloadProductions();}
       },
     });
   };
-  const episodeActions=row=><div className="studio-row-actions">
-    <Button size="small" disabled={!row.episode_sha256} onClick={async()=>{
-      try{
-        const detail=await api('/api/film/productions/'+row.film_slug+'/'+row.episode_id);
-        modal.info({title:'Thông tin cảnh và mã SHA',width:720,
-          content:<Space direction="vertical" style={{width:'100%'}}>
-            <Text code>{detail.proposal.episode_sha256}</Text>
-            <Text>Thông tin tham chiếu, trang phục và bối cảnh do Owner nhập.</Text>
-            <pre className="source-text">{JSON.stringify(detail.proposal.shots,null,2)}</pre>
-            {detail.render&&<Text>SHA bản dựng: {detail.render.video_sha256}</Text>}
-          </Space>});
-      }catch(error){message.error(error.message||'Không đọc được hồ sơ tập phim');}
-    }}>Xem hồ sơ cảnh</Button>
-    <Button size="small" disabled={!row.episode_sha256||row.state!=='PREPARED_NOT_RENDERED'}
-      onClick={()=>filmProductionAction(row,'voice')}>Tạo thoại</Button>
-    <Button size="small" type="primary" disabled={!row.episode_sha256||row.state!=='PREPARED_NOT_RENDERED'}
-      onClick={()=>filmProductionAction(row,'render')}>Dựng MP4</Button>
+  const episodeActions=row=>row.episode_sha256&&<div className="studio-row-actions">
+    <Button size="small" onClick={()=>onInspect(row)}>Xem hồ sơ cảnh</Button>
+    {row.state==='PREPARED_NOT_RENDERED'&&<>
+      <Button size="small" onClick={()=>filmProductionAction(row,'voice')}>Tạo thoại</Button>
+      <Button size="small" type="primary" onClick={()=>filmProductionAction(row,'render')}>Dựng MP4</Button>
+    </>}
   </div>;
 
   return <Card className="env-panel" title={<SectionTitle icon={<VideoCameraOutlined/>}

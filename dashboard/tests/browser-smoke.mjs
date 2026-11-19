@@ -88,19 +88,33 @@ try {
   let projectRows=[];
   let clipRequests=0;
   let episodeRequests=0;
+  const studioEpisodes=[
+    {film_slug:'demo',episode_id:'ep01',episode_sha256:'example-episode',
+      state:'PREPARED_NOT_RENDERED',shot_count:1,runtime_seconds:4},
+    {film_slug:'demo',episode_id:'ep02',episode_sha256:'example-draft',
+      state:'RENDER_RECEIPT_PRESENT_UNINSPECTED',shot_count:1,runtime_seconds:4},
+    {film_slug:'demo',episode_id:'ep03',state:'INVALID_NEEDS_OWNER_REVIEW'},
+  ];
+  let studioReadError=false;
   await page2.route('**/api/**',route=>{
     const p=new URL(route.request().url()).pathname;
     if(p==='/api/ops/discovery')environmentRequests++;
     if(p==='/api/film/motion')clipRequests++;
     if(p==='/api/film/productions')episodeRequests++;
+    if(p==='/api/film/productions'&&studioReadError)return route.fulfill({
+      status:503,contentType:'application/json',body:JSON.stringify({error:'fixture_error'}),
+    });
     const payload=p==='/api/session'?{csrf:'fixture-only-csrf'}:
       p==='/api/video-studio/projects'?{projects:projectRows,canonical_engine:'film_studio'}:
       p==='/api/characters'?{characters:[]}:
       p==='/api/film/motion'?{jobs:[{job_id:'demo-job',film_slug:'demo',shot_id:'001',
         status:'COMPLETE_UNVERIFIED',state:'COMPLETE_UNVERIFIED',plan_sha:'example-plan',
         workflow_sha:'example-workflow',mp4_technical_verified:false}]}:
-      p==='/api/film/productions'?{episodes:[{film_slug:'demo',episode_id:'ep01',
-        episode_sha256:'example-episode',state:'PREPARED_NOT_RENDERED',shot_count:3,runtime_seconds:12}]}:
+      p==='/api/film/productions'?{episodes:studioEpisodes}:
+      p==='/api/film/productions/demo/ep01'?{proposal:{...studioEpisodes[0],shots:[]},render:null}:
+      p==='/api/film/productions/demo/ep02'?{proposal:{...studioEpisodes[1],
+        shots:[{shot_id:'001',action_camera:'Máy quay tiến gần',caption:'Bắt đầu hành trình'}]},
+        render:{video_sha256:'fixture-render-sha'}}:
       p==='/api/model-hub'?{revision:2,
         profiles:[{id:'local-text',provider:'ollama',model:'qwen3:8b',enabled:true,source:'git'}],
         routes:[{id:'draft',label:'Soạn nháp',kind:'text',status:'CONFIG_ONLY',model_ref:'local-text'}],
@@ -116,19 +130,43 @@ try {
   await page2.waitForURL('**/#/projects');
   await page2.getByText('Dự án & tập phim',{exact:true}).waitFor();
   await page2.goto(origin+'/dashboard/#/media-studio',{waitUntil:'networkidle'});
-  if(clipRequests||episodeRequests)throw new Error('Studio fetched tools before being opened');
+  if(clipRequests||!episodeRequests)throw new Error('Studio did not separate production reads from motion tools');
   await page2.setViewportSize({width:390,height:850});
+  const studio=page2.locator('.studio-page');
+  if((await studio.locator('.studio-stats .env-stat-value').allTextContents()).join(',')!=='1,1,1')
+    throw new Error('Studio counters do not match episode stages');
+  await studio.locator('.studio-filters').getByText('Chờ xem bản dựng',{exact:true}).click();
+  if(await studio.locator('.studio-episode').count()!==1)throw new Error('Studio review filter is incorrect');
+  await studio.getByRole('button',{name:'Xem chi tiết demo / ep02',exact:true}).click();
+  const episodeDrawer=page2.locator('.studio-episode-drawer');
+  await episodeDrawer.getByText('Phụ đề: Bắt đầu hành trình',{exact:true}).waitFor();
+  await episodeDrawer.getByText('workspace/films/demo/productions/ep02/episode.mp4',{exact:true}).waitFor();
+  await episodeDrawer.getByText('Thông tin kỹ thuật và mã SHA',{exact:true}).click();
+  await episodeDrawer.getByText('SHA bản dựng: fixture-render-sha',{exact:true}).waitFor();
+  await page2.keyboard.press('Escape');
+  await episodeDrawer.waitFor({state:'hidden'});
+  studioReadError=true;
+  await studio.getByRole('button',{name:'Làm mới',exact:false}).click();
+  await studio.getByText('Không đọc được danh sách tập phim',{exact:true}).waitFor();
+  studioReadError=false;
+  await studio.getByRole('button',{name:'Thử lại danh sách tập phim'}).click();
+  await studio.getByText('Không đọc được danh sách tập phim',{exact:true}).waitFor({state:'hidden'});
+  const loadedEpisodeRequests=episodeRequests;
   await page2.getByRole('button',{name:'Mở clip chuyển động'}).click();
   await page2.getByText('Chờ xác minh MP4',{exact:true}).waitFor();
   await page2.getByRole('button',{name:'Đối chiếu ComfyUI'}).waitFor();
-  if(!clipRequests||episodeRequests)throw new Error('Opening clips loaded the wrong tool');
-  await page2.getByRole('button',{name:'Mở khu vực dựng'}).click();
+  if(!clipRequests||episodeRequests!==loadedEpisodeRequests)throw new Error('Opening clips loaded the wrong tool');
+  await studio.locator('.studio-filters').getByText('Tất cả',{exact:true}).click();
+  await studio.getByRole('button',{name:'Xem chi tiết demo / ep01',exact:true}).click();
+  await episodeDrawer.getByRole('button',{name:'Mở công cụ dựng'}).click();
+  await episodeDrawer.waitFor({state:'hidden'});
   await page2.getByText('Tập phim & bản dựng',{exact:true}).waitFor();
-  await page2.getByRole('button',{name:'Dựng MP4',exact:true}).click();
+  await page2.locator('tr[data-row-key="demo:ep01"]')
+    .getByRole('button',{name:'Dựng MP4',exact:true}).click();
   const renderDialog=page2.getByRole('dialog',{name:'Kiểm tra và dựng MP4 local bằng FFmpeg?'});
   await renderDialog.getByRole('button',{name:'Hủy',exact:true}).click();
   await renderDialog.waitFor({state:'hidden'});
-  if(!episodeRequests||await page2.getByText('Danh sách clip chuyển động',{exact:true}).count())
+  if(episodeRequests!==loadedEpisodeRequests||await page2.getByText('Danh sách clip chuyển động',{exact:true}).count())
     throw new Error('Episode workspace did not replace the clips workspace');
   const studioOverflow=await page2.locator('.studio-table .ant-table-content').evaluate(
     table=>table.scrollWidth>table.clientWidth+2);
@@ -232,9 +270,11 @@ try {
   const ownerCode='fixture-orchestrator-owner';
   const policyDb=join(policyTemp,'hub.sqlite3');
   policyServer=spawn('python',['-u','-c',[
-    'import sys', 'from pathlib import Path',
+    'import sys', 'from pathlib import Path', 'from functools import partial',
     'from agentforge.ai import model_hub', 'from agentforge.api.server import create_server',
+    'from agentforge.features.film_studio import production',
     'model_hub.DB_PATH = Path(sys.argv[1])',
+    'production.list_episodes = partial(production.list_episodes, film_root=Path(sys.argv[1]).parent / "films")',
     'server = create_server(0, owner_code=sys.argv[2])',
     'print(server.server_port, flush=True)', 'server.serve_forever()',
   ].join('\n'),policyDb,ownerCode],{cwd:'..',stdio:['ignore','pipe','inherit'],windowsHide:true});
@@ -252,6 +292,9 @@ try {
   await settings.goto(policyOrigin+'/dashboard/#/orchestrator');
   await settings.getByLabel('Mã Owner',{exact:true}).fill(ownerCode);
   await settings.getByRole('button',{name:'Mở dashboard'}).click();
+  await settings.goto(policyOrigin+'/dashboard/#/media-studio',{waitUntil:'networkidle'});
+  await settings.getByText('Chưa có tập phim trong workspace.',{exact:true}).waitFor();
+  await settings.getByText('Bắt đầu một video',{exact:true}).waitFor();
   // Fresh checkout starts with zero registered model profiles.
   await settings.goto(policyOrigin+'/dashboard/#/models',{waitUntil:'networkidle'});
   await settings.getByText('Chưa đăng ký model. Chọn Đăng ký model để bắt đầu.',{exact:true}).waitFor();
