@@ -109,13 +109,18 @@ try {
   await env.getByText('8,47 GB').first().waitFor();
   await env.getByText('11,94 GB').first().waitFor();
   await env.getByText('32 GB',{exact:false}).first().waitFor();
-  await env.getByText('1 TB',{exact:false}).first().waitFor();
-  await env.getByText('RAM/VRAM hiển thị theo hệ 1.024',{exact:false}).waitFor();
+  await env.getByText('931,5 GB',{exact:false}).waitFor();
+  await env.getByRole('button',{name:'Quy ước đơn vị dung lượng'}).focus();
+  await page2.getByRole('tooltip').getByText('Ổ đĩa, RAM và VRAM dùng hệ 1.024',{exact:false}).waitFor();
   if(/\b(?:MiB|GiB)\b/.test(await env.innerText()))
     throw new Error('Technical capacity units leaked into the Environment UI');
   await env.getByText('Gián đoạn',{exact:true}).waitFor();
-  await env.getByText('TIMEOUT',{exact:true}).waitFor();
+  await env.getByText('TIMEOUT',{exact:true}).filter({visible:true}).waitFor();
+  const serviceRows=env.locator('.env-table').nth(1).locator('tbody tr[data-row-key]');
+  if(!(await serviceRows.first().innerText()).includes('comfyui'))
+    throw new Error('Degraded service is not listed first');
   await env.getByText('qwen3:8b').first().waitFor();
+  await env.getByText('Chưa xác minh khả năng chạy',{exact:true}).waitFor();
   if(environmentRequests<1)throw new Error('Environment did not request actual discovery API');
   const refreshResponse=page2.waitForResponse(r=>
     r.url().includes('/api/ops/discovery')&&r.status()===200);
@@ -130,6 +135,11 @@ try {
       document.documentElement.scrollWidth>window.innerWidth+2);
     if(overflow)throw new Error('Environment page overflows viewport at '+width+'px');
   }
+  await serviceRows.first().getByText('Chi tiết',{exact:true}).click();
+  await serviceRows.first().getByText('TIMEOUT',{exact:true}).waitFor();
+  const tableOverflow=await env.locator('.ant-table-content').evaluateAll(
+    tables=>tables.some(table=>table.scrollWidth>table.clientWidth+2));
+  if(tableOverflow)throw new Error('Environment tables overflow on mobile');
   await page2.getByRole('button',{name:'Mở điều hướng'}).click();
   await page2.getByText('LOCAL-FIRST AI STUDIO').last().waitFor();
   await page2.keyboard.press('Escape');

@@ -1,7 +1,7 @@
 // Pure presentation helpers. Preserve unavailable data instead of guessing.
 // Raw API values are preserved: RAM/disk/models use bytes, NVIDIA VRAM uses MiB.
-// User-facing memory follows the common Windows 1024 convention (displayed MB/GB/TB).
-// Storage/model capacities follow decimal SI (1000). Never simply relabel a number.
+// Hardware capacities follow the Windows 1024 convention (displayed MB/GB/TB).
+// Model sizes follow decimal SI (1000).
 const DISPLAY_UNITS=['B','KB','MB','GB','TB','PB'];
 function adaptiveUnits(bytes, base, digits) {
   if(typeof bytes!=='number'||!Number.isFinite(bytes)||bytes<0)return 'Chưa xác định';

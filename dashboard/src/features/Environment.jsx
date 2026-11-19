@@ -1,4 +1,4 @@
-import {Alert, Button, Card, Empty, Progress, Table, Typography} from 'antd';
+import {Alert, Button, Card, Empty, Grid, Progress, Table, Tooltip, Typography} from 'antd';
 import {AppstoreOutlined, CloudServerOutlined, CodeOutlined, DatabaseOutlined,
   DesktopOutlined, HddOutlined, InfoCircleOutlined, ReloadOutlined,
   SafetyCertificateOutlined, ThunderboltOutlined} from '@ant-design/icons';
@@ -42,49 +42,69 @@ function Detail({label,value}){
   </div>;
 }
 
+function MobileDetails({children}){
+  if(!children)return null;
+  return <details className="env-mobile-details">
+    <summary>Chi tiết</summary>
+    <div className="env-break">{children}</div>
+  </details>;
+}
+
+const desktopColumns=['sm'];
+const softwareDetails=row=>
+  [row.version,row.detail,row.scope].filter(Boolean).join(' · ')||'Chưa có thông tin';
+const serviceDetails=row=><div className="env-service-detail">
+  <span className="env-endpoint">{row.endpoint||'—'}</span>
+  {row.error&&<span className="env-diagnostic env-break">{row.error}</span>}
+  {row.truncated&&<span className="env-diagnostic">Danh mục bị giới hạn</span>}
+</div>;
+const modelSize=value=>typeof value==='number'?formatCapacity(value,2):'Chưa rõ';
+const servicePriority=row=>({bad:0,warn:1})[statusTone(row.status)]??2;
+
 const softwareColumns=[
   {title:'Công cụ',dataIndex:'id',key:'name',width:170,
-    render:value=><span className="env-runtime-name">{value}</span>},
+    render:(value,row)=><><span className="env-runtime-name env-break">{value}</span>
+      <MobileDetails>{softwareDetails(row)}</MobileDetails></>},
   {title:'Trạng thái',dataIndex:'status',key:'status',width:180,
     render:value=><Status value={value}/>},
-  {title:'Thông tin phát hiện',key:'details',render:(_,r)=>
-    <span className="env-muted env-break">
-      {[r.version,r.detail,r.scope].filter(Boolean).join(' · ')||'Chưa có thông tin'}
-    </span>},
+  {title:'Thông tin phát hiện',key:'details',responsive:desktopColumns,
+    render:(_,row)=><span className="env-muted env-break">{softwareDetails(row)}</span>},
 ];
 const serviceColumns=[
   {title:'Dịch vụ',dataIndex:'id',key:'name',width:170,
-    render:value=><span className="env-runtime-name">{value}</span>},
+    render:(value,row)=><><span className="env-runtime-name env-break">{value}</span>
+      <MobileDetails>{serviceDetails(row)}</MobileDetails></>},
   {title:'Trạng thái',dataIndex:'status',key:'status',width:180,
     render:value=><Status value={value}/>},
-  {title:'Endpoint / chẩn đoán',key:'details',render:(_,r)=>
-    <div className="env-service-detail"><span className="env-endpoint">{r.endpoint||'—'}</span>
-      {r.error&&<span className="env-diagnostic">{r.error}</span>}
-      {r.truncated&&<span className="env-diagnostic">Danh mục bị giới hạn</span>}
-    </div>},
+  {title:'Endpoint / chẩn đoán',key:'details',responsive:desktopColumns,
+    render:(_,row)=>serviceDetails(row)},
 ];
 const modelColumns=[
   {title:'Model',dataIndex:'name',key:'name',
     render:value=><span className="env-runtime-name env-break">{value}</span>},
-  {title:'Provider',dataIndex:'provider',key:'provider',width:120},
-  {title:'Nhóm',dataIndex:'type',key:'type',width:160},
+  {title:'Provider',dataIndex:'provider',key:'provider',width:120,responsive:desktopColumns},
+  {title:'Nhóm',dataIndex:'type',key:'type',width:160,responsive:desktopColumns},
   {title:'Trạng thái',dataIndex:'status',key:'status',width:155,
-    render:value=><Status value={value}/>},
-  {title:'Dung lượng',dataIndex:'size_bytes',key:'size',width:130,
-    render:value=>typeof value==='number'?formatCapacity(value,2):'Chưa rõ'},
+    render:(value,row)=><><Status value={value==='INSTALLED'?'LOCAL_MODEL_FOUND':value}/>
+      {(!row.loadability||row.loadability==='UNKNOWN')&&
+        <div className="env-model-verification">Chưa xác minh khả năng chạy</div>}</>},
+  {title:'Dung lượng',dataIndex:'size_bytes',key:'size',width:130,responsive:desktopColumns,
+    render:modelSize},
 ];
 const profileColumns=[
   {title:'Profile',dataIndex:'id',key:'id',
-    render:value=><span className="env-runtime-name env-break">{value}</span>},
-  {title:'Model đích',dataIndex:'name',key:'name',
+    render:(value,row)=><><span className="env-runtime-name env-break">{value}</span>
+      <MobileDetails>{[row.name,row.provider].filter(Boolean).join(' · ')}</MobileDetails></>},
+  {title:'Model đích',dataIndex:'name',key:'name',responsive:desktopColumns,
     render:value=><span className="env-break">{value}</span>},
-  {title:'Provider',dataIndex:'provider',key:'provider',width:125},
+  {title:'Provider',dataIndex:'provider',key:'provider',width:125,responsive:desktopColumns},
   {title:'Trạng thái',dataIndex:'status',key:'status',width:160,
     render:value=><Status value={value}/>},
 ];
 
 export function Environment({onNavigate}){
   const scan=useResource('/api/ops/discovery');
+  const {sm}=Grid.useBreakpoint();
   useScreenRefresh(scan.reload);
   const snapshot=scan.data;
   const hw=snapshot?.hardware;
@@ -92,6 +112,7 @@ export function Environment({onNavigate}){
   const devices=Array.isArray(gpu.devices)?gpu.devices:[];
   const primaryGpu=devices[0];
   const services=Array.isArray(snapshot?.services)?snapshot.services:[];
+  const orderedServices=[...services].sort((a,b)=>servicePriority(a)-servicePriority(b));
   const software=Array.isArray(snapshot?.software)?snapshot.software:[];
   const models=Array.isArray(snapshot?.models)?snapshot.models:[];
   const configured=Array.isArray(snapshot?.configured_models)?snapshot.configured_models:[];
@@ -151,16 +172,14 @@ export function Environment({onNavigate}){
           sub={'Tổng '+formatMemory(memory.total_bytes)+
             (memoryUsage!==null?' · Đã dùng '+memoryUsage+'%':'')}
           progress={memoryUsage}/>
-        <Stat icon={<HddOutlined/>} label="Ổ đĩa workspace"
-          value={formatCapacity(disk.free_bytes)}
-          sub={'Tổng '+formatCapacity(disk.total_bytes)+
+        <Stat icon={<HddOutlined/>} label={<>Ổ đĩa workspace <Tooltip
+          title="Ổ đĩa, RAM và VRAM dùng hệ 1.024 như Windows. Dung lượng model dùng hệ 1.000."
+          trigger={['hover','focus']}><button className="env-unit-help" type="button"
+            aria-label="Quy ước đơn vị dung lượng"><InfoCircleOutlined/></button></Tooltip></>}
+          value={formatMemory(disk.free_bytes)}
+          sub={'Tổng '+formatMemory(disk.total_bytes)+
             (diskUsage!==null?' · Đã dùng '+diskUsage+'%':'')}
           progress={diskUsage}/>
-      </div>
-
-      <div className="env-units-note"><InfoCircleOutlined/>
-        <span>RAM/VRAM hiển thị theo hệ 1.024 như Windows; ổ đĩa và model theo
-          hệ 1.000. Đơn vị MB/GB/TB được chọn tự động.</span>
       </div>
 
       <Card className="env-panel" title={<SectionTitle icon={<DesktopOutlined/>}
@@ -181,41 +200,38 @@ export function Environment({onNavigate}){
         description="Tách biệt công cụ đã cài đặt và dịch vụ đang phản hồi"/>}>
         <div className="env-subheading">Công cụ cục bộ <span>{software.length} công cụ</span></div>
         <Table className="env-table" size="middle" pagination={false}
-          rowKey={r=>r.id+':'+(r.endpoint||'cli')} scroll={{x:650}}
+          rowKey={r=>r.id+':'+(r.endpoint||'cli')} scroll={sm?{x:650}:undefined}
           dataSource={software} columns={softwareColumns}
           locale={{emptyText:'Chưa có dữ liệu công cụ'}}/>
         <div className="env-subheading env-subheading-separated">
           Dịch vụ local <span>{services.length} endpoint</span>
         </div>
         <Table className="env-table" size="middle" pagination={false}
-          rowKey={r=>r.id+':'+(r.endpoint||'service')} scroll={{x:650}}
-          dataSource={services} columns={serviceColumns}
+          rowKey={r=>r.id+':'+(r.endpoint||'service')} scroll={sm?{x:650}:undefined}
+          dataSource={orderedServices} columns={serviceColumns}
           locale={{emptyText:'Chưa phát hiện dịch vụ local'}}/>
       </Card>
 
       <Card className="env-panel" title={<SectionTitle icon={<AppstoreOutlined/>}
-        title="Model được phát hiện"
+        title="Model & cấu hình"
         description="Danh mục đọc từ Ollama, ComfyUI và profile Owner"/>}
         extra={<Button icon={<CodeOutlined/>} onClick={()=>onNavigate('models')}>
           Cấu hình model
         </Button>}>
-        <div className="env-inline-note"><InfoCircleOutlined/>
-          <span>Đã phát hiện không có nghĩa model chạy được. Chưa xác minh
-            tốc độ, độ phù hợp VRAM hoặc chất lượng sinh.</span>
-        </div>
         <div className="env-subheading">Model từ runtime <span>{models.length} model</span></div>
-        <Table className="env-table" size="middle" rowKey="id" scroll={{x:760}}
+        <Table className="env-table" size="middle" rowKey="id" scroll={sm?{x:760}:undefined}
           dataSource={models} pagination={{pageSize:8,hideOnSinglePage:true}}
           columns={modelColumns}
           locale={{emptyText:'Chưa phát hiện model tại các endpoint đã quét'}}
-          expandable={{expandedRowRender:model=><Text className="env-break">
-            {model.endpoint||'Không rõ endpoint'} · Loadability: {model.loadability||'UNKNOWN'}
-            {model.family?' · Family: '+model.family:''}
-          </Text>}}/>
+          expandable={{expandedRowRender:model=><div className="env-break">
+            <Text>Endpoint: {model.endpoint||'Chưa rõ'} · Khả năng chạy: {displayStatus(model.loadability||'UNKNOWN')}</Text>
+            {model.family&&<div>Họ model: {model.family}</div>}
+            {!sm&&<div>{[model.provider,model.type,modelSize(model.size_bytes)].filter(Boolean).join(' · ')}</div>}
+          </div>}}/>
         <div className="env-subheading env-subheading-separated">
           Profile đã cấu hình <span>{configured.length} profile</span>
         </div>
-        <Table className="env-table" size="middle" rowKey="id" scroll={{x:650}}
+        <Table className="env-table" size="middle" rowKey="id" scroll={sm?{x:650}:undefined}
           pagination={{pageSize:6,hideOnSinglePage:true}} dataSource={configured}
           columns={profileColumns}
           locale={{emptyText:'Chưa có profile model trong cấu hình'}}/>

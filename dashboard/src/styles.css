@@ -271,17 +271,13 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .env-status.tone-good{color:var(--good);background:var(--good-bg)}
 .env-status.tone-warn{color:var(--warn);background:var(--warn-bg)}
 .env-status.tone-bad{color:var(--bad);background:var(--bad-bg)}
-.env-inline-note{display:flex;align-items:flex-start;gap:10px;
-  background:var(--env-raised);border:1px solid var(--env-border);
-  color:var(--muted);padding:12px 15px;border-radius:11px;
-  font-size:12px;line-height:1.55;margin-bottom:22px}
-.env-inline-note>.anticon{margin-top:2px;color:var(--primary)}
+.env-mobile-details{display:none}
+.env-model-verification{margin-top:4px;color:var(--muted);font-size:11px}
 .env-disclaimer{color:var(--muted);font-size:11px;line-height:1.6;
   display:flex;align-items:flex-start;gap:8px;margin:0 1px 3px}
 .env-disclaimer>.anticon{color:var(--primary);margin-top:3px}
-.env-units-note{display:flex;align-items:flex-start;gap:8px;color:var(--env-subtle);
-  font-size:11px;line-height:1.5;margin:-8px 1px 0}
-.env-units-note .anticon{margin-top:2px;color:var(--primary);flex-shrink:0}
+.env-unit-help{padding:0 3px;border:0;background:transparent;color:var(--primary);
+  font:inherit;cursor:help}
 .env-placeholder{min-height:170px;display:grid;place-items:center;color:var(--muted);font-size:13px}
 @media(max-width:1290px){.env-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:991px){
@@ -305,6 +301,18 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
   .af-header-actions{width:100%;justify-content:flex-end}
   .af-content{padding:17px 12px 42px}
   .ant-card-body{padding:16px}
+}
+@media(width < 576px){
+  .env-table .ant-table-content > table{table-layout:fixed!important}
+  .env-table col:not(.ant-table-expand-icon-col){width:auto!important}
+  .env-table .ant-table-thead > tr > th,
+  .env-table .ant-table-tbody > tr > td{padding:10px 8px}
+  .env-table .ant-table-tbody > tr > td{vertical-align:top;overflow-wrap:anywhere}
+  .env-table .env-status{padding:4px 7px;white-space:normal}
+  .env-status-dot{flex-shrink:0}
+  .env-mobile-details{display:block;color:var(--muted);font-size:12px;margin-top:5px}
+  .env-mobile-details summary{color:var(--primary);cursor:pointer}
+  .env-mobile-details[open] > div{margin-top:5px}
 }
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;
