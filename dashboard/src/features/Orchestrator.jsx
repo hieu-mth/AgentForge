@@ -46,9 +46,8 @@ function LimitField({name,label,min,max,unit,note}){
   </Form.Item>;
 }
 
-export function Orchestrator({mutate}){
+export function Orchestrator({mutate,dirty,setDirty}){
   const resource=useResource('/api/model-hub');
-  const [dirty,setDirty]=useState(false);
   useScreenRefresh(()=>dirty?undefined:resource.reload());
   return <div className="orchestrator-page">
     <ResourceStatus resource={resource} label="chính sách điều phối"/>

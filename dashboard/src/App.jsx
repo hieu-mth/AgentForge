@@ -1,5 +1,5 @@
-import {useCallback,useEffect,useState} from 'react';
-import {Alert,Button,Card,Drawer,Form,Input,Layout,Menu,Space,Spin,Tabs,Typography} from 'antd';
+import {useCallback,useEffect,useRef,useState} from 'react';
+import {Alert,App as AntApp,Button,Card,Drawer,Form,Input,Layout,Menu,Space,Spin,Tabs,Typography} from 'antd';
 import {AppstoreOutlined,ArrowRightOutlined,CodeOutlined,DashboardOutlined,LockOutlined,MenuOutlined,MoonOutlined,
   PlayCircleOutlined,ReloadOutlined,SendOutlined,SettingOutlined,
   SunOutlined,UserOutlined,VideoCameraOutlined} from '@ant-design/icons';
@@ -68,12 +68,15 @@ function Login({onLogin,error,busy}){
 }
 
 export default function App(){
+  const {modal}=AntApp.useApp();
   const [section,setSection]=useState(()=>parseSection(window.location.hash));
   const [session,setSession]=useState(null);
   const [status,setStatus]=useState('loading');
   const [error,setError]=useState(null);
   const [busy,setBusy]=useState(false);
   const [mobileNavOpen,setMobileNavOpen]=useState(false);
+  const [draftDirty,setDraftDirty]=useState(false);
+  const discardOpen=useRef(false);
   const {mode,toggle}=useThemeMode();
   const refresh=useCallback(async(afterLogin=false)=>{
     setStatus('loading');
@@ -85,20 +88,57 @@ export default function App(){
       setSession(null);setStatus(e.status===401?'login':'offline');
     }
   },[]);
-  useEffect(()=>{refresh();return onAuthExpired(()=>{setError(null);setSession(null);setStatus('login');});},[refresh]);
   useEffect(()=>{
-    const update=()=>setSection(parseSection(window.location.hash));
+    refresh();
+    return onAuthExpired(()=>{
+      setDraftDirty(false);setError(null);setSession(null);setStatus('login');
+    });
+  },[refresh]);
+  const confirmDiscard=useCallback(action=>{
+    if(!draftDirty){action();return;}
+    if(discardOpen.current)return;
+    discardOpen.current=true;
+    modal.confirm({
+      title:'Bỏ thay đổi chưa lưu?',
+      content:'Bạn đang có bản nháp trong AI điều phối tác vụ.',
+      okText:'Bỏ thay đổi',cancelText:'Ở lại chỉnh sửa',
+      okButtonProps:{danger:true},autoFocusButton:'cancel',
+      onOk:()=>{setDraftDirty(false);action();},
+      afterClose:()=>{discardOpen.current=false;},
+    });
+  },[draftDirty,modal]);
+  useEffect(()=>{
+    const update=()=>{
+      const next=parseSection(window.location.hash);
+      if(next===section)return;
+      if(!draftDirty){setSection(next);return;}
+      window.history.replaceState(null,'',hashFor(section));
+      confirmDiscard(()=>{
+        window.history.replaceState(null,'',hashFor(next));
+        setSection(next);
+      });
+    };
     window.addEventListener('hashchange',update);
     return ()=>window.removeEventListener('hashchange',update);
-  },[]);
-  const navigate=next=>{window.location.hash=hashFor(next);setSection(parseSection(window.location.hash));setMobileNavOpen(false);};
-  const mutate=async(path,body)=>{
+  },[section,draftDirty,confirmDiscard]);
+  const navigate=next=>{
+    setMobileNavOpen(false);
+    if(next===section)return;
+    confirmDiscard(()=>{
+      window.history.pushState(null,'',hashFor(next));
+      setSection(next);
+    });
+  };
+  const mutate=async(path,body,{inlineError=false}={})=>{
     if(!session?.csrf)throw new Error('Phiên Owner chưa sẵn sàng');
     setBusy(true);
     try{
       const result=await api(path,{method:'POST',body,csrf:session.csrf});
       setError(null);return result;
-    }catch(e){setError(e);return null;}
+    }catch(e){
+      if(inlineError)throw e;
+      setError(e);return null;
+    }
     finally{setBusy(false);}
   };
   const login=async({code})=>{
@@ -120,7 +160,7 @@ export default function App(){
     case 'characters':page=<CharacterLibrary mutate={mutate} onNavigate={navigate}/>;break;
     case 'projects':page=<Projects/>;break;
     case 'models':page=<ModelHub mutate={mutate}/>;break;
-    case 'orchestrator':page=<Orchestrator mutate={mutate}/>;break;
+    case 'orchestrator':page=<Orchestrator mutate={mutate} dirty={draftDirty} setDirty={setDraftDirty}/>;break;
     case 'environment':page=<Environment onNavigate={navigate}/>;break;
     case 'channels':page=<Publishing mutate={mutate}/>;break;
     default:page=<Card title="Tổng quan Video Studio"><Space direction="vertical">
@@ -159,7 +199,7 @@ export default function App(){
           </div>
         </div>
         <Space className="af-header-actions" size={10}>
-          <Button icon={<ReloadOutlined/>} onClick={refresh}>Kiểm tra phiên</Button>
+          <Button icon={<ReloadOutlined/>} onClick={()=>confirmDiscard(()=>refresh())}>Kiểm tra phiên</Button>
           <Button icon={mode==='dark'?<SunOutlined/>:<MoonOutlined/>}
             onClick={toggle}>{mode==='dark'?'Sáng':'Tối'}</Button>
         </Space>

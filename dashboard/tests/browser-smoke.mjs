@@ -139,6 +139,8 @@ try {
   if(/\b(?:MiB|GiB)\b/.test(await env.innerText()))
     throw new Error('Technical capacity units leaked into the Environment UI');
   await env.getByText('Gián đoạn',{exact:true}).waitFor();
+  const timeoutDiagnostic=env.getByText('Dịch vụ phản hồi quá chậm',{exact:true}).filter({visible:true});
+  await timeoutDiagnostic.click();
   await env.getByText('TIMEOUT',{exact:true}).filter({visible:true}).waitFor();
   const serviceRows=env.locator('.env-table').nth(1).locator('tbody tr[data-row-key]');
   if(!(await serviceRows.first().innerText()).includes('comfyui'))
@@ -160,6 +162,7 @@ try {
     if(overflow)throw new Error('Environment page overflows viewport at '+width+'px');
   }
   await serviceRows.first().getByText('Chi tiết',{exact:true}).click();
+  await serviceRows.first().getByText('Dịch vụ phản hồi quá chậm',{exact:true}).click();
   await serviceRows.first().getByText('TIMEOUT',{exact:true}).waitFor();
   const tableOverflow=await env.locator('.ant-table-content').evaluateAll(
     tables=>tables.some(table=>table.scrollWidth>table.clientWidth+2));
@@ -251,8 +254,26 @@ try {
   const decompose=settings.getByRole('checkbox',{name:'Tự phân tích và chia nhỏ yêu cầu'});
   await decompose.check();
   await settings.getByText('Có thay đổi chưa lưu',{exact:true}).waitFor();
-  await settings.getByRole('button',{name:'Hủy thay đổi'}).click();
-  if(await decompose.isChecked()||await savePolicy.isEnabled())throw new Error('Cancel kept edits');
+  await settings.setViewportSize({width:1280,height:850});
+  const tabs=settings.locator('.af-section-tabs');
+  const modelTab=tabs.locator('[data-node-key="models"] [role="tab"]');
+  const discardDialog=settings.getByRole('dialog',{name:'Bỏ thay đổi chưa lưu?'});
+  await modelTab.click();
+  await discardDialog.getByRole('button',{name:'Ở lại chỉnh sửa'}).click();
+  await discardDialog.waitFor({state:'hidden'});
+  if(!await decompose.isChecked())throw new Error('Staying on tab discarded the draft');
+  await settings.evaluate(()=>{location.hash='#/models';});
+  await discardDialog.getByRole('button',{name:'Ở lại chỉnh sửa'}).click();
+  await discardDialog.waitFor({state:'hidden'});
+  if(!settings.url().endsWith('#/orchestrator')||!await decompose.isChecked())
+    throw new Error('Hash navigation discarded the draft');
+  await modelTab.click();
+  await discardDialog.getByRole('button',{name:'Bỏ thay đổi',exact:true}).click();
+  await settings.waitForURL('**/#/models');
+  await tabs.locator('[data-node-key="orchestrator"] [role="tab"]').click();
+  await decompose.waitFor();
+  if(await decompose.isChecked()||await savePolicy.isEnabled())throw new Error('Discard kept edits');
+  await settings.setViewportSize({width:390,height:850});
   await settings.goto(policyOrigin+'/dashboard/#/models');
   await settings.getByRole('button',{name:'Đăng ký model'}).click();
   const registerDialog=settings.getByRole('dialog');
@@ -377,11 +398,19 @@ try {
     await registerDialog.getByLabel('Mã hồ sơ',{exact:true}).fill('cloud_fixture');
     await registerDialog.getByRole('button',{name:'Xem lại cấu hình'}).click();
     await registerDialog.getByText('••••••••',{exact:true}).waitFor();
+    await settings.route('**/api/model-hub/profile',route=>route.fulfill({
+      status:400,contentType:'application/json',
+      body:JSON.stringify({error:'ValueError',message:'Endpoint không hợp lệ cho hồ sơ này.'}),
+    }),{times:1});
+    await registerDialog.getByRole('button',{name:'Xác nhận lưu'}).click();
+    await registerDialog.getByText('Endpoint không hợp lệ cho hồ sơ này.',{exact:true}).waitFor();
     await registerDialog.getByRole('button',{name:'Xác nhận lưu'}).click();
     await registerDialog.waitFor({state:'hidden'});
     const cloud=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
     if(cloud.profiles[0]?.has_api_key!==true||JSON.stringify(cloud).includes(fixtureKey))
       throw new Error('Direct Cloud registration failed or exposed the key');
+    await settings.getByText('Chưa xác minh kết nối',{exact:true}).waitFor();
+    await settings.getByText('Đã lưu hồ sơ model',{exact:true}).waitFor();
   }
   if(settingsErrors.length)throw new Error('Orchestrator runtime errors: '+settingsErrors.join(' | '));
   console.log('Orchestrator authenticated API, SQLite persistence, reset and responsive Edge: PASS');

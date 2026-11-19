@@ -64,11 +64,9 @@ export function ModelHub({mutate}) {
     const result=await mutate('/api/model-hub/profile',{
       ack:'SAVE_MODEL_PROFILE',expected_revision:revision,profile,
       ...(apiKey?{api_key:apiKey}:{}),
-    });
-    if(!result)return false;
+    },{inlineError:true});
     setHub(result);setChecked({});setProbes({});setEditor(null);
-    message.success('?? l?u h? s? model');
-    return true;
+    message.success('Đã lưu hồ sơ model');
   };
 
   const deleteProfile=row=>update('/api/model-hub/profile/delete',{
@@ -118,7 +116,7 @@ export function ModelHub({mutate}) {
       <Stat icon={<HistoryOutlined/>} label="Phiên bản cấu hình" value={hub?.revision??'—'}/>
     </div>
     <Card className="env-panel" title={<SectionTitle icon={<AppstoreOutlined/>} title="Danh sách model"
-      description="Hồ sơ đã đăng ký và trạng thái kiểm tra gần nhất"/>} loading={loading}>
+      description="Hồ sơ đã đăng ký và kết quả kiểm tra trong phiên này"/>} loading={loading}>
       <Table className="hub-table" size="middle" rowKey="id" dataSource={profiles} scroll={desktop?{x:980}:undefined}
         pagination={{pageSize:8,hideOnSinglePage:true}} locale={{emptyText:<Empty description="Chưa đăng ký model. Chọn Đăng ký model để bắt đầu."/>}}
         columns={[
@@ -142,6 +140,8 @@ export function ModelHub({mutate}) {
                 ?checked[row.id].status==='LOCAL_MODEL_FOUND'?'Đã phát hiện qua Ollama':displayStatus(checked[row.id].status)
                 :'Chưa kiểm tra Ollama'}
             </Text>}
+            {byAdapter[row.provider]?.connection==='cloud'&&
+              <Text type="secondary" className="env-muted">Chưa xác minh kết nối</Text>}
             {probes[row.id]&&probes[row.id].revision===hub?.revision&&<Text type="secondary" style={{fontSize:11}}>
               {probes[row.id].status==='PASS_RUNTIME'?'Đã chạy thử thành công':'Chạy thử: '+displayStatus(probes[row.id].status)}
               {' · '}{new Date(probes[row.id].checked_at).toLocaleTimeString('vi-VN')}

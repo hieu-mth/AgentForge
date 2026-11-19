@@ -3,6 +3,7 @@ import {Alert,Button,Form,Input,Modal,Radio,Select,Space,Switch} from 'antd';
 import {ApiOutlined,CloudOutlined,DesktopOutlined} from '@ant-design/icons';
 import {SectionTitle} from '../components/settings.jsx';
 import {profilePayload} from '../model_hub_ui.js';
+import {requestError} from '../api.js';
 
 const connectionOptions=[
   {value:'local',label:<><DesktopOutlined/> Local</>},
@@ -29,7 +30,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
   const fields=useEnv&&adapter.legacy_defaults?adapter.legacy_defaults:adapter.defaults;
   const [review,setReview]=useState(null);
   const [saving,setSaving]=useState(false);
-  const [failed,setFailed]=useState(false);
+  const [saveError,setSaveError]=useState(null);
   const editing=Boolean(profile);
 
   function changeAdapter(changed){
@@ -44,9 +45,11 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
 
   async function save(){
     setSaving(true);
-    setFailed(false);
+    setSaveError(null);
     try{
-      if(!await onSave(review,revision,directCloud?form.getFieldValue('api_key'):undefined))setFailed(true);
+      await onSave(review,revision,directCloud?form.getFieldValue('api_key'):undefined);
+    }catch(error){
+      setSaveError(requestError(error));
     }finally{setSaving(false);}
   }
 
@@ -57,7 +60,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         'Chọn cách kết nối, sau đó nhập model và cấu hình truy cập.'}/>}
     onCancel={saving?undefined:onCancel} closable={!saving} keyboard={!saving} mask={{closable:false}}
     footer={<Space wrap>
-      <Button disabled={saving} onClick={review?()=>{setReview(null);setFailed(false);}:onCancel}>
+      <Button disabled={saving} onClick={review?()=>{setReview(null);setSaveError(null);}:onCancel}>
         {review?'Quay lại':'Hủy'}
       </Button>
       <Button type="primary" loading={saving} onClick={review?save:()=>form.submit()}>
@@ -134,8 +137,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         <dt>Trạng thái</dt><dd>{review.enabled?'Đã bật':'Đã tắt'}</dd>
       </dl>
       <p className="model-dialog-help">Hồ sơ được lưu vào SQLite trên máy này. Lượt lưu chỉ cập nhật cấu hình.</p>
-      {failed&&<Alert showIcon type="error" message="Chưa lưu được hồ sơ"
-        description="Đóng dialog rồi làm mới danh sách nếu cấu hình đã thay đổi ở phiên khác."/>}
+      {saveError&&<Alert showIcon type="error" message="Chưa lưu được hồ sơ" description={saveError}/>}
     </>}
   </Modal>;
 }

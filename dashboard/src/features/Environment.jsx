@@ -32,12 +32,25 @@ function MobileDetails({children}){
   </details>;
 }
 
+const diagnosticLabels={
+  NVIDIA_SMI_NOT_FOUND:'Không tìm thấy công cụ NVIDIA',
+  CONNECTION_REFUSED:'Dịch vụ không nhận kết nối',
+  TIMEOUT:'Dịch vụ phản hồi quá chậm',
+  INVALID_OR_UNAVAILABLE_RESPONSE:'Dịch vụ không trả về dữ liệu hợp lệ',
+};
+function Diagnostic({code}){
+  return <details className="env-diagnostic env-break">
+    <summary>{diagnosticLabels[code]??'Không đọc được dữ liệu chẩn đoán'}</summary>
+    <code>{code}</code>
+  </details>;
+}
+
 const desktopColumns=['sm'];
 const softwareDetails=row=>
   [row.version,row.detail,row.scope].filter(Boolean).join(' · ')||'Chưa có thông tin';
 const serviceDetails=row=><div className="env-service-detail">
   <span className="env-endpoint">{row.endpoint||'—'}</span>
-  {row.error&&<span className="env-diagnostic env-break">{row.error}</span>}
+  {row.error&&<Diagnostic code={row.error}/>}
   {row.truncated&&<span className="env-diagnostic">Danh mục bị giới hạn</span>}
 </div>;
 const modelSize=value=>typeof value==='number'?formatCapacity(value,2):'Chưa rõ';
@@ -135,7 +148,7 @@ export function Environment({onNavigate}){
         <Stat icon={<DesktopOutlined/>} label="GPU chính"
           value={primaryGpu?.name||'Chưa phát hiện'}
           sub={primaryGpu?'Driver '+(primaryGpu.driver_version||'chưa rõ'):
-            (gpu.error||'Chưa có số liệu GPU')}/>
+            (gpu.error?<Diagnostic code={gpu.error}/>:'Chưa có số liệu GPU')}/>
         <Stat icon={<ThunderboltOutlined/>} label="VRAM khả dụng"
           value={primaryGpu?formatVram(primaryGpu.vram_free_mib):'Chưa xác định'}
           sub={primaryGpu?'Tổng '+formatVram(primaryGpu.vram_total_mib)+
