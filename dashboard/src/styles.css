@@ -318,6 +318,21 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .model-stat-grid,.overview-stats{grid-template-columns:repeat(3,minmax(0,1fr))}
 .model-stat-grid .env-stat,.overview-stats .env-stat{min-height:120px}
 .overview-table .env-status{white-space:normal}
+.studio-tools{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.studio-shortcuts .ant-btn{color:var(--muted)}
+.studio-details{margin:5px 0;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.studio-details summary{color:var(--primary);cursor:pointer}
+.studio-details[open] > div{margin-top:5px}
+.studio-panel-note,.studio-voice{margin-top:12px}
+.studio-voice{margin-bottom:12px}
+.studio-table .env-status{white-space:normal;overflow-wrap:anywhere;align-items:baseline}
+.studio-row-actions{display:flex;flex-wrap:wrap;align-items:flex-start;gap:6px;margin-top:6px}
+.studio-row-actions .ant-btn{height:auto;min-height:24px;max-width:100%;white-space:normal}
+.studio-row-actions .ant-input{max-width:100%;min-width:0}
+@media(width < 680px){
+  .studio-tools{grid-template-columns:1fr}
+  .studio-page .env-panel .ant-card-head-wrapper{flex-wrap:wrap;row-gap:8px}
+}
 .model-history{display:flex;justify-content:flex-end}
 .env-status.tone-neutral{color:var(--muted);background:var(--env-raised)}
 .orchestrator-page > .ant-form{display:grid;gap:18px;min-width:0}

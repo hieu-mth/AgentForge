@@ -196,7 +196,7 @@ export default function App(){
           </div>
         </div>
         <Space className="af-header-actions" size={10}>
-          <Button icon={<ReloadOutlined/>} onClick={()=>confirmDiscard(()=>refresh())}>Kiểm tra phiên</Button>
+          <Button icon={<ReloadOutlined/>} onClick={()=>confirmDiscard(()=>refresh())}>Kiểm tra đăng nhập</Button>
           <Button icon={mode==='dark'?<SunOutlined/>:<MoonOutlined/>}
             onClick={toggle}>{mode==='dark'?'Sáng':'Tối'}</Button>
         </Space>

@@ -1,60 +1,36 @@
-import { useState } from 'react';
-import { Alert, Button, Card, Col, Row, Space, Steps, Tag, Typography } from 'antd';
-import { PictureOutlined, TeamOutlined, SafetyCertificateOutlined, SettingOutlined } from '@ant-design/icons';
-import { FilmProduction } from './FilmProduction.jsx';
+import {useState} from 'react';
+import {Button,Card,Space} from 'antd';
+import {FolderOpenOutlined,PlayCircleOutlined,SettingOutlined,TeamOutlined,VideoCameraOutlined} from '@ant-design/icons';
+import {SectionTitle,SettingsHeading} from '../components/settings.jsx';
+import {FilmProduction,MotionClips} from './FilmProduction.jsx';
 
-const { Title, Text, Paragraph } = Typography;
-
-// The studio is a workflow entry point, not a simulated video-production runtime.
-// All destinations are existing Owner routes and retain their own authorization gates.
-// Only link to routes exposed by the video-first sidebar.
-const WORKFLOW = [
-  {title:'Dự án video',description:'Xem những tập phim đã lưu trên máy',route:'projects',action:'Xem dự án video',icon:<PictureOutlined/>},
-  {title:'Kiểm tra bản dựng',description:'Xem tiến trình chuyển động, kiểm tra clip và dựng phim local',route:'film-production',action:'Xem bản dựng',icon:<SafetyCertificateOutlined/>},
-];
-const LINKS = [
-  {title:'Thư viện nhân vật',description:'Quản lý hồ sơ nhân vật local',route:'characters',icon:<TeamOutlined/>},
-  {title:'Model & cấu hình',description:'Xem model đã đăng ký và khả năng kết nối thực tế',route:'models',icon:<SettingOutlined/>},
-];
-export function MediaStudio({onNavigate,mutate}) {
-  const [productionOpen,setProductionOpen]=useState(false);
-  return <Space direction="vertical" size="large" style={{width:'100%'}}>
-    <div>
-      <Tag>AI Media Studio</Tag>
-      <Title level={3} style={{margin:'10px 0 6px'}}>Sản xuất video</Title>
-      <Paragraph type="secondary" style={{margin:0}}>Đi từ tư liệu đến bản duyệt bằng các công cụ hiện có của AgentForge. Khâu biên kịch chưa được tích hợp vào Studio.</Paragraph>
+export function MediaStudio({onNavigate,mutate}){
+  const [tool,setTool]=useState(null);
+  return <div className="environment-page studio-page">
+    <SettingsHeading title="Sản xuất video" eyebrow="STUDIO VIDEO"
+      description="Kiểm tra clip chuyển động, tạo giọng đọc và dựng tập phim trên máy này."
+      actions={<Button icon={<FolderOpenOutlined/>} onClick={()=>onNavigate('projects')}>Xem dự án video</Button>}/>
+    <div className="studio-tools">
+      <Card className="env-panel" title={<SectionTitle icon={<PlayCircleOutlined/>} title="Clip chuyển động"
+        description="Đối chiếu tiến trình ComfyUI và nhập MP4 từ máy này."/>}>
+        <Button type={tool==='motion'?'default':'primary'} aria-expanded={tool==='motion'}
+          onClick={()=>setTool(tool==='motion'?null:'motion')}>
+          {tool==='motion'?'Đóng clip chuyển động':'Mở clip chuyển động'}
+        </Button>
+      </Card>
+      <Card className="env-panel" title={<SectionTitle icon={<VideoCameraOutlined/>} title="Dựng & kiểm tra tập phim"
+        description="Xem hồ sơ từng cảnh, tạo thoại offline và dựng MP4."/>}>
+        <Button type={tool==='episode'?'default':'primary'} aria-expanded={tool==='episode'}
+          onClick={()=>setTool(tool==='episode'?null:'episode')}>
+          {tool==='episode'?'Đóng khu vực dựng':'Mở khu vực dựng'}
+        </Button>
+      </Card>
     </div>
-    <Alert type="info" showIcon message="Trung tâm điều hướng, không phải trình render"
-      description="Trang này không tự tạo video, không xác nhận GPU/model đã sẵn sàng. Mỗi bước mở đúng màn hình thực tế; quyền chạy AI, tiến trình ngoài và duyệt thành phẩm vẫn được kiểm soát riêng."/>
-    <Card title="Quy trình đề xuất">
-      <Steps responsive current={-1} items={WORKFLOW.map(x=>({title:x.title,description:x.description,status:'wait'}))}/>
-      <Row gutter={[12,12]} style={{marginTop:22}}>
-        {WORKFLOW.map(item=><Col xs={24} md={8} key={item.route}>
-          <Card size="small" style={{height:'100%'}}>
-            <Space direction="vertical" style={{width:'100%'}}>
-              <Text strong>{item.title}</Text>
-              <Text type="secondary">{item.description}</Text>
-              <Button block icon={item.icon}
-                aria-expanded={item.route==='film-production'?productionOpen:undefined}
-                onClick={()=>item.route==='film-production'
-                  ?setProductionOpen(open=>!open):onNavigate(item.route)}>
-                {item.route==='film-production'&&productionOpen?'Ẩn bản dựng':item.action}
-              </Button>
-            </Space>
-          </Card>
-        </Col>)}
-      </Row>
-    </Card>
-    {productionOpen&&<FilmProduction mutate={mutate}/>}
-    <Row gutter={[12,12]}>
-      {LINKS.map(item=><Col xs={24} md={12} key={item.route}>
-        <Card title={item.title} extra={item.icon}>
-          <Paragraph type="secondary">{item.description}</Paragraph>
-          <Button onClick={()=>onNavigate(item.route)}>Mở {item.title.toLowerCase()}</Button>
-        </Card>
-      </Col>)}
-    </Row>
-    <Alert type="warning" showIcon message="Chưa xác minh khả năng tạo video AI đầu-cuối"
-      description="Trước khi đánh dấu sẵn sàng cần kiểm tra checkpoint, ComfyUI, GPU, tạo video thật và QA MP4 trên máy Owner. Không coi storyboard hoặc ảnh tĩnh là video chuyển động đã hoàn thành."/>
-  </Space>;
+    {tool==='motion'&&<MotionClips mutate={mutate}/>}
+    {tool==='episode'&&<FilmProduction mutate={mutate}/>}
+    <Space className="studio-shortcuts" wrap>
+      <Button type="text" icon={<TeamOutlined/>} onClick={()=>onNavigate('characters')}>Thư viện nhân vật</Button>
+      <Button type="text" icon={<SettingOutlined/>} onClick={()=>onNavigate('models')}>Cấu hình Model AI</Button>
+    </Space>
+  </div>;
 }

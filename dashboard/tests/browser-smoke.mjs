@@ -86,12 +86,21 @@ try {
     ],
   };
   let projectRows=[];
+  let clipRequests=0;
+  let episodeRequests=0;
   await page2.route('**/api/**',route=>{
     const p=new URL(route.request().url()).pathname;
     if(p==='/api/ops/discovery')environmentRequests++;
+    if(p==='/api/film/motion')clipRequests++;
+    if(p==='/api/film/productions')episodeRequests++;
     const payload=p==='/api/session'?{csrf:'fixture-only-csrf'}:
       p==='/api/video-studio/projects'?{projects:projectRows,canonical_engine:'film_studio'}:
       p==='/api/characters'?{characters:[]}:
+      p==='/api/film/motion'?{jobs:[{job_id:'demo-job',film_slug:'demo',shot_id:'001',
+        status:'COMPLETE_UNVERIFIED',state:'COMPLETE_UNVERIFIED',plan_sha:'example-plan',
+        workflow_sha:'example-workflow',mp4_technical_verified:false}]}:
+      p==='/api/film/productions'?{episodes:[{film_slug:'demo',episode_id:'ep01',
+        episode_sha256:'example-episode',state:'PREPARED_NOT_RENDERED',shot_count:3,runtime_seconds:12}]}:
       p==='/api/model-hub'?{revision:2,
         profiles:[{id:'local-text',provider:'ollama',model:'qwen3:8b',enabled:true,source:'git'}],
         routes:[{id:'draft',label:'Soạn nháp',kind:'text',status:'CONFIG_ONLY',model_ref:'local-text'}],
@@ -107,9 +116,25 @@ try {
   await page2.waitForURL('**/#/projects');
   await page2.getByText('Dự án & tập phim',{exact:true}).waitFor();
   await page2.goto(origin+'/dashboard/#/media-studio',{waitUntil:'networkidle'});
-  await page2.getByRole('button',{name:'Xem bản dựng'}).click();
-  await page2.getByText('Film Studio · Continuity & Dựng phim',{exact:true}).waitFor();
-  await page2.getByRole('button',{name:'Mở model & cấu hình'}).click();
+  if(clipRequests||episodeRequests)throw new Error('Studio fetched tools before being opened');
+  await page2.setViewportSize({width:390,height:850});
+  await page2.getByRole('button',{name:'Mở clip chuyển động'}).click();
+  await page2.getByText('Chờ xác minh MP4',{exact:true}).waitFor();
+  await page2.getByRole('button',{name:'Đối chiếu ComfyUI'}).waitFor();
+  if(!clipRequests||episodeRequests)throw new Error('Opening clips loaded the wrong tool');
+  await page2.getByRole('button',{name:'Mở khu vực dựng'}).click();
+  await page2.getByText('Tập phim & bản dựng',{exact:true}).waitFor();
+  await page2.getByRole('button',{name:'Dựng MP4',exact:true}).click();
+  const renderDialog=page2.getByRole('dialog',{name:'Kiểm tra và dựng MP4 local bằng FFmpeg?'});
+  await renderDialog.getByRole('button',{name:'Hủy',exact:true}).click();
+  await renderDialog.waitFor({state:'hidden'});
+  if(!episodeRequests||await page2.getByText('Danh sách clip chuyển động',{exact:true}).count())
+    throw new Error('Episode workspace did not replace the clips workspace');
+  const studioOverflow=await page2.locator('.studio-table .ant-table-content').evaluate(
+    table=>table.scrollWidth>table.clientWidth+2);
+  if(studioOverflow)throw new Error('Studio table overflows on mobile');
+  await page2.setViewportSize({width:1440,height:900});
+  await page2.getByRole('button',{name:'Cấu hình Model AI'}).click();
   await page2.waitForURL('**/#/models');
   const hub=page2.locator('.model-hub');
   await hub.getByText('Đã bật',{exact:true}).waitFor();
