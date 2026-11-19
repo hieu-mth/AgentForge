@@ -1,5 +1,10 @@
 // Real browser smoke: production Vite chunks must mount React, not leave a white page.
 import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { mkdtemp, rm, rmdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createInterface } from 'node:readline';
 import { chromium } from 'playwright-core';
 import { setTimeout as sleep } from 'node:timers/promises';
 
@@ -9,7 +14,7 @@ const vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview'
   '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
   cwd: process.cwd(), stdio: 'pipe', windowsHide: true,
 });
-let browser;
+let browser, policyServer, policyTemp;
 try {
   let ready = false;
   for (let i=0;i<40;i++) {
@@ -172,7 +177,99 @@ try {
   await page2.getByText('Tổng quan Video Studio',{exact:true}).waitFor();
   if(errors2.length)throw new Error('Video Studio runtime errors: '+errors2.join(' | '));
   console.log('Video-only project and retired route smoke: PASS');
+
+  // Serve the built dashboard and real authenticated API against isolated SQLite.
+  policyTemp=await mkdtemp(join(tmpdir(),'agentforge-policy-'));
+  const ownerCode='fixture-orchestrator-owner';
+  const policyDb=join(policyTemp,'hub.sqlite3');
+  policyServer=spawn('python',['-u','-c',[
+    'import sys', 'from pathlib import Path',
+    'from agentforge.ai import model_hub', 'from agentforge.api.server import create_server',
+    'model_hub.DB_PATH = Path(sys.argv[1])',
+    'server = create_server(0, owner_code=sys.argv[2])',
+    'print(server.server_port, flush=True)', 'server.serve_forever()',
+  ].join('\n'),policyDb,ownerCode],{cwd:'..',stdio:['ignore','pipe','inherit'],windowsHide:true});
+  const output=createInterface({input:policyServer.stdout});
+  const [policyPort]=await once(output,'line',{signal:AbortSignal.timeout(10000)});
+  const policyOrigin='http://127.0.0.1:'+policyPort;
+  const settings=await browser.newPage({viewport:{width:390,height:850}});
+  const settingsErrors=[];
+  settings.on('pageerror',error=>settingsErrors.push(error.message));
+  const postOptions={headers:{Origin:policyOrigin},
+    data:{ack:'RESET_ORCHESTRATOR',expected_revision:0}};
+  const endpoint=policyOrigin+'/api/model-hub/orchestrator';
+  if((await settings.request.post(endpoint,postOptions)).status()!==401)
+    throw new Error('Orchestrator mutation is accessible without an Owner session');
+  await settings.goto(policyOrigin+'/dashboard/#/orchestrator');
+  await settings.getByLabel('Mã Owner',{exact:true}).fill(ownerCode);
+  await settings.getByRole('button',{name:'Mở dashboard'}).click();
+  await settings.getByRole('heading',{name:'AI điều phối tác vụ',exact:true}).waitFor();
+  for(const title of ['AI điều phối chính','Phân công AI theo năng lực',
+    'Quy tắc tự động điều phối','Quyền hạn & giới hạn']){
+    await settings.getByText(title,{exact:true}).waitFor();
+  }
+  if((await settings.request.post(endpoint,postOptions)).status()!==403)
+    throw new Error('Orchestrator mutation is accessible without a CSRF token');
+  await settings.getByText('Không khả dụng',{exact:true}).first().waitFor();
+  const savePolicy=settings.locator('.orchestrator-header').getByRole('button',{name:'Lưu cấu hình'});
+  const openOptions=settings.locator('.ant-select-dropdown:visible .ant-select-item-option-content');
+  const motionModel=settings.getByRole('combobox',{name:'Model chính · Tạo chuyển động'});
+  await motionModel.click();
+  await openOptions.filter({hasText:'Chưa gán'}).waitFor();
+  if(await openOptions.filter({hasText:/local_primary|cloud_primary/}).count())
+    throw new Error('Video binding offers incompatible text models');
+  await motionModel.press('Escape');
+  const selection=settings.getByRole('combobox',{name:'Lựa chọn model'});
+  await selection.click();
+  await openOptions.filter({hasText:/^AI đề xuất từ danh sách cho phép$/}).click();
+  await savePolicy.click();
+  await settings.getByText('Chọn model khả dụng cho danh sách đề xuất.',{exact:true}).waitFor();
+  await settings.getByRole('button',{name:'Hủy thay đổi'}).click();
+  const decompose=settings.getByRole('checkbox',{name:'Tự phân tích và chia nhỏ yêu cầu'});
+  await decompose.check();
+  await settings.getByText('Có thay đổi chưa lưu',{exact:true}).waitFor();
+  await settings.getByRole('button',{name:'Hủy thay đổi'}).click();
+  if(await decompose.isChecked()||await savePolicy.isEnabled())throw new Error('Cancel kept edits');
+  await settings.getByRole('combobox',{name:'Model điều phối'}).click();
+  await openOptions.filter({hasText:/local_primary/}).click();
+  await decompose.check();
+  await savePolicy.click();
+  await settings.getByRole('dialog').getByRole('button',{name:'Lưu cấu hình'}).click();
+  await settings.getByText('Owner tùy chỉnh · Phiên bản 1',{exact:true}).waitFor();
+  await settings.reload();
+  await settings.getByText('Owner tùy chỉnh · Phiên bản 1',{exact:true}).waitFor();
+  if(!await decompose.isChecked())throw new Error('Settings did not persist after reload');
+  const persisted=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
+  if(persisted.orchestrator.policy.primary!=='local_primary')
+    throw new Error('Saved model was not read back from real Model Hub');
+  const {csrf}=await (await settings.request.get(policyOrigin+'/api/session')).json();
+  const invalid=await settings.request.post(endpoint,{headers:{...postOptions.headers,'X-CSRF-Token':csrf},
+    data:{ack:'SAVE_ORCHESTRATOR',expected_revision:1,policy:persisted.orchestrator.policy,
+      route_changes:{'film.motion':'local_primary'}}});
+  if(invalid.status()!==400)throw new Error('API accepted a text model for video');
+  await settings.getByRole('button',{name:'Đặt lại mặc định'}).click();
+  await settings.getByRole('dialog').getByRole('button',{name:'Đặt lại',exact:true}).click();
+  await settings.getByText('Mặc định · Phiên bản 2',{exact:true}).waitFor();
+  if(await decompose.isChecked())throw new Error('Reset did not restore defaults');
+  for(const width of [390,900,1440]){
+    await settings.setViewportSize({width,height:850});
+    await settings.waitForFunction(()=>document.documentElement.scrollWidth<=window.innerWidth+2);
+  }
+  await settings.getByRole('button',{name:'Sáng'}).click();
+  await settings.waitForFunction(()=>document.documentElement.dataset.theme==='light');
+  await settings.getByRole('button',{name:'Tối'}).click();
+  await settings.waitForFunction(()=>document.documentElement.dataset.theme==='dark');
+  if(settingsErrors.length)throw new Error('Orchestrator runtime errors: '+settingsErrors.join(' | '));
+  console.log('Orchestrator authenticated API, SQLite persistence, reset and responsive Edge: PASS');
 } finally {
   if (browser) await browser.close();
   vite.kill();
+  if(policyServer&&policyServer.exitCode===null&&policyServer.signalCode===null){
+    const exited=once(policyServer,'exit');
+    if(policyServer.kill())await exited;
+  }
+  if(policyTemp){
+    await rm(join(policyTemp,'hub.sqlite3'),{force:true});
+    await rmdir(policyTemp);
+  }
 }

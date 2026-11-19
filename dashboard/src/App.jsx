@@ -10,6 +10,7 @@ import {MediaStudio} from './features/MediaStudio.jsx';
 import {CharacterLibrary} from './features/CharacterLibrary.jsx';
 import {Projects} from './features/Projects.jsx';
 import {ModelHub} from './features/Models.jsx';
+import {Orchestrator} from './features/Orchestrator.jsx';
 import {Environment} from './features/Environment.jsx';
 import {Publishing} from './features/Publishing.jsx';
 
@@ -119,6 +120,7 @@ export default function App(){
     case 'characters':page=<CharacterLibrary mutate={mutate} onNavigate={navigate}/>;break;
     case 'projects':page=<Projects/>;break;
     case 'models':page=<ModelHub mutate={mutate}/>;break;
+    case 'orchestrator':page=<Orchestrator mutate={mutate}/>;break;
     case 'environment':page=<Environment onNavigate={navigate}/>;break;
     case 'channels':page=<Publishing mutate={mutate}/>;break;
     default:page=<Card title="Tổng quan Video Studio"><Space direction="vertical">

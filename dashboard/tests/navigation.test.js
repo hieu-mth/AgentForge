@@ -5,7 +5,7 @@ import { NAV_GROUPS, groupFor, defaultSection, tabsFor, parseSection, hashFor, l
 
 const videoScreens = [
   'overview','media-studio','characters','projects','channels',
-  'environment','models',
+  'environment','models','orchestrator',
 ];
 const retiredScreens = ['websites','workspace','mattress','growth','finance','team','goals','tasks','intelligence','memory','schedules','reviews'];
 

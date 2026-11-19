@@ -4,6 +4,16 @@ from agentforge.api.routes._shared import UNHANDLED
 
 
 def handle(server, path, request, session=None):
+    if path == "/api/model-hub/orchestrator":
+        action = request.get("ack")
+        if action == "SAVE_ORCHESTRATOR" and set(request) == {
+                "ack", "expected_revision", "policy", "route_changes"}:
+            return model_hub.change(
+                action, expected_revision=request["expected_revision"],
+                policy=request["policy"], route_changes=request["route_changes"])
+        if action == "RESET_ORCHESTRATOR" and set(request) == {"ack", "expected_revision"}:
+            return model_hub.change(action, expected_revision=request["expected_revision"])
+        raise PermissionError("Cần xác nhận lưu hoặc đặt lại chính sách điều phối")
     if path == "/api/model-hub/profile":
         if (set(request) != {"ack", "expected_revision", "profile"} or
                 request["ack"] != "SAVE_MODEL_PROFILE"):

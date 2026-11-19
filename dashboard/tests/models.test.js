@@ -1,32 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { compatibleProfiles, exposureFor, profilePayload, KIND_LABELS,
-  STATUS_LABELS } from '../src/model_hub_ui.js';
+import { exposureFor, profilePayload } from '../src/model_hub_ui.js';
 import { groupFor, hashFor, parseSection } from '../src/navigation.js';
 
-const profiles=[
-  {id:'local_primary',provider:'ollama',enabled:true},
-  {id:'cloud_primary',provider:'anthropic',enabled:true},
-  {id:'video',provider:'comfyui',enabled:true},
-  {id:'disabled',provider:'ollama',enabled:false},
-];
-
-test('route capability prevents selecting a video engine for coding',()=>{
-  assert.deepEqual(compatibleProfiles({kind:'text'},profiles).map(p=>p.id),
-    ['local_primary','cloud_primary']);
-  assert.deepEqual(compatibleProfiles({kind:'video'},profiles).map(p=>p.id),
-    ['video']);
-  assert.deepEqual(compatibleProfiles({kind:'image'},profiles).map(p=>p.id),
-    ['video']);
-  assert.deepEqual(compatibleProfiles({kind:'rules'},profiles),[]);
-});
 test('cloud and config-only media always show explicit risk',()=>{
-  assert.match(exposureFor(profiles[1]),/Cloud/);
-  assert.match(exposureFor(profiles[2]),/chưa chạy model/);
-  assert.match(exposureFor(profiles[0]),/chưa tự gọi inference/);
-  assert.match(STATUS_LABELS.CONFIG_ONLY,/chưa nối runtime/);
-  assert.match(STATUS_LABELS.DETERMINISTIC,/không cần AI/);
-  assert.equal(KIND_LABELS.rules,'Python rules');
+  assert.match(exposureFor({provider:'anthropic'}),/Cloud/);
+  assert.match(exposureFor({provider:'comfyui'}),/chưa chạy model/);
+  assert.match(exposureFor({provider:'ollama'}),/chưa tự gọi inference/);
 });
 test('profile form never sends unrelated fields or token values',()=>{
   const cloud=profilePayload({

@@ -7,6 +7,8 @@ export const onAuthExpired = listener => {
 };
 export const sessionRevision = () => authRevision;
 export function requestError(error) {
+  if (error?.message === 'MODEL_HUB_REVISION_CONFLICT')
+    return 'Cấu hình đã thay đổi ở phiên khác. Hãy hủy bản nháp và làm mới trang trước khi lưu lại.';
   if (error?.status === 403) return 'Không có quyền truy cập (403). Phiên đăng nhập không bị thay đổi.';
   if (error?.status === 503) return 'Dịch vụ local chưa sẵn sàng (503). Hãy kiểm tra backend rồi thử lại.';
   return error?.message || 'Không kết nối được backend local. Hãy kiểm tra AgentForge đang chạy.';
