@@ -221,7 +221,7 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .env-section-description{font-size:11px;font-weight:400;color:var(--muted);
   white-space:normal;margin-top:4px;line-height:1.45}
 .env-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
-  border:1px solid var(--env-border);border-radius:12px;overflow:hidden;margin-bottom:23px}
+  border:1px solid var(--env-border);border-radius:12px;overflow:hidden}
 .env-detail{display:flex;justify-content:space-between;align-items:center;gap:14px;
   min-width:0;padding:15px 17px;border-bottom:1px solid var(--env-border)}
 .env-detail:nth-child(odd){border-right:1px solid var(--env-border)}
@@ -233,14 +233,29 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
   font-size:12px;font-weight:720;margin:0 0 12px;color:var(--text)}
 .env-subheading span{font-size:11px;font-weight:500;color:var(--muted)}
 .env-subheading-separated{margin-top:26px;padding-top:22px;border-top:1px solid var(--env-border)}
-.env-table .ant-table{background:transparent;font-size:12px}
-.env-table .ant-table-thead>tr>th{font-size:11px;letter-spacing:.12px;
-  background:var(--env-raised)!important;color:var(--env-subtle);
-  border-bottom:1px solid var(--env-border)!important}
-.env-table .ant-table-tbody>tr>td{padding-top:13px!important;
-  padding-bottom:13px!important;border-bottom-color:var(--env-border)}
-.env-table .ant-table-tbody>tr:last-child>td{border-bottom:0}
-.env-table .ant-table-tbody>tr:hover>td{background:var(--env-raised)!important}
+.env-table .ant-table {
+  overflow: hidden;
+  border: 1px solid var(--env-border);
+  border-radius: 12px;
+  background: var(--env-card);
+  font-size: 13px;
+}
+.env-table .ant-table-thead > tr > th,
+.env-table .ant-table-thead > tr > th:hover {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--env-border);
+  background: var(--env-raised);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: default;
+}
+.env-table .ant-table-thead > tr > th::before {display:none}
+.env-table .ant-table-tbody > tr > td {
+  padding: 14px 16px;
+  border-bottom-color: var(--env-border);
+}
+.env-table .ant-table-tbody > tr:last-child > td {border-bottom:0}
 .env-runtime-name{color:var(--text);font-weight:650}
 .env-muted{color:var(--muted);font-size:12px}
 .env-break{overflow-wrap:anywhere;word-break:break-word}
@@ -256,9 +271,6 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .env-status.tone-good{color:var(--good);background:var(--good-bg)}
 .env-status.tone-warn{color:var(--warn);background:var(--warn-bg)}
 .env-status.tone-bad{color:var(--bad);background:var(--bad-bg)}
-.env-gpu-memory{display:flex;flex-direction:column;gap:3px;
-  font-variant-numeric:tabular-nums;font-size:11px}
-.env-gpu-memory .ant-progress{margin:0}
 .env-inline-note{display:flex;align-items:flex-start;gap:10px;
   background:var(--env-raised);border:1px solid var(--env-border);
   color:var(--muted);padding:12px 15px;border-radius:11px;

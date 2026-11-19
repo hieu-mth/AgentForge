@@ -174,23 +174,6 @@ export function Environment({onNavigate}){
           <Detail label="CUDA Toolkit" value={gpu.cuda_toolkit?.version||
             gpu.cuda_toolkit?.status||'Chưa xác minh'}/>
         </div>
-        <div className="env-subheading">Card đồ họa <span>{devices.length} GPU phát hiện</span></div>
-        <Table className="env-table" size="middle" rowKey={(_,i)=>String(i)}
-          scroll={{x:580}} pagination={false} dataSource={devices}
-          locale={{emptyText:gpu.error||'Chưa phát hiện GPU bằng nvidia-smi'}}
-          columns={[
-            {title:'Thiết bị',dataIndex:'name',key:'gpu',
-              render:name=><span className="env-runtime-name">{name}</span>},
-            {title:'Driver',dataIndex:'driver_version',key:'driver',width:130},
-            {title:'VRAM trống / tổng',key:'vram',width:255,
-              render:(_,r)=><div className="env-gpu-memory">
-                <span>{formatVram(r.vram_free_mib)} / {formatVram(r.vram_total_mib)}</span>
-                {percentUsed(r.vram_free_mib,r.vram_total_mib)!==null&&
-                  <Progress percent={percentUsed(r.vram_free_mib,r.vram_total_mib)}
-                    showInfo={false} size="small" strokeColor="#7776ee"
-                    trailColor="var(--env-track)"/>}
-              </div>},
-          ]}/>
       </Card>
 
       <Card className="env-panel" title={<SectionTitle icon={<CloudServerOutlined/>}
