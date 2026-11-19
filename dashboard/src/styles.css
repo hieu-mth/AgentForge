@@ -323,6 +323,7 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .studio-start > div:nth-child(2){flex:1;min-width:0}
 .studio-start h3,.studio-drawer-content h3{margin:0 0 5px;font-size:15px}
 .studio-start p,.studio-drawer-content p{margin:0;color:var(--muted);line-height:1.6}
+.studio-start .ant-input{margin-top:10px;resize:none}
 .studio-start-icon{display:grid;place-items:center;width:42px;height:42px;flex-shrink:0;
   border-radius:12px;background:var(--env-hero);color:var(--primary);font-size:19px}
 .studio-stats{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -336,7 +337,7 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
   border:1px solid var(--env-border);background:var(--env-raised);border-radius:13px}
 .studio-episode-cover{height:76px;display:grid;place-items:center;
   background:var(--env-hero);color:var(--primary);font-size:25px}
-.studio-episode-body{display:grid;flex:1;align-content:start;grid-template-rows:auto auto auto 1fr auto;
+.studio-episode-body{display:grid;flex:1;align-content:start;grid-template-rows:auto auto 1fr auto;
   justify-items:start;gap:6px;padding:14px;min-width:0;overflow-wrap:anywhere}
 .studio-episode-body h3{margin:0 0 3px;font-size:16px}
 .studio-episode-project{color:var(--muted);font-size:12px;overflow-wrap:anywhere}
@@ -347,6 +348,9 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .studio-advanced,.studio-drawer-content{display:grid;gap:16px;justify-items:stretch}
 .studio-drawer-content{justify-items:start;overflow-wrap:anywhere}
 .studio-drawer-content section{width:100%}
+.studio-episode-select{width:100%}
+.studio-preview-actions{margin:10px 0}
+.studio-preview{display:block;width:100%;max-height:55vh;border-radius:10px;background:#121520}
 .studio-drawer-content p + .ant-btn,.studio-shot-list{margin-top:12px}
 .studio-shot-list li{padding:10px 12px;border:1px solid var(--env-border);border-radius:10px}
 .studio-shot-list li > div{margin-top:4px}
