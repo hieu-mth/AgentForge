@@ -97,6 +97,53 @@ class OwnerAuthVideoFoundationTests(unittest.TestCase):
         self.assertEqual(loaded["revision"], 2)
         self.assertEqual(loaded["profiles"][0]["flux"], revised["flux"])
 
+    def test_draft_collection_missing_id_and_broken_sqlite_have_distinct_statuses(self):
+        from agentforge.features.film_studio import draft_pipeline as drafts
+
+        _, login, headers = self.request("POST", "/api/login", {"code": self.code})
+        self.cookie = headers["Set-Cookie"].split(";", 1)[0]
+        self.csrf = login["csrf"]
+        self.server.allow_external_actions = True
+        endpoint = "/api/film/drafts"
+        identifier = "a" * 32
+        db = self.root / "drafts.sqlite3"
+        brief = {"idea": "Mèo cam tìm đường về", "seconds": 6, "scene_count": 2, "ratio": "16:9"}
+        with patch.object(drafts, "DB", db):
+            self.assertEqual(self.request("GET", endpoint)[:2], (200, {"drafts": []}))
+            self.assertFalse(db.exists())
+            self.assertEqual(self.request("GET", endpoint + "/" + identifier)[:2],
+                             (404, {"error": "draft_not_found"}))
+            self.assertEqual(self.request("POST", endpoint + "/" + identifier + "/resume")[:2],
+                             (404, {"error": "draft_not_found"}))
+            self.assertEqual(self.request("GET", "/api/film/unknown")[:2], (404, {"error": "not_found"}))
+            db.write_bytes(b"broken database fixture")
+            status, error, _ = self.request("GET", endpoint)
+            self.assertEqual((status, error["error"]), (503, "draft_storage_unavailable"))
+            self.assertEqual(db.read_bytes(), b"broken database fixture")
+
+        def checkpoint(job, slot):
+            try:
+                drafts._save({**job, "status": "FAILED", "stage": "STORYBOARD"})
+            finally:
+                slot.__exit__(None, None, None)
+                done.set()
+
+        done = threading.Event()
+        with (patch.object(drafts, "DB", self.root / "fresh.sqlite3"),
+              patch.object(drafts.model_hub, "draft_routes"),
+              patch.object(drafts.render, "_ffmpeg"),
+              patch.object(drafts, "_work", side_effect=checkpoint),
+              patch.object(drafts, "ACTIVE", None)):
+            status, created, _ = self.request("POST", endpoint + "/start", {"id": identifier, **brief})
+            self.assertEqual((status, created["status"]), (200, "RUNNING"))
+            self.assertTrue(done.wait(3))
+            restored = self.request("GET", endpoint)[1]["drafts"]
+            self.assertEqual([(row["id"], row["stage"]) for row in restored], [(identifier, "STORYBOARD")])
+            done.clear()
+            status, resumed, _ = self.request("POST", endpoint + "/" + identifier + "/resume")
+            self.assertEqual((status, resumed["id"], resumed["stage"]), (200, identifier, "STORYBOARD"))
+            self.assertTrue(done.wait(3))
+
     def test_dashboard_redirect_and_retired_routes_are_not_exposed(self):
         status, _, headers = self.request("GET", "/")
         self.assertEqual(status, 302)

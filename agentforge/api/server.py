@@ -11,6 +11,7 @@ from agentforge.api import auth
 from agentforge.api.auth import COOKIE, SESSION_SECONDS
 from agentforge.api.static import _react_asset
 from agentforge.api.routes import read
+from agentforge.features.film_studio.draft_pipeline import DraftNotFound, DraftStoreUnavailable
 from agentforge.api.routes.mutations import _owner_action
 
 MAX_BODY = 65536
@@ -88,6 +89,10 @@ class _Handler(BaseHTTPRequestHandler):
             return self._blocked(401, "authentication_required")
         try:
             return read.dispatch(self, route)
+        except DraftNotFound:
+            return self._blocked(404, "draft_not_found")
+        except DraftStoreUnavailable as exc:
+            return self._reply(503, {"error": "draft_storage_unavailable", "message": str(exc)})
         except (ValueError, KeyError, PermissionError, TypeError, FileNotFoundError):
             return self._blocked(404, "not_found")
 
@@ -135,6 +140,10 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             output = _owner_action(self.server, path, data, session)
             return self._reply(200, output)
+        except DraftNotFound:
+            return self._blocked(404, "draft_not_found")
+        except DraftStoreUnavailable as exc:
+            return self._reply(503, {"error": "draft_storage_unavailable", "message": str(exc)})
         except (ValueError, KeyError, TypeError, PermissionError, FileExistsError) as exc:
             # Do not echo arbitrary input or secrets into an error response.
             msg = str(exc)[:180]

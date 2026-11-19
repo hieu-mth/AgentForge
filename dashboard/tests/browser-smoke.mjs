@@ -301,8 +301,9 @@ try {
   policyServer=spawn('python',['-u','-c',[
     'import sys', 'from pathlib import Path', 'from functools import partial',
     'from agentforge.ai import model_hub', 'from agentforge.api.server import create_server',
-    'from agentforge.features.film_studio import production',
+    'from agentforge.features.film_studio import production, draft_pipeline',
     'model_hub.DB_PATH = Path(sys.argv[1])',
+    'draft_pipeline.DB = Path(sys.argv[1]).parent / "drafts.sqlite3"',
     'production.list_episodes = partial(production.list_episodes, film_root=Path(sys.argv[1]).parent / "films")',
     'server = create_server(0, owner_code=sys.argv[2])',
     'print(server.server_port, flush=True)', 'server.serve_forever()',
@@ -324,13 +325,29 @@ try {
   await settings.goto(policyOrigin+'/dashboard/#/media-studio',{waitUntil:'networkidle'});
   await settings.getByText('Chưa có tập phim trong workspace.',{exact:true}).waitFor();
   await settings.getByText('Tạo video từ ý tưởng',{exact:true}).waitFor();
+  await settings.getByText('Chưa có bản nháp',{exact:true}).waitFor();
   let draftFixture=null;
-  await settings.route('**/api/film/drafts',route=>route.fulfill({json:{
-    drafts:draftFixture?[draftFixture]:[],
-  }}));
+  let draftListStatus=404;
+  let draftReads=0;
+  await settings.route('**/api/film/drafts',route=>{
+    draftReads++;
+    if(draftListStatus===404)return route.fulfill({status:404,json:{error:'not_found'}});
+    if(draftListStatus===503)return route.fulfill({status:503,json:{
+      error:'draft_storage_unavailable',message:'Fixture SQLite unavailable',
+    }});
+    return route.fulfill({json:{drafts:draftFixture?[draftFixture]:[]}});
+  });
+  await settings.reload();
+  await settings.getByText(/Backend đang chạy chưa hỗ trợ bản nháp/).waitFor();
+  if(await settings.getByText('Chưa có bản nháp',{exact:true}).count())
+    throw new Error('Missing draft API was silently displayed as empty');
+  draftListStatus=503;
+  await settings.getByRole('button',{name:'Thử lại bản nháp',exact:true}).click();
+  await settings.getByText('Fixture SQLite unavailable',{exact:true}).waitFor();
+  draftListStatus=200;
   await settings.route('**/api/film/drafts/start',route=>{
     const {id,...brief}=route.request().postDataJSON();
-    if(!/^[0-9a-f]{32}$/.test(id)||brief.idea!=='Chú mèo cam khám phá khu rừng'||
+    if(!/^[0-9a-f]{32}$/.test(id)||!['Chú mèo cam khám phá khu rừng','Ý tưởng mới'].includes(brief.idea)||
         brief.seconds!==12||brief.scene_count!==3||brief.ratio!=='9:16')
       throw new Error('Unexpected draft submission');
     draftFixture={id,brief,status:'RUNNING',stage:'PLANNING',worker_active:true};
@@ -344,7 +361,22 @@ try {
   draftFixture={...draftFixture,status:'FAILED',worker_active:false,error:'Fixture runtime unavailable'};
   await settings.getByText('Cần xử lý',{exact:true}).click();
   await settings.getByText('Fixture runtime unavailable',{exact:true}).waitFor();
-  await settings.getByRole('button',{name:'Tiếp tục từ checkpoint'}).waitFor();
+  await settings.route('**/api/film/drafts/*/resume',route=>{
+    draftFixture=null;
+    draftListStatus=503;
+    return route.fulfill({status:404,json:{error:'draft_not_found'}});
+  });
+  await settings.getByRole('button',{name:'Tiếp tục từ checkpoint'}).click();
+  await settings.getByText(/Bản nháp này không còn tồn tại/).waitFor();
+  await settings.getByText('Fixture SQLite unavailable',{exact:true}).waitFor();
+  await settings.getByText('Chú mèo cam khám phá khu rừng',{exact:true}).waitFor({state:'hidden'});
+  const failedReads=draftReads;
+  await sleep(2800);
+  if(draftReads!==failedReads)throw new Error('Draft list retried automatically after an API failure');
+  draftListStatus=200;
+  await settings.getByLabel('Ý tưởng video',{exact:true}).fill('Ý tưởng mới');
+  await settings.getByRole('button',{name:'Tạo bản nháp',exact:true}).click();
+  await settings.getByText('Ý tưởng mới',{exact:true}).waitFor();
   // Fresh checkout starts with zero registered model profiles.
   await settings.goto(policyOrigin+'/dashboard/#/models',{waitUntil:'networkidle'});
   await settings.getByText('Chưa đăng ký model. Chọn Đăng ký model để bắt đầu.',{exact:true}).waitFor();
