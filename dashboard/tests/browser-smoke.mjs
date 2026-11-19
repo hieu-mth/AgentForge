@@ -256,7 +256,7 @@ try {
   await settings.getByRole('dialog').getByRole('button',{name:'Lưu cấu hình'}).click();
   await settings.getByText('Owner tùy chỉnh · Phiên bản 2',{exact:true}).waitFor();
   await settings.reload();
-  await settings.getByText('Owner tùy chỉnh · Phiên bản 1',{exact:true}).waitFor();
+  await settings.getByText('Owner tùy chỉnh · Phiên bản 2',{exact:true}).waitFor();
   if(!await decompose.isChecked())throw new Error('Settings did not persist after reload');
   const persisted=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
   if(persisted.orchestrator.policy.primary!=='local_primary')
