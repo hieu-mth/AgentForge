@@ -35,8 +35,11 @@ def dispatch(self, route):
             "auto_publish": False, "visual_continuity_verified": False,
         })
     if route.startswith("/api/film/productions/"):
-        from agentforge.features.film_studio.production import inspect, inspect_render
         parts = route.split("/")
+        if len(parts) == 7 and parts[-1] == "preview":
+            from agentforge.api.routes.film_preview import preview
+            return preview(self, parts[4], parts[5])
+        from agentforge.features.film_studio.production import inspect, inspect_render
         if len(parts) != 6 or parts[:4] != ["", "api", "film", "productions"]:
             raise ValueError("Invalid film production path")
         slug, episode = parts[4], parts[5]
@@ -62,6 +65,10 @@ def dispatch(self, route):
             "automatic_model_download": False, "automatic_upload": False,
         })
     if route.startswith("/api/film/motion/job/"):
+        parts = route.split("/")
+        if len(parts) == 7 and parts[-1] == "preview":
+            from agentforge.api.routes.film_preview import clip_preview
+            return clip_preview(self, parts[5])
         from agentforge.features.film_studio.motion_verify import _job, inspect_receipt
         job_id = route.removeprefix("/api/film/motion/job/")
         from agentforge.features.film_studio.motion_comfy import DB as motion_db
