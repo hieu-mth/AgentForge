@@ -7,6 +7,7 @@ import {useResource, ResourceStatus} from '../use_resource.jsx';
 import {useScreenRefresh} from '../refresh_scope.jsx';
 import {displayStatus} from '../environment_format.js';
 import {ModelProfileDialog} from './ModelProfileDialog.jsx';
+import {FluxProbeDialog,fluxStatus} from './FluxProbeDialog.jsx';
 
 const { Text, Paragraph } = Typography;
 const desktopColumns=['md'];
@@ -21,6 +22,7 @@ export function ModelHub({mutate}) {
   const [checked,setChecked]=useState({});
   const [probes,setProbes]=useState({});
   const [editor,setEditor]=useState(null);
+  const [fluxProbe,setFluxProbe]=useState(null);
 
   const reload=hubResource.reload;
   useScreenRefresh(reload);
@@ -42,7 +44,7 @@ export function ModelHub({mutate}) {
         const result=await mutate(path,body);
         if(result){
           if(path==='/api/model-hub/check') {
-            setChecked(old=>({...old,[body.profile_id]:{status:result.status,revision:hub?.revision}}));
+            setChecked(old=>({...old,[body.profile_id]:{...result,revision:hub?.revision}}));
           }else if(path==='/api/model-hub/probe') {
             setProbes(old=>({...old,[body.profile_id]:result}));
           }else {
@@ -85,6 +87,8 @@ export function ModelHub({mutate}) {
     },'Kiểm tra ComfyUI local?','Đọc thông tin GPU và danh sách model của các node loader.')}>
       Kiểm tra ComfyUI
     </Button>}
+    {row.flux&&<Button size="small" disabled={!row.enabled}
+      onClick={()=>setFluxProbe({profile:row,revision:hub.revision})}>Chạy thử</Button>}
     {byAdapter[row.provider]?.local_probe&&<>
       <Tooltip title="Đọc danh sách model từ Ollama local">
         <Button size="small" onClick={()=>update('/api/model-hub/check',{
@@ -147,8 +151,9 @@ export function ModelHub({mutate}) {
             </Text>}
             {row.flux&&<Text type="secondary" style={{fontSize:12}}>
               {checked[row.id]?.revision===hub?.revision
-                ? {READY:'ComfyUI sẵn sàng',GPU_UNAVAILABLE:'Chưa phát hiện CUDA',
-                  MODEL_UNAVAILABLE:'Thiếu model trong ComfyUI',COMFYUI_UNAVAILABLE:'ComfyUI không phản hồi'}[checked[row.id].status]
+                ? <>{fluxStatus[checked[row.id].status]??checked[row.id].status}
+                    {checked[row.id].checked_at&&<><br/>Lần kiểm tra: {
+                      new Date(checked[row.id].checked_at).toLocaleString('vi-VN')}</>}</>
                 : 'Chưa kiểm tra ComfyUI'}
             </Text>}
             {byAdapter[row.provider]?.connection==='cloud'&&
@@ -168,5 +173,6 @@ export function ModelHub({mutate}) {
     </div>
     {editor&&<ModelProfileDialog adapters={adapters} profile={editor.profile}
       profiles={profiles} revision={editor.revision} onCancel={()=>setEditor(null)} onSave={saveProfile}/>}
+    {fluxProbe&&<FluxProbeDialog {...fluxProbe} mutate={mutate} onCancel={()=>setFluxProbe(null)}/>}
   </div>;
 }

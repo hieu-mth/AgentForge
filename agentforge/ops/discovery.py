@@ -132,12 +132,14 @@ def _comfy(port):
     endpoint = f"http://127.0.0.1:{port}"
     service = {"id": "comfyui", "endpoint": endpoint}
     try:
-        stats = comfyui.request_json("/system_stats", port=port, timeout=2)
+        stats = comfyui.request_json("/system_stats", port=port, timeout=5)
         if not isinstance(stats, dict) or not isinstance(stats.get("devices"), list):
             raise ValueError("Invalid system stats")
     except PROBE_ERRORS as exc:
-        status, reason = _error(exc)
-        return {**service, "status": status, "error": reason}, []
+        status, _ = _error(exc)
+        return {**service, "status": status, "error": comfyui.failure_status(exc),
+                "checked_at": datetime.now(timezone.utc).isoformat()}, []
+    checked_at = datetime.now(timezone.utc).isoformat()
     categories = comfyui.MODEL_CATEGORIES
     with ThreadPoolExecutor(max_workers=len(categories)) as pool:
         results = list(pool.map(lambda key: _comfy_catalog_at_port(key, port), categories))
@@ -150,7 +152,7 @@ def _comfy(port):
         for name in entries[:MAX_MODELS]:
             if isinstance(name, str) and 0 < len(name) <= 240 and name.isprintable():
                 models.append(_model("comfyui", endpoint, category, name))
-    return {**service, "status": "DEGRADED" if errors else "RUNNING", "check": "SYSTEM_STATS",
+    return {**service, "status": "RUNNING", "check": "SYSTEM_STATS", "checked_at": checked_at,
             "catalog_errors": errors, "truncated": truncated}, models
 
 

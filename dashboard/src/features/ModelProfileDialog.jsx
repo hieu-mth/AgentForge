@@ -126,7 +126,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
             {required:true},{validator:(_,value)=>{
               try {
                 const graph=JSON.parse(value);
-                if(graph?.['38']?.class_type==='UnetLoaderGGUF') {
+                if(graph&&Object.values(graph).filter(node=>node?.class_type==='UnetLoaderGGUF').length===1) {
                   if(new TextEncoder().encode(JSON.stringify(graph)).length<=adapter.flux_workflow_max_bytes)
                     return Promise.resolve();
                   return Promise.reject(new Error('Workflow vượt giới hạn '+adapter.flux_workflow_max_bytes+' byte.'));

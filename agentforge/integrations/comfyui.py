@@ -21,6 +21,23 @@ class ComfyUITransportError(ValueError):
     """Invalid local route or bounded JSON response."""
 
 
+class ComfyHTTPError(RuntimeError):
+    def __init__(self, status):
+        self.status = status
+        super().__init__("Local ComfyUI returned non-success status")
+
+
+def failure_status(exc):
+    if isinstance(exc, ComfyHTTPError):
+        return ("AUTH_REQUIRED" if exc.status in {401, 403} else
+                "COMFYUI_TIMEOUT" if exc.status in {408, 504} else "COMFYUI_HTTP_ERROR")
+    if isinstance(exc, TimeoutError):
+        return "COMFYUI_TIMEOUT"
+    if isinstance(exc, (OSError, http.client.HTTPException)):
+        return "COMFYUI_UNAVAILABLE"
+    return "COMFYUI_INVALID_RESPONSE"
+
+
 def request_json(path: str, *, body=None, timeout=6, port=DEFAULT_PORT,
                  max_response_bytes=MAX_RESPONSE_BYTES):
     """One request to a fixed loopback host; caller owns one-shot semantics."""
@@ -41,7 +58,7 @@ def request_json(path: str, *, body=None, timeout=6, port=DEFAULT_PORT,
                               "Accept": "application/json"})
         response = conn.getresponse()
         if response.status != 200:
-            raise RuntimeError("Local ComfyUI returned non-success status")
+            raise ComfyHTTPError(response.status)
         data = response.read(max_response_bytes + 1)
     finally:
         conn.close()
@@ -113,7 +130,7 @@ def request_image_bytes(path, *, body=None, timeout=5, port=DEFAULT_PORT,
                               "Content-Type": "application/json"})
         response = conn.getresponse()
         if response.status != 200:
-            raise RuntimeError("Local ComfyUI returned non-success status")
+            raise ComfyHTTPError(response.status)
         raw = response.read(max_response_bytes + 1)
     finally:
         conn.close()

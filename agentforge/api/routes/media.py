@@ -69,8 +69,10 @@ def handle(server, path, request, session=None):
                 or ("ack" in request and request["ack"] != "GENERATE_AI_VISUALS")):
             raise ValueError("Invalid FLUX image request")
         from agentforge.features.media import flux_runtime
-        return flux_runtime.generate(request["prompt"], automated="ack" not in request,
-                                     **{key: request[key] for key in options & request.keys()})
+        from agentforge.ai.model_hub import local_inference_slot
+        with local_inference_slot():
+            return flux_runtime.generate(request["prompt"], automated="ack" not in request,
+                                         **{key: request[key] for key in options & request.keys()})
     if path == "/api/visuals/approve":
         if (set(request) != {"job_id", "sha256"} or session is None
                 or not isinstance(request["job_id"], str)

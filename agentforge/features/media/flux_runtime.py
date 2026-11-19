@@ -1,5 +1,6 @@
 ﻿"""Execute the bound Model Hub image capability through the visual job ledger."""
 import hashlib
+import http.client
 import io
 import json
 import os
@@ -36,25 +37,29 @@ def _json(path, *, port, body=None, timeout=5):
 
 def readiness(config, port):
     graph = config["workflow"]
+    ids = flux_workflow.node_ids(graph)
     try:
-        stats = _json("/system_stats", port=port)
+        stats = _json("/system_stats", port=port, timeout=5)
         if not any(isinstance(device, dict) and device.get("type") == "cuda"
                    for device in stats["devices"]):
             return "GPU_UNAVAILABLE"
         for node_id, fields in (("38", ("unet_name",)), ("39", ("clip_name1", "clip_name2")),
                                 ("40", ("vae_name",))):
-            node = graph[node_id]
+            node = graph[ids[node_id]]
             kind = node["class_type"]
-            model_fields = _json("/object_info/" + kind, port=port)[kind]["input"]["required"]
+            definitions = _json("/object_info/" + kind, port=port)
+            if kind not in definitions:
+                return "WORKFLOW_NODE_UNAVAILABLE"
+            model_fields = definitions[kind]["input"]["required"]
             for field in fields:
                 if node["inputs"][field] not in model_fields[field][0]:
                     return "MODEL_UNAVAILABLE"
-    except (OSError, ValueError, RuntimeError, KeyError, TypeError):
-        return "COMFYUI_UNAVAILABLE"
+    except (OSError, ValueError, RuntimeError, KeyError, TypeError, http.client.HTTPException) as exc:
+        return comfyui.failure_status(exc)
     return "READY"
 
 
-def _output(history, ident):
+def _output(history, ident, output_node):
     if history is None:
         return None
     status = history.get("status", {})
@@ -64,7 +69,7 @@ def _output(history, ident):
         raise JobError("CANCELLED")
     if status.get("status_str") != "success" or status.get("completed") is not True:
         raise JobError("EXECUTION_FAILED")
-    images = history.get("outputs", {}).get("9", {}).get("images", [])
+    images = history.get("outputs", {}).get(output_node, {}).get("images", [])
     if not isinstance(images, list) or len(images) != 1 or not isinstance(images[0], dict):
         raise JobError("OUTPUT_MISSING")
     image = images[0]
@@ -77,13 +82,16 @@ def _output(history, ident):
 
 
 def _collect(provider_id, ident, port, config, metadata):
+    output_node = flux_workflow.node_ids(config["workflow"])["9"]
     deadline = time.monotonic() + config["timeout_seconds"]
     while (remaining := deadline - time.monotonic()) > 0:
         try:
             history = _json("/history/" + provider_id, port=port, timeout=min(remaining, 5))
-        except (OSError, RuntimeError):
+        except comfyui.ComfyHTTPError as exc:
+            raise JobError(comfyui.failure_status(exc)) from None
+        except (OSError, http.client.HTTPException):
             history = {}
-        filename = _output(history.get(provider_id), ident)
+        filename = _output(history.get(provider_id), ident, output_node)
         if filename is not None:
             break
         time.sleep(min(1, max(0, deadline - time.monotonic())))
@@ -103,19 +111,22 @@ def _collect(provider_id, ident, port, config, metadata):
 
 
 def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=None,
-             automated=False, hub_db=None, db_path=None):
+             automated=False, hub_db=None, db_path=None, profile_id=None, expected_revision=None):
     """Entry point for Studio and trusted Orchestrator callers."""
     ops_control.require_active()
-    revision, profile = model_hub.image_runtime(automated=automated, db_path=hub_db)
+    revision, profile = (model_hub.image_runtime(automated=automated, db_path=hub_db)
+                         if profile_id is None else model_hub.flux_probe_profile(
+                             profile_id, expected_revision=expected_revision, db_path=hub_db))
     config = flux_workflow.validate(profile["flux"], profile["model"], profile["base_url"])
     port = urlsplit(profile["base_url"]).port
     if scene is not None and (not isinstance(scene, str) or not re.fullmatch(
             r"[a-z0-9][a-z0-9_/-]{0,119}", scene)):
         raise ValueError("Invalid scene reference")
     graph = config["workflow"]
-    width = graph["27"]["inputs"]["width"] if width is None else width
-    height = graph["27"]["inputs"]["height"] if height is None else height
-    steps = graph["31"]["inputs"]["steps"] if steps is None else steps
+    ids = flux_workflow.node_ids(graph)
+    width = graph[ids["27"]]["inputs"]["width"] if width is None else width
+    height = graph[ids["27"]]["inputs"]["height"] if height is None else height
+    steps = graph[ids["31"]]["inputs"]["steps"] if steps is None else steps
     seed = secrets.randbelow(2**53) if seed is None else seed
     ident = uuid4().hex
     bound = flux_workflow.bind(config, ident, prompt, width, height, seed, steps)
@@ -132,6 +143,7 @@ def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=No
         "prompt": prompt.strip(), "seed": seed, "width": width, "height": height,
         "steps": steps, "scene": scene, "model": profile["model"], "profile_id": profile["id"],
         "model_hub_revision": revision, "workflow": bound,
+        "probe": profile_id is not None,
         "workflow_sha256": hashlib.sha256(json.dumps(bound, sort_keys=True).encode()).hexdigest(),
         "output_dir": config["output_dir"], "duration_seconds": None,
     }
@@ -182,7 +194,11 @@ def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=No
         status = "ASSET_READY"
     except JobError as exc:
         status = exc.status
-    except (OSError, RuntimeError, ValueError, KeyError, TypeError, AttributeError):
+    except comfyui.ComfyHTTPError as exc:
+        status = ("WORKFLOW_REJECTED" if status == "SUBMIT_UNCERTAIN" and exc.status in {400, 422}
+                  else comfyui.failure_status(exc))
+    except (OSError, RuntimeError, ValueError, KeyError, TypeError, AttributeError,
+            http.client.HTTPException):
         pass
     finally:
         metadata["duration_seconds"] = round(time.monotonic() - started, 3)
@@ -199,4 +215,7 @@ def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=No
             target.unlink(missing_ok=True)
     return {"job_id": ident, "provider_id": provider_id, "status": status,
             "sha256": digest if status == "ASSET_READY" else None,
-            "duration_seconds": metadata["duration_seconds"]}
+            "duration_seconds": metadata["duration_seconds"],
+            "preview_url": f"/api/visuals/{ident}/preview" if status == "ASSET_READY" else None,
+            "workspace_path": f"workspace/{config['output_dir']}/{ident}.png" if status == "ASSET_READY" else None,
+            "width": width, "height": height, "seed": seed, "steps": steps}

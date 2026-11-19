@@ -133,6 +133,7 @@ def dispatch(self, route):
             "preview_url": "/api/visuals/" + row["job_id"] + "/preview",
         } for row in rows
             if row.get("status") == "ASSET_READY"
+            and not row.get("probe")
             and row.get("purpose") in {"video", "image"}
             and row.get("asset_sha")]
         return self._reply(200, {"images": images[:80],
