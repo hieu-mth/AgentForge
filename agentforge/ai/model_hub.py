@@ -40,6 +40,30 @@ EXECUTIONS = {"config_only", "rules"}
 MAX_PROFILE_COUNT = 32
 MAX_STATE_BYTES = 65536
 
+# These are the profile adapters accepted by Model Hub. Registration is
+# configuration only, including for providers with an existing runtime.
+ADAPTERS = {
+    "ollama": {
+        "label": "Ollama", "connection": "local", "model_label": "Tên model",
+        "model_example": "qwen3:8b",
+        "description": "Model văn bản chạy qua Ollama trên máy này.",
+        "defaults": {"base_url": "http://127.0.0.1:11434"}, "local_probe": True,
+    },
+    "comfyui": {
+        "label": "ComfyUI", "connection": "local", "model_label": "Mã checkpoint",
+        "model_example": "wan2.2_5b",
+        "description": "Hồ sơ ảnh hoặc video. Đăng ký chỉ lưu cấu hình cho ComfyUI.",
+        "defaults": {"base_url": "http://127.0.0.1:8188"}, "local_probe": False,
+    },
+    "anthropic": {
+        "label": "Anthropic-compatible", "connection": "cloud", "model_label": "Model ID",
+        "model_example": "model-id-da-cap",
+        "description": "Lưu cấu hình endpoint tương thích Anthropic. Dashboard chưa hỗ trợ chạy thử cloud.",
+        "defaults": {"base_url_env": "ANTHROPIC_BASE_URL",
+                     "api_key_env": "ANTHROPIC_AUTH_TOKEN"}, "local_probe": False,
+    },
+}
+
 
 def _required_text(value, pattern, name):
     if not isinstance(value, str) or not pattern.fullmatch(value):
@@ -78,7 +102,7 @@ def validate_profile(value, *, profile_id=None):
     if profile_id is not None and ident != profile_id:
         raise ModelConfigError("Profile ID mismatch")
     provider = value.get("provider")
-    if provider not in {"ollama", "anthropic", "comfyui"}:
+    if not isinstance(provider, str) or provider not in ADAPTERS:
         raise ModelConfigError("Unsupported provider")
     model = _required_text(value.get("model"), MODEL_RE, "model/checkpoint name")
     enabled = value.get("enabled")
@@ -86,15 +110,13 @@ def validate_profile(value, *, profile_id=None):
         raise ModelConfigError("Invalid enabled state")
     common = {"id": ident, "provider": provider, "model": model,
               "enabled": enabled}
-    if provider in {"ollama", "comfyui"}:
-        if set(value) - {"id", "provider", "model", "enabled", "base_url"}:
-            raise ModelConfigError("Local provider accepts only a loopback URL")
+    fields = ADAPTERS[provider]["defaults"]
+    if set(value) - (common.keys() | fields.keys()):
+        raise ModelConfigError("Fields do not match the selected adapter")
+    if ADAPTERS[provider]["connection"] == "local":
         common["base_url"] = _local_url(value.get("base_url"))
     else:
-        if set(value) - {"id", "provider", "model", "enabled",
-                         "base_url_env", "api_key_env"}:
-            raise ModelConfigError("Cloud provider accepts only env names")
-        for key in ("base_url_env", "api_key_env"):
+        for key in fields:
             env = value.get(key)
             if not isinstance(env, str) or not ENV_NAME.fullmatch(env):
                 raise ModelConfigError("Cloud credentials must use env references")
@@ -259,6 +281,7 @@ def _catalog(revision, state):
                        })
     return {
         "revision": revision,
+        "adapters": [{"id": key, **copy.deepcopy(adapter)} for key, adapter in ADAPTERS.items()],
         "profiles": [{"id": k, **v, "source": (
             "owner"),
             "health": "UNVERIFIED",

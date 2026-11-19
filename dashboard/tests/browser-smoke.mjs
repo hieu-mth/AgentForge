@@ -237,17 +237,38 @@ try {
   await settings.getByText('Có thay đổi chưa lưu',{exact:true}).waitFor();
   await settings.getByRole('button',{name:'Hủy thay đổi'}).click();
   if(await decompose.isChecked()||await savePolicy.isEnabled())throw new Error('Cancel kept edits');
-  // Explicit Owner registration is a real API mutation; no TOML model defaults.
-  const {csrf:registerCsrf}=await (await settings.request.get(
-    policyOrigin+'/api/session')).json();
-  const registered=await settings.request.post(policyOrigin+'/api/model-hub/profile',{
-    headers:{Origin:policyOrigin,'X-CSRF-Token':registerCsrf},
-    data:{ack:'SAVE_MODEL_PROFILE',expected_revision:0,
-      profile:{id:'local_primary',provider:'ollama',model:'synthetic-local:8b',
-        enabled:true,base_url:'http://127.0.0.1:11434'}},
-  });
-  if(registered.status()!==200)throw new Error('Owner SQLite profile registration failed');
-  await settings.reload();
+  await settings.goto(policyOrigin+'/dashboard/#/models');
+  await settings.getByRole('button',{name:'Đăng ký model'}).click();
+  const registerDialog=settings.getByRole('dialog');
+  await registerDialog.getByText('Cloud',{exact:true}).click();
+  await registerDialog.getByText('Anthropic-compatible',{exact:true}).waitFor();
+  await registerDialog.getByLabel('Biến môi trường chứa API key',{exact:true}).waitFor();
+  if(await registerDialog.getByLabel('Địa chỉ runtime local',{exact:true}).count())
+    throw new Error('Cloud registration exposed the local endpoint field');
+  await registerDialog.getByText('Local',{exact:true}).click();
+  await registerDialog.getByRole('combobox',{name:'Runtime'}).click();
+  await openOptions.filter({hasText:/^ComfyUI$/}).click();
+  await registerDialog.getByLabel('Mã checkpoint',{exact:true}).waitFor();
+  await registerDialog.getByRole('combobox',{name:'Runtime'}).click();
+  await openOptions.filter({hasText:/^Ollama$/}).click();
+  await registerDialog.getByLabel('Tên model',{exact:true}).fill('synthetic-local:8b');
+  await registerDialog.getByLabel('Mã hồ sơ',{exact:true}).fill('local_primary');
+  const localEndpoint=registerDialog.getByLabel('Địa chỉ runtime local',{exact:true});
+  await localEndpoint.fill('http://127.0.0.1:99999');
+  await registerDialog.getByRole('button',{name:'Xem lại cấu hình'}).click();
+  await registerDialog.getByText('Dùng địa chỉ HTTP loopback với cổng từ 1 đến 65535.').waitFor();
+  await localEndpoint.fill('http://127.0.0.1:11434');
+  await registerDialog.getByRole('button',{name:'Xem lại cấu hình'}).click();
+  await registerDialog.getByText('synthetic-local:8b',{exact:true}).waitFor();
+  const beforeSave=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
+  if(beforeSave.profiles.length)throw new Error('Registration saved before Owner confirmation');
+  await registerDialog.getByRole('button',{name:'Xác nhận lưu'}).click();
+  await registerDialog.waitFor({state:'hidden'});
+  const registered=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
+  if(registered.revision!==1||registered.profiles[0]?.provider!=='ollama')
+    throw new Error('Owner SQLite profile registration failed');
+  console.log('Model adapter selection, validation and real SQLite registration: PASS');
+  await settings.goto(policyOrigin+'/dashboard/#/orchestrator');
   await settings.getByRole('heading',{name:'AI điều phối tác vụ',exact:true}).waitFor();
   await settings.getByRole('combobox',{name:'Model điều phối'}).click();
   await openOptions.filter({hasText:/local_primary/}).click();
@@ -286,6 +307,14 @@ try {
   // Real Model Hub UI can delete an unassigned Owner profile; never touches weights.
   await settings.goto(policyOrigin+'/dashboard/#/models',{waitUntil:'networkidle'});
   const modelRow=settings.locator('tr[data-row-key="local_primary"]');
+  await settings.getByRole('button',{name:'Sáng'}).click();
+  await settings.waitForFunction(()=>document.documentElement.dataset.theme==='light');
+  await modelRow.getByRole('button',{name:'Sửa'}).click();
+  await registerDialog.getByText('Chỉnh sửa hồ sơ model',{exact:true}).waitFor();
+  if(await registerDialog.getByLabel('Tên model',{exact:true}).inputValue()!=='synthetic-local:8b')
+    throw new Error('Editor did not load the persisted model');
+  await registerDialog.getByRole('button',{name:'Hủy',exact:true}).click();
+  await registerDialog.waitFor({state:'hidden'});
   await modelRow.getByText('Xóa',{exact:true}).click();
   await settings.getByRole('dialog').getByRole('button',{name:'Xác nhận'}).click();
   await settings.getByText('Chưa đăng ký model. Chọn Đăng ký model để bắt đầu.',{exact:true}).waitFor();
