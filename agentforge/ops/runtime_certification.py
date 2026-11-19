@@ -62,7 +62,14 @@ def _local_endpoint(value):
     return parts.hostname, parts.port
 
 
-def _http_json(host, port, route, *, payload=None, timeout=3, max_bytes=MAX_TAGS_BYTES):
+class LocalProviderHTTPError(RuntimeError):
+    def __init__(self, status):
+        self.status = status
+        super().__init__("Local provider did not return HTTP 200")
+
+
+def _http_json(host, port, route, *, payload=None, timeout=3, max_bytes=MAX_TAGS_BYTES,
+               max_request_bytes=4096):
     """No proxy/redirect: exact loopback host plus hardcoded Ollama route."""
     if host not in LOOPBACK or route not in ("/api/tags", "/api/chat"):
         raise ValueError("Unapproved local route")
@@ -72,7 +79,8 @@ def _http_json(host, port, route, *, payload=None, timeout=3, max_bytes=MAX_TAGS
         raise ValueError("Invalid HTTP budget")
     body = None if payload is None else json.dumps(
         payload, ensure_ascii=True, allow_nan=False).encode("utf-8")
-    if body is not None and len(body) > 4096:
+    if (type(max_request_bytes) is not int or not 1 <= max_request_bytes <= 16384
+            or body is not None and len(body) > max_request_bytes):
         raise ValueError("Local inference probe payload too large")
     connection = http.client.HTTPConnection(host, port, timeout=timeout)
     try:
@@ -81,7 +89,7 @@ def _http_json(host, port, route, *, payload=None, timeout=3, max_bytes=MAX_TAGS
                                                "Content-Type": "application/json"})
         response = connection.getresponse()
         if response.status != 200:
-            raise RuntimeError("Local provider did not return HTTP 200")
+            raise LocalProviderHTTPError(response.status)
         data = response.read(max_bytes + 1)
     finally:
         connection.close()

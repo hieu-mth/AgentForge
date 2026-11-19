@@ -1,13 +1,14 @@
 import {useRef,useState} from 'react';
-import {Button,Card,Empty,Input,Radio,Space} from 'antd';
+import {Button,Card,Empty,Radio,Space} from 'antd';
 import {ClockCircleOutlined,EyeOutlined,FolderOpenOutlined,PlayCircleOutlined,ReloadOutlined,
-  SettingOutlined,TeamOutlined,ToolOutlined,VideoCameraOutlined,WarningOutlined} from '@ant-design/icons';
+  SettingOutlined,ToolOutlined,VideoCameraOutlined,WarningOutlined} from '@ant-design/icons';
 import {SectionTitle,SettingsHeading,SettingsStatus,Stat} from '../components/settings.jsx';
 import {useResource,ResourceStatus} from '../use_resource.jsx';
 import {useScreenRefresh} from '../refresh_scope.jsx';
 import {FilmProduction,MotionClips} from './FilmProduction.jsx';
 import {StudioEpisodeDetails} from './StudioEpisodeDetails.jsx';
 import {StudioImages} from './StudioImages.jsx';
+import {StudioDrafts} from './StudioDrafts.jsx';
 
 const groups={
   attention:{label:'Cần xử lý',tone:'bad',next:'Kiểm tra lại hồ sơ tập và các clip nguồn.'},
@@ -57,16 +58,7 @@ export function MediaStudio({onNavigate,mutate}){
       description="Theo dõi tập phim local, kiểm tra các bản dựng và tiếp tục sản xuất."
       actions={<Button icon={<FolderOpenOutlined/>} onClick={()=>onNavigate('projects')}>Xem dự án video</Button>}/>
 
-    <section className="studio-start">
-      <div className="studio-start-icon"><VideoCameraOutlined aria-hidden="true"/></div>
-      <div>
-        <h3>Tạo video từ ý tưởng</h3>
-        <p id="studio-idea-help">AgentForge chưa có API tiếp nhận ý tưởng và lập kế hoạch. Khi bạn chuẩn bị hồ sơ tập và clip bằng CLI, dự án sẽ xuất hiện ở bên dưới.</p>
-        <Input.TextArea disabled rows={2} aria-label="Ý tưởng video" aria-describedby="studio-idea-help"
-          placeholder="Ví dụ: Một chú mèo cam khám phá khu rừng phép thuật, khoảng 20 giây, tỷ lệ 9:16."/>
-      </div>
-      <Button onClick={()=>onNavigate('characters')} icon={<TeamOutlined/>}>Thư viện nhân vật</Button>
-    </section>
+    <StudioDrafts mutate={mutate} onCharacters={()=>onNavigate('characters')}/>
 
     {projects&&<div className="env-stat-grid studio-stats" aria-label="Trạng thái ưu tiên của các dự án tìm thấy">
       <Stat icon={<ClockCircleOutlined/>} label="Dự án chờ dựng" value={projects.filter(row=>row.group==='prepared').length}/>

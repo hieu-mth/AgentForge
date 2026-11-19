@@ -111,12 +111,15 @@ def _collect(provider_id, ident, port, config, metadata):
 
 
 def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=None,
-             automated=False, hub_db=None, db_path=None, profile_id=None, expected_revision=None):
+             automated=False, hub_db=None, db_path=None, profile_id=None, expected_revision=None,
+             production_job=None, production_revision=None):
     """Entry point for Studio and trusted Orchestrator callers."""
     ops_control.require_active()
     revision, profile = (model_hub.image_runtime(automated=automated, db_path=hub_db)
                          if profile_id is None else model_hub.flux_probe_profile(
                              profile_id, expected_revision=expected_revision, db_path=hub_db))
+    if production_revision is not None and revision != production_revision:
+        raise ValueError("Image routing changed; resume using the updated configuration")
     config = flux_workflow.validate(profile["flux"], profile["model"], profile["base_url"])
     port = urlsplit(profile["base_url"]).port
     if scene is not None and (not isinstance(scene, str) or not re.fullmatch(
@@ -128,7 +131,7 @@ def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=No
     height = graph[ids["27"]]["inputs"]["height"] if height is None else height
     steps = graph[ids["31"]]["inputs"]["steps"] if steps is None else steps
     seed = secrets.randbelow(2**53) if seed is None else seed
-    ident = uuid4().hex
+    ident = visual_jobs._id(production_job) if production_job is not None else uuid4().hex
     bound = flux_workflow.bind(config, ident, prompt, width, height, seed, steps)
     directory = output_directory(config["output_dir"])
     target = ensure_local_root(directory / (ident + ".png"))

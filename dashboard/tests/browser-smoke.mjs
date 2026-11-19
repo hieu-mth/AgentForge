@@ -139,10 +139,11 @@ try {
   if(clipRequests||!episodeRequests)throw new Error('Studio did not separate production reads from motion tools');
   await page2.setViewportSize({width:390,height:850});
   const studio=page2.locator('.studio-page');
+  await studio.locator('.studio-stats .env-stat-value').last().waitFor();
   if((await studio.locator('.studio-stats .env-stat-value').allTextContents()).join(',')!=='1,1,1')
     throw new Error('Studio counters do not match episode stages');
-  if(await studio.locator('.studio-episode').count()!==3||await studio.getByLabel('Ý tưởng video').isEnabled())
-    throw new Error('Studio duplicated projects or enabled an unsupported creation action');
+  if(await studio.locator('.studio-episode').count()!==3||!await studio.getByLabel('Ý tưởng video').isEnabled())
+    throw new Error('Studio duplicated projects or disabled the idea input');
   for(const width of [1440,1280,900,390]){
     await page2.setViewportSize({width,height:850});
     await page2.waitForFunction(()=>document.documentElement.scrollWidth<=window.innerWidth+2);
@@ -323,6 +324,27 @@ try {
   await settings.goto(policyOrigin+'/dashboard/#/media-studio',{waitUntil:'networkidle'});
   await settings.getByText('Chưa có tập phim trong workspace.',{exact:true}).waitFor();
   await settings.getByText('Tạo video từ ý tưởng',{exact:true}).waitFor();
+  let draftFixture=null;
+  await settings.route('**/api/film/drafts',route=>route.fulfill({json:{
+    drafts:draftFixture?[draftFixture]:[],
+  }}));
+  await settings.route('**/api/film/drafts/start',route=>{
+    const {id,...brief}=route.request().postDataJSON();
+    if(!/^[0-9a-f]{32}$/.test(id)||brief.idea!=='Chú mèo cam khám phá khu rừng'||
+        brief.seconds!==12||brief.scene_count!==3||brief.ratio!=='9:16')
+      throw new Error('Unexpected draft submission');
+    draftFixture={id,brief,status:'RUNNING',stage:'PLANNING',worker_active:true};
+    return route.fulfill({json:draftFixture});
+  });
+  await settings.getByLabel('Ý tưởng video',{exact:true}).fill('Chú mèo cam khám phá khu rừng');
+  await settings.getByRole('button',{name:'Tạo bản nháp',exact:true}).click();
+  await settings.getByText('Đang lập kế hoạch',{exact:true}).waitFor();
+  await settings.reload();
+  await settings.getByText('Chú mèo cam khám phá khu rừng',{exact:true}).waitFor();
+  draftFixture={...draftFixture,status:'FAILED',worker_active:false,error:'Fixture runtime unavailable'};
+  await settings.getByText('Cần xử lý',{exact:true}).click();
+  await settings.getByText('Fixture runtime unavailable',{exact:true}).waitFor();
+  await settings.getByRole('button',{name:'Tiếp tục từ checkpoint'}).waitFor();
   // Fresh checkout starts with zero registered model profiles.
   await settings.goto(policyOrigin+'/dashboard/#/models',{waitUntil:'networkidle'});
   await settings.getByText('Chưa đăng ký model. Chọn Đăng ký model để bắt đầu.',{exact:true}).waitFor();

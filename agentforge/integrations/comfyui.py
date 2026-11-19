@@ -80,7 +80,7 @@ def validate_image_route(path, *, has_body=False):
     if not isinstance(path, str) or len(path) > 300:
         raise ComfyUITransportError("Invalid local image route")
     if has_body:
-        if path != "/prompt":
+        if path not in {"/prompt", "/free"}:
             raise ComfyUITransportError("Invalid image POST route")
         return
     if (path in MODEL_ROUTES or path in {"/system_stats", "/queue"}
@@ -111,6 +111,9 @@ def request_image_bytes(path, *, body=None, timeout=5, port=DEFAULT_PORT,
     interpret provider HTTP redirect as a fetchable destination.
     """
     validate_image_route(path, has_body=body is not None)
+    if path == "/free" and (not isinstance(body, dict) or body.keys() != {"unload_models", "free_memory"}
+                            or any(value is not True for value in body.values())):
+        raise ComfyUITransportError("Invalid local memory release request")
     if type(port) is not int or not 1 <= port <= 65535:
         raise ComfyUITransportError("Invalid local ComfyUI port")
     if (type(timeout) not in (int, float) or not 0 < timeout <= 30

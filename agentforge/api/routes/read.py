@@ -2,6 +2,26 @@
 
 
 def dispatch(self, route):
+    if route == "/api/film/drafts":
+        from agentforge.features.film_studio import draft_pipeline
+        return self._reply(200, {"drafts": draft_pipeline.list_drafts()})
+    if route.startswith("/api/film/drafts/"):
+        from agentforge.features.film_studio import draft_pipeline
+        from agentforge.api.routes.film_preview import _serve
+        parts = route.split("/")
+        if len(parts) not in {5, 6}:
+            raise ValueError("Invalid draft route")
+        job = draft_pipeline._read(parts[4])
+        if len(parts) == 5:
+            return self._reply(200, job)
+        if parts[5] == "preview":
+            def verify(stream):
+                draft_pipeline.verify_video(job, stream)
+                self._session().setdefault("draft_previews", {})[job["id"]] = job["video_sha"]
+            return _serve(self, draft_pipeline.video_path(job), draft_pipeline.MAX_VIDEO, "draft.mp4", verify)
+        if parts[5].startswith("scene-") and parts[5][6:].isascii() and parts[5][6:].isdecimal():
+            return self._reply(200, draft_pipeline.image(job, int(parts[5][6:])), mime="image/png")
+        raise ValueError("Invalid draft asset route")
     if route == "/api/characters":
         from agentforge.features.film_studio.characters import list_characters
         return self._reply(200, list_characters())

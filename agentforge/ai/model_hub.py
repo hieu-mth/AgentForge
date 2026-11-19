@@ -349,6 +349,54 @@ def image_runtime(*, automated=False, db_path=None):
     return revision, profile
 
 
+def draft_routes(*, db_path=None):
+    """Resolve local production capabilities from one Owner policy snapshot."""
+    revision, state = _read_state(db_path=db_path)
+    policy = state.get("orchestrator", orchestrator_policy.defaults())
+    permissions = policy["permissions"]
+    if (policy["mode"] == "MANUAL" or not all(permissions[key] for key in
+            ("plan", "assign_local", "call_local", "run_tools")) or "ffmpeg" not in policy["tools"]):
+        raise PermissionError("Enable local planning, assignment, model calls and FFmpeg in AI Orchestrator")
+    profiles = _profiles(state=state)
+    bindings = {}
+    for capability in ("general.text", "film.storyboard", "character.select", "image.generate"):
+        ref = state["routes"].get(capability, policy["mappings"].get(capability))
+        decision = orchestrator_policy.resolve(capability, policy, profiles, ref)
+        profile = profiles.get(decision.get("model_ref"))
+        if profile:
+            bindings[capability] = profile
+    for capability in ("general.text", "film.storyboard"):
+        if bindings.get(capability, {}).get("provider") != "ollama":
+            raise ModelConfigError("Assign an enabled local Ollama model to " + capability)
+    if "flux" not in bindings.get("image.generate", {}):
+        raise ModelConfigError("Assign an enabled FLUX profile to image.generate")
+    return revision, bindings
+
+
+def draft_routes(*, db_path=None):
+    """Resolve local production capabilities from one Owner policy snapshot."""
+    revision, state = _read_state(db_path=db_path)
+    policy = state.get("orchestrator", orchestrator_policy.defaults())
+    permissions = policy["permissions"]
+    if (policy["mode"] == "MANUAL" or not all(permissions[key] for key in
+            ("plan", "assign_local", "call_local", "run_tools")) or "ffmpeg" not in policy["tools"]):
+        raise PermissionError("Enable local planning, assignment, model calls and FFmpeg in AI Orchestrator")
+    profiles = _profiles(state=state)
+    bindings = {}
+    for capability in ("general.text", "film.storyboard", "character.select", "image.generate"):
+        ref = state["routes"].get(capability, policy["mappings"].get(capability))
+        decision = orchestrator_policy.resolve(capability, policy, profiles, ref)
+        profile = profiles.get(decision.get("model_ref"))
+        if profile:
+            bindings[capability] = profile
+    for capability in ("general.text", "film.storyboard"):
+        if bindings.get(capability, {}).get("provider") != "ollama":
+            raise ModelConfigError("Assign an enabled local Ollama model to " + capability)
+    if "flux" not in bindings.get("image.generate", {}):
+        raise ModelConfigError("Assign an enabled FLUX profile to image.generate")
+    return revision, bindings
+
+
 def _catalog(revision, state):
     profiles = _profiles(state=state)
     routes = []
