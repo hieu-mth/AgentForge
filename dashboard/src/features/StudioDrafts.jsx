@@ -1,6 +1,7 @@
 ﻿import {useEffect,useRef,useState} from 'react';
 import {Alert,Button,Card,Collapse,Form,Image,Input,InputNumber,Modal,Select,Space,Tag} from 'antd';
 import {useResource,ResourceStatus} from '../use_resource.jsx';
+import {useScreenRefresh} from '../refresh_scope.jsx';
 import {requestError} from '../api.js';
 import {StudioPreview} from './StudioPreview.jsx';
 
@@ -9,8 +10,9 @@ const labels={QUEUED:'Đã tiếp nhận',PLANNING:'Đang lập kế hoạch',ST
   IMAGES:'Đang tạo ảnh từng cảnh',RENDER:'Đang dựng và kiểm tra MP4',REVIEW:'Chờ Owner duyệt',
   FAILED:'Cần xử lý',APPROVED:'Đã duyệt',REJECTED:'Đã từ chối'};
 
-export function StudioDrafts({mutate}) {
+export function StudioDrafts({mutate,onCharacters}) {
   const {data,reload,...resource}=useResource(API);
+  useScreenRefresh(reload);
   const busy=useRef(false);
   const request=useRef(null);
   const [pending,setPending]=useState(false);
@@ -49,7 +51,7 @@ export function StudioDrafts({mutate}) {
   }
 
   return <Card className="env-panel" title="Tạo video từ ý tưởng"
-    extra={<Button onClick={reload}>Làm mới bản nháp</Button>}>
+    extra={<Button onClick={reload}>Tải lại bản nháp</Button>}>
     <Form layout="vertical" onFinish={submit} initialValues={{seconds:12,scene_count:3,ratio:'9:16'}}>
       <Form.Item label="Ý tưởng video" name="idea" rules={[{required:true,whitespace:true}]}>
         <Input.TextArea rows={3} maxLength={500}
@@ -70,13 +72,16 @@ export function StudioDrafts({mutate}) {
         </Form.Item>
       </Space>
     </Form>
-    <p className="env-muted">Bản nháp dùng ảnh tĩnh với pan/zoom và không có nhạc. Đặc điểm nhân vật được giữ bằng prompt.</p>
+    <p className="env-muted">Bản nháp dùng ảnh tĩnh với pan/zoom, không có nhạc. Tính nhất quán của nhân vật dựa trên prompt.</p>
+    <Button type="link" onClick={onCharacters}>Thư viện nhân vật</Button>
     {error&&<Alert showIcon type="error" message={error}/>}
     <ResourceStatus resource={{...resource,data,reload}} label="bản nháp"/>
     <Collapse items={drafts.map(job=>({key:job.id,
       label:<Space wrap><span>{job.board?.title??job.brief.idea}</span>
         <Tag>{job.status==='RUNNING'&&!job.worker_active?'Đã gián đoạn':
-          labels[job.status==='RUNNING'?job.stage:job.status]??job.status}</Tag></Space>,
+          labels[job.status==='RUNNING'?job.stage:job.status]??job.status}</Tag>
+        {job.board&&<span>{job.board.scenes.filter(scene=>scene.asset).length}/{job.board.scenes.length} ảnh</span>}
+      </Space>,
       children:<>
         {job.error&&<Alert showIcon type="error" message={job.error}/>}
         {['RUNNING','FAILED'].includes(job.status)&&!job.worker_active&&<Button size="small" disabled={pending||running}

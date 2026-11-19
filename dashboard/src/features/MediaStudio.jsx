@@ -58,7 +58,7 @@ export function MediaStudio({onNavigate,mutate}){
       description="Theo dõi tập phim local, kiểm tra các bản dựng và tiếp tục sản xuất."
       actions={<Button icon={<FolderOpenOutlined/>} onClick={()=>onNavigate('projects')}>Xem dự án video</Button>}/>
 
-    <StudioDrafts mutate={mutate}/>
+    <StudioDrafts mutate={mutate} onCharacters={()=>onNavigate('characters')}/>
 
     {projects&&<div className="env-stat-grid studio-stats" aria-label="Trạng thái ưu tiên của các dự án tìm thấy">
       <Stat icon={<ClockCircleOutlined/>} label="Dự án chờ dựng" value={projects.filter(row=>row.group==='prepared').length}/>
