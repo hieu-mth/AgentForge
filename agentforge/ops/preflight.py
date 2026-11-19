@@ -19,11 +19,11 @@ CHECKS = (
     ("pyproject", "Python packaging", "pyproject.toml", "file"),
     ("dashboard_source", "Dashboard source", "dashboard/package.json", "file"),
     ("dashboard_build", "Dashboard build", "dashboard/dist/index.html", "file"),
-    ("model_defaults", "Model registry", "config/models.toml", "file"),
-    ("task_routes", "Task routing", "config/task_routes.toml", "file"),
+    ("model_hub", "Model Hub", "agentforge/ai/model_hub.py", "file"),
+    ("policy", "Capability policy", "agentforge/ai/orchestrator_policy.py", "file"),
 )
-REQUIRED = frozenset({"source", "pyproject", "dashboard_source", "model_defaults",
-                      "task_routes"})
+REQUIRED = frozenset({"source", "pyproject", "dashboard_source", "model_hub",
+                      "policy"})
 
 
 def _path_status(root, relative, kind):

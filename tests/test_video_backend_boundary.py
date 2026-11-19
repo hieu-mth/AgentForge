@@ -17,7 +17,7 @@ class VideoBoundaryTests(unittest.TestCase):
     def test_retired_packages_and_registry_are_absent(self):
         for path in ("skills", "workers", "sandbox/webapp", "agentforge/core",
                      "agentforge/features/websites", "agentforge/features/webapps",
-                     "agentforge/features/growth", "config/opportunities.json"):
+                     "agentforge/features/growth", "config"):
             with self.subTest(path=path):
                 self.assertFalse((ROOT / path).exists())
 
@@ -36,10 +36,13 @@ class VideoBoundaryTests(unittest.TestCase):
                         self.assertFalse(any(name == banned or name.startswith(banned+".")
                                              for banned in RETIRED), name)
 
-    def test_only_film_model_and_operations_routes_remain(self):
-        text = (ROOT / "config/task_routes.toml").read_text(encoding="utf-8")
-        self.assertIn('[routes."film.motion"]', text)
-        self.assertNotIn('[routes."growth.report"]', text)
+    def test_active_capabilities_live_in_source_not_config_files(self):
+        from agentforge.ai.model_hub import route_catalog
+        routes = route_catalog()
+        self.assertIn("film.motion", routes)
+        self.assertNotIn("growth.report", routes)
+        self.assertFalse((ROOT / "config").exists())
+        self.assertFalse((ROOT / "agentforge/ai/model_registry.py").exists())
 
 
 if __name__ == "__main__":

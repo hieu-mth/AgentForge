@@ -18,7 +18,7 @@ class SourceHygieneTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue(forbidden_path(path))
         for path in ["agentforge/api/server.py", "docs/README.md",
-                     "config/task_routes.toml", ".env.example",
+                     "agentforge/ai/orchestrator_policy.py", ".env.example",
                      "dashboard/src/App.jsx"]:
             with self.subTest(path=path):
                 self.assertFalse(forbidden_path(path))

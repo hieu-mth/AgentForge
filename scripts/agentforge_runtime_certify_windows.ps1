@@ -15,7 +15,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$ModelRef = "local_primary",
+    [string]$ModelRef,
     [switch]$RunOllama,
     [switch]$ConfirmInference,
     [switch]$RunFFmpeg,
@@ -25,6 +25,9 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+if ($RunOllama -and [string]::IsNullOrWhiteSpace($ModelRef)) {
+    throw "RunOllama requires ModelRef of a model registered in Dashboard."
+}
 if ($RunOllama -and -not $ConfirmInference) {
     throw "RunOllama requires ConfirmInference (one real local Ollama call)."
 }
@@ -45,8 +48,10 @@ if (Test-Path -LiteralPath $venv -PathType Leaf) {
     $python = $command.Source
 }
 
-$argsList = @("-B", "-m", "agentforge.ops.runtime_certification",
-              "--model-ref", $ModelRef)
+$argsList = @("-B", "-m", "agentforge.ops.runtime_certification")
+if (-not [string]::IsNullOrWhiteSpace($ModelRef)) {
+    $argsList += @("--model-ref", $ModelRef)
+}
 if ($RunOllama) { $argsList += @("--run-ollama", "--confirm-inference") }
 if ($RunFFmpeg) { $argsList += @("--run-ffmpeg", "--confirm-local-exec") }
 if ($SaveReport) { $argsList += "--save-report" }

@@ -16,12 +16,20 @@ class RuntimeCertificationTests(unittest.TestCase):
                 cert._local_endpoint(target)
 
     def test_model_hub_text_snapshot_still_powers_ollama_preflight(self):
-        from agentforge.ai.model_hub import effective_models
-        profiles = effective_models()
-        self.assertIn("local_primary", profiles)
-        self.assertEqual(profiles["local_primary"]["provider"], "ollama")
-        self.assertEqual(cert._ollama_profile("local_primary")[2],
-                         profiles["local_primary"]["model"])
+        from agentforge.ai import model_hub
+        with tempfile.TemporaryDirectory() as folder:
+            db = Path(folder) / "model_hub.sqlite3"
+            with patch.object(model_hub, "DB_PATH", db):
+                self.assertEqual(model_hub.effective_models(), {})
+                with self.assertRaisesRegex(ValueError, "not an enabled"):
+                    cert._ollama_profile("local_primary")
+                model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0,
+                                 profile={"id":"my_model","provider":"ollama",
+                                          "model":"demo:8b","enabled":True,
+                                          "base_url":"http://127.0.0.1:11434"})
+                profiles = model_hub.effective_models()
+                self.assertEqual(profiles["my_model"]["provider"], "ollama")
+                self.assertEqual(cert._ollama_profile("my_model")[2], "demo:8b")
 
     def test_default_preflight_does_not_start_inference_or_gpu(self):
         with patch.object(cert, "_ollama_preflight", return_value={"status": "UNAVAILABLE"}), \

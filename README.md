@@ -13,7 +13,7 @@ npm.cmd run build --prefix dashboard
 .\.venv\Scripts\python.exe -m agentforge --port 8780
 ```
 
-Mở http://127.0.0.1:8780/dashboard/ và đăng nhập bằng mã Owner được in riêng tại terminal. Chỉ bật `--allow-external-tools` khi chủ động chạy các tác vụ media đã review. Ứng dụng không tự cài ComfyUI, tải weights, kích hoạt GPU hay public YouTube.
+Mở http://127.0.0.1:8780/dashboard/ và đăng nhập bằng mã Owner được in riêng tại terminal. Model Hub khởi tạo với **không model nào được đăng ký**; Owner thêm và phân công model qua Dashboard. Capability metadata nằm trong Python, không còn thư mục `config/`. Chỉ bật `--allow-external-tools` khi chủ động chạy các tác vụ media đã review. Ứng dụng không tự cài ComfyUI, tải weights, kích hoạt GPU hay public YouTube.
 
 ## Hướng dẫn
 
@@ -25,4 +25,4 @@ Mở http://127.0.0.1:8780/dashboard/ và đăng nhập bằng mã Owner đượ
 - [Publishing handoff](docs/verification/PUBLISHING.md)
 - [Owner runtime acceptance](docs/verification/OWNER_PRODUCTION_GATE.md)
 
-Git cleanup **không xóa hay migrate** `data/`, `workspace/`, `.env`, model weights, secrets, video và backups của Owner. CI fixture không chứng minh GPU, continuity, voice hay upload thật.
+Git cleanup **không xóa hay migrate** `data/`, `workspace/`, `.env`, model weights, secrets, video và backups của Owner. AgentForge không cần file `.env` để khởi động; source không tự nạp `.env`, nhưng file này vẫn được Git ignore để tránh lộ secrets. CI fixture không chứng minh GPU, continuity, voice hay upload thật.
