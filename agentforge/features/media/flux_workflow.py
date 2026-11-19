@@ -1,5 +1,6 @@
 ﻿"""Validate and bind the reviewed FLUX GGUF API graph."""
 import copy
+import json
 import ntpath
 import re
 from urllib.parse import urlsplit
@@ -24,6 +25,7 @@ LINKS = {
 }
 MODEL_FILE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_. -]{0,139}\.(?:gguf|safetensors)\Z", re.I)
 FOLDER = re.compile(r"[A-Za-z0-9_-]{1,48}(?:/[A-Za-z0-9_-]{1,48}){0,3}\Z")
+MAX_WORKFLOW_BYTES = 16_000
 
 
 def _integer(value, lower, upper, label):
@@ -88,6 +90,13 @@ def validate(config, model, endpoint):
     for value in (inputs["6"]["text"], inputs["9"]["filename_prefix"]):
         if not isinstance(value, str) or len(value) > 2000:
             raise ValueError("Invalid FLUX workflow text")
+    try:
+        encoded = json.dumps(graph, ensure_ascii=False, separators=(",", ":"),
+                             allow_nan=False).encode("utf-8")
+    except (UnicodeError, ValueError):
+        raise ValueError("Invalid FLUX workflow JSON") from None
+    if len(encoded) > MAX_WORKFLOW_BYTES:
+        raise ValueError("FLUX workflow exceeds the 16000-byte limit")
     return config
 
 

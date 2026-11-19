@@ -74,14 +74,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
     </Space>}>
     <Form hidden={Boolean(review)} form={form} layout="vertical" initialValues={initial}
       requiredMark={false} onValuesChange={changeAdapter}
-      onFinish={values=>{
-        const payload=profilePayload(values,{...adapter,defaults:fields});
-        if(provider==='comfyui'&&values.flux_enabled) {
-          const settings=values.flux_settings;
-          payload.flux={...settings,workflow:JSON.parse(settings.workflow)};
-        }
-        setReview(payload);
-      }}>
+      onFinish={values=>setReview(profilePayload(values,{...adapter,defaults:fields}))}>
       <div className="model-dialog-grid">
         <Form.Item name="connection" label="Loại kết nối">
           <Radio.Group optionType="button" buttonStyle="solid" disabled={editing}
@@ -124,18 +117,24 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
             ?Promise.resolve():Promise.reject(new Error('Nhập API key hợp lệ cho endpoint này.'))})]}>
         <Input.Password autoComplete="new-password"/>
       </Form.Item>}
-      {provider==='comfyui'&&<>
+      {provider==='comfyui'&&!adapter.flux_workflow_max_bytes&&
+        <Alert type="warning" showIcon message="Backend đang chạy chưa hỗ trợ đăng ký workflow FLUX."/>}
+      {provider==='comfyui'&&adapter.flux_workflow_max_bytes&&<>
         <Form.Item name="flux_enabled" label="Workflow FLUX GGUF" valuePropName="checked"><Switch/></Form.Item>
         {fluxEnabled&&<>
           <Form.Item name={['flux_settings','workflow']} label="Workflow API JSON" rules={[
             {required:true},{validator:(_,value)=>{
               try {
                 const graph=JSON.parse(value);
-                if(graph?.['38']?.class_type==='UnetLoaderGGUF')return Promise.resolve();
+                if(graph?.['38']?.class_type==='UnetLoaderGGUF') {
+                  if(new TextEncoder().encode(JSON.stringify(graph)).length<=adapter.flux_workflow_max_bytes)
+                    return Promise.resolve();
+                  return Promise.reject(new Error('Workflow vượt giới hạn '+adapter.flux_workflow_max_bytes+' byte.'));
+                }
               } catch { /* Show validation below. */ }
               return Promise.reject(new Error('Dán workflow FLUX ở định dạng ComfyUI API JSON.'));
             }},
-          ]}><Input.TextArea rows={6} spellCheck={false} maxLength={16000}/></Form.Item>
+           ]}><Input.TextArea rows={6} spellCheck={false}/></Form.Item>
           <div className="model-dialog-grid">
             {[
               ['max_resolution','Cạnh ảnh tối đa (px)',256,1536],

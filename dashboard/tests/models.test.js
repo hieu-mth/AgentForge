@@ -21,6 +21,20 @@ test('profile form never sends unrelated fields or token values',()=>{
   assert.equal(local.enabled,false);
   assert.ok(!('api_key_env' in local));
 });
+test('FLUX workflow is sent only for an advertising ComfyUI backend',()=>{
+  const values={id:'flux_schnell_gguf',model:'flux1-schnell-Q4_K_S.gguf',enabled:true,
+    base_url:'http://127.0.0.1:8188',flux_enabled:true,flux_settings:{
+      workflow:'{"38":{"class_type":"UnetLoaderGGUF"}}',max_resolution:1024,max_steps:4,
+      timeout_seconds:180,output_dir:'visuals',api_key:'fixture-key',
+    }};
+  const adapter={id:'comfyui',defaults:{base_url:''}};
+  assert.ok(!('flux' in profilePayload(values,adapter)));
+  assert.deepEqual(profilePayload(values,{...adapter,flux_workflow_max_bytes:16000}).flux,{
+    workflow:{38:{class_type:'UnetLoaderGGUF'}},max_resolution:1024,max_steps:4,
+    timeout_seconds:180,output_dir:'visuals',
+  });
+});
+
 test('Owner settings deep-link includes Model Hub',()=>{
   assert.equal(groupFor('models'),'settings');
   assert.equal(hashFor('models'),'#/models');

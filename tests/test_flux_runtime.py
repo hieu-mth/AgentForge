@@ -34,6 +34,14 @@ def profile():
 
 
 class FluxRuntimeTests(unittest.TestCase):
+    def test_workflow_limit_counts_utf8_bytes(self):
+        row = profile()
+        graph = row["flux"]["workflow"]
+        graph["6"]["inputs"]["text"] = "🟠" * 2000
+        graph["9"]["inputs"]["filename_prefix"] = "🟠" * 2000
+        with self.assertRaisesRegex(ValueError, "byte limit"):
+            model_hub.validate_profile(row)
+
     def test_graph_mapping_and_limits(self):
         cfg = model_hub.validate_profile(profile())["flux"]
         original = copy.deepcopy(cfg["workflow"])

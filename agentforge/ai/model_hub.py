@@ -21,6 +21,7 @@ from urllib.parse import urlsplit
 
 from agentforge.ai import cloud_credentials, orchestrator_policy
 from agentforge.ai.orchestrator_policy import ModelConfigError
+from agentforge.features.media import flux_workflow
 from agentforge.paths import COMPANY_DATA_DIR, ensure_local_root
 
 DB_PATH = COMPANY_DATA_DIR / "model_hub.sqlite3"
@@ -56,6 +57,7 @@ ADAPTERS = {
         "model_example": "wan2.2_5b",
         "description": "Hồ sơ ảnh hoặc video. Đăng ký chỉ lưu cấu hình cho ComfyUI.",
         "defaults": {"base_url": "http://127.0.0.1:8188"}, "local_probe": False,
+        "flux_workflow_max_bytes": flux_workflow.MAX_WORKFLOW_BYTES,
     },
     "anthropic": {
         "label": "Anthropic-compatible", "connection": "cloud", "model_label": "Model ID",
@@ -112,10 +114,13 @@ def validate_profile(value, *, profile_id=None):
     """Return canonical allowlisted profile; secrets are never accepted."""
     if not isinstance(value, dict):
         raise ModelConfigError("Model profile must be an object")
-    if len(value) > 7 or not set(value).issubset({
+    allowed = {
         "id", "provider", "model", "enabled", "base_url",
-        "base_url_env", "api_key_env", "api_key_protected", "flux",
-    }):
+        "base_url_env", "api_key_env", "api_key_protected",
+    }
+    if value.get("provider") == "comfyui":
+        allowed.add("flux")
+    if not value.keys() <= allowed:
         raise ModelConfigError("Unknown or sensitive model profile fields")
     ident = _required_text(value.get("id", profile_id), ID_RE, "model ID")
     if profile_id is not None and ident != profile_id:
@@ -136,8 +141,7 @@ def validate_profile(value, *, profile_id=None):
             raise ModelConfigError("Fields do not match the selected adapter")
         common["base_url"] = _local_url(value.get("base_url"))
         if "flux" in fields:
-            from agentforge.features.media.flux_workflow import validate
-            common["flux"] = validate(value["flux"], model, common["base_url"])
+            common["flux"] = flux_workflow.validate(value["flux"], model, common["base_url"])
     elif fields == {"base_url", "api_key_protected"} and profile_id is not None:
         key = value["api_key_protected"]
         try:

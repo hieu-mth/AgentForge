@@ -66,6 +66,37 @@ class OwnerAuthVideoFoundationTests(unittest.TestCase):
         self.assertEqual(self.request("POST", "/api/logout", {})[0], 200)
         self.assertEqual(self.request("GET", "/api/session")[0], 401)
 
+    def test_flux_profile_api_persists_only_valid_comfy_configuration(self):
+        from agentforge.ai import model_hub
+        from tests.test_flux_runtime import profile
+
+        _, login, headers = self.request("POST", "/api/login", {"code": self.code})
+        self.cookie = headers["Set-Cookie"].split(";", 1)[0]
+        self.csrf = login["csrf"]
+        row = profile()
+        row.update(id="flux_schnell_gguf", model="flux1-schnell-Q4_K_S.gguf")
+        row["flux"]["workflow"]["38"]["inputs"]["unet_name"] = row["model"]
+        endpoint = "/api/model-hub/profile"
+        body = {"ack": "SAVE_MODEL_PROFILE", "expected_revision": 0, "profile": row}
+        db = self.root / "hub.sqlite3"
+        with patch.object(model_hub, "DB_PATH", db):
+            for fields in ({"workflow": {}}, {"api_key": "fixture-private"},
+                           {"api_key_protected": "opaque"}, {"provider": "ollama"}):
+                status, _, _ = self.request("POST", endpoint, body | {"profile": row | fields})
+                self.assertEqual(status, 400, fields.keys())
+            status, created, _ = self.request("POST", endpoint, body)
+            self.assertEqual(status, 200, created)
+            self.assertEqual(created["profiles"][0]["flux"], row["flux"])
+            revised = row | {"flux": row["flux"] | {"timeout_seconds": 45}}
+            status, edited, _ = self.request("POST", endpoint, body | {
+                "profile": revised, "expected_revision": 1})
+            self.assertEqual(status, 200, edited)
+            status, loaded, _ = self.request("GET", "/api/model-hub")
+        self.assertTrue(db.is_file())
+        self.assertEqual(status, 200)
+        self.assertEqual(loaded["revision"], 2)
+        self.assertEqual(loaded["profiles"][0]["flux"], revised["flux"])
+
     def test_dashboard_redirect_and_retired_routes_are_not_exposed(self):
         status, _, headers = self.request("GET", "/")
         self.assertEqual(status, 302)
