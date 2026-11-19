@@ -1,7 +1,8 @@
 """Versioned, local-only Owner Model Hub; no model invocation at configuration time.
 
-Git-owned models.toml and task_routes.toml are defaults. Dashboard writes an
-audited SQLite overlay, never TOML, API credentials or generated workflows.
+Owner-added model profiles and route assignments have one source of truth:
+versioned SQLite. The capability catalog stays in reviewed Python source.
+No profiles or assignments are created by default; GET is read-only.
 All model routes are configuration-only until an explicitly reviewed runtime
 consumes their bindings. A saved cloud profile never authorizes a cloud call.
 """
@@ -12,19 +13,22 @@ from contextlib import closing
 import json
 import re
 import sqlite3
-import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from agentforge.ai import orchestrator_policy
-from agentforge.ai.model_registry import (
-    DEFAULT_CONFIG, ENV_NAME, ModelConfigError, load_models,
-)
-from agentforge.paths import COMPANY_DATA_DIR, CONFIG_DIR, ensure_local_root
+from agentforge.ai.orchestrator_policy import ModelConfigError
+from agentforge.paths import COMPANY_DATA_DIR, ensure_local_root
 
 DB_PATH = COMPANY_DATA_DIR / "model_hub.sqlite3"
-ROUTES_FILE = CONFIG_DIR / "task_routes.toml"
+ENV_NAME = re.compile(r"[A-Z_][A-Z0-9_]*\Z")
+# Routes are approved capabilities, NOT configured model selections.
+# Retain stable IDs for existing Owner SQLite routes and Dashboard clients.
+ROUTE_CAPABILITIES = frozenset({
+    "general.text", "film.storyboard", "film.motion",
+    "image.generate", "ops.monitor",
+})
 # Persisted Owner overlays for retired products are accepted read-only but
 # excluded from active routes. Never rewrite the Owner's SQLite on GET.
 
@@ -99,35 +103,26 @@ def validate_profile(value, *, profile_id=None):
 
 
 def _defaults():
-    """Load only reviewed runtime capabilities; no implicit worker execution."""
-    try:
-        raw = tomllib.loads(ROUTES_FILE.read_text(encoding="utf-8-sig"))
-    except (OSError, UnicodeError, tomllib.TOMLDecodeError) as exc:
-        raise ModelConfigError("Cannot load default routing") from exc
-    if set(raw) != {"routes"} or not isinstance(raw["routes"], dict):
-        raise ModelConfigError("Invalid default routes")
-    routes = {}
-    for key, value in raw["routes"].items():
-        _required_text(key, TASK_RE, "task key")
-        if (not isinstance(value, dict) or
-                not set(value).issubset({"label", "kind", "execution", "default_model"})):
-            raise ModelConfigError("Invalid route config")
-        label = value.get("label")
-        kind = value.get("kind")
-        execution = value.get("execution")
-        if not isinstance(label, str) or not 1 <= len(label) <= 90:
-            raise ModelConfigError("Route label is missing")
-        if kind not in KINDS or execution not in EXECUTIONS:
-            raise ModelConfigError("Invalid route kind")
-        if (execution == "rules") != (kind == "rules"):
-            raise ModelConfigError("Rules must be deterministic")
-        default_model = value.get("default_model")
-        if default_model is not None:
-            _required_text(default_model, ID_RE, "default model reference")
-        routes[key] = {"id": key, "label": label, "kind": kind,
-                       "execution": execution, "default_model": default_model}
-    return routes
+    """Source-defined capabilities, with NO model/profile defaults.
 
+    Model assignment and override live only in Owner SQLite. This read never
+    touches TOML, external endpoints or storage.
+    """
+    catalog = {}
+    for key, label, kind, _ in orchestrator_policy.CAPABILITIES:
+        if key not in ROUTE_CAPABILITIES:
+            continue
+        deterministic = key == "ops.monitor"
+        catalog[key] = {
+            "id": key,
+            "label": label,
+            "kind": "rules" if deterministic else kind,
+            "execution": "rules" if deterministic else "config_only",
+            "default_model": None,
+        }
+    if set(catalog) != ROUTE_CAPABILITIES:
+        raise ModelConfigError("Capability catalog does not match active routes")
+    return catalog
 
 def _empty():
     return {"profiles": {}, "routes": {}}
@@ -187,16 +182,9 @@ def _read_state(*, db_path=None):
 
 
 def _profiles(*, state=None):
-    # Always use explicit default-config path, never recursively load an overlay.
-    baseline = load_models(DEFAULT_CONFIG)
-    merged = {name: {"id": name, **item}
-              for name, item in baseline.items()}
+    """Owner profiles only: empty DB yields no configured model."""
     doc = state if state is not None else _read_state()[1]
-    for ident, profile in doc["profiles"].items():
-        if ident in merged and profile["provider"] != merged[ident]["provider"]:
-            raise ModelConfigError("Cannot change the provider of a built-in model")
-        merged[ident] = dict(profile)
-    return merged
+    return {ident: dict(profile) for ident, profile in doc["profiles"].items()}
 
 
 def effective_models(*, db_path=None):
@@ -260,13 +248,13 @@ def _catalog(revision, state):
         else:
             status = "CONFIG_ONLY"
         routes.append({**route, "model_ref": selected,
-                        "source": ("owner" if key in state["routes"] else "default"),
+                        "source": ("owner" if key in state["routes"] else "system"),
                        "status": status,
                        })
     return {
         "revision": revision,
         "profiles": [{"id": k, **v, "source": (
-            "owner" if k in state["profiles"] else "git"),
+            "owner"),
             "health": "UNVERIFIED",
             "runtime_supported": v["provider"] in {"ollama", "anthropic"}}
             for k, v in sorted(profiles.items())],
@@ -404,13 +392,13 @@ def _save_orchestrator(updated, policy, route_changes):
     updated["orchestrator"] = policy
 
 
-def change(action, *, expected_revision, db_path=None, profile=None,
+def change(action, *, expected_revision, db_path=None, profile=None, profile_id=None,
            task_id=None, model_ref=None, target_revision=None, policy=None, route_changes=None):
     """CAS-guarded Owner mutation; snapshot history supports explicit rollback."""
     if type(expected_revision) is not int or expected_revision < 0:
         raise ValueError("Expected non-negative revision")
-    if action not in {"SAVE_MODEL_PROFILE", "SET_MODEL_ROUTE",
-                      "RESET_MODEL_ROUTE", "ROLLBACK_MODEL_HUB",
+    if action not in {"SAVE_MODEL_PROFILE", "DELETE_MODEL_PROFILE",
+                      "SET_MODEL_ROUTE", "RESET_MODEL_ROUTE", "ROLLBACK_MODEL_HUB",
                       "SAVE_ORCHESTRATOR", "RESET_ORCHESTRATOR"}:
         raise PermissionError("Unknown Model Hub action")
     path = _database(db_path)
@@ -426,10 +414,24 @@ def change(action, *, expected_revision, db_path=None, profile=None,
         updated = copy.deepcopy(current)
         if action == "SAVE_MODEL_PROFILE":
             p = validate_profile(profile)
-            baseline = load_models(DEFAULT_CONFIG)
-            if p["id"] in baseline and p["provider"] != baseline[p["id"]]["provider"]:
-                raise ModelConfigError("Cannot change built-in model provider")
+            # Explicit Owner upsert only; no Git-bundled model can reappear.
+            if p["id"] not in updated["profiles"] and len(updated["profiles"]) >= MAX_PROFILE_COUNT:
+                raise ModelConfigError("Model registry is full")
             updated["profiles"][p["id"]] = p
+        elif action == "DELETE_MODEL_PROFILE":
+            _required_text(profile_id, ID_RE, "model ID")
+            if profile_id not in updated["profiles"]:
+                raise ModelConfigError("Unknown model profile")
+            attached = {ref for key, ref in updated["routes"].items()
+                        if key in _defaults()}
+            current_policy = updated.get("orchestrator", orchestrator_policy.defaults())
+            attached.update([current_policy["primary"]])
+            attached.update(current_policy["allowed_profiles"])
+            attached.update(current_policy["mappings"].values())
+            attached.update(current_policy["fallbacks"].values())
+            if profile_id in attached:
+                raise ModelConfigError("Model is assigned; unassign it before deleting")
+            del updated["profiles"][profile_id]
         elif action in {"SET_MODEL_ROUTE", "RESET_MODEL_ROUTE"}:
             routes = _defaults()
             if task_id not in routes or routes[task_id]["kind"] == "rules":

@@ -1,5 +1,6 @@
 """Versioned Owner policy. Resolution is pure and never authorizes execution."""
-from agentforge.ai.model_registry import ModelConfigError
+class ModelConfigError(ValueError):
+    """Invalid model profile, capability binding or Owner policy."""
 
 CAPABILITIES = (
     ("general.text", "Lập kế hoạch", "text", None),

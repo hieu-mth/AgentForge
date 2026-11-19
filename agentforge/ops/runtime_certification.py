@@ -242,7 +242,7 @@ def _dashboard_preflight():
                    owner_login_verified=False)
 
 
-def inspect(*, model_ref="local_primary", run_ollama=False,
+def inspect(*, model_ref=None, run_ollama=False,
             run_ffmpeg=False):
     """Actual host probes, no mocks; explicitly tagged which stages ran."""
     checks = {
@@ -251,14 +251,18 @@ def inspect(*, model_ref="local_primary", run_ollama=False,
         "node": _result("TOOL_PRESENT" if shutil.which("node") else "UNAVAILABLE"),
         "npm": _result("TOOL_PRESENT" if shutil.which("npm.cmd" if os.name == "nt" else "npm")
                        else "UNAVAILABLE"),
-        "ollama": _safe_probe(lambda: _ollama_preflight(model_ref)),
+        "ollama": (_safe_probe(lambda: _ollama_preflight(model_ref))
+                   if model_ref is not None else
+                   _result("NO_MODEL_SELECTED", inference_invoked=False)),
         "comfyui_gpu": _safe_probe(_comfy_preflight),
         "ffmpeg": _safe_probe(_ffmpeg_preflight),
         "dashboard": _safe_probe(_dashboard_preflight),
     }
     # No automatic escalation: optional probes each need a separate CLI flag.
     if run_ollama:
-        checks["ollama_inference"] = _safe_probe(lambda: _ollama_inference(model_ref))
+        checks["ollama_inference"] = (
+            _safe_probe(lambda: _ollama_inference(model_ref))
+            if model_ref is not None else _result("NO_MODEL_SELECTED", inference_invoked=False))
     if run_ffmpeg:
         checks["ffmpeg_encode_decode"] = _safe_probe(_ffmpeg_runtime)
     checks.update({
@@ -310,7 +314,8 @@ def save_report(report):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Owner-side real runtime probes, NOT production GO")
-    parser.add_argument("--model-ref", default="local_primary")
+    parser.add_argument("--model-ref", default=None,
+                        help="Owner-created Ollama profile ID (no built-in model)")
     parser.add_argument("--run-ollama", action="store_true")
     parser.add_argument("--confirm-inference", action="store_true")
     parser.add_argument("--run-ffmpeg", action="store_true")
@@ -320,6 +325,8 @@ def main(argv=None):
     if (args.run_ollama and not args.confirm_inference
             or args.run_ffmpeg and not args.confirm_local_exec):
         parser.error("Every active probe requires its matching explicit confirmation flag")
+    if args.run_ollama and not args.model_ref:
+        parser.error("--run-ollama requires an explicitly selected --model-ref")
     report = inspect(model_ref=args.model_ref, run_ollama=args.run_ollama,
                      run_ffmpeg=args.run_ffmpeg)
     if args.save_report:

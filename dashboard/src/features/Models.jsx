@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { App as AntApp, Alert, Button, Card, Empty, Form, Grid, Input,
   Modal, Select, Space, Switch, Table, Tooltip, Typography } from 'antd';
-import {AppstoreOutlined,DesktopOutlined,HistoryOutlined,PlusOutlined,ReloadOutlined} from '@ant-design/icons';
+import {AppstoreOutlined,DeleteOutlined,DesktopOutlined,HistoryOutlined,PlusOutlined,ReloadOutlined} from '@ant-design/icons';
 import {SectionTitle,SettingsHeading,SettingsStatus,Stat} from '../components/settings.jsx';
 import {useResource, ResourceStatus} from '../use_resource.jsx';
 import {useScreenRefresh} from '../refresh_scope.jsx';
@@ -85,6 +85,11 @@ export function ModelHub({mutate}) {
     ()=>setEditorOpen(false));
   };
 
+  const deleteProfile=row=>update('/api/model-hub/profile/delete',{
+    ack:'DELETE_MODEL_PROFILE',expected_revision:hub.revision,profile_id:row.id,
+  },'Xóa hồ sơ model '+row.id+'?',
+  'Chỉ xóa hồ sơ cấu hình khỏi SQLite. Không xóa weights hay file của Owner. Nếu hồ sơ đang được phân công, backend sẽ từ chối.');
+
   const rollback=()=>update('/api/model-hub/rollback',{
     ack:'ROLLBACK_MODEL_HUB',expected_revision:hub.revision,target_revision:hub.revision-1,
   },'Khôi phục cấu hình về phiên bản '+(hub.revision-1)+'?',
@@ -107,11 +112,13 @@ export function ModelHub({mutate}) {
       </Button>
     </>}
     <Button size="small" onClick={()=>editProfile(row)}>Sửa</Button>
+    <Button size="small" danger icon={<DeleteOutlined/>}
+      onClick={()=>deleteProfile(row)}>Xóa</Button>
   </Space>;
 
   return <div className="environment-page model-hub">
     <SettingsHeading title="Model AI" eyebrow="HỒ SƠ MODEL"
-      description="Quản lý model local và cloud, nhà cung cấp và kết quả kiểm tra."
+      description="Chỉ hiển thị model Owner đã đăng ký trong SQLite; không có model mặc định hoặc tự tải."
       actions={<>
         <Button icon={<ReloadOutlined/>} onClick={reload} loading={loading}>Làm mới</Button>
         <Button type="primary" icon={<PlusOutlined/>} disabled={!hub} onClick={()=>editProfile(null)}>
@@ -127,15 +134,15 @@ export function ModelHub({mutate}) {
     <Card className="env-panel" title={<SectionTitle icon={<AppstoreOutlined/>} title="Danh sách model"
       description="Hồ sơ đã đăng ký và trạng thái kiểm tra gần nhất"/>} loading={loading}>
       <Table className="hub-table" size="middle" rowKey="id" dataSource={profiles} scroll={desktop?{x:980}:undefined}
-        pagination={{pageSize:8,hideOnSinglePage:true}} locale={{emptyText:<Empty description="Chưa có model"/>}}
+        pagination={{pageSize:8,hideOnSinglePage:true}} locale={{emptyText:<Empty description="Chưa đăng ký model. Chọn Đăng ký model để bắt đầu."/>}}
         columns={[
           {title:'Hồ sơ',dataIndex:'id',width:170,render:(id,row)=><Space direction="vertical" size={4}>
             <span className="env-runtime-name">{id}</span>
-            {desktop?<Text type="secondary">{row.source==='git'?'Mặc định':'Owner tùy chỉnh'}</Text>:
+            {desktop?<Text type="secondary">Owner đăng ký</Text>:
               <details className="hub-details"><summary>Chi tiết</summary>
                 <div>{PROVIDER_LABELS[row.provider]||row.provider}</div>
                 <div>{row.model}</div>
-                <div>{row.source==='git'?'Mặc định':'Owner tùy chỉnh'}</div>
+                <div>Owner đăng ký</div>
               </details>}
             {!desktop&&profileActions(row)}
           </Space>},

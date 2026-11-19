@@ -22,6 +22,14 @@ def handle(server, path, request, session=None):
             "SAVE_MODEL_PROFILE",
             expected_revision=request["expected_revision"],
             profile=request["profile"])
+    if path == "/api/model-hub/profile/delete":
+        if (set(request) != {"ack", "expected_revision", "profile_id"} or
+                request["ack"] != "DELETE_MODEL_PROFILE"):
+            raise PermissionError("Explicit model removal confirmation required")
+        return model_hub.change(
+            "DELETE_MODEL_PROFILE",
+            expected_revision=request["expected_revision"],
+            profile_id=request["profile_id"])
     if path == "/api/model-hub/route":
         if (set(request) != {"ack", "expected_revision", "task_id", "model_ref"} or
                 request["ack"] != "SET_MODEL_ROUTE"):
