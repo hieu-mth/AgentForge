@@ -9,7 +9,7 @@ cd D:\AgentForge
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\agentforge_runtime_certify_windows.ps1 -SaveReport
 ```
 
-Kiểm Python/Node, model catalog Ollama, ComfyUI, FFmpeg và HTTP Dashboard. Các công cụ render local được Owner cài và bật riêng. Receipt được lưu trong `workspace/runtime-certification/` khi bật SaveReport; không upload receipt hoặc secret.
+Kiểm Python/Node, ComfyUI, FFmpeg và HTTP Dashboard. Nếu không chỉ định ModelRef, Ollama probe trả `NO_MODEL_SELECTED` (không tạo model giả). Các công cụ render local được Owner cài và bật riêng. Receipt được lưu trong `workspace/runtime-certification/` khi bật SaveReport; không upload receipt hoặc secret.
 
 ## 2. FFmpeg fixture thực (Owner chủ động)
 
@@ -22,10 +22,10 @@ Chỉ chứng nhận encode/decode clip tạm 1 giây, không phải motion do A
 ## 3. Một lượt Ollama local (Owner chủ động)
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\agentforge_runtime_certify_windows.ps1 -RunOllama -ConfirmInference -ModelRef local_primary -SaveReport
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\agentforge_runtime_certify_windows.ps1 -RunOllama -ConfirmInference -ModelRef my_local_model -SaveReport
 ```
 
-Script dùng một prompt cố định, không truyền dữ liệu riêng tư, không pull model và không fallback cloud. PASS_RUNTIME chỉ cho kiểm tra text inference.
+Trước tiên, đăng ký profile Ollama có ID `my_local_model` (hoặc ID khác) qua Dashboard, rồi thay `-ModelRef` đúng với ID đã đăng ký. Không còn `local_primary` mặc định. Script dùng một prompt cố định, không truyền dữ liệu riêng tư, không pull model và không fallback cloud. PASS_RUNTIME chỉ cho kiểm tra text inference.
 
 ## 4. ComfyUI, shot thật và Film Studio
 
