@@ -203,6 +203,13 @@ try {
   await settings.goto(policyOrigin+'/dashboard/#/orchestrator');
   await settings.getByLabel('Mã Owner',{exact:true}).fill(ownerCode);
   await settings.getByRole('button',{name:'Mở dashboard'}).click();
+  // Fresh checkout starts with zero registered model profiles.
+  await settings.goto(policyOrigin+'/dashboard/#/models',{waitUntil:'networkidle'});
+  await settings.getByText('Chưa đăng ký model. Chọn Đăng ký model để bắt đầu.',{exact:true}).waitFor();
+  const freshHub=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
+  if(freshHub.revision!==0||freshHub.profiles.length!==0)
+    throw new Error('Fresh Owner Model Hub must not preload any model');
+  await settings.goto(policyOrigin+'/dashboard/#/orchestrator',{waitUntil:'networkidle'});
   await settings.getByRole('heading',{name:'AI điều phối tác vụ',exact:true}).waitFor();
   for(const title of ['AI điều phối chính','Phân công AI theo năng lực',
     'Quy tắc tự động điều phối','Quyền hạn & giới hạn']){
@@ -230,12 +237,24 @@ try {
   await settings.getByText('Có thay đổi chưa lưu',{exact:true}).waitFor();
   await settings.getByRole('button',{name:'Hủy thay đổi'}).click();
   if(await decompose.isChecked()||await savePolicy.isEnabled())throw new Error('Cancel kept edits');
+  // Explicit Owner registration is a real API mutation; no TOML model defaults.
+  const {csrf:registerCsrf}=await (await settings.request.get(
+    policyOrigin+'/api/session')).json();
+  const registered=await settings.request.post(policyOrigin+'/api/model-hub/profile',{
+    headers:{Origin:policyOrigin,'X-CSRF-Token':registerCsrf},
+    data:{ack:'SAVE_MODEL_PROFILE',expected_revision:0,
+      profile:{id:'local_primary',provider:'ollama',model:'synthetic-local:8b',
+        enabled:true,base_url:'http://127.0.0.1:11434'}},
+  });
+  if(registered.status()!==200)throw new Error('Owner SQLite profile registration failed');
+  await settings.reload();
+  await settings.getByRole('heading',{name:'AI điều phối tác vụ',exact:true}).waitFor();
   await settings.getByRole('combobox',{name:'Model điều phối'}).click();
   await openOptions.filter({hasText:/local_primary/}).click();
   await decompose.check();
   await savePolicy.click();
   await settings.getByRole('dialog').getByRole('button',{name:'Lưu cấu hình'}).click();
-  await settings.getByText('Owner tùy chỉnh · Phiên bản 1',{exact:true}).waitFor();
+  await settings.getByText('Owner tùy chỉnh · Phiên bản 2',{exact:true}).waitFor();
   await settings.reload();
   await settings.getByText('Owner tùy chỉnh · Phiên bản 1',{exact:true}).waitFor();
   if(!await decompose.isChecked())throw new Error('Settings did not persist after reload');
@@ -244,12 +263,12 @@ try {
     throw new Error('Saved model was not read back from real Model Hub');
   const {csrf}=await (await settings.request.get(policyOrigin+'/api/session')).json();
   const invalid=await settings.request.post(endpoint,{headers:{...postOptions.headers,'X-CSRF-Token':csrf},
-    data:{ack:'SAVE_ORCHESTRATOR',expected_revision:1,policy:persisted.orchestrator.policy,
+    data:{ack:'SAVE_ORCHESTRATOR',expected_revision:2,policy:persisted.orchestrator.policy,
       route_changes:{'film.motion':'local_primary'}}});
   if(invalid.status()!==400)throw new Error('API accepted a text model for video');
   await settings.getByRole('button',{name:'Đặt lại mặc định'}).click();
   await settings.getByRole('dialog').getByRole('button',{name:'Đặt lại',exact:true}).click();
-  await settings.getByText('Mặc định · Phiên bản 2',{exact:true}).waitFor();
+  await settings.getByText('Mặc định · Phiên bản 3',{exact:true}).waitFor();
   if(await decompose.isChecked())throw new Error('Reset did not restore defaults');
   for(const width of [390,900,1440]){
     await settings.setViewportSize({width,height:850});
