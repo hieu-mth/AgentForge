@@ -8,7 +8,7 @@ from agentforge.ops import discovery
 
 MIB = 1024 * 1024
 MIN_RAM_MIB = {"plan": 4096, "cast": 4096, "storyboard": 4096, "image": 4096, "render": 2048}
-MIN_VRAM_MIB = {"image": 2048}
+MIN_VRAM_MIB = {"plan": 6144, "cast": 6144, "storyboard": 6144, "image": 2048}
 
 
 def _windows_commit():

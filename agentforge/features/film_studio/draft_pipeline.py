@@ -56,7 +56,7 @@ def _cancellation(ident, *, mark=False):
 
 
 @contextmanager
-def _measured(job, operation):
+def _measured(job, operation, comfy_profile=None):
     if _cancellation(job["id"]):
         raise DraftCancelled
     before = draft_resources.snapshot()
@@ -65,6 +65,10 @@ def _measured(job, operation):
     _save(job)
     try:
         reason = draft_resources.pressure(before, operation)
+        if reason == "VRAM_LOW" and comfy_profile and comfy_profile.get("base_url"):
+            if _release_idle_comfy(comfy_profile):
+                point["after_release"] = draft_resources.snapshot()
+                reason = draft_resources.pressure(point["after_release"], operation)
         if reason:
             raise ResourceWait(reason)
         yield
@@ -279,7 +283,7 @@ def _write_board(job, bindings):
     if not job.get("plan"):
         job["stage"] = "PLANNING"
         _save(job)
-        with _measured(job, "plan"):
+        with _measured(job, "plan", comfy):
             output = _ask(bindings["general.text"], "Plan a short coherent video. Return Vietnamese outline.",
                           job["brief"], _object(outline=STRING), comfy)
         job["plan"] = _text(output["outline"], 700)
@@ -293,7 +297,7 @@ def _write_board(job, bindings):
         selector = bindings.get("character.select", bindings["film.storyboard"])
         if selector["provider"] != "ollama":
             raise ValueError("Assign a local Ollama model to character.select")
-        with _measured(job, "cast"):
+        with _measured(job, "cast", comfy):
             selection = _ask(selector, "Select up to two relevant registered characters. Return empty if none fit.",
                              {"outline": job["plan"], "candidates": candidates},
                              _object(ids={"type": "array", "items": {**STRING, "enum": list(candidates)},
@@ -309,7 +313,7 @@ def _write_board(job, bindings):
         "type": "array", "minItems": count, "maxItems": count, "items": _object(
             description=STRING, image_prompt=STRING, character_ids=references,
             audio=STRING)})
-    with _measured(job, "storyboard"):
+    with _measured(job, "storyboard", comfy):
         data = _ask(bindings["film.storyboard"],
                 "Write a coherent Vietnamese storyboard for a silent motion slideshow. "
                 "Use English visual prompts with stable setting and character appearance. "
@@ -435,7 +439,7 @@ def _work(job, slot):
                 if scene["asset"]:
                     _image(job, index, scene, revision, bindings["image.generate"])
                 else:
-                    with _measured(job, "image"):
+                    with _measured(job, "image", image_profile):
                         used_flux = True
                         _image(job, index, scene, revision, bindings["image.generate"])
             ops_control.require_active()
