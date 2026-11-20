@@ -280,11 +280,18 @@ def _story(value, count, duration, cast):
             "scenes": result}
 
 
+def _activity(job, stage, operation, profile=None, **details):
+    job["stage"] = stage
+    job["activity"] = {"operation": operation, **details}
+    if profile:
+        job["activity"].update(provider=profile["provider"], model=profile["model"])
+    _save(job)
+
+
 def _write_board(job, bindings):
     comfy = bindings["image.generate"]
     if not job.get("plan"):
-        job["stage"] = "PLANNING"
-        _save(job)
+        _activity(job, "PLANNING", "plan", bindings["general.text"])
         with _measured(job, "plan", comfy):
             output = _ask(bindings["general.text"], "Plan a short coherent video. Return Vietnamese outline.",
                           job["brief"], _object(outline=STRING), comfy)
@@ -299,6 +306,7 @@ def _write_board(job, bindings):
         selector = bindings.get("character.select", bindings["film.storyboard"])
         if selector["provider"] != "ollama":
             raise ValueError("Assign a local Ollama model to character.select")
+        _activity(job, "STORYBOARD", "cast", selector)
         with _measured(job, "cast", comfy):
             selection = _ask(selector, "Select up to two relevant registered characters. Return empty if none fit.",
                              {"outline": job["plan"], "candidates": candidates},
@@ -315,6 +323,7 @@ def _write_board(job, bindings):
         "type": "array", "minItems": count, "maxItems": count, "items": _object(
             description=STRING, image_prompt=STRING, character_ids=references,
             audio=STRING)})
+    _activity(job, "STORYBOARD", "storyboard", bindings["film.storyboard"])
     with _measured(job, "storyboard", comfy):
         data = _ask(bindings["film.storyboard"],
                 "Write a coherent Vietnamese storyboard for a silent motion slideshow. "
@@ -434,19 +443,17 @@ def _work(job, slot):
             folder.mkdir(parents=True, exist_ok=True)
             if not job.get("board"):
                 _write_board(job, bindings)
-            job["stage"] = "IMAGES"
-            _save(job)
             for index, scene in enumerate(job["board"]["scenes"]):
                 ops_control.require_active()
                 if scene["asset"]:
                     _image(job, index, scene, revision, bindings["image.generate"])
                 else:
+                    _activity(job, "IMAGES", "image", image_profile, scene=index + 1)
                     with _measured(job, "image", image_profile):
                         used_flux = True
                         _image(job, index, scene, revision, bindings["image.generate"])
             ops_control.require_active()
-            job["stage"] = "RENDER"
-            _save(job)
+            _activity(job, "RENDER", "render")
             with _measured(job, "render"):
                 job["video_sha"] = _render(job)
             job["status"] = "REVIEW"
@@ -465,6 +472,7 @@ def _work(job, slot):
         try:
             if used_flux and image_profile.get("base_url"):
                 _release_idle_comfy(image_profile)
+            job.pop("activity", None)
             _save(job)
         finally:
             ACTIVE = None
@@ -476,6 +484,7 @@ def _work(job, slot):
 def _start(job, slot):
     global ACTIVE
     job.update(status="RUNNING", error=None)
+    job.pop("activity", None)
     _save(job)
     snapshot = copy.deepcopy(job)
     ACTIVE = job["id"]

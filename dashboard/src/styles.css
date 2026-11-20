@@ -349,7 +349,9 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .studio-drawer-content{justify-items:start;overflow-wrap:anywhere}
 .studio-drawer-content section{width:100%}
 .studio-episode-select{width:100%}
-.studio-preview-actions{margin:10px 0}
+.studio-preview-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:10px 0}
+.studio-preview-actions>.ant-space{min-width:0}
+.studio-preview-actions>a{flex:none;margin-inline-start:auto}
 .studio-preview{display:block;width:100%;max-height:55vh;border-radius:10px;background:#121520}
 .studio-drawer-content p + .ant-btn,.studio-shot-list{margin-top:12px}
 .studio-shot-list li{padding:10px 12px;border:1px solid var(--env-border);border-radius:10px}

@@ -56,11 +56,17 @@ class DraftTests(unittest.TestCase):
         (folder / "scene-01.png").write_bytes(known)
         job["board"]["scenes"][0]["asset"] = draft._sha(known)
         draft._save(job)
-        profile = {"flux": {"max_resolution": 768}}
+        profile = {"provider": "comfyui", "model": "fixture.gguf", "flux": {"max_resolution": 768}}
+        def missing_output(*args, **kwargs):
+            self.assertEqual(draft._read(self.ident)["activity"], {
+                "operation": "image", "provider": "comfyui", "model": "fixture.gguf", "scene": 2,
+            })
+            return {"status": "OUTPUT_MISSING"}
         with (patch.object(draft.model_hub, "draft_routes", return_value=(8, {"image.generate": profile})),
-              patch.object(draft.flux_runtime, "generate", return_value={"status": "OUTPUT_MISSING"}) as generate):
+              patch.object(draft.flux_runtime, "generate", side_effect=missing_output) as generate):
             draft._work(job, nullcontext())
             self.assertEqual(job["status"], "FAILED")
+            self.assertNotIn("activity", job)
             self.assertEqual(job["board"]["scenes"][1]["attempts"], 1)
             generate.assert_called_once()
         recovered = draft._read(self.ident)
@@ -111,7 +117,7 @@ class DraftTests(unittest.TestCase):
             draft._save(job)
             draft._cancellation(job["id"], mark=True)
 
-        profile = {"base_url": "http://127.0.0.1:8188"}
+        profile = {"base_url": "http://127.0.0.1:8188", "provider": "comfyui", "model": "fixture.gguf"}
         with (patch.object(draft.model_hub, "draft_routes", return_value=(1, {"image.generate": profile})),
               patch.object(draft, "_image", side_effect=complete_scene) as image,
               patch.object(draft, "_render") as render,

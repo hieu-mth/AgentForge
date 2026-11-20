@@ -4,6 +4,7 @@ import {useResource,ResourceStatus} from '../use_resource.jsx';
 import {useScreenRefresh} from '../refresh_scope.jsx';
 import {requestError} from '../api.js';
 import {StudioPreview} from './StudioPreview.jsx';
+import './studio-draft-progress.css';
 
 const API='/api/film/drafts';
 function draftError(failure) {
@@ -23,20 +24,53 @@ function usage(total,available,unit) {
   return ((total-available)/unit).toFixed(1)+' / '+(available/unit).toFixed(1)+' GiB';
 }
 
+const stages=[['PLANNING','Lập kế hoạch'],['STORYBOARD','Storyboard'],['IMAGES','Tạo ảnh'],['RENDER','Dựng MP4']];
+const providers={ollama:'Ollama',comfyui:'ComfyUI'};
+
+function DraftProgress({job,starting}) {
+  const activity=job?.activity;
+  const current=stages.findIndex(([key])=>key===job?.stage);
+  const scenes=job?.board?.scenes??[];
+  const completed=scenes.filter(scene=>scene.asset).length;
+  const title=starting?'Đang gửi yêu cầu':activity?.operation==='cast'?'Đang chọn nhân vật':
+    activity?.operation==='image'&&activity.scene? 'Đang tạo ảnh cảnh '+activity.scene+'/'+scenes.length:
+    labels[job?.stage]??'Đang chuẩn bị bản nháp';
+  return <section className="draft-progress" aria-label="Tiến độ tạo bản nháp">
+    <div className="draft-progress-now" role="status">
+      <span className="draft-progress-spinner" aria-hidden="true"/>
+      <div>
+        <strong>{title}</strong>
+        {activity?.model&&<div className="env-muted env-break">
+          {providers[activity.provider]??activity.provider} · {activity.model}
+        </div>}
+        {activity?.operation==='render'&&<div className="env-muted">FFmpeg · Kiểm tra đầu ra MP4</div>}
+        {job?.stage==='IMAGES'&&<div className="env-muted">{completed}/{scenes.length} ảnh đã sẵn sàng</div>}
+      </div>
+    </div>
+    <ol className="draft-progress-steps">
+      {stages.map(([key,label],index)=><li key={key}
+        className={index<current?'is-complete':index===current?'is-current':undefined}
+        aria-current={index===current?'step':undefined}>{label}</li>)}
+    </ol>
+  </section>;
+}
+
 export function StudioDrafts({mutate,onCharacters}) {
-  const {data,reload,...resource}=useResource(API);
+  const {data,reload,setData,...resource}=useResource(API);
   const {data:capacity,reload:refreshCapacity}=useResource(API+'/resources');
   useScreenRefresh(reload);
   const busy=useRef(false);
   const request=useRef(null);
   const [pending,setPending]=useState(false);
+  const [starting,setStarting]=useState(false);
   const [error,setError]=useState(null);
   const [editor,setEditor]=useState(null);
   const [missing,setMissing]=useState([]);
   const drafts=Array.isArray(data?.drafts)?data.drafts.filter(job=>!missing.includes(job.id)):[];
   const listError=resource.error?draftError(resource.error):
     data&&!Array.isArray(data.drafts)?'API bản nháp trả dữ liệu không hợp lệ.':null;
-  const running=!listError&&drafts.some(job=>job.status==='RUNNING'&&job.worker_active);
+  const active=drafts.find(job=>job.status==='RUNNING'&&job.worker_active);
+  const running=!listError&&Boolean(active);
   const queued=drafts.filter(job=>job.status==='QUEUED').length;
   const waiting=drafts.filter(job=>job.status==='WAITING_RESOURCES').length;
   useEffect(()=>{
@@ -54,9 +88,13 @@ export function StudioDrafts({mutate,onCharacters}) {
     if(busy.current)return;
     busy.current=true;
     setPending(true);
+    setStarting(path==='/start'||path.endsWith('/resume'));
     setError(null);
     try {
-      await mutate(API+path,body,{inlineError:true});
+      const result=await mutate(API+path,body,{inlineError:true});
+      if(result?.id&&result.status==='RUNNING'&&(path==='/start'||path.endsWith('/resume'))) {
+        setData({drafts:[{...result,worker_active:true},...drafts.filter(job=>job.id!==result.id)]});
+      }
       done?.();
       await reload();
     } catch(failure) {
@@ -70,6 +108,7 @@ export function StudioDrafts({mutate,onCharacters}) {
     } finally {
       busy.current=false;
       setPending(false);
+      setStarting(false);
     }
   }
 
@@ -111,8 +150,10 @@ export function StudioDrafts({mutate,onCharacters}) {
     {error&&<Alert showIcon type="error" message={error}/>}
     {listError?<Alert showIcon type="error" message="Không đọc được bản nháp"
       description={listError} action={<Button onClick={reload}>Thử lại bản nháp</Button>}/>:
-      <ResourceStatus resource={{...resource,loading:resource.loading&&!data,data,reload}} label="bản nháp"/>}
-    {!resource.loading&&!listError&&data&&drafts.length===0&&
+      <ResourceStatus resource={{...resource,loading:resource.loading&&!data&&!starting,data,reload}}
+        label="bản nháp"/>}
+    {(starting||running)&&<DraftProgress job={active} starting={starting&&!active}/>}
+    {!starting&&!resource.loading&&!listError&&data&&drafts.length===0&&
       <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Chưa có bản nháp"/>}
     {drafts.length>0&&<Collapse accordion destroyOnHidden items={drafts.map(job=>({key:job.id,
       label:<Space wrap><span>{job.board?.title??job.brief.idea}</span>
@@ -139,13 +180,12 @@ export function StudioDrafts({mutate,onCharacters}) {
             onClick={()=>setEditor({id:job.id,index,scene})}>Sửa cảnh / tạo lại ảnh</Button></div>
         </li>)}</ul>}
         {job.video_sha&&<StudioPreview key={job.video_sha} url={API+'/'+job.id+'/preview?v='+job.video_sha}
-          filename="draft.mp4" label="Xem bản nháp MP4"/>}
-        {job.status==='REVIEW'&&<Space wrap style={{marginTop:12}}>
+          filename="draft.mp4" label="Xem bản nháp MP4" reviewActions={job.status==='REVIEW'?<>
           <Button type="primary" disabled={pending}
             onClick={()=>run('/'+job.id+'/approve',{sha256:job.video_sha})}>Duyệt bản nháp</Button>
           <Button danger disabled={pending}
             onClick={()=>run('/'+job.id+'/reject',{sha256:job.video_sha})}>Từ chối</Button>
-        </Space>}
+        </>:null}/>}
       </>,
     }))}/>}
     {editor&&<Modal open title={'Sửa cảnh '+(editor.index+1)} footer={null}

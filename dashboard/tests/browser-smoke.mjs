@@ -335,8 +335,10 @@ try {
   let draftFixture=null;
   let draftListStatus=404;
   let draftReads=0;
-  await settings.route('**/api/film/drafts',route=>{
+  let holdDraftRead;
+  await settings.route('**/api/film/drafts',async route=>{
     draftReads++;
+    if(holdDraftRead)await holdDraftRead;
     if(draftListStatus===404)return route.fulfill({status:404,json:{error:'not_found'}});
     if(draftListStatus===503)return route.fulfill({status:503,json:{
       error:'draft_storage_unavailable',message:'Fixture SQLite unavailable',
@@ -356,12 +358,26 @@ try {
     if(!/^[0-9a-f]{32}$/.test(id)||!['Chú mèo cam khám phá khu rừng','Ý tưởng mới'].includes(brief.idea)||
         brief.seconds!==12||brief.scene_count!==3||brief.ratio!=='9:16')
       throw new Error('Unexpected draft submission');
-    draftFixture={id,brief,status:'RUNNING',stage:'PLANNING',worker_active:true};
+    draftFixture={id,brief,status:'RUNNING',stage:'PLANNING',worker_active:true,
+      activity:{operation:'plan',provider:'ollama',model:'fixture-planner'}};
     return route.fulfill({json:draftFixture});
   });
   await settings.getByLabel('Ý tưởng video',{exact:true}).fill('Chú mèo cam khám phá khu rừng');
   await settings.getByRole('button',{name:'Tạo bản nháp',exact:true}).click();
-  await settings.getByText('Đang lập kế hoạch',{exact:true}).waitFor();
+  const draftProgress=settings.getByRole('region',{name:'Tiến độ tạo bản nháp'});
+  await draftProgress.getByText('Đang lập kế hoạch',{exact:true}).waitFor();
+  await draftProgress.getByText('Ollama · fixture-planner',{exact:true}).waitFor();
+  let releaseDraftRead;
+  holdDraftRead=new Promise(resolve=>{releaseDraftRead=resolve;});
+  try {
+    await settings.waitForRequest(request=>new URL(request.url()).pathname==='/api/film/drafts');
+    if(await settings.getByText('Đang đọc bản nháp…',{exact:true}).count())
+      throw new Error('Draft progress refresh displayed the initial loading indicator');
+    await draftProgress.getByText('Ollama · fixture-planner',{exact:true}).waitFor();
+  } finally {
+    releaseDraftRead();
+    holdDraftRead=null;
+  }
   await settings.reload();
   await settings.getByText('Chú mèo cam khám phá khu rừng',{exact:true}).waitFor();
   draftFixture={...draftFixture,status:'FAILED',worker_active:false,error:'Fixture runtime unavailable'};
@@ -382,7 +398,7 @@ try {
   draftListStatus=200;
   await settings.getByLabel('Ý tưởng video',{exact:true}).fill('Ý tưởng mới');
   await settings.getByRole('button',{name:'Tạo bản nháp',exact:true}).click();
-  await settings.getByText('Ý tưởng mới',{exact:true}).waitFor();
+  await settings.getByRole('button',{name:/^Ý tưởng mới/}).waitFor();
   // Fresh checkout starts with zero registered model profiles.
   await settings.goto(policyOrigin+'/dashboard/#/models',{waitUntil:'networkidle'});
   await settings.getByText('Chưa đăng ký model. Chọn Đăng ký model để bắt đầu.',{exact:true}).waitFor();

@@ -85,7 +85,7 @@ export function ModelHub({mutate}) {
     {row.flux&&<Button size="small" onClick={()=>update('/api/model-hub/check',{
       ack:'CHECK_LOCAL_MODEL',profile_id:row.id,
     },'Kiểm tra ComfyUI local?','Đọc thông tin GPU và danh sách model của các node loader.')}>
-      Kiểm tra ComfyUI
+      Kiểm tra
     </Button>}
     {row.flux&&<Button size="small" disabled={!row.enabled}
       onClick={()=>setFluxProbe({profile:row,revision:hub.revision})}>Chạy thử</Button>}
