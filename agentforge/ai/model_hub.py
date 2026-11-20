@@ -13,6 +13,7 @@ import base64
 import binascii
 from contextlib import closing, contextmanager
 from threading import Lock
+from time import monotonic
 import json
 import re
 import sqlite3
@@ -44,16 +45,32 @@ EXECUTIONS = {"config_only", "rules"}
 MAX_PROFILE_COUNT = 32
 MAX_STATE_BYTES = 65536
 _LOCAL_INFERENCE = Lock()
+_LOCAL_ADMISSION = Lock()
+last_local_inference = 0.0
+
+
+def local_inference_busy():
+    return _LOCAL_INFERENCE.locked()
 
 
 @contextmanager
-def local_inference_slot():
+def local_inference_slot(*, observe=True):
     """Serialize interactive local inference in the dashboard API process."""
-    if not _LOCAL_INFERENCE.acquire(blocking=False):
-        raise PermissionError("LOCAL_INFERENCE_BUSY")
+    global last_local_inference
+    with _LOCAL_ADMISSION:
+        if not _LOCAL_INFERENCE.acquire(blocking=False):
+            raise PermissionError("LOCAL_INFERENCE_BUSY")
+        if not observe:
+            # New GPU requests wait for the final idle transition, then can auto-start.
+            try:
+                yield
+            finally:
+                _LOCAL_INFERENCE.release()
+            return
     try:
         yield
     finally:
+        last_local_inference = monotonic()
         _LOCAL_INFERENCE.release()
 
 # These are the profile adapters accepted by Model Hub. Registration is

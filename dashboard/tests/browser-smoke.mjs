@@ -98,9 +98,19 @@ try {
       episode_sha256:'example-prepared',shot_count:2,runtime_seconds:8},
   ];
   let studioReadError=false;
+  let service={state:'RUNNING',managed:false,configured:true,can_manage:true,
+    endpoint:'http://127.0.0.1:8192',devices:[]};
+  const serviceActions=[];
   await page2.route('**/api/**',async route=>{
     const p=new URL(route.request().url()).pathname;
     if(p==='/api/ops/discovery')environmentRequests++;
+    if(p==='/api/ops/comfyui/control'){
+      const request=route.request().postDataJSON();
+      serviceActions.push(request.action);
+      service={...service,state:'RUNNING',managed:true,pid:4210};
+      return route.fulfill({json:service});
+    }
+    if(p==='/api/ops/comfyui')return route.fulfill({json:service});
     if(p==='/api/film/motion')clipRequests++;
     if(p==='/api/film/productions')episodeRequests++;
     if(p==='/api/film/productions'&&studioReadError){
@@ -185,8 +195,9 @@ try {
   await studio.locator('.studio-filters').getByText('Tất cả',{exact:true}).click();
   await studio.getByRole('button',{name:'Xem dự án demo',exact:true}).click();
   await episodeDrawer.getByRole('combobox',{name:'Chọn tập phim'}).click();
-  await page2.locator('.ant-select-dropdown:visible .ant-select-item-option-content')
-    .filter({hasText:/^ep01 · Chờ dựng$/}).click();
+  const episodeOption=page2.locator('.ant-select-dropdown:visible .ant-select-item-option')
+    .filter({hasText:/^ep01 · Chờ dựng$/});
+  await episodeOption.evaluate(option=>option.click());
   await episodeDrawer.getByRole('button',{name:'Mở công cụ dựng'}).click();
   await episodeDrawer.waitFor({state:'hidden'});
   await page2.getByText('Tập phim & bản dựng',{exact:true}).waitFor();
@@ -221,6 +232,26 @@ try {
   const env=page2.locator('[data-testid="environment-page"]');
   await env.getByRole('heading',{name:'Môi trường & Tài nguyên'}).waitFor();
   await env.locator('.env-stat-grid .env-stat').first().waitFor();
+  const comfyCard=env.locator('.ant-card').filter({hasText:'Dịch vụ ComfyUI'});
+  const stop=comfyCard.getByRole('button',{name:'Dừng',exact:true});
+  const start=comfyCard.getByRole('button',{name:'Khởi động',exact:true});
+  const check=comfyCard.getByRole('button',{name:'Kiểm tra ComfyUI',exact:true});
+  await comfyCard.getByText('Chạy bên ngoài',{exact:false}).waitFor();
+  if(!await stop.isDisabled()||!await start.isDisabled())throw new Error('External ComfyUI is controllable');
+  service={...service,state:'STOPPED'};
+  await check.click();
+  await comfyCard.getByText('Đã dừng',{exact:true}).waitFor();
+  await start.click();
+  await comfyCard.getByText('PID 4210',{exact:false}).waitFor();
+  if(serviceActions.join()!=='start'||!await stop.isEnabled())
+    throw new Error('Managed ComfyUI controls did not follow the API');
+  service={...service,busy:true};
+  await check.click();
+  await comfyCard.getByText('Đang có tác vụ',{exact:false}).waitFor();
+  if(!await stop.isDisabled())throw new Error('Stop was enabled during active production');
+  service={...service,state:'STOPPED',managed:false,pid:null,busy:false};
+  await comfyCard.getByText('Đã dừng',{exact:true}).waitFor({timeout:15000});
+  console.log('ComfyUI controls, external ownership and active job protection: PASS');
   if(await env.locator('.env-stat').count()!==4)throw new Error('Missing four resource tiles');
   await env.getByText('NVIDIA GeForce RTX 5070').first().waitFor();
   await env.getByText('8,47 GB').first().waitFor();
@@ -398,7 +429,7 @@ try {
   draftListStatus=200;
   await settings.getByLabel('Ý tưởng video',{exact:true}).fill('Ý tưởng mới');
   await settings.getByRole('button',{name:'Tạo bản nháp',exact:true}).click();
-  await settings.getByRole('button',{name:/^Ý tưởng mới/}).waitFor();
+  await settings.getByRole('tab',{name:/^Ý tưởng mới/}).waitFor();
   // Fresh checkout starts with zero registered model profiles.
   await settings.goto(policyOrigin+'/dashboard/#/models',{waitUntil:'networkidle'});
   await settings.getByText('Chưa đăng ký model. Chọn Đăng ký model để bắt đầu.',{exact:true}).waitFor();

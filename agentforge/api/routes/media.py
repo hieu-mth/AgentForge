@@ -111,10 +111,12 @@ def handle(server, path, request, session=None):
                 set(request) != {"ack", "purpose", "topic", "scenes", "checkpoint"}
                 or request.get("ack") != "GENERATE_AI_VISUALS"):
             raise PermissionError("Explicit visual GPU batch approval required")
+        from agentforge.ai.model_hub import local_inference_slot
         from agentforge.features.media import visual_jobs
-        return visual_jobs.submit(
-            request["purpose"], request["topic"], request["scenes"],
-            request["checkpoint"], confirm_generation=True)
+        with local_inference_slot():
+            return visual_jobs.submit(
+                request["purpose"], request["topic"], request["scenes"],
+                request["checkpoint"], confirm_generation=True)
     if path.startswith("/api/visuals/") and path.endswith("/collect"):
         if not server.allow_external_actions:
             raise PermissionError("Local ComfyUI collection requires external mode")
@@ -124,5 +126,7 @@ def handle(server, path, request, session=None):
         parts = path.split("/")
         if len(parts) != 5:
             raise ValueError("Invalid image job route")
-        return visual_jobs.collect(parts[3], confirm_import=True)
+        from agentforge.ai.model_hub import local_inference_slot
+        with local_inference_slot():
+            return visual_jobs.collect(parts[3], confirm_import=True)
     return UNHANDLED
