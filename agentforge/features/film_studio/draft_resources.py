@@ -60,7 +60,7 @@ def _windows_processes():
             path = buffer.value.lower()
             name = os.path.basename(path)
             role = ("agentforge" if pid == os.getpid() else
-                    "ollama" if name.startswith("ollama") else
+                    "ollama" if name.startswith(("ollama", "llama-server")) and "ollama" in path else
                     "ffmpeg" if name.startswith("ffmpeg") else
                     "comfyui" if "comfyui" in path and name.startswith("python") else None)
             if not role:
