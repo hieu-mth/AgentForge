@@ -235,7 +235,7 @@ try {
   const comfyCard=env.locator('.ant-card').filter({hasText:'Dịch vụ ComfyUI'});
   const stop=comfyCard.getByRole('button',{name:'Dừng',exact:true});
   const start=comfyCard.getByRole('button',{name:'Khởi động',exact:true});
-  const check=comfyCard.getByRole('button',{name:'Kiểm tra',exact:true});
+  const check=comfyCard.getByRole('button',{name:'Kiểm tra ComfyUI',exact:true});
   await comfyCard.getByText('Chạy bên ngoài',{exact:false}).waitFor();
   if(!await stop.isDisabled()||!await start.isDisabled())throw new Error('External ComfyUI is controllable');
   service={...service,state:'STOPPED'};

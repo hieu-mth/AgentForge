@@ -43,7 +43,7 @@ export function ComfyService({mutate}){
   const badge=states[data?.state];
   const blocked=Boolean(pending||starting||data?.busy||error);
   return <Card className="env-panel" title="Dịch vụ ComfyUI" extra={
-    <Button onClick={reload} loading={loading&&!pending}>Kiểm tra</Button>
+    <Button aria-label="Kiểm tra ComfyUI" onClick={reload} loading={loading&&!pending}>Kiểm tra</Button>
   }>
     <Space orientation="vertical" size="middle" style={{display:'flex'}}>
       {error&&<Alert type="error" showIcon message={requestError(error)}/>}
