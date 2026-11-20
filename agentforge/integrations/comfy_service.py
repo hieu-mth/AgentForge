@@ -34,7 +34,11 @@ LOG_DIR = COMPANY_DATA_DIR / "runtime_logs"
 RUNTIME_DIR = COMPANY_DATA_DIR / "comfy_runtime"
 
 
-class StartupPressure(ValueError):
+class StartupError(ValueError):
+    """ComfyUI could not become ready before a prompt was submitted."""
+
+
+class StartupPressure(StartupError):
     """The existing resource gate refused to load ComfyUI."""
 
 
@@ -260,18 +264,26 @@ def status():
             "error": (_ERROR or "ComfyUI process exited or endpoint is unavailable") if state == "ERROR" else None}
 
 
-def ensure_running(port, *, required=False):
+def managed_exited(port):
+    child = _CHILD
+    return child is not None and _PORT == port and child.poll() is not None
+
+
+def ensure_running(port):
     """Called from existing GPU dispatch paths after their inference admission."""
     global _CHILD, _PORT, _STATE, _ERROR
     with LOCK:
         config = _settings()
-        if not config or config["port"] != port:
-            if required:
-                raise ValueError("Configure the launcher for the active ComfyUI endpoint")
-            return False
-        configured_port, _ = _target(config["profile_id"])
+        if not config:
+            raise StartupError("COMFYUI_LAUNCHER_REQUIRED")
+        if config["port"] != port:
+            raise StartupError("COMFYUI_ENDPOINT_MISMATCH")
+        try:
+            configured_port, _ = _target(config["profile_id"])
+        except ValueError:
+            raise StartupError("COMFYUI_ENDPOINT_MISMATCH") from None
         if configured_port != port:
-            raise ValueError("ComfyUI profile endpoint changed; save the launcher again")
+            raise StartupError("COMFYUI_ENDPOINT_MISMATCH")
         if _probe(port):
             return True
         if _owned() or _occupied(port):
@@ -349,5 +361,5 @@ def control(action):
             else:
                 _CHILD, _PORT, _STATE, _ERROR = None, None, "STOPPED", None
         if action in {"start", "restart"}:
-            ensure_running(port, required=True)
+            ensure_running(port)
         return status()
