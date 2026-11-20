@@ -126,5 +126,7 @@ def handle(server, path, request, session=None):
         parts = path.split("/")
         if len(parts) != 5:
             raise ValueError("Invalid image job route")
-        return visual_jobs.collect(parts[3], confirm_import=True)
+        from agentforge.ai.model_hub import local_inference_slot
+        with local_inference_slot():
+            return visual_jobs.collect(parts[3], confirm_import=True)
     return UNHANDLED

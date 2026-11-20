@@ -249,6 +249,8 @@ try {
   await check.click();
   await comfyCard.getByText('Đang có tác vụ',{exact:false}).waitFor();
   if(!await stop.isDisabled())throw new Error('Stop was enabled during active production');
+  service={...service,state:'STOPPED',managed:false,pid:null,busy:false};
+  await comfyCard.getByText('Đã dừng',{exact:true}).waitFor({timeout:15000});
   console.log('ComfyUI controls, external ownership and active job protection: PASS');
   if(await env.locator('.env-stat').count()!==4)throw new Error('Missing four resource tiles');
   await env.getByText('NVIDIA GeForce RTX 5070').first().waitFor();

@@ -16,7 +16,7 @@ from agentforge.ai import model_hub
 from agentforge.features.film_studio import characters
 from agentforge.features.film_studio import draft_resources
 from agentforge.features.media import flux_runtime, flux_workflow, render, visual_jobs
-from agentforge.integrations.comfy_service import StartupPressure
+from agentforge.integrations import comfy_service
 from agentforge.ops import runtime_certification as runtime
 from agentforge.paths import COMPANY_DATA_DIR, WORKSPACE_DIR, ensure_local_root
 
@@ -169,6 +169,15 @@ def list_drafts():
             return []
         jobs = [_decode_row(row) for row in conn.execute("SELECT body FROM drafts ORDER BY rowid DESC LIMIT 30")]
     return [{**job, "worker_active": job["id"] == ACTIVE} for job in jobs]
+
+
+def jobs_pending():
+    if ACTIVE:
+        return True
+    with _db() as conn:
+        return bool(conn and conn.execute(
+            "SELECT 1 FROM drafts WHERE json_extract(body,'$.status') IN "
+            "('QUEUED','RUNNING','WAITING_RESOURCES') LIMIT 1").fetchone())
 
 
 @contextmanager
@@ -372,7 +381,7 @@ def _image(job, index, scene, revision, profile):
             output = flux_runtime.generate(prompt, width=width, height=height, automated=True,
                                            scene=f"{job['id']}/episode-01/scene-{index+1:02d}",
                                            production_job=scene["job_id"], production_revision=revision)
-        except StartupPressure:
+        except comfy_service.StartupPressure:
             scene["job_id"] = previous_job
             scene["attempts"] -= 1
             raise
@@ -464,7 +473,7 @@ def _work(job, slot):
             with _measured(job, "render"):
                 job["video_sha"] = _render(job)
             job["status"] = "REVIEW"
-    except (ResourceWait, StartupPressure) as exc:
+    except (ResourceWait, comfy_service.StartupPressure) as exc:
         job.update(status="WAITING_RESOURCES", error=str(exc))
     except DraftCancelled:
         job.update(status="CANCELLED", error=None, video_sha=None)
@@ -490,16 +499,18 @@ def _work(job, slot):
 
 def _start(job, slot):
     global ACTIVE
-    job.update(status="RUNNING", error=None)
-    job.pop("activity", None)
-    _save(job)
-    snapshot = copy.deepcopy(job)
-    ACTIVE = job["id"]
-    try:
-        threading.Thread(target=_work, args=(job, slot), daemon=True).start()
-    except BaseException:
-        ACTIVE = None
-        raise
+    with comfy_service.LOCK:
+        comfy_service.reset_idle()
+        job.update(status="RUNNING", error=None)
+        job.pop("activity", None)
+        _save(job)
+        snapshot = copy.deepcopy(job)
+        ACTIVE = job["id"]
+        try:
+            threading.Thread(target=_work, args=(job, slot), daemon=True).start()
+        except BaseException:
+            ACTIVE = None
+            raise
     return snapshot
 
 
@@ -549,7 +560,7 @@ def submit(data):
     render._ffmpeg()
     job = {"id": ident, "brief": brief, "stage": "QUEUED", "status": "QUEUED",
            "video_sha": None, "updated_at": visual_jobs._now()}
-    with _db(True) as conn:
+    with comfy_service.LOCK, _db(True) as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute("SELECT body FROM drafts WHERE id=?", (ident,)).fetchone()
         if row:
@@ -562,6 +573,7 @@ def submit(data):
         if "WAITING_RESOURCES" in statuses or len(statuses) >= _queue_limit():
             raise ValueError("Draft queue is full or paused for resources")
         conn.execute("INSERT INTO drafts VALUES (?,?)", (ident, json.dumps(job, ensure_ascii=False)))
+        comfy_service.reset_idle()
     started = _dispatch()
     return started if started and started["id"] == ident else _read(ident)
 

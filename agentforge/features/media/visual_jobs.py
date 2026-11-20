@@ -73,6 +73,15 @@ def runtime_details(job_id, *, db_path=None):
     return {**json.loads(row["metadata"]), "approved": bool(row["reviewed"])} if row else None
 
 
+def jobs_pending():
+    db = _db()
+    if db is None:
+        return False
+    with closing(db):
+        return db.execute("SELECT 1 FROM visual_jobs WHERE status IN "
+                          "('SUBMITTING','SUBMITTED','COLLECTING') LIMIT 1").fetchone() is not None
+
+
 def approve(job_id, sha256, *, db_path=None):
     row = _row(job_id, db_path=db_path)
     if row["asset_sha"] != sha256 or row["status"] != "ASSET_READY":

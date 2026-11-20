@@ -25,6 +25,11 @@ _STATE = "STOPPED"
 _ERROR = None
 _LOG = logging.getLogger(__name__)
 START_TIMEOUT = 120
+IDLE_TIMEOUT = 60
+_IDLE_INTERVAL = 2
+_IDLE_SINCE = None
+_IDLE_WAKE = threading.Event()
+_IDLE_THREAD = None
 LOG_DIR = COMPANY_DATA_DIR / "runtime_logs"
 RUNTIME_DIR = COMPANY_DATA_DIR / "comfy_runtime"
 
@@ -137,6 +142,83 @@ def _queue_busy(port):
         return True
 
 
+def _jobs_pending():
+    from agentforge.features.film_studio import draft_pipeline
+    from agentforge.features.media import visual_jobs
+    return draft_pipeline.jobs_pending() or visual_jobs.jobs_pending()
+
+
+def reset_idle():
+    """Reset the countdown while holding LOCK during Studio admission."""
+    global _IDLE_SINCE
+    _IDLE_SINCE = None
+
+
+def _stop_owned():
+    global _CHILD, _PORT, _STATE, _ERROR
+    _CHILD.terminate()
+    try:
+        _CHILD.wait(timeout=8)
+    except subprocess.TimeoutExpired:
+        _STATE, _ERROR = "ERROR", "Managed ComfyUI did not stop within 8 seconds"
+        raise ValueError(_ERROR) from None
+    _CHILD, _PORT, _STATE, _ERROR = None, None, "STOPPED", None
+    reset_idle()
+    _IDLE_WAKE.clear()
+
+
+def _idle_check():
+    global _IDLE_SINCE
+    try:
+        with LOCK:
+            if not _owned() or _STATE != "RUNNING":
+                reset_idle()
+                _IDLE_WAKE.clear()
+                return
+            if model_hub.local_inference_busy() or _jobs_pending() or _queue_busy(_PORT):
+                reset_idle()
+                return
+            now = time.monotonic()
+            _IDLE_SINCE = max(_IDLE_SINCE if _IDLE_SINCE is not None else now,
+                              model_hub.last_local_inference)
+            if now - _IDLE_SINCE < IDLE_TIMEOUT:
+                return
+        # Acquire in the same order as image generation and manual controls.
+        with model_hub.local_inference_slot(observe=False), LOCK:
+            if (_owned() and _STATE == "RUNNING" and _IDLE_SINCE is not None
+                    and model_hub.last_local_inference <= _IDLE_SINCE
+                    and not _jobs_pending() and not _queue_busy(_PORT)):
+                pid = _CHILD.pid
+                _stop_owned()
+                _LOG.info("Stopped managed ComfyUI PID %s after %s idle seconds", pid, IDLE_TIMEOUT)
+            else:
+                reset_idle()
+    except PermissionError:
+        # An admitted inference (or an unverifiable ledger) invalidates the countdown.
+        with LOCK:
+            reset_idle()
+    except (sqlite3.Error, OSError, ValueError, RuntimeError):
+        with LOCK:
+            reset_idle()
+        _LOG.warning("Could not verify or stop idle ComfyUI", exc_info=True)
+
+
+def _watch_idle():
+    global _IDLE_THREAD
+
+    def run():
+        while True:
+            _IDLE_WAKE.wait()
+            _idle_check()
+            time.sleep(_IDLE_INTERVAL)
+
+    reset_idle()
+    if _IDLE_THREAD is None:
+        _IDLE_THREAD = threading.Thread(target=run, name="comfyui-idle", daemon=True)
+        _IDLE_THREAD.start()
+    _IDLE_WAKE.set()
+
+
 def status():
     config = _settings()
     if not config:
@@ -165,8 +247,10 @@ def status():
         state = "ERROR"
     else:
         state = "ERROR" if state == "ERROR" else "STOPPED"
-    from agentforge.features.film_studio import draft_pipeline
-    production_busy = bool(draft_pipeline.ACTIVE)
+    try:
+        production_busy = bool((managed or data) and _jobs_pending())
+    except (sqlite3.Error, OSError, ValueError, RuntimeError):
+        production_busy = True
     return {"state": state, "configured": config["install_root"] is not None,
             "managed": managed, "pid": child.pid if managed else None,
             "endpoint": endpoint, "profile_id": config["profile_id"], "install_root": config["install_root"],
@@ -235,6 +319,7 @@ def ensure_running(port, *, required=False):
                 break
             if _probe(port) and _owned():
                 _STATE = "RUNNING"
+                _watch_idle()
                 return True
             time.sleep(1)
         # Keep ownership so an Owner can inspect or stop the slow startup explicitly.
@@ -250,8 +335,7 @@ def control(action):
             raise ValueError("Register the ComfyUI Portable launcher first")
         port = config["port"]
         if action in {"stop", "restart"}:
-            from agentforge.features.film_studio import draft_pipeline
-            if draft_pipeline.ACTIVE:
+            if _jobs_pending():
                 raise PermissionError("A draft production is active")
             if _owned():
                 probe = _probe(port)
@@ -259,13 +343,7 @@ def control(action):
                     raise PermissionError("ComfyUI has a job or its queue cannot be verified")
                 if not probe and _occupied(port):
                     raise PermissionError("Cannot verify ComfyUI queue before stopping")
-                _CHILD.terminate()
-                try:
-                    _CHILD.wait(timeout=8)
-                except subprocess.TimeoutExpired:
-                    _STATE, _ERROR = "ERROR", "Managed ComfyUI did not stop within 8 seconds"
-                    raise ValueError(_ERROR) from None
-                _CHILD, _PORT, _STATE, _ERROR = None, None, "STOPPED", None
+                _stop_owned()
             elif _occupied(port):
                 raise PermissionError("AgentForge cannot stop a ComfyUI it did not launch")
             else:

@@ -20,11 +20,15 @@ export function ComfyService({mutate}){
   const [failure,setFailure]=useState(null);
   const [form]=Form.useForm();
   const starting=data?.state==='STARTING';
+  const managed=data?.managed;
   useEffect(()=>{
-    if(!starting&&!['start','restart'].includes(pending))return;
-    const timer=setInterval(reload,5000);
+    const transitioning=starting||['start','restart'].includes(pending);
+    if(!transitioning&&!managed)return;
+    const timer=setInterval(()=>{
+      if(!document.hidden)reload();
+    },transitioning?5000:10000);
     return ()=>clearInterval(timer);
-  },[starting,pending,reload]);
+  },[starting,managed,pending,reload]);
 
   async function submit(operation,body){
     setPending(operation);

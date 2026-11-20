@@ -9,6 +9,7 @@ import pytest
 from agentforge import ops_control
 from agentforge.ai import model_hub
 from agentforge.features.film_studio import draft_pipeline
+from agentforge.features.media import visual_jobs
 from agentforge.integrations import comfy_service as service
 
 
@@ -30,7 +31,14 @@ def runtime(monkeypatch, tmp_path):
     monkeypatch.setattr(service.draft_resources, "pressure", lambda sample, stage: None)
     monkeypatch.setattr(service, "_occupied", lambda port: service._owned())
     monkeypatch.setattr(service, "_probe", lambda port: {"devices": []} if service._owned() else None)
-    monkeypatch.setattr(service, "_queue_busy", lambda port: False)
+    monkeypatch.setattr(service.comfyui, "request_image_bytes",
+                        lambda *args, **kwargs: b'{"queue_running":[],"queue_pending":[]}')
+    monkeypatch.setattr(service, "_watch_idle", service.reset_idle)
+    monkeypatch.setattr(service, "_IDLE_WAKE", threading.Event())
+    monkeypatch.setattr(service, "_IDLE_SINCE", None)
+    monkeypatch.setattr(model_hub, "last_local_inference", 0.0)
+    monkeypatch.setattr(draft_pipeline, "DB", tmp_path / "drafts.sqlite3")
+    monkeypatch.setattr(visual_jobs, "DB", tmp_path / "visuals.sqlite3")
     monkeypatch.setattr(subprocess, "CREATE_NO_WINDOW", 0, raising=False)
 
     class Child:
@@ -75,7 +83,112 @@ def test_external_comfy_is_never_adopted_or_stopped(runtime, monkeypatch):
     for action in ("stop", "restart"):
         with pytest.raises(PermissionError, match="did not launch"):
             service.control(action)
+    service._idle_check()
     assert not runtime
+
+
+@pytest.fixture
+def idle_clock(runtime, monkeypatch):
+    clock = SimpleNamespace(now=0.0)
+    service.control("start")
+    monkeypatch.setattr(service, "time", SimpleNamespace(monotonic=lambda: clock.now))
+    service._idle_check()
+    return clock
+
+
+def test_idle_lifecycle(idle_clock, runtime):
+    idle_clock.now = 59.99
+    service._idle_check()
+    assert runtime[0].code is None
+    idle_clock.now = 60
+    service._idle_check()
+    assert service.status()["state"] == "STOPPED"
+    assert runtime[0].code == 0
+    assert service.ensure_running(8192)
+    assert len(runtime) == 2
+
+
+def test_sequential_jobs_reset_countdown_even_between_polls(idle_clock, runtime, monkeypatch):
+    for finished in (59, 110, 160):
+        monkeypatch.setattr(model_hub, "last_local_inference", finished)
+        idle_clock.now = finished + 2
+        service._idle_check()
+        assert service._IDLE_SINCE == finished
+        assert runtime[0].code is None
+    idle_clock.now = 220
+    service._idle_check()
+    assert runtime[0].code == 0
+
+
+def test_admitted_job_while_counting_down(idle_clock, runtime):
+    idle_clock.now = 60
+    with model_hub.local_inference_slot(observe=False):
+        service._idle_check()
+        assert service._IDLE_SINCE is None
+        assert runtime[0].code is None
+    service._idle_check()
+    idle_clock.now = 120
+    service._idle_check()
+    assert runtime[0].code == 0
+
+
+@pytest.mark.parametrize("source", ["studio", "checkpoint", "image", "provider", "queue_error"])
+def test_busy_or_unverifiable_work_blocks_idle_stop(idle_clock, runtime, monkeypatch, source):
+    idle_clock.now = 60
+    if source == "studio":
+        draft_pipeline._save({"id": "d" * 32, "status": "QUEUED"})
+    elif source == "checkpoint":
+        monkeypatch.setattr(draft_pipeline, "ACTIVE", "saving")
+    elif source == "image":
+        with visual_jobs._db(create=True) as db:
+            db.execute("INSERT INTO visual_jobs VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                       ("a" * 32, "b" * 32, "image", 0, "p", "c", None, "SUBMITTED", None, "sha", "now", "now"))
+    elif source == "provider":
+        monkeypatch.setattr(service, "_queue_busy", lambda port: True)
+    else:
+        def no_queue(*args, **kwargs):
+            raise TimeoutError()
+        monkeypatch.setattr(service.comfyui, "request_image_bytes", no_queue)
+    service._idle_check()
+    assert runtime[0].code is None
+    assert service._IDLE_SINCE is None
+
+
+def test_backend_restart_leaves_existing_process_external(idle_clock, runtime, monkeypatch):
+    monkeypatch.setattr(service, "_CHILD", None)
+    monkeypatch.setattr(service, "_PORT", None)
+    monkeypatch.setattr(service, "_probe", lambda port: {"devices": []})
+    idle_clock.now = 120
+    service._idle_check()
+    assert not service.status()["managed"]
+    assert runtime[0].code is None
+
+
+def test_new_job_admission_waits_for_final_stop(idle_clock, runtime, monkeypatch):
+    stopping = threading.Event()
+    admitted = threading.Event()
+    real_stop = service._stop_owned
+
+    def stop():
+        stopping.set()
+        assert not admitted.wait(0.1)
+        real_stop()
+
+    def admit():
+        assert stopping.wait(3)
+        with model_hub.local_inference_slot():
+            assert service.ensure_running(8192)
+            admitted.set()
+
+    monkeypatch.setattr(service, "_stop_owned", stop)
+    idle_clock.now = 60
+    with ThreadPoolExecutor(2) as pool:
+        job = pool.submit(admit)
+        idle = pool.submit(service._idle_check)
+        idle.result(timeout=3)
+        job.result(timeout=3)
+    assert admitted.is_set()
+    assert runtime[0].code == 0 and runtime[1].code is None
 
 
 def test_refuse_stop_during_production_or_provider_work(runtime, monkeypatch):
