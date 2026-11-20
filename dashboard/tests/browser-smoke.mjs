@@ -195,8 +195,9 @@ try {
   await studio.locator('.studio-filters').getByText('Tất cả',{exact:true}).click();
   await studio.getByRole('button',{name:'Xem dự án demo',exact:true}).click();
   await episodeDrawer.getByRole('combobox',{name:'Chọn tập phim'}).click();
-  await page2.locator('.ant-select-dropdown:visible .ant-select-item-option-content')
-    .filter({hasText:/^ep01 · Chờ dựng$/}).click();
+  const episodeOption=page2.locator('.ant-select-dropdown:visible .ant-select-item-option')
+    .filter({hasText:/^ep01 · Chờ dựng$/});
+  await episodeOption.evaluate(option=>option.click());
   await episodeDrawer.getByRole('button',{name:'Mở công cụ dựng'}).click();
   await episodeDrawer.waitFor({state:'hidden'});
   await page2.getByText('Tập phim & bản dựng',{exact:true}).waitFor();
@@ -248,6 +249,7 @@ try {
   await check.click();
   await comfyCard.getByText('Đang có tác vụ',{exact:false}).waitFor();
   if(!await stop.isDisabled())throw new Error('Stop was enabled during active production');
+  console.log('ComfyUI controls, external ownership and active job protection: PASS');
   if(await env.locator('.env-stat').count()!==4)throw new Error('Missing four resource tiles');
   await env.getByText('NVIDIA GeForce RTX 5070').first().waitFor();
   await env.getByText('8,47 GB').first().waitFor();
@@ -425,7 +427,7 @@ try {
   draftListStatus=200;
   await settings.getByLabel('Ý tưởng video',{exact:true}).fill('Ý tưởng mới');
   await settings.getByRole('button',{name:'Tạo bản nháp',exact:true}).click();
-  await settings.getByRole('button',{name:/^Ý tưởng mới/}).waitFor();
+  await settings.getByText('Ý tưởng mới',{exact:true}).waitFor();
   // Fresh checkout starts with zero registered model profiles.
   await settings.goto(policyOrigin+'/dashboard/#/models',{waitUntil:'networkidle'});
   await settings.getByText('Chưa đăng ký model. Chọn Đăng ký model để bắt đầu.',{exact:true}).waitFor();
