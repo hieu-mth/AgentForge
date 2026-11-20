@@ -104,13 +104,15 @@ def validate_image_route(path, *, has_body=False):
 
 
 def request_image_bytes(path, *, body=None, timeout=5, port=DEFAULT_PORT,
-                        max_response_bytes=262144):
+                        max_response_bytes=262144, sink=None):
     """Fixed-loopback, no-proxy/no-redirect binary transport for Image Studio.
 
     Caller owns explicit GPU consent and one-shot dispatch state. Never
     interpret provider HTTP redirect as a fetchable destination.
     """
     validate_image_route(path, has_body=body is not None)
+    if sink is not None and not path.startswith("/view?"):
+        raise ComfyUITransportError("Only an image response can be streamed")
     if path == "/free" and (not isinstance(body, dict) or body.keys() != {"unload_models", "free_memory"}
                             or any(value is not True for value in body.values())):
         raise ComfyUITransportError("Invalid local memory release request")
@@ -134,6 +136,14 @@ def request_image_bytes(path, *, body=None, timeout=5, port=DEFAULT_PORT,
         response = conn.getresponse()
         if response.status != 200:
             raise ComfyHTTPError(response.status)
+        if sink is not None:
+            total = 0
+            while chunk := response.read(min(64 * 1024, max_response_bytes - total + 1)):
+                total += len(chunk)
+                if total > max_response_bytes:
+                    raise ComfyUITransportError("ComfyUI image response exceeds safe size limit")
+                sink.write(chunk)
+            return b""
         raw = response.read(max_response_bytes + 1)
     finally:
         conn.close()

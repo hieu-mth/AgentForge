@@ -9,7 +9,7 @@ import os
 import re
 import sqlite3
 import urllib.parse
-from contextlib import closing
+from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -230,7 +230,8 @@ def collect(job_id, *, confirm_import=False, db_path=None, output_root=None, ope
             "owner_review_required": True}
 
 
-def image_for_job(job_id, *, db_path=None, output_root=None):
+@contextmanager
+def open_image_for_job(job_id, *, db_path=None, output_root=None):
     row = _row(job_id, db_path=db_path)
     if row["status"] != "ASSET_READY" or not row["asset_sha"]:
         raise PermissionError("AI visual image is not ready")
@@ -244,10 +245,19 @@ def image_for_job(job_id, *, db_path=None, output_root=None):
     ensure_local_root(path)
     if not path.is_file() or not 0 < path.stat().st_size <= MAX_IMAGE:
         raise PermissionError("Missing/oversized visual image")
-    data = path.read_bytes()
-    if hashlib.sha256(data).hexdigest() != row["asset_sha"]:
-        raise PermissionError("AI image hash changed")
-    return data, "image/png"
+    with path.open("rb") as stream:
+        if hashlib.file_digest(stream, "sha256").hexdigest() != row["asset_sha"]:
+            raise PermissionError("AI image hash changed")
+        stream.seek(0)
+        yield stream, row["asset_sha"]
+
+
+def image_for_job(job_id, *, db_path=None, output_root=None):
+    with open_image_for_job(job_id, db_path=db_path, output_root=output_root) as (stream, _):
+        data = stream.read(MAX_IMAGE + 1)
+        if len(data) > MAX_IMAGE:
+            raise PermissionError("Oversized visual image")
+        return data, "image/png"
 
 
 def report(*, db_path=None):

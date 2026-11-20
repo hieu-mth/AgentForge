@@ -2,6 +2,9 @@
 
 
 def dispatch(self, route):
+    if route == "/api/film/drafts/resources":
+        from agentforge.features.film_studio import draft_resources
+        return self._reply(200, draft_resources.snapshot())
     if route == "/api/film/drafts":
         from agentforge.features.film_studio import draft_pipeline
         return self._reply(200, {"drafts": draft_pipeline.list_drafts()})

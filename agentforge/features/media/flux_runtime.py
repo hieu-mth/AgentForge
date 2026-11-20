@@ -81,7 +81,7 @@ def _output(history, ident, output_node):
     return filename
 
 
-def _collect(provider_id, ident, port, config, metadata):
+def _collect(provider_id, ident, port, config, metadata, *, sink=None):
     output_node = flux_workflow.node_ids(config["workflow"])["9"]
     deadline = time.monotonic() + config["timeout_seconds"]
     while (remaining := deadline - time.monotonic()) > 0:
@@ -99,13 +99,16 @@ def _collect(provider_id, ident, port, config, metadata):
         raise JobError("TIMED_OUT")
     query = urlencode({"filename": filename, "subfolder": "", "type": "output"})
     contents = comfyui.request_image_bytes("/view?" + query, port=port, timeout=15,
-                                         max_response_bytes=visual_jobs.MAX_IMAGE)
+                                         max_response_bytes=visual_jobs.MAX_IMAGE, sink=sink)
+    image_file = io.BytesIO(contents) if sink is None else sink
+    image_file.seek(0)
     from PIL import Image
-    with Image.open(io.BytesIO(contents), formats=["PNG"]) as image:
+    with Image.open(image_file, formats=["PNG"]) as image:
         if image.size != (metadata["width"], metadata["height"]):
             raise JobError("OUTPUT_INVALID")
         image.verify()
-    with Image.open(io.BytesIO(contents), formats=["PNG"]) as image:
+    image_file.seek(0)
+    with Image.open(image_file, formats=["PNG"]) as image:
         image.load()
     return contents
 
@@ -187,13 +190,13 @@ def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=No
             db.execute("UPDATE visual_jobs SET provider_id=?,status='SUBMITTED',updated_at=? WHERE job_id=?",
                        (provider_id, visual_jobs._now(), ident))
         status = "OUTPUT_INVALID"
-        contents = _collect(provider_id, ident, port, config, metadata)
-        digest = hashlib.sha256(contents).hexdigest()
-        with ensure_local_root(target).open("xb") as stream:
+        with ensure_local_root(target).open("xb+") as stream:
             created = True
-            stream.write(contents)
+            _collect(provider_id, ident, port, config, metadata, sink=stream)
             stream.flush()
             os.fsync(stream.fileno())
+            stream.seek(0)
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
         status = "ASSET_READY"
     except JobError as exc:
         status = exc.status

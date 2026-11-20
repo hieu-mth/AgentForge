@@ -1,4 +1,5 @@
 """Local-only transport and stable Film Studio error/patch boundary."""
+import io
 import unittest
 from unittest.mock import patch
 
@@ -56,6 +57,21 @@ class ComfyUIIntegrationTests(unittest.TestCase):
                 comfyui.request_image_bytes(path, max_response_bytes=4)
             response.read.assert_called_once_with(5)
             connect.return_value.close.assert_called_once()
+
+    def test_image_download_streams_and_stops_at_the_budget(self):
+        path = "/view?filename=af_" + "a" * 32 + "_00001_.png&subfolder=&type=output"
+        with patch.object(comfyui.http.client, "HTTPConnection") as connect:
+            response = connect.return_value.getresponse.return_value
+            response.status = 200
+            response.read.side_effect = [b"12", b"34", b""]
+            target = io.BytesIO()
+            self.assertEqual(comfyui.request_image_bytes(path, max_response_bytes=4, sink=target), b"")
+            self.assertEqual(target.getvalue(), b"1234")
+            response.read.side_effect = [b"12", b"345"]
+            target = io.BytesIO()
+            with self.assertRaises(comfyui.ComfyUITransportError):
+                comfyui.request_image_bytes(path, max_response_bytes=4, sink=target)
+            self.assertEqual(target.getvalue(), b"12")
 
     def test_motion_errors_and_http_mock_point_remain_compatible(self):
         with patch.object(comfyui, "request_json", side_effect=comfyui.ComfyUITransportError("bad")) as api:

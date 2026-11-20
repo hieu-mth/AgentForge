@@ -26,3 +26,15 @@ Mở http://127.0.0.1:8780/dashboard/ và đăng nhập bằng mã Owner đượ
 - [Owner runtime acceptance](docs/verification/OWNER_PRODUCTION_GATE.md)
 
 Git cleanup **không xóa hay migrate** `data/`, `workspace/`, `.env`, model weights, secrets, video và backups của Owner. AgentForge không cần file `.env` để khởi động; source không tự nạp `.env`, nhưng file này vẫn được Git ignore để tránh lộ secrets. CI fixture không chứng minh GPU, continuity, voice hay upload thật.
+
+### Kiểm thử bộ nhớ Studio với ba bản nháp
+
+Khi Ollama và ComfyUI đang chạy và Model Hub đã gán các năng lực local, dùng một lúc máy rảnh để chạy:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/check_draft_resources.py --confirm-local-inference
+```
+
+Lệnh tạo ba bản nháp liên tiếp bằng model thật trong workspace kiểm thử riêng. So sánh các dòng cuối mỗi clip trong `samples.jsonl` và các mốc trước/sau từng bước trong `clip-*.json`. Số liệu gồm RAM khả dụng, commit của Windows, VRAM, working set và private bytes theo tiến trình nhận diện được. Chạy thử dashboard song song nếu cần kiểm tra tab trình duyệt. Chỉ coi kiểm thử live đạt khi cả ba MP4 qua xác minh và tab hoạt động như mong đợi.
+
+Worker Studio xử lý một bản nháp mỗi lượt, mặc định giới hạn ba job đang chạy hoặc đang chờ. Có thể đặt `AGENTFORGE_DRAFT_QUEUE_LIMIT` từ 1 đến 8 khi khởi động backend. Khi thiếu tài nguyên, job dừng ở checkpoint và có thể tiếp tục bằng nút **Tiếp tục từ checkpoint**. Yêu cầu hủy đang chạy có hiệu lực tại checkpoint kế tiếp.
