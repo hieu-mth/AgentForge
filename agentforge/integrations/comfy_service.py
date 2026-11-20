@@ -196,7 +196,10 @@ def ensure_running(port, *, required=False):
             raise ValueError("Managed ComfyUI Portable requires Windows")
         from agentforge import ops_control
         ops_control.require_active()
-        pressure = draft_resources.pressure(draft_resources.snapshot(), "image")
+        resources = draft_resources.snapshot()
+        if resources.get("processes", {}).get("comfyui"):
+            raise ValueError("Another ComfyUI process is running; check the endpoint in Model Hub")
+        pressure = draft_resources.pressure(resources, "image")
         if pressure:
             raise StartupPressure(pressure)
         root, executable, script, fingerprints = _launcher(config["install_root"])

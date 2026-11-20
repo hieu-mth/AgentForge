@@ -1,4 +1,4 @@
-﻿import os
+import os
 import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -94,6 +94,15 @@ def test_refuse_stop_during_production_or_provider_work(runtime, monkeypatch):
 def test_start_admission_respects_memory(runtime, monkeypatch):
     monkeypatch.setattr(service.draft_resources, "pressure", lambda sample, stage: "COMMIT_LOW")
     with pytest.raises(service.StartupPressure, match="COMMIT_LOW"):
+        service.ensure_running(8192)
+    assert not runtime
+
+
+def test_other_comfy_process_blocks_duplicate_even_on_a_different_port(runtime, monkeypatch):
+    monkeypatch.setattr(service.draft_resources, "snapshot", lambda: {
+        "processes": {"comfyui": [{"pid": 987}]},
+    })
+    with pytest.raises(ValueError, match="Another ComfyUI process"):
         service.ensure_running(8192)
     assert not runtime
 
