@@ -124,6 +124,12 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(restored["status"], "CANCELLED")
         self.assertEqual(restored["board"]["scenes"][0]["asset"], "committed")
 
+    def test_comfy_offload_skipped_during_commit_pressure(self):
+        with (patch.dict(self.capacity, {"commit_used": 31 << 30}),
+              patch.object(draft.flux_runtime, "_json") as request):
+            self.assertFalse(draft._release_idle_comfy({"base_url": "http://127.0.0.1:8188"}))
+            request.assert_not_called()
+
     def test_local_render_integrity_and_review_checkpoint(self):
         try:
             from PIL import Image

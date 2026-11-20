@@ -200,6 +200,8 @@ def _worker_slot():
 
 
 def _release_idle_comfy(profile):
+    if not draft_resources.can_release_models(draft_resources.snapshot()):
+        return False
     port = urlsplit(profile["base_url"]).port
     try:
         queue = flux_runtime._json("/queue", port=port)

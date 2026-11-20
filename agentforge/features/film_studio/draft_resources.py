@@ -101,3 +101,14 @@ def pressure(sample, operation):
     if operation in MIN_VRAM_MIB and free is not None and free < MIN_VRAM_MIB[operation]:
         return "VRAM_LOW"
     return None
+
+
+def can_release_models(sample):
+    """Offloading GPU weights can allocate additional host memory."""
+    available = sample["ram_available"]
+    use, limit = sample["commit_used"], sample["commit_limit"]
+    if available is None or available < 4096 * MIB:
+        return False
+    if os.name == "nt" and (use is None or limit is None):
+        return False
+    return use is None or limit is None or limit - use >= 8192 * MIB
