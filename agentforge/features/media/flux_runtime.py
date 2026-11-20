@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 from agentforge import ops_control
 from agentforge.ai import model_hub
 from agentforge.features.media import flux_workflow, visual_jobs
-from agentforge.integrations import comfyui
+from agentforge.integrations import comfy_service, comfyui
 from agentforge.paths import WORKSPACE_DIR, ensure_local_root
 
 
@@ -90,6 +90,8 @@ def _collect(provider_id, ident, port, config, metadata, *, sink=None):
         except comfyui.ComfyHTTPError as exc:
             raise JobError(comfyui.failure_status(exc)) from None
         except (OSError, http.client.HTTPException):
+            if comfy_service.managed_exited(port):
+                raise JobError("COMFYUI_STOPPED") from None
             history = {}
         filename = _output(history.get(provider_id), ident, output_node)
         if filename is not None:
@@ -144,11 +146,15 @@ def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=No
         raise ValueError("FLUX image verification requires the AgentForge media extra") from None
     ready = readiness(config, port)
     if ready == "COMFYUI_UNAVAILABLE":
-        from agentforge.integrations import comfy_service
-        if comfy_service.ensure_running(port):
-            ready = readiness(config, port)
+        try:
+            comfy_service.ensure_running(port)
+        except (ValueError, PermissionError, OSError) as exc:
+            if isinstance(exc, comfy_service.StartupError):
+                raise
+            raise comfy_service.StartupError(str(exc)) from exc
+        ready = readiness(config, port)
     if ready != "READY":
-        raise ValueError(ready)
+        raise comfy_service.StartupError(ready)
     metadata = {
         "prompt": prompt.strip(), "seed": seed, "width": width, "height": height,
         "steps": steps, "scene": scene, "model": profile["model"], "profile_id": profile["id"],

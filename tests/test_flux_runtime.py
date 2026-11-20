@@ -112,7 +112,7 @@ class FluxRuntimeTests(unittest.TestCase):
         with self.assertRaisesRegex(flux_runtime.JobError, "CANCELLED"):
             flux_runtime._output({"status": {"messages": [["execution_interrupted"]]}}, "job", "109")
 
-    def test_profile_probe_without_route_collects_verified_png(self):
+    def test_profile_probe_without_route_auto_starts_before_submitting_and_collects_png(self):
         try:
             from PIL import Image
         except ImportError:
@@ -129,6 +129,7 @@ class FluxRuntimeTests(unittest.TestCase):
             if path == "/queue":
                 return {"queue_running": [], "queue_pending": []}
             if path == "/prompt":
+                self.assertEqual(calls[:2], ["start", "/queue"])
                 filename = kwargs["body"]["prompt"]["9"]["inputs"]["filename_prefix"] + "_00001_.png"
                 return {"prompt_id": pid}
             return {pid: {"status": {"status_str": "success", "completed": True},
@@ -140,7 +141,9 @@ class FluxRuntimeTests(unittest.TestCase):
             hub, db = root / "hub.db", root / "visual.db"
             model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0, profile=profile(), db_path=hub)
             with (patch.object(flux_runtime, "WORKSPACE_DIR", root / "workspace"),
-                  patch.object(flux_runtime, "readiness", return_value="READY"),
+                  patch.object(flux_runtime, "readiness", side_effect=["COMFYUI_UNAVAILABLE", "READY"]),
+                  patch.object(flux_runtime.comfy_service, "ensure_running",
+                               side_effect=lambda port: calls.append("start")),
                   patch.object(flux_runtime, "_json", side_effect=provider),
                   patch.object(flux_runtime.comfyui, "request_image_bytes",
                                side_effect=lambda *args, sink, **kwargs: sink.write(png.getvalue()) and b"") as download):
@@ -151,10 +154,16 @@ class FluxRuntimeTests(unittest.TestCase):
                                                width=256, height=256, seed=42, hub_db=hub, db_path=db)
                 self.assertTrue(visual_jobs.report(db_path=db)["jobs"][0]["probe"])
                 self.assertEqual(visual_jobs.image_for_job(result["job_id"], db_path=db)[0], png.getvalue())
-            self.assertEqual(calls, ["/queue", "/prompt", "/history/" + pid])
+            self.assertEqual(calls, ["start", "/queue", "/prompt", "/history/" + pid])
             self.assertEqual(download.call_args.kwargs["max_response_bytes"], visual_jobs.MAX_IMAGE)
             self.assertEqual(result["status"], "ASSET_READY")
             self.assertEqual((root / result["workspace_path"]).read_bytes(), png.getvalue())
+
+    def test_collection_reports_managed_process_exit(self):
+        with (patch.object(flux_runtime, "_json", side_effect=ConnectionRefusedError),
+              patch.object(flux_runtime.comfy_service, "managed_exited", return_value=True)):
+            with self.assertRaisesRegex(flux_runtime.JobError, "COMFYUI_STOPPED"):
+                flux_runtime._collect("provider-id", "a" * 32, 8188, profile()["flux"], {})
 
     def test_owner_policy_and_concurrent_gpu_admission(self):
         try:

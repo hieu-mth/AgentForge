@@ -61,11 +61,12 @@ class DraftTests(unittest.TestCase):
             self.assertEqual(draft._read(self.ident)["activity"], {
                 "operation": "image", "provider": "comfyui", "model": "fixture.gguf", "scene": 2,
             })
-            return {"status": "OUTPUT_MISSING"}
+            return {"status": "COMFYUI_STOPPED"}
         with (patch.object(draft.model_hub, "draft_routes", return_value=(8, {"image.generate": profile})),
               patch.object(draft.flux_runtime, "generate", side_effect=missing_output) as generate):
             draft._work(job, nullcontext())
             self.assertEqual(job["status"], "FAILED")
+            self.assertEqual(job["error"], "ComfyUI scene result: COMFYUI_STOPPED")
             self.assertNotIn("activity", job)
             self.assertEqual(job["board"]["scenes"][1]["attempts"], 1)
             generate.assert_called_once()
@@ -82,6 +83,21 @@ class DraftTests(unittest.TestCase):
             self.assertTrue(generate.call_args.kwargs["scene"].endswith("/scene-02"))
         self.assertEqual((folder / "scene-01.png").read_bytes(), known)
         self.assertEqual(draft._read(self.ident)["status"], "REVIEW")
+
+    def test_launcher_error_before_submission_keeps_scene_retry_budget(self):
+        job = {"id": self.ident, "brief": self.brief,
+               "board": draft._story(self.board(), 2, 6, {"cat": {}}),
+               "cast": {"cat": {"name": "Miu", "appearance": "orange cat"}}}
+        scene = job["board"]["scenes"][0]
+        profile = {"flux": {"max_resolution": 768}}
+        for error in ("COMFYUI_LAUNCHER_REQUIRED", "COMFYUI_ENDPOINT_MISMATCH"):
+            with (self.subTest(error=error),
+                  patch.object(draft.flux_runtime, "generate",
+                               side_effect=draft.comfy_service.StartupError(error))):
+                with self.assertRaisesRegex(draft.comfy_service.StartupError, error):
+                    draft._image(job, 0, scene, 1, profile)
+            self.assertEqual(scene["attempts"], 0)
+            self.assertIsNone(scene["job_id"])
 
     def test_job_waits_on_ram_and_vram_and_preserves_scene_checkpoint(self):
         job = {"id": self.ident, "brief": self.brief, "status": "RUNNING", "stage": "IMAGES",

@@ -258,6 +258,24 @@ class ComfyServiceTests(unittest.TestCase):
             self.children[0].code = 1
         assert service.control("start")["pid"] == 2
 
+    def test_missing_launcher_and_wrong_endpoint_are_distinct(self):
+        with patch.object(service, "_settings", return_value=None):
+            with self.assertRaisesRegex(service.StartupError, "COMFYUI_LAUNCHER_REQUIRED"):
+                service.ensure_running(8192)
+        with self.assertRaisesRegex(service.StartupError, "COMFYUI_ENDPOINT_MISMATCH"):
+            service.ensure_running(8188)
+        with patch.object(service, "_target", return_value=(8188, "http://127.0.0.1:8188")):
+            with self.assertRaisesRegex(service.StartupError, "COMFYUI_ENDPOINT_MISMATCH"):
+                service.ensure_running(8192)
+        assert not self.children
+
+    def test_start_waits_for_slow_portable_readiness(self):
+        with (patch.object(service, "_probe", side_effect=[None, None, None, {"devices": []}]),
+              patch.object(service.time, "sleep") as wait):
+            self.assertTrue(service.ensure_running(8192))
+        self.assertEqual(wait.call_count, 2)
+        self.assertEqual(len(self.children), 1)
+
 
     def test_concurrent_automatic_requests_share_process(self):
         entered = threading.Event()

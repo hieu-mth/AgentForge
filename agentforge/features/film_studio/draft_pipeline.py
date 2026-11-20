@@ -381,7 +381,7 @@ def _image(job, index, scene, revision, profile):
             output = flux_runtime.generate(prompt, width=width, height=height, automated=True,
                                            scene=f"{job['id']}/episode-01/scene-{index+1:02d}",
                                            production_job=scene["job_id"], production_revision=revision)
-        except comfy_service.StartupPressure:
+        except comfy_service.StartupError:
             scene["job_id"] = previous_job
             scene["attempts"] -= 1
             raise
