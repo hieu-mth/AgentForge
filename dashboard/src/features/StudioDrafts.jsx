@@ -114,7 +114,7 @@ export function StudioDrafts({mutate,onCharacters}) {
       <ResourceStatus resource={{...resource,loading:resource.loading&&!data,data,reload}} label="bản nháp"/>}
     {!resource.loading&&!listError&&data&&drafts.length===0&&
       <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Chưa có bản nháp"/>}
-    {drafts.length>0&&<Collapse items={drafts.map(job=>({key:job.id,
+    {drafts.length>0&&<Collapse accordion destroyOnHidden items={drafts.map(job=>({key:job.id,
       label:<Space wrap><span>{job.board?.title??job.brief.idea}</span>
         <Tag>{job.status==='RUNNING'&&!job.worker_active?'Đã gián đoạn':
           labels[job.status==='RUNNING'?job.stage:job.status]??job.status}</Tag>
@@ -133,7 +133,7 @@ export function StudioDrafts({mutate,onCharacters}) {
           <p>{scene.description}</p>
           {scene.character_ids.map(id=><Tag key={id}>{job.cast[id]?.name}</Tag>)}
           <p className="env-muted">Âm thanh dự kiến: {scene.audio}</p>
-          {scene.asset&&<Image width={180} alt={'Ảnh cảnh '+(index+1)}
+          {scene.asset&&<Image width={180} loading="lazy" alt={'Ảnh cảnh '+(index+1)}
             src={API+'/'+job.id+'/scene-'+index+'?v='+scene.asset}/>}
           <div><Button size="small" disabled={running||pending||job.status==='APPROVED'}
             onClick={()=>setEditor({id:job.id,index,scene})}>Sửa cảnh / tạo lại ảnh</Button></div>
