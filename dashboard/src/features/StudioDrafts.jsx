@@ -14,10 +14,18 @@ function draftError(failure) {
 }
 const labels={QUEUED:'Đã tiếp nhận',PLANNING:'Đang lập kế hoạch',STORYBOARD:'Đang viết storyboard',
   IMAGES:'Đang tạo ảnh từng cảnh',RENDER:'Đang dựng và kiểm tra MP4',REVIEW:'Chờ Owner duyệt',
-  FAILED:'Cần xử lý',APPROVED:'Đã duyệt',REJECTED:'Đã từ chối'};
+  FAILED:'Cần xử lý',APPROVED:'Đã duyệt',REJECTED:'Đã từ chối',
+  WAITING_RESOURCES:'Chờ tài nguyên',CANCELLED:'Đã hủy'};
+const warnings={RAM_LOW:'RAM khả dụng không đủ',COMMIT_LOW:'Hạn mức bộ nhớ cam kết không đủ',
+  VRAM_LOW:'VRAM khả dụng không đủ',GPU_BUSY:'Một tác vụ local đang sử dụng GPU'};
+function usage(total,available,unit) {
+  if(!Number.isFinite(total)||!Number.isFinite(available))return 'Chưa đo được';
+  return ((total-available)/unit).toFixed(1)+' / '+(available/unit).toFixed(1)+' GiB';
+}
 
 export function StudioDrafts({mutate,onCharacters}) {
   const {data,reload,...resource}=useResource(API);
+  const {data:capacity,reload:refreshCapacity}=useResource(API+'/resources');
   useScreenRefresh(reload);
   const busy=useRef(false);
   const request=useRef(null);
@@ -29,11 +37,18 @@ export function StudioDrafts({mutate,onCharacters}) {
   const listError=resource.error?draftError(resource.error):
     data&&!Array.isArray(data.drafts)?'API bản nháp trả dữ liệu không hợp lệ.':null;
   const running=!listError&&drafts.some(job=>job.status==='RUNNING'&&job.worker_active);
+  const queued=drafts.filter(job=>job.status==='QUEUED').length;
+  const waiting=drafts.filter(job=>job.status==='WAITING_RESOURCES').length;
   useEffect(()=>{
-    if(!running||resource.loading)return;
+    if(!running&&!waiting&&!queued)return;
+    const timer=setInterval(refreshCapacity,15000);
+    return ()=>clearInterval(timer);
+  },[running,waiting,queued,refreshCapacity]);
+  useEffect(()=>{
+    if((!running&&(!queued||waiting))||resource.loading||listError)return;
     const timer=setTimeout(reload,2500);
     return ()=>clearTimeout(timer);
-  },[reload,running,resource.loading]);
+  },[reload,running,queued,waiting,resource.loading,listError]);
 
   async function run(path,body,done) {
     if(busy.current)return;
@@ -65,7 +80,12 @@ export function StudioDrafts({mutate,onCharacters}) {
   }
 
   return <Card className="env-panel" title="Tạo video từ ý tưởng"
-    extra={!listError&&<Button onClick={reload}>Tải lại bản nháp</Button>}>
+    extra={!listError&&<Button onClick={()=>{reload();refreshCapacity();}}>Tải lại bản nháp</Button>}>
+    <Space wrap className="env-muted" style={{marginBottom:12}}>
+      <span>RAM dùng / khả dụng: {usage(capacity?.ram_total,capacity?.ram_available,1024**3)}</span>
+      <span>VRAM dùng / khả dụng: {usage(capacity?.vram_total_mib,capacity?.vram_free_mib,1024)}</span>
+      <span>Đang chạy {running?1:0} · Trong hàng đợi {queued} · Chờ tài nguyên {waiting}</span>
+    </Space>
     <Form layout="vertical" onFinish={submit} initialValues={{seconds:12,scene_count:3,ratio:'9:16'}}>
       <Form.Item label="Ý tưởng video" name="idea" rules={[{required:true,whitespace:true}]}>
         <Input.TextArea rows={3} maxLength={500}
@@ -82,7 +102,7 @@ export function StudioDrafts({mutate,onCharacters}) {
           <Select options={['9:16','16:9'].map(value=>({value,label:value}))}/>
         </Form.Item>
         <Form.Item label=" ">
-          <Button type="primary" htmlType="submit" loading={pending} disabled={running}>Tạo bản nháp</Button>
+          <Button type="primary" htmlType="submit" loading={pending} disabled={waiting>0}>Tạo bản nháp</Button>
         </Form.Item>
       </Space>
     </Form>
@@ -91,26 +111,29 @@ export function StudioDrafts({mutate,onCharacters}) {
     {error&&<Alert showIcon type="error" message={error}/>}
     {listError?<Alert showIcon type="error" message="Không đọc được bản nháp"
       description={listError} action={<Button onClick={reload}>Thử lại bản nháp</Button>}/>:
-      <ResourceStatus resource={{...resource,data,reload}} label="bản nháp"/>}
+      <ResourceStatus resource={{...resource,loading:resource.loading&&!data,data,reload}} label="bản nháp"/>}
     {!resource.loading&&!listError&&data&&drafts.length===0&&
       <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Chưa có bản nháp"/>}
-    {drafts.length>0&&<Collapse items={drafts.map(job=>({key:job.id,
+    {drafts.length>0&&<Collapse accordion destroyOnHidden items={drafts.map(job=>({key:job.id,
       label:<Space wrap><span>{job.board?.title??job.brief.idea}</span>
         <Tag>{job.status==='RUNNING'&&!job.worker_active?'Đã gián đoạn':
           labels[job.status==='RUNNING'?job.stage:job.status]??job.status}</Tag>
         {job.board&&<span>{job.board.scenes.filter(scene=>scene.asset).length}/{job.board.scenes.length} ảnh</span>}
       </Space>,
       children:<>
-        {job.error&&<Alert showIcon type="error" message={job.error}/>}
-        {['RUNNING','FAILED'].includes(job.status)&&!job.worker_active&&<Button size="small" disabled={pending||running}
+        {job.error&&<Alert showIcon type={job.status==='WAITING_RESOURCES'?'warning':'error'}
+          message={warnings[job.error]??job.error}/>}
+        {['RUNNING','FAILED','QUEUED','WAITING_RESOURCES'].includes(job.status)&&!job.worker_active&&<Button size="small" disabled={pending||running}
           onClick={()=>run('/'+job.id+'/resume',{})}>Tiếp tục từ checkpoint</Button>}
+        {['RUNNING','QUEUED','WAITING_RESOURCES'].includes(job.status)&&<Button size="small"
+          disabled={pending} onClick={()=>run('/'+job.id+'/cancel',{})}>Hủy tác vụ</Button>}
         {job.plan&&<p>{job.plan}</p>}
         {job.board&&<ul className="studio-shot-list">{job.board.scenes.map((scene,index)=><li key={index}>
           <strong>Cảnh {index+1} · {scene.seconds} giây</strong>
           <p>{scene.description}</p>
           {scene.character_ids.map(id=><Tag key={id}>{job.cast[id]?.name}</Tag>)}
           <p className="env-muted">Âm thanh dự kiến: {scene.audio}</p>
-          {scene.asset&&<Image width={180} alt={'Ảnh cảnh '+(index+1)}
+          {scene.asset&&<Image width={180} loading="lazy" alt={'Ảnh cảnh '+(index+1)}
             src={API+'/'+job.id+'/scene-'+index+'?v='+scene.asset}/>}
           <div><Button size="small" disabled={running||pending||job.status==='APPROVED'}
             onClick={()=>setEditor({id:job.id,index,scene})}>Sửa cảnh / tạo lại ảnh</Button></div>

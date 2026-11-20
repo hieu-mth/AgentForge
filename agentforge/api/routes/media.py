@@ -11,7 +11,7 @@ def handle(server, path, request, session=None):
         return draft_pipeline.submit(request)
     if path.startswith("/api/film/drafts/"):
         parts = path.split("/")
-        if len(parts) != 6 or parts[5] not in {"approve", "reject", "edit", "resume"}:
+        if len(parts) != 6 or parts[5] not in {"approve", "reject", "edit", "resume", "cancel"}:
             raise ValueError("Unknown draft action")
         from agentforge.features.film_studio import draft_pipeline
         identifier, action = parts[4:]

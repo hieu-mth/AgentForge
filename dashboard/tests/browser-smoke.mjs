@@ -322,7 +322,13 @@ try {
   await settings.goto(policyOrigin+'/dashboard/#/orchestrator');
   await settings.getByLabel('Mã Owner',{exact:true}).fill(ownerCode);
   await settings.getByRole('button',{name:'Mở dashboard'}).click();
+  await settings.route('**/api/film/drafts/resources',route=>route.fulfill({json:{
+    ram_total:32*1024**3,ram_available:8*1024**3,
+    vram_total_mib:12*1024,vram_free_mib:3*1024,
+  }}));
   await settings.goto(policyOrigin+'/dashboard/#/media-studio',{waitUntil:'networkidle'});
+  await settings.getByText('RAM dùng / khả dụng: 24.0 / 8.0 GiB',{exact:true}).waitFor();
+  await settings.getByText('VRAM dùng / khả dụng: 9.0 / 3.0 GiB',{exact:true}).waitFor();
   await settings.getByText('Chưa có tập phim trong workspace.',{exact:true}).waitFor();
   await settings.getByText('Tạo video từ ý tưởng',{exact:true}).waitFor();
   await settings.getByText('Chưa có bản nháp',{exact:true}).waitFor();

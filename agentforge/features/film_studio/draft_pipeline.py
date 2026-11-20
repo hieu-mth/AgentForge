@@ -1,6 +1,7 @@
 ﻿"""Checkpointed local idea-to-draft production."""
 import copy
 import hashlib
+import os
 import json
 import re
 import sqlite3
@@ -13,6 +14,7 @@ from urllib.parse import urlsplit
 from agentforge import ops_control
 from agentforge.ai import model_hub
 from agentforge.features.film_studio import characters
+from agentforge.features.film_studio import draft_resources
 from agentforge.features.media import flux_runtime, flux_workflow, render, visual_jobs
 from agentforge.ops import runtime_certification as runtime
 from agentforge.paths import COMPANY_DATA_DIR, WORKSPACE_DIR, ensure_local_root
@@ -23,6 +25,58 @@ SIZES = {"9:16": (720, 1280), "16:9": (1280, 720)}
 LOCK = threading.Lock()
 ACTIVE = None
 IMG_RETRIES = 3
+_QUEUE_STATES = {"QUEUED", "RUNNING", "WAITING_RESOURCES"}
+
+
+class ResourceWait(Exception):
+    pass
+
+
+class DraftCancelled(Exception):
+    pass
+
+
+def _queue_limit():
+    try:
+        configured = int(os.getenv("AGENTFORGE_DRAFT_QUEUE_LIMIT", "3"))
+    except ValueError:
+        configured = 3
+    return max(1, min(8, configured))
+
+
+def _cancellation(ident, *, mark=False):
+    with _db(mark) as conn:
+        if conn is None:
+            return False
+        if mark:
+            conn.execute("CREATE TABLE IF NOT EXISTS draft_cancellations (id TEXT PRIMARY KEY)")
+            conn.execute("INSERT OR IGNORE INTO draft_cancellations VALUES (?)", (ident,))
+        table = conn.execute("SELECT 1 FROM sqlite_master WHERE name='draft_cancellations'").fetchone()
+        return bool(table and conn.execute("SELECT 1 FROM draft_cancellations WHERE id=?", (ident,)).fetchone())
+
+
+@contextmanager
+def _measured(job, operation, comfy_profile=None):
+    if _cancellation(job["id"]):
+        raise DraftCancelled
+    before = draft_resources.snapshot()
+    point = {"operation": operation, "before": before}
+    job["resources"] = (job.get("resources", []) + [point])[-24:]
+    _save(job)
+    try:
+        reason = draft_resources.pressure(before, operation)
+        if reason == "VRAM_LOW" and comfy_profile and comfy_profile.get("base_url"):
+            if _release_idle_comfy(comfy_profile):
+                point["after_release"] = draft_resources.snapshot()
+                reason = draft_resources.pressure(point["after_release"], operation)
+        if reason:
+            raise ResourceWait(reason)
+        yield
+    finally:
+        point["after"] = draft_resources.snapshot()
+        _save(job)
+        if _cancellation(job["id"]):
+            raise DraftCancelled
 
 
 class DraftNotFound(KeyError):
@@ -146,6 +200,8 @@ def _worker_slot():
 
 
 def _release_idle_comfy(profile):
+    if not draft_resources.can_release_models(draft_resources.snapshot()):
+        return False
     port = urlsplit(profile["base_url"]).port
     try:
         queue = flux_runtime._json("/queue", port=port)
@@ -229,8 +285,9 @@ def _write_board(job, bindings):
     if not job.get("plan"):
         job["stage"] = "PLANNING"
         _save(job)
-        output = _ask(bindings["general.text"], "Plan a short coherent video. Return Vietnamese outline.",
-                      job["brief"], _object(outline=STRING), comfy)
+        with _measured(job, "plan", comfy):
+            output = _ask(bindings["general.text"], "Plan a short coherent video. Return Vietnamese outline.",
+                          job["brief"], _object(outline=STRING), comfy)
         job["plan"] = _text(output["outline"], 700)
         _save(job)
     job["stage"] = "STORYBOARD"
@@ -242,10 +299,11 @@ def _write_board(job, bindings):
         selector = bindings.get("character.select", bindings["film.storyboard"])
         if selector["provider"] != "ollama":
             raise ValueError("Assign a local Ollama model to character.select")
-        selection = _ask(selector, "Select up to two relevant registered characters. Return empty if none fit.",
-                         {"outline": job["plan"], "candidates": candidates},
-                         _object(ids={"type": "array", "items": {**STRING, "enum": list(candidates)},
-                                      "maxItems": 2}), comfy)
+        with _measured(job, "cast", comfy):
+            selection = _ask(selector, "Select up to two relevant registered characters. Return empty if none fit.",
+                             {"outline": job["plan"], "candidates": candidates},
+                             _object(ids={"type": "array", "items": {**STRING, "enum": list(candidates)},
+                                          "maxItems": 2}), comfy)
         ids = selection["ids"]
         if not isinstance(ids, list) or len(ids) > 2 or any(not isinstance(x, str) or x not in candidates for x in ids):
             raise ValueError("Invalid character selection")
@@ -257,7 +315,8 @@ def _write_board(job, bindings):
         "type": "array", "minItems": count, "maxItems": count, "items": _object(
             description=STRING, image_prompt=STRING, character_ids=references,
             audio=STRING)})
-    data = _ask(bindings["film.storyboard"],
+    with _measured(job, "storyboard", comfy):
+        data = _ask(bindings["film.storyboard"],
                 "Write a coherent Vietnamese storyboard for a silent motion slideshow. "
                 "Use English visual prompts with stable setting and character appearance. "
                 "Use only supplied cast IDs, or an empty character_ids array if cast is empty. "
@@ -303,15 +362,22 @@ def _image(job, index, scene, revision, profile):
                                        production_job=scene["job_id"], production_revision=revision)
         if output["status"] != "ASSET_READY":
             raise ValueError("ComfyUI scene result: " + output["status"])
-    data, _ = visual_jobs.image_for_job(scene["job_id"])
     temporary = ensure_local_root(path.with_name(uuid4().hex + ".tmp"))
     try:
-        with temporary.open("xb") as stream:
-            stream.write(data)
+        with visual_jobs.open_image_for_job(scene["job_id"]) as (source, digest), temporary.open("xb") as stream:
+            remaining = visual_jobs.MAX_IMAGE
+            while chunk := source.read(min(64 * 1024, remaining + 1)):
+                remaining -= len(chunk)
+                if remaining < 0:
+                    raise ValueError("Scene image exceeds import budget")
+                stream.write(chunk)
+        with temporary.open("rb") as stream:
+            if hashlib.file_digest(stream, "sha256").hexdigest() != digest:
+                raise ValueError("Scene image changed during import")
         temporary.replace(ensure_local_root(path))
     finally:
         temporary.unlink(missing_ok=True)
-    scene["asset"] = _sha(data)
+    scene["asset"] = digest
     _save(job)
 
 
@@ -345,7 +411,8 @@ def _render(job):
         frames = re.findall(r"(?m)^frame=(\d+)", verification.stdout)
         if not frames or int(frames[-1]) != job["brief"]["seconds"] * 24:
             raise ValueError("MP4 duration verification failed")
-        digest = _sha(temporary.read_bytes())
+        with temporary.open("rb") as stream:
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
         temporary.replace(ensure_local_root(target))
         return digest
     finally:
@@ -354,10 +421,15 @@ def _render(job):
 
 def _work(job, slot):
     global ACTIVE
+    image_profile = None
+    used_flux = False
     try:
+        if _cancellation(job["id"]):
+            raise DraftCancelled
         ops_control.require_active()
         with model_hub.local_inference_slot():
             revision, bindings = model_hub.draft_routes()
+            image_profile = bindings["image.generate"]
             folder = _folder(job["id"])
             folder.mkdir(parents=True, exist_ok=True)
             if not job.get("board"):
@@ -366,22 +438,39 @@ def _work(job, slot):
             _save(job)
             for index, scene in enumerate(job["board"]["scenes"]):
                 ops_control.require_active()
-                _image(job, index, scene, revision, bindings["image.generate"])
+                if scene["asset"]:
+                    _image(job, index, scene, revision, bindings["image.generate"])
+                else:
+                    with _measured(job, "image", image_profile):
+                        used_flux = True
+                        _image(job, index, scene, revision, bindings["image.generate"])
             ops_control.require_active()
             job["stage"] = "RENDER"
             _save(job)
-            job["video_sha"] = _render(job)
+            with _measured(job, "render"):
+                job["video_sha"] = _render(job)
             job["status"] = "REVIEW"
+    except ResourceWait as exc:
+        job.update(status="WAITING_RESOURCES", error=str(exc))
+    except DraftCancelled:
+        job.update(status="CANCELLED", error=None, video_sha=None)
     except (ValueError, PermissionError) as exc:
-        job.update(status="FAILED", error=str(exc)[:240])
+        if str(exc) == "LOCAL_INFERENCE_BUSY":
+            job.update(status="WAITING_RESOURCES", error="GPU_BUSY")
+        else:
+            job.update(status="FAILED", error=str(exc)[:240])
     except Exception:
         job.update(status="FAILED", error="Local runtime failed at " + job["stage"] + "; check Ollama, ComfyUI or FFmpeg before resuming.")
     finally:
         try:
+            if used_flux and image_profile.get("base_url"):
+                _release_idle_comfy(image_profile)
             _save(job)
         finally:
             ACTIVE = None
             slot.__exit__(None, None, None)
+    if job["status"] != "WAITING_RESOURCES":
+        _dispatch()
 
 
 def _start(job, slot):
@@ -396,6 +485,31 @@ def _start(job, slot):
         ACTIVE = None
         raise
     return snapshot
+
+
+def _dispatch():
+    try:
+        slot = _worker_slot()
+        slot.__enter__()
+    except PermissionError:
+        return
+    started = False
+    try:
+        with _db() as conn:
+            if conn is None:
+                return
+            if conn.execute("SELECT 1 FROM drafts WHERE json_extract(body,'$.status') IN "
+                            "('RUNNING','WAITING_RESOURCES') LIMIT 1").fetchone():
+                return
+            row = conn.execute("SELECT body FROM drafts WHERE json_extract(body,'$.status')='QUEUED' "
+                               "ORDER BY rowid LIMIT 1").fetchone()
+        if row:
+            result = _start(_decode_row(row), slot)
+            started = True
+            return result
+    finally:
+        if not started:
+            slot.__exit__(None, None, None)
 
 
 def submit(data):
@@ -414,28 +528,58 @@ def submit(data):
         if prior["brief"] != brief:
             raise ValueError("Production ID already belongs to another brief")
         return prior
-    slot = _worker_slot()
-    slot.__enter__()
-    try:
-        try:
-            prior = _read(ident)
-        except KeyError:
-            prior = None
-        if prior:
+    ops_control.require_active()
+    model_hub.draft_routes()
+    render._ffmpeg()
+    job = {"id": ident, "brief": brief, "stage": "QUEUED", "status": "QUEUED",
+           "video_sha": None, "updated_at": visual_jobs._now()}
+    with _db(True) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT body FROM drafts WHERE id=?", (ident,)).fetchone()
+        if row:
+            prior = _decode_row(row)
             if prior["brief"] != brief:
                 raise ValueError("Production ID already belongs to another brief")
-            slot.__exit__(None, None, None)
             return prior
-        ops_control.require_active()
-        model_hub.draft_routes()
-        render._ffmpeg()
-        return _start({"id": ident, "brief": brief, "stage": "QUEUED", "video_sha": None}, slot)
-    except BaseException:
-        slot.__exit__(None, None, None)
-        raise
+        statuses = [row[0] for row in conn.execute("SELECT json_extract(body,'$.status') FROM drafts "
+                    "WHERE json_extract(body,'$.status') IN ('QUEUED','RUNNING','WAITING_RESOURCES')")]
+        if "WAITING_RESOURCES" in statuses or len(statuses) >= _queue_limit():
+            raise ValueError("Draft queue is full or paused for resources")
+        conn.execute("INSERT INTO drafts VALUES (?,?)", (ident, json.dumps(job, ensure_ascii=False)))
+    started = _dispatch()
+    return started if started and started["id"] == ident else _read(ident)
 
 
 def act(ident, action, data):
+    if action == "cancel":
+        job = _read(ident)
+        if job["status"] not in _QUEUE_STATES:
+            raise ValueError("Draft cannot be cancelled")
+        _cancellation(ident, mark=True)
+        if job["status"] == "RUNNING":
+            try:
+                slot = _worker_slot()
+                slot.__enter__()
+            except PermissionError:
+                return job
+            try:
+                job = _read(ident)
+                if job["status"] != "RUNNING":
+                    return job
+                job.update(status="CANCELLED", error=None)
+                _save(job)
+            finally:
+                slot.__exit__(None, None, None)
+            _dispatch()
+            return job
+        # A queued or waiting draft has no provider work to interrupt.
+        job.update(status="CANCELLED", error=None)
+        _save(job)
+        _dispatch()
+        return job
+    if action == "resume" and _read(ident)["status"] == "QUEUED":
+        started = _dispatch()
+        return started if started and started["id"] == ident else _read(ident)
     slot = _worker_slot()
     slot.__enter__()
     started = False
@@ -458,8 +602,12 @@ def act(ident, action, data):
             job.update(status="FAILED", video_sha=None, error="Scene changed. Resume to regenerate this scene.")
             _save(job)
             return job
-        if action != "resume" or job["status"] not in {"RUNNING", "FAILED"}:
+        if action != "resume" or job["status"] not in {"RUNNING", "FAILED", "WAITING_RESOURCES"}:
             raise ValueError("Draft cannot be resumed")
+        with _db() as conn:
+            if conn.execute("SELECT 1 FROM drafts WHERE id<>? AND json_extract(body,'$.status')="
+                            "'WAITING_RESOURCES' LIMIT 1", (ident,)).fetchone():
+                raise ValueError("Resume the draft that is waiting for resources first")
         ops_control.require_active()
         model_hub.draft_routes()
         job = _start(job, slot)

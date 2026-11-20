@@ -142,7 +142,8 @@ class FluxRuntimeTests(unittest.TestCase):
             with (patch.object(flux_runtime, "WORKSPACE_DIR", root / "workspace"),
                   patch.object(flux_runtime, "readiness", return_value="READY"),
                   patch.object(flux_runtime, "_json", side_effect=provider),
-                  patch.object(flux_runtime.comfyui, "request_image_bytes", return_value=png.getvalue()) as download):
+                  patch.object(flux_runtime.comfyui, "request_image_bytes",
+                               side_effect=lambda *args, sink, **kwargs: sink.write(png.getvalue()) and b"") as download):
                 with self.assertRaisesRegex(ValueError, "REVISION_CONFLICT"):
                     flux_runtime.generate("probe", profile_id="fixture_flux", expected_revision=0,
                                           hub_db=hub, db_path=db)
