@@ -427,7 +427,7 @@ try {
   draftListStatus=200;
   await settings.getByLabel('Ý tưởng video',{exact:true}).fill('Ý tưởng mới');
   await settings.getByRole('button',{name:'Tạo bản nháp',exact:true}).click();
-  await settings.getByText('Ý tưởng mới',{exact:true}).waitFor();
+  await settings.getByRole('tab',{name:/^Ý tưởng mới/}).waitFor();
   // Fresh checkout starts with zero registered model profiles.
   await settings.goto(policyOrigin+'/dashboard/#/models',{waitUntil:'networkidle'});
   await settings.getByText('Chưa đăng ký model. Chọn Đăng ký model để bắt đầu.',{exact:true}).waitFor();
