@@ -2,6 +2,14 @@
 
 
 def dispatch(self, route):
+    if route == "/api/ops/comfyui":
+        import sqlite3
+        from agentforge.integrations import comfy_service
+        try:
+            status = comfy_service.status()
+        except sqlite3.Error:
+            return self._blocked(503, "comfy_service_storage_unavailable")
+        return self._reply(200, {**status, "can_manage": self.server.allow_external_actions})
     if route == "/api/film/drafts/resources":
         from agentforge.features.film_studio import draft_resources
         return self._reply(200, draft_resources.snapshot())

@@ -1,3 +1,4 @@
+import {ComfyService} from './ComfyService.jsx';
 import {Alert, Button, Card, Empty, Grid, Table, Tooltip, Typography} from 'antd';
 import {AppstoreOutlined, CloudServerOutlined, CodeOutlined, DatabaseOutlined,
   DesktopOutlined, HddOutlined, InfoCircleOutlined, ReloadOutlined,
@@ -105,7 +106,7 @@ const profileColumns=[
     render:value=><Status value={value}/>},
 ];
 
-export function Environment({onNavigate}){
+export function Environment({onNavigate,mutate}){
   const scan=useResource('/api/ops/discovery');
   const {sm}=Grid.useBreakpoint();
   useScreenRefresh(scan.reload);
@@ -139,6 +140,7 @@ export function Environment({onNavigate}){
           loading={scan.loading}>Quét lại</Button>
       </>}/>
 
+    <ComfyService mutate={mutate}/>
     <ResourceStatus resource={scan} label="môi trường"/>
     {!snapshot&&<Card className="env-panel">
       {scan.loading?<div className="env-placeholder" role="status">

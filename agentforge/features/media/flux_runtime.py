@@ -143,6 +143,10 @@ def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=No
     except ImportError:
         raise ValueError("FLUX image verification requires the AgentForge media extra") from None
     ready = readiness(config, port)
+    if ready == "COMFYUI_UNAVAILABLE":
+        from agentforge.integrations import comfy_service
+        if comfy_service.ensure_running(port):
+            ready = readiness(config, port)
     if ready != "READY":
         raise ValueError(ready)
     metadata = {

@@ -98,9 +98,19 @@ try {
       episode_sha256:'example-prepared',shot_count:2,runtime_seconds:8},
   ];
   let studioReadError=false;
+  let service={state:'RUNNING',managed:false,configured:true,can_manage:true,
+    endpoint:'http://127.0.0.1:8192',devices:[]};
+  const serviceActions=[];
   await page2.route('**/api/**',async route=>{
     const p=new URL(route.request().url()).pathname;
     if(p==='/api/ops/discovery')environmentRequests++;
+    if(p==='/api/ops/comfyui/control'){
+      const request=route.request().postDataJSON();
+      serviceActions.push(request.action);
+      service={...service,state:'RUNNING',managed:true,pid:4210};
+      return route.fulfill({json:service});
+    }
+    if(p==='/api/ops/comfyui')return route.fulfill({json:service});
     if(p==='/api/film/motion')clipRequests++;
     if(p==='/api/film/productions')episodeRequests++;
     if(p==='/api/film/productions'&&studioReadError){
@@ -221,6 +231,23 @@ try {
   const env=page2.locator('[data-testid="environment-page"]');
   await env.getByRole('heading',{name:'Môi trường & Tài nguyên'}).waitFor();
   await env.locator('.env-stat-grid .env-stat').first().waitFor();
+  const comfyCard=env.locator('.ant-card').filter({hasText:'Dịch vụ ComfyUI'});
+  const stop=comfyCard.getByRole('button',{name:'Dừng',exact:true});
+  const start=comfyCard.getByRole('button',{name:'Khởi động',exact:true});
+  const check=comfyCard.getByRole('button',{name:'Kiểm tra',exact:true});
+  await comfyCard.getByText('Chạy bên ngoài',{exact:false}).waitFor();
+  if(!await stop.isDisabled()||!await start.isDisabled())throw new Error('External ComfyUI is controllable');
+  service={...service,state:'STOPPED'};
+  await check.click();
+  await comfyCard.getByText('Đã dừng',{exact:true}).waitFor();
+  await start.click();
+  await comfyCard.getByText('PID 4210',{exact:false}).waitFor();
+  if(serviceActions.join()!=='start'||!await stop.isEnabled())
+    throw new Error('Managed ComfyUI controls did not follow the API');
+  service={...service,busy:true};
+  await check.click();
+  await comfyCard.getByText('Đang có tác vụ',{exact:false}).waitFor();
+  if(!await stop.isDisabled())throw new Error('Stop was enabled during active production');
   if(await env.locator('.env-stat').count()!==4)throw new Error('Missing four resource tiles');
   await env.getByText('NVIDIA GeForce RTX 5070').first().waitFor();
   await env.getByText('8,47 GB').first().waitFor();

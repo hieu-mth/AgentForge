@@ -16,6 +16,7 @@ from agentforge.ai import model_hub
 from agentforge.features.film_studio import characters
 from agentforge.features.film_studio import draft_resources
 from agentforge.features.media import flux_runtime, flux_workflow, render, visual_jobs
+from agentforge.integrations.comfy_service import StartupPressure
 from agentforge.ops import runtime_certification as runtime
 from agentforge.paths import COMPANY_DATA_DIR, WORKSPACE_DIR, ensure_local_root
 
@@ -356,6 +357,7 @@ def _image(job, index, scene, revision, profile):
     if not prior or prior["status"] != "ASSET_READY":
         if scene["attempts"] >= IMG_RETRIES:
             raise ValueError("Scene reached its retry limit")
+        previous_job = scene["job_id"]
         scene["job_id"] = uuid4().hex
         scene["attempts"] += 1
         _save(job)
@@ -366,9 +368,14 @@ def _image(job, index, scene, revision, profile):
         long = min(768, cfg["max_resolution"] // 16 * 16)
         short = max(256, (long * 9 // 16) // 16 * 16)
         width, height = (short, long) if job["brief"]["ratio"] == "9:16" else (long, short)
-        output = flux_runtime.generate(prompt, width=width, height=height, automated=True,
-                                       scene=f"{job['id']}/episode-01/scene-{index+1:02d}",
-                                       production_job=scene["job_id"], production_revision=revision)
+        try:
+            output = flux_runtime.generate(prompt, width=width, height=height, automated=True,
+                                           scene=f"{job['id']}/episode-01/scene-{index+1:02d}",
+                                           production_job=scene["job_id"], production_revision=revision)
+        except StartupPressure:
+            scene["job_id"] = previous_job
+            scene["attempts"] -= 1
+            raise
         if output["status"] != "ASSET_READY":
             raise ValueError("ComfyUI scene result: " + output["status"])
     temporary = ensure_local_root(path.with_name(uuid4().hex + ".tmp"))
@@ -457,7 +464,7 @@ def _work(job, slot):
             with _measured(job, "render"):
                 job["video_sha"] = _render(job)
             job["status"] = "REVIEW"
-    except ResourceWait as exc:
+    except (ResourceWait, StartupPressure) as exc:
         job.update(status="WAITING_RESOURCES", error=str(exc))
     except DraftCancelled:
         job.update(status="CANCELLED", error=None, video_sha=None)
