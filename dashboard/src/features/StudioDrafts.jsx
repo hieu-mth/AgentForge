@@ -1,11 +1,12 @@
 ﻿import {useEffect,useRef,useState} from 'react';
-import {Alert,Button,Card,Collapse,Empty,Form,Image,Input,InputNumber,Modal,Select,Space,Tabs,Tag} from 'antd';
+import {Alert,Button,Card,Collapse,Empty,Form,Input,InputNumber,Modal,Select,Space,Tabs,Tag} from 'antd';
 import {ReloadOutlined} from '@ant-design/icons';
 import {useResource,ResourceStatus} from '../use_resource.jsx';
 import {useScreenRefresh} from '../refresh_scope.jsx';
 import {requestError} from '../api.js';
 import {formatMemory,formatVram} from '../environment_format.js';
 import {StudioPreview} from './StudioPreview.jsx';
+import {StoryboardReview} from './StoryboardReview.jsx';
 import {ProductionProgress} from './ProductionProgress.jsx';
 import './studio-draft-progress.css';
 
@@ -13,6 +14,7 @@ const API='/api/film/drafts';
 const editorKey='agentforge.studio.video-brief.v1';
 const briefDefaults={idea:'',seconds:12,motionSeconds:6,scene_count:3,ratio:'9:16',mode:'motion'};
 const motionShots={4:2,6:3,15:8,30:15};
+const videoModes={motion:'Có chuyển động',still:'Ảnh tĩnh (lia và thu phóng)'};
 const motionMaxShots={4:2,6:3,15:9,30:16};
 function savedBrief(){
   try {
@@ -45,7 +47,7 @@ function draftError(failure) {
 const labels={QUEUED:'Đã tiếp nhận',PLANNING:'Đang lập kế hoạch',STORYBOARD:'Đang viết storyboard',
   STORYBOARD_REVIEW:'Storyboard chờ duyệt',NEEDS_RECONCILIATION:'Cần đối soát',INTERRUPTED:'Đã gián đoạn',
   IMAGES:'Đang tạo ảnh từng cảnh',MOTION:'Đang tạo chuyển động',RENDER:'Đang dựng MP4',VERIFY:'Đang xác minh MP4',
-  REVIEW:'Phim hoàn chỉnh · chờ duyệt',RUNNING:'Đang sản xuất',
+  REVIEW:'Video hoàn chỉnh · chờ duyệt',RUNNING:'Đang sản xuất',
   FAILED:'Cần xử lý',APPROVED:'Đã duyệt',REJECTED:'Đã từ chối',
   WAITING_RESOURCES:'Chờ tài nguyên',CANCELLED:'Đã hủy'};
 const warnings={RAM_LOW:'RAM khả dụng không đủ',COMMIT_LOW:'Hạn mức bộ nhớ cam kết không đủ',
@@ -71,15 +73,12 @@ const statusColors={RUNNING:'processing',QUEUED:'blue',REVIEW:'purple',FAILED:'e
   WAITING_RESOURCES:'warning',APPROVED:'success'};
 const draftDate=new Intl.DateTimeFormat('vi-VN',{dateStyle:'short',timeStyle:'short'});
 
-function draftPriority(job){
-  if(job.worker_active)return 0;
-  if(['FAILED','WAITING_RESOURCES','RUNNING'].includes(job.status))return 1;
-  return job.status==='REVIEW'?2:3;
-}
+const draftTimestamp=job=>Number.isFinite(Date.parse(job.updated_at))?job.updated_at:job.created_at;
+const draftTime=job=>Date.parse(draftTimestamp(job))||0;
 
 function DraftLabel({job}){
   const title=job.board?.title||job.brief.idea;
-  const stamp=job.created_at||job.updated_at;
+  const stamp=draftTimestamp(job);
   const date=stamp&&new Date(stamp);
   const status=job.status==='RUNNING'&&!job.worker_active?'Đã gián đoạn':
     labels[job.status==='RUNNING'?job.stage:job.status]??job.status;
@@ -90,11 +89,11 @@ function DraftLabel({job}){
     </div>
     <div className="draft-row-meta env-muted">
       {date&&Number.isFinite(date.getTime())&&<time dateTime={stamp}>
-        {job.created_at?'Tạo ':'Cập nhật '}{draftDate.format(date)}
+        {stamp!==job.created_at?'Cập nhật ':'Tạo '}{draftDate.format(date)}
       </time>}
       {job.brief.seconds&&<span>{job.brief.seconds} giây</span>}
       {job.brief.ratio&&<span>{job.brief.ratio}</span>}
-      <span>{job.brief.mode==='motion'?'Chuyển động LTX':'Ảnh tĩnh pan/zoom'}</span>
+      <span>{videoModes[job.brief.mode==='motion'?'motion':'still']}</span>
       {job.board&&<span>{job.board.scenes.filter(scene=>scene.asset).length}/{job.board.scenes.length} ảnh</span>}
     </div>
   </div>;
@@ -116,6 +115,7 @@ export function StudioDrafts({mutate,onCharacters}) {
   useScreenRefresh(reload);
   const busy=useRef(false);
   const request=useRef(null);
+  const filmsRef=useRef(null);
   const [pending,setPending]=useState(false);
   const [scenePreview,setScenePreview]=useState(null);
   const [starting,setStarting]=useState(false);
@@ -124,14 +124,22 @@ export function StudioDrafts({mutate,onCharacters}) {
   const [missing,setMissing]=useState([]);
   const [filter,setFilter]=useState('work');
   const [previewId,setPreviewId]=useState(null);
+  const [selectedId,setSelectedId]=useState(null);
+  const [storyboardId,setStoryboardId]=useState(null);
   const drafts=Array.isArray(data?.drafts)?data.drafts.filter(job=>!missing.includes(job.id)):[];
   const visibleDrafts=drafts.filter(job=>historyStates.has(job.status)===(filter==='history'))
-    .sort((a,b)=>draftPriority(a)-draftPriority(b));
+    .sort((a,b)=>draftTime(b)-draftTime(a));
   const preview=drafts.find(job=>job.id===previewId&&job.video_sha);
   const listError=resource.error?draftError(resource.error):
     data&&!Array.isArray(data.drafts)?'API bản nháp trả dữ liệu không hợp lệ.':null;
   const active=drafts.find(job=>job.status==='RUNNING'&&job.worker_active);
-  const featured=active??visibleDrafts[0];
+  const featured=selectedId===null?visibleDrafts[0]:visibleDrafts.find(job=>job.id===selectedId);
+  const reviewing=drafts.find(job=>job.id===storyboardId&&job.board);
+  const canEdit=reviewing?.storyboard_version&&['STORYBOARD_REVIEW','FAILED','REVIEW','APPROVED','REJECTED'].includes(reviewing.status);
+  const sceneCount=reviewing?.board.scenes.length;
+  const minScenes=reviewing?.brief.mode==='motion'?motionShots[reviewing.brief.seconds]:2;
+  const maxScenes=reviewing?.brief.mode==='motion'?motionMaxShots[reviewing.brief.seconds]:
+    Math.min(6,Math.floor((reviewing?.brief.seconds??0)/2));
   const running=!listError&&Boolean(active);
   const queued=drafts.filter(job=>job.status==='QUEUED').length;
   const waiting=drafts.filter(job=>job.status==='WAITING_RESOURCES').length;
@@ -154,19 +162,23 @@ export function StudioDrafts({mutate,onCharacters}) {
     setError(null);
     try {
       const result=await mutate(API+path,body,{inlineError:true});
-      if(result?.id&&result.status==='RUNNING'&&(path==='/start'||path.endsWith('/resume'))) {
-        setData({drafts:[{...result,worker_active:true},...drafts.filter(job=>job.id!==result.id)]});
+      if(result?.id) {
+        setData({drafts:[{...result,worker_active:result.worker_active??result.status==='RUNNING'},
+          ...drafts.filter(job=>job.id!==result.id)]});
       }
-      done?.();
+      done?.(result);
       await reload();
     } catch(failure) {
       setError(draftError(failure));
       if(failure.code==='draft_not_found'&&path!=='/start') {
         setMissing(ids=>[...ids,path.split('/')[1]]);
         setEditor(null);
+        setStoryboardId(null);
+        setSelectedId(null);
       }
       if(path==='/start'&&failure.status>=400&&failure.status<500)request.current=null;
-      if(failure.code==='draft_not_found'||!failure.status)await reload();
+      if(failure.code==='draft_not_found'||!failure.status||
+          (path.includes('/storyboard-')&&[400,409].includes(failure.status)))await reload();
     } finally {
       busy.current=false;
       setPending(false);
@@ -180,22 +192,30 @@ export function StudioDrafts({mutate,onCharacters}) {
       scene_count:motion?motionShots[values.motionSeconds]:values.scene_count,ratio:motion?'16:9':values.ratio};
     const brief=JSON.stringify(payload);
     if(request.current?.brief!==brief)request.current={brief,id:crypto.randomUUID().replaceAll('-','')};
-    return run('/start',{...payload,id:request.current.id},()=>{request.current=null;setFilter('work');});
+    return run('/start',{...payload,id:request.current.id},result=>{
+      if(!result?.id)return;
+      request.current=null;
+      form.setFieldsValue(briefDefaults);
+      try {
+        localStorage.removeItem(editorKey);
+        setSaveFailed(false);
+      } catch {
+        setSaveFailed(true);
+      }
+      setFilter('work');
+      setSelectedId(result.id);
+      requestAnimationFrame(()=>filmsRef.current?.scrollIntoView({
+        block:'start',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',
+      }));
+    });
   }
 
   function storyboard(job,action,fields={}){
     return run('/'+job.id+'/storyboard-'+action,{sha256:job.storyboard_sha,...fields});
   }
 
-  function approveStoryboard(job){
-    const motion=job.brief.mode==='motion';
-    Modal.confirm({title:'Duyệt storyboard và chạy production',
-      content:`${job.brief.scene_count} cảnh, tối đa ${job.brief.scene_count} lượt FLUX${motion?' và LTX':''}, chạy tuần tự. Phim ${job.brief.seconds} giây. Tác vụ dừng khi lỗi hoặc thiếu tài nguyên.`,
-      okText:'Duyệt và tạo phim',cancelText:'Quay lại',onOk:()=>storyboard(job,'approve')});
-  }
-
   return <>
-    <Card className="env-panel" title="Tạo video từ ý tưởng"
+    <Card className="env-panel" title="Tạo video mới"
       extra={<Button onClick={onCharacters}>Thư viện nhân vật</Button>}>
     <Form form={form} layout="vertical" onFinish={submit} initialValues={initialBrief}
       onValuesChange={(_,next)=>{
@@ -219,14 +239,13 @@ export function StudioDrafts({mutate,onCharacters}) {
       {saveFailed&&<Alert type="warning" showIcon message="Trình duyệt không lưu được nội dung để khôi phục khi tải lại."/>}
       {advice&&<Alert type="warning" showIcon message={advice}/>}
       <div className="draft-form-options">
-        <Form.Item name="mode" label="Kiểu video" rules={[{required:true}]}>
-          <Select onChange={value=>{if(value==='motion'&&form.getFieldValue('scene_count')>3)form.setFieldValue('scene_count',3);}}
-            options={[{value:'motion',label:'Phim chuyển động LTX'},{value:'still',label:'Ảnh tĩnh pan/zoom'}]}/>
+        <Form.Item className="draft-video-mode" name="mode" label="Kiểu video" rules={[{required:true}]}>
+          <Select options={Object.entries(videoModes).map(([value,label])=>({value,label}))}/>
         </Form.Item>
-        {!moving&&<Form.Item name="seconds" label="Thời lượng (giây)" rules={[{required:true,type:'integer',min:6,max:60}]}>
-          <InputNumber min={6} max={60}/>
+        {!moving&&<Form.Item name="seconds" label="Thời lượng" rules={[{required:true,type:'integer',min:6,max:60}]}>
+          <InputNumber min={6} max={60} suffix="giây"/>
         </Form.Item>}
-        {moving?<Form.Item name="motionSeconds" label="Thời lượng phim" rules={[{required:true}]}>
+        {moving?<Form.Item name="motionSeconds" label="Thời lượng" rules={[{required:true}]}>
           <Select options={Object.keys(motionShots).map(value=>({value:Number(value),label:value+' giây'}))}/>
         </Form.Item>:<Form.Item name="scene_count" label="Số cảnh" rules={[{required:true,type:'integer',min:2,max:6}]}>
           <InputNumber min={2} max={6}/>
@@ -239,12 +258,10 @@ export function StudioDrafts({mutate,onCharacters}) {
       </div>
     </Form>
     {moving&&<p className="env-muted">16:9 · {selectedSeconds===30?'AI chọn 15–16 cảnh':motionShots[selectedSeconds]+' cảnh'} · Tạo ảnh và chuyển động sau khi duyệt storyboard.</p>}
-    {!listError&&(starting||featured)&&<ProductionProgress job={featured} starting={starting&&!active}
-      labels={labels} warnings={warnings} busy={pending}
-      onCancel={featured?()=>run('/'+featured.id+'/cancel',{}):null}
-      onResume={featured&&!running?()=>run('/'+featured.id+'/resume',{}):null}/>}
-    {!listError&&waiting>0&&<Alert showIcon type="warning" message="Bản nháp đang chờ tài nguyên"
-      description={[...new Set(drafts.filter(job=>job.status==='WAITING_RESOURCES').map(job=>warnings[job.error]??job.error).filter(Boolean))].join(' · ')}/>}
+    </Card>
+    <Card ref={filmsRef} className="env-panel studio-drafts-list" title="Video của bạn"
+      extra={!listError&&<Button icon={<ReloadOutlined/>} onClick={()=>{reload();refreshCapacity();}}
+        loading={resource.loading}>Làm mới</Button>}>
     <details className="draft-resource-details env-muted">
       <summary>Tài nguyên{queued>0&&' · '+queued+' trong hàng đợi'}{waiting>0&&' · '+waiting+' đang chờ'}</summary>
       <Space wrap>
@@ -252,89 +269,49 @@ export function StudioDrafts({mutate,onCharacters}) {
         <span>VRAM dùng / khả dụng: {usage(capacity?.vram_total_mib,capacity?.vram_free_mib,formatVram)}</span>
       </Space>
     </details>
-    </Card>
-    <Card className="env-panel studio-drafts-list" title="Bản nháp"
-      extra={!listError&&<Button icon={<ReloadOutlined/>} onClick={()=>{reload();refreshCapacity();}}
-        loading={resource.loading}>Làm mới</Button>}>
-    {error&&<Alert showIcon type="error" message={error}/>}
+    {error&&!reviewing&&!editor&&<Alert showIcon type="error" message={error}/>}
     {listError?<Alert showIcon type="error" message="Không đọc được bản nháp"
       description={listError} action={<Button onClick={reload}>Thử lại bản nháp</Button>}/>:
       <ResourceStatus resource={{...resource,loading:resource.loading&&!data&&!starting,data,reload}}
         label="bản nháp"/>}
-    {data&&!listError&&<Tabs className="draft-filters" activeKey={filter} onChange={setFilter}
+    {data&&!listError&&<Tabs className="draft-filters" activeKey={filter} onChange={key=>{setFilter(key);setSelectedId(null);}}
       items={[{key:'work',label:'Đang xử lý & chờ duyệt'},{key:'history',label:'Đã kết thúc'}]}/>}
     {!starting&&!resource.loading&&!listError&&data&&visibleDrafts.length===0&&
       <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={filter==='history'?'Chưa có bản nháp đã kết thúc':'Chưa có bản nháp'}/>}
-    {visibleDrafts.length>0&&<Collapse className="draft-list" accordion destroyOnHidden items={visibleDrafts.map(job=>({key:job.id,
-      label:<DraftLabel job={job}/>,
-      extra:job.video_sha&&<Button size="small" onKeyDown={event=>event.stopPropagation()}
-        onClick={event=>{event.stopPropagation();setPreviewId(job.id);}}>Xem bản nháp MP4</Button>,
-      children:<>
-        {job.error&&job.id!==featured?.id&&<Alert showIcon type={job.status==='WAITING_RESOURCES'?'warning':'error'}
-          message={warnings[job.error]??job.error}/>}
-        {job.id!==featured?.id&&['RUNNING','FAILED','QUEUED','WAITING_RESOURCES','INTERRUPTED','NEEDS_RECONCILIATION'].includes(job.status)&&!job.worker_active&&<Button size="small" disabled={pending||running}
-          onClick={()=>run('/'+job.id+'/resume',{})}>Tiếp tục từ checkpoint</Button>}
-        {job.id!==featured?.id&&['RUNNING','QUEUED','WAITING_RESOURCES'].includes(job.status)&&<Button size="small"
-          disabled={pending} onClick={()=>run('/'+job.id+'/cancel',{})}>Hủy tác vụ</Button>}
-        {!job.board?.scenes.some(scene=>scene.script_range)?<p className="draft-source-text">
-          <strong>Nội dung video</strong><br/>{job.brief.idea}
-        </p>:null}
-        {job.plan&&<p>{job.plan}</p>}
-        {job.storyboard_version&&job.board&&<Space wrap>
-          <Tag>Storyboard v{job.storyboard_version}</Tag>
-          {job.status==='STORYBOARD_REVIEW'&&<Button type="primary" disabled={pending||running}
-            onClick={()=>approveStoryboard(job)}>Duyệt storyboard</Button>}
-          {job.status==='STORYBOARD_REVIEW'&&(job.brief.mode==='motion'?
-            job.board.scenes.length<motionMaxShots[job.brief.seconds]:
-            job.board.scenes.length<Math.min(6,Math.floor(job.brief.seconds/2)))&&
-            <Button disabled={pending||running} onClick={()=>setEditor({job,adding:true,index:job.board.scenes.length,scene:{}})}>Thêm cảnh</Button>}
-        </Space>}
-        {!!job.storyboard_history?.length&&<details>
-          <summary>Lịch sử storyboard</summary>
-          <ul>{job.storyboard_history.map(entry=><li key={entry.sha256}>
-            Phiên bản {entry.storyboard.version} · {entry.storyboard.scenes.length} cảnh
-            {entry.video_sha?' · Có MP4 đã lưu':''}
-          </li>)}</ul>
-        </details>}
-        {job.board&&<ul className="studio-shot-list">{job.board.scenes.map((scene,index)=><li key={scene.shot_id??index}>
-          <strong>Cảnh {index+1} · {Number(scene.seconds.toFixed(2)).toLocaleString('vi-VN')} giây</strong>
-          <p>{scene.description}</p>
-          {job.storyboard_version&&<details>
-            <summary>Prompt và tính liên tục</summary>
-            <p>Ảnh · {scene.image_prompt}</p><p>Chuyển động · {scene.motion_prompt}</p>
-            <p>{scene.continuity??job.board.continuity}</p>
-            {scene.scene_notes&&<p>{scene.scene_notes}</p>}
-            {scene.caption&&<p>Phụ đề · {scene.caption}</p>}
+    {!listError&&starting&&!featured&&<ProductionProgress starting labels={labels} warnings={warnings}/>}
+    {visibleDrafts.length>0&&<Collapse className="draft-list" accordion destroyOnHidden
+      activeKey={featured?.id??[]} onChange={key=>setSelectedId((Array.isArray(key)?key[0]:key)??'')}
+      items={visibleDrafts.map(job=>({key:job.id,
+        label:<DraftLabel job={job}/>,
+        extra:<Space wrap>
+          {job.board&&<Button size="small" type={job.status==='STORYBOARD_REVIEW'?'primary':'default'}
+            onKeyDown={event=>event.stopPropagation()}
+            onClick={event=>{event.stopPropagation();setSelectedId(job.id);setError(null);setStoryboardId(job.id);}}>Xem storyboard</Button>}
+          {job.video_sha&&<Button size="small" onKeyDown={event=>event.stopPropagation()}
+            onClick={event=>{event.stopPropagation();setSelectedId(job.id);setPreviewId(job.id);}}>Xem video</Button>}
+        </Space>,
+        children:<>
+          <ProductionProgress job={job} labels={labels} warnings={warnings} busy={pending}
+            onCancel={()=>run('/'+job.id+'/cancel',{})}
+            onResume={!running?()=>run('/'+job.id+'/resume',{}):null}/>
+          {!job.board&&<details><summary>Nội dung video</summary>
+            <p className="draft-source-text">{job.brief.idea}</p>
           </details>}
-          {scene.script_range&&<details>
-            <summary>Kịch bản gốc của cảnh</summary>
-            <p className="draft-source-text">{Array.from(job.brief.idea).slice(...scene.script_range).join('')}</p>
-          </details>}
-          {scene.character_ids.map(id=><Tag key={id}>{job.cast[id]?.name}</Tag>)}
-          <p className="env-muted">Âm thanh dự kiến: {scene.audio}</p>
-          {scene.asset&&<Image width={180} loading="lazy" alt={'Ảnh cảnh '+(index+1)}
-            src={API+'/'+job.id+'/scene-'+index+'?v='+scene.asset}/>}
-          {job.storyboard_version||job.brief.mode==='motion'?<div>
-            {scene.asset&&<Tag>Đã tạo ảnh</Tag>}
-            {scene.motion_sha&&<Tag color="green">Đã xác minh clip chuyển động</Tag>}
-            {scene.motion_sha&&<Button size="small"
-              onClick={()=>setScenePreview({id:job.id,index,sha:scene.motion_sha})}>Xem chuyển động</Button>}
-            {job.storyboard_version&&['STORYBOARD_REVIEW','FAILED','REVIEW','APPROVED','REJECTED'].includes(job.status)&&
-              <Space size="small" wrap>
-                <Button size="small" disabled={pending||running} onClick={()=>setEditor({job,index,scene})}>Sửa cảnh</Button>
-                <Button size="small" disabled={pending||running} onClick={()=>setEditor({job,index,scene,rewrite:true})}>AI viết lại</Button>
-                {index>0&&<Button size="small" disabled={pending||running}
-                  onClick={()=>storyboard(job,'move',{index,target:index-1})}>Đưa lên</Button>}
-                {(job.brief.mode==='motion'?job.board.scenes.length>motionShots[job.brief.seconds]:
-                  job.board.scenes.length>2)&&<Button size="small" danger disabled={pending||running}
-                  onClick={()=>storyboard(job,'remove',{index})}>Bỏ cảnh</Button>}
-              </Space>}
-          </div>:<div><Button size="small" disabled={running||pending||job.status==='APPROVED'}
-            onClick={()=>setEditor({id:job.id,index,scene})}>Sửa cảnh / tạo lại ảnh</Button></div>}
-        </li>)}</ul>}
-      </>,
-    }))}/>}
+          {!job.storyboard_version&&job.brief.mode!=='motion'&&job.board?.scenes.map((scene,index)=>
+            <Button key={index} disabled={running||pending||job.status==='APPROVED'}
+              onClick={()=>setEditor({id:job.id,index,scene})}>Sửa cảnh {index+1}</Button>)}
+        </>,
+      }))}/>}
     </Card>
+    {reviewing&&<StoryboardReview key={reviewing.id} job={reviewing} busy={pending||running} error={editor?null:error}
+      onClose={()=>setStoryboardId(null)}
+      onApprove={()=>run('/'+reviewing.id+'/storyboard-approve',{sha256:reviewing.storyboard_sha},()=>setStoryboardId(null))}
+      onEdit={canEdit?(index,scene)=>setEditor({job:reviewing,index,scene}):null}
+      onRewrite={canEdit?(index,scene)=>setEditor({job:reviewing,index,scene,rewrite:true}):null}
+      onMove={canEdit?(index,target)=>storyboard(reviewing,'move',{index,target}):null}
+      onRemove={canEdit&&sceneCount>minScenes?index=>storyboard(reviewing,'remove',{index}):null}
+      onAdd={canEdit&&sceneCount<maxScenes?()=>setEditor({job:reviewing,adding:true,index:sceneCount,scene:{}}):null}
+      onPreview={(index,sha)=>setScenePreview({id:reviewing.id,index,sha})}/>}
     {scenePreview&&<Modal open title={'Chuyển động cảnh '+(scenePreview.index+1)} footer={null}
       onCancel={()=>setScenePreview(null)}>
       <StudioPreview key={scenePreview.sha} initiallyOpen label="Xem clip chuyển động" filename="motion.mp4"
@@ -357,6 +334,7 @@ export function StudioDrafts({mutate,onCharacters}) {
     </Modal>}
     {editor&&<Modal open title={(editor.rewrite?'AI viết lại cảnh ':editor.adding?'Thêm cảnh ':'Sửa cảnh ')+(editor.index+1)} footer={null}
       onCancel={()=>setEditor(null)}>
+      {error&&<Alert showIcon type="error" message={error}/>}
       <Form layout="vertical" initialValues={editor.scene} onFinish={values=>editor.job?
         run('/'+editor.job.id+'/storyboard-'+(editor.rewrite?'rewrite':editor.adding?'add':'edit'),
           {...values,index:editor.index,sha256:editor.job.storyboard_sha},()=>setEditor(null)):
@@ -371,7 +349,7 @@ export function StudioDrafts({mutate,onCharacters}) {
           <Input.TextArea maxLength={600}/>
         </Form.Item>
         {editor.job&&<Form.Item name="motion_prompt" label="Prompt chuyển động" rules={[{required:true,whitespace:true}]}
-          hidden={editor.job.brief.mode!=='motion'} initialValue={editor.adding?'Ảnh tĩnh pan/zoom':undefined}>
+          hidden={editor.job.brief.mode!=='motion'} initialValue={editor.adding?videoModes.still:undefined}>
           <Input.TextArea maxLength={600}/>
         </Form.Item>}
         {editor.job&&<>

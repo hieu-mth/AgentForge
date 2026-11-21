@@ -101,6 +101,20 @@ class DraftTests(unittest.TestCase):
             draft.submit({"id": self.ident, **self.brief, "idea": "Khác"})
         self.assertEqual(len(draft.list_drafts()), 1)
 
+    def test_list_includes_an_older_draft_updated_after_the_newest_thirty(self):
+        old = {"id": self.ident, "brief": self.brief, "status": "REVIEW",
+               "created_at": "2026-01-01T00:00:00+00:00"}
+        with patch.object(draft.visual_jobs, "_now", return_value="2026-01-01T00:00:00+00:00"):
+            draft._save(old)
+        with patch.object(draft.visual_jobs, "_now", return_value="2026-01-02T00:00:00+00:00"):
+            for index in range(30):
+                draft._save({**old, "id": f"{index:032x}", "status": "FAILED"})
+        with patch.object(draft.visual_jobs, "_now", return_value="2026-01-03T00:00:00+00:00"):
+            draft._save(old)
+        jobs = draft.list_drafts()
+        self.assertEqual(len(jobs), 30)
+        self.assertEqual(jobs[0]["id"], self.ident)
+
     def test_motion_http_to_verified_mp4_without_gpu(self):
         motion = draft.draft_motion.motion_comfy
         runner = draft.draft_motion

@@ -89,7 +89,7 @@ export function MediaStudio({onNavigate,mutate}){
     <section className="studio-advanced" aria-labelledby="studio-advanced-title">
       <Card className="env-panel" title={<SectionTitle icon={<ToolOutlined/>}
         title={<span id="studio-advanced-title" tabIndex={-1} ref={toolsHeading}>Công cụ nâng cao</span>}
-        description="Dùng khi cần đối chiếu, nhập clip hoặc dựng bản phim local"/>}>
+        description="Dùng để đối chiếu, nhập clip hoặc dựng video trên máy"/>}>
         <Space wrap>
           <Button icon={<PlayCircleOutlined/>} aria-expanded={tool==='motion'}
             onClick={()=>setTool(tool==='motion'?null:'motion')}>

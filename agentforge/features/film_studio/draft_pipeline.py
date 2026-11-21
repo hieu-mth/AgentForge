@@ -175,7 +175,11 @@ def list_drafts():
     with _db() as conn:
         if conn is None:
             return []
-        jobs = [_decode_row(row) for row in conn.execute("SELECT body FROM drafts ORDER BY rowid DESC LIMIT 30")]
+        jobs = [_decode_row(row) for row in conn.execute(
+            """SELECT body FROM drafts
+               ORDER BY COALESCE(julianday(json_extract(body, '$.updated_at')),
+                                 julianday(json_extract(body, '$.created_at'))) DESC, rowid DESC
+               LIMIT 30""")]
     for job in jobs:
         job["worker_active"] = job["id"] == ACTIVE
         if job["status"] == "RUNNING" and not job["worker_active"] and "storyboard_version" in job:

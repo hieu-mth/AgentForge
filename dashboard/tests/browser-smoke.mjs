@@ -369,7 +369,7 @@ try {
   await settings.getByText('VRAM dùng / khả dụng: 9 GB / 3 GB',{exact:true}).waitFor();
   if(await settings.locator('.studio-projects').count())
     throw new Error('Studio displays an empty episode panel');
-  await settings.getByText('Tạo video từ ý tưởng',{exact:true}).waitFor();
+  await settings.getByText('Tạo video mới',{exact:true}).waitFor();
   await settings.getByText('Chưa có bản nháp',{exact:true}).waitFor();
   let draftFixture=null;
   let cancelledDraft=null;
@@ -407,6 +407,8 @@ try {
   await settings.getByRole('button',{name:'Tạo storyboard',exact:true}).click();
   const draftProgress=settings.getByRole('region',{name:'Tiến độ tạo bản nháp'});
   await draftProgress.getByText('Đang lập kế hoạch',{exact:true}).waitFor();
+  const briefEditor=settings.getByLabel('Nội dung video',{exact:true});
+  if(await briefEditor.inputValue()!=='')throw new Error('Submitted storyboard left text in the composer');
   await draftProgress.getByText('Ollama · fixture-planner',{exact:true}).waitFor();
   let releaseDraftRead;
   holdDraftRead=new Promise(resolve=>{releaseDraftRead=resolve;});
@@ -420,9 +422,10 @@ try {
     holdDraftRead=null;
   }
   await settings.reload();
+  await briefEditor.waitFor();
+  if(await briefEditor.inputValue()!=='')throw new Error('Submitted storyboard text was restored after refresh');
   await settings.getByRole('tab',{name:/^Chú mèo cam khám phá khu rừng/}).waitFor();
   draftFixture={...draftFixture,status:'FAILED',worker_active:false,error:'Fixture runtime unavailable'};
-  await settings.getByRole('tab',{name:/^Chú mèo cam khám phá khu rừng/}).click();
   await settings.getByText('Fixture runtime unavailable',{exact:true}).waitFor();
   await settings.route('**/api/film/drafts/*/resume',route=>{
     draftFixture=null;
@@ -454,9 +457,24 @@ try {
   });
   await settings.locator('.studio-drafts-list').getByRole('button',{name:'Làm mới',exact:false}).click();
   await draftProgress.locator('.production-header').getByText('Storyboard chờ duyệt',{exact:true}).waitFor();
-  await settings.getByRole('tab',{name:/^Ý tưởng mới/}).click();
-  await settings.getByRole('button',{name:'Duyệt storyboard',exact:true}).click();
-  await settings.getByRole('button',{name:'Duyệt và tạo phim',exact:true}).click();
+  await settings.getByRole('button',{name:'Xem storyboard',exact:true}).click();
+  const storyboardDialog=settings.getByRole('dialog',{name:'Ý tưởng mới'});
+  await storyboardDialog.getByRole('button',{name:/Cảnh 02/}).click();
+  await storyboardDialog.getByRole('heading',{name:'Cảnh 2',exact:true}).waitFor();
+  const reviewViewport=settings.viewportSize();
+  if(process.env.AGENTFORGE_STORYBOARD_SCREENSHOT){
+    await settings.setViewportSize({width:1440,height:1000});
+    await storyboardDialog.screenshot({path:process.env.AGENTFORGE_STORYBOARD_SCREENSHOT});
+  }
+  await settings.setViewportSize({width:390,height:844});
+  if(await storyboardDialog.evaluate(node=>{
+    const rect=node.getBoundingClientRect();
+    return node.scrollWidth>node.clientWidth+1||rect.left<0||rect.right>window.innerWidth+1;
+  }))
+    throw new Error('Storyboard review overflows mobile');
+  if(reviewViewport)await settings.setViewportSize(reviewViewport);
+  await storyboardDialog.getByRole('button',{name:'Duyệt và bắt đầu sản xuất',exact:true}).click();
+  await storyboardDialog.waitFor({state:'hidden'});
   await draftProgress.getByText('Đang tạo chuyển động cảnh 2/3',{exact:true}).waitFor();
   await draftProgress.getByText('1/3 clip đã xác minh',{exact:true}).waitFor();
   const viewport=settings.viewportSize();
@@ -471,12 +489,12 @@ try {
   draftFixture={...draftFixture,status:'REVIEW',worker_active:false,
     created_at:'2026-06-20T03:00:00Z',video_sha:'fixture-video',receipt_sha:'fixture-receipt'};
   await settings.locator('.studio-drafts-list').getByRole('button',{name:'Làm mới',exact:false}).click();
-  await settings.locator('.production-header').getByText('Phim hoàn chỉnh · chờ duyệt',{exact:true}).waitFor();
+  await settings.locator('.production-header').getByText('Video hoàn chỉnh · chờ duyệt',{exact:true}).waitFor();
   await draftProgress.getByText('100%',{exact:true}).waitFor();
   await settings.locator('.draft-row-meta time[datetime="2026-06-20T03:00:00Z"]').waitFor();
   await settings.getByRole('tab',{name:/^Bản nháp đã hủy/}).waitFor({state:'hidden'});
   await settings.route('**/api/film/drafts/*/preview*',route=>route.fulfill({status:404}));
-  await settings.getByRole('button',{name:'Xem bản nháp MP4'}).click();
+  await settings.getByRole('button',{name:'Xem video',exact:true}).click();
   const draftPreview=settings.getByRole('dialog',{name:'Ý tưởng mới'});
   await draftPreview.getByRole('button',{name:'Duyệt bản nháp'}).waitFor();
   await draftPreview.getByText('Không phát được MP4').waitFor();

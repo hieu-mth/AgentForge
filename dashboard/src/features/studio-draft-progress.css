@@ -1,14 +1,16 @@
 .draft-form-options {
   --draft-label-height: 30px;
   --draft-control-height: 40px;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.15fr);
+  display: flex;
+  flex-wrap: wrap;
   align-items: start;
   gap: 12px;
-  max-width: 620px;
+  max-width: 820px;
   margin-top: 8px;
 }
-.draft-form-options .ant-form-item { margin-bottom: 0; }
+.draft-form-options .ant-form-item { flex: 0 1 132px; min-width: 0; margin-bottom: 0; }
+.draft-form-options .draft-video-mode { flex-basis: 220px; }
+.draft-form-options .draft-submit { flex: 0 0 146px; }
 .draft-form-options .ant-form-item-label {
   min-height: var(--draft-label-height);
   padding-bottom: 4px;
@@ -21,7 +23,8 @@
 }
 .draft-form-options .draft-submit { margin-top: var(--draft-label-height); }
 @media (max-width: 620px) {
-  .draft-form-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .draft-form-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .draft-form-options .draft-video-mode { grid-column: 1 / -1; }
 }
 
 .draft-resource-details { margin-top: 12px; }
@@ -46,6 +49,7 @@
 .draft-row-meta { font-size: 12px; margin-top: 4px; }
 .draft-row-meta span:not(:first-child)::before { content: "·"; margin-right: 8px; }
 .draft-list .ant-collapse-header-text { min-width: 0; }
+.studio-drafts-list { scroll-margin-top: 84px; }
 .draft-list .ant-collapse-extra { margin-inline-start: 8px; }
 @media (max-width: 480px) {
   .draft-list .ant-collapse-extra .ant-btn { white-space: normal; height: auto; max-width: 100px; }

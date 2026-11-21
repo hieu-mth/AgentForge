@@ -1,0 +1,22 @@
+.storyboard-review .ant-modal-container { display:flex; flex-direction:column; max-height:calc(100dvh - 100px); }
+.storyboard-review .ant-modal-body { min-height:0; overflow:auto; }
+.storyboard-layout { display:grid; grid-template-columns:minmax(180px, 32%) minmax(0, 1fr); gap:20px; }
+.storyboard-scenes { display:grid; align-content:start; gap:6px; max-height:51vh; overflow:auto; }
+.storyboard-scenes button:not(.ant-btn) { display:grid; gap:3px; text-align:left; color:inherit; background:var(--surface);
+  border:1px solid var(--line); border-radius:8px; padding:8px 10px; min-width:0; cursor:pointer; }
+.storyboard-scenes button[aria-pressed=true] { border-color:var(--primary); }
+.storyboard-scenes span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.storyboard-detail { min-width:0; overflow-wrap:anywhere; }
+.storyboard-detail h3 { margin-top:0; }
+.storyboard-detail summary { cursor:pointer; margin-bottom:6px; }
+.storyboard-context { margin-bottom:14px; }
+.storyboard-context summary { cursor:pointer; }
+.storyboard-actions { margin-top:12px; }
+.storyboard-footer { display:flex; justify-content:space-between; align-items:center; gap:12px; text-align:left; flex-wrap:wrap; }
+@media (max-width:600px) {
+  .storyboard-review .ant-modal { top:0; margin:0; max-width:100%; width:100%!important; padding-bottom:0; }
+  .storyboard-review .ant-modal-container { min-height:100dvh; max-height:100dvh; }
+  .storyboard-review .ant-modal-body { flex:1; }
+  .storyboard-layout { grid-template-columns:minmax(0,1fr); gap:14px; }
+  .storyboard-scenes { max-height:24vh; }
+}
