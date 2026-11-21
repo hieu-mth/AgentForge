@@ -330,7 +330,7 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
                 workflow_sha, seed, confirmed=False,
                 image_job=None, image_sha=None, ltx_encoder=None, confirm_ltx_gate_b=False,
                 confirm_new_attempt=False,
-                film_root: Path = FILMS, db_path: Path = DB):
+                film_root: Path = FILMS, db_path: Path = DB, on_reserved=None):
     """One-shot owner dispatch, checkpointed BEFORE any GPU/HTTP work.
 
     Ambiguous SUBMITTING is never blindly retried. No import, verification,
@@ -409,6 +409,8 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
                              (job_id, model_id, image_job, image_sha, template["profile"]["frames"]))
         if is_ltx:
             try:
+                if on_reserved:
+                    on_reserved(job_id)
                 graph[bindings["image_node"]]["inputs"]["image"] = motion_ltx.upload_source(PORT, job_id, image)
                 comfy_service.require_other_queue_idle(PORT, include_profiles=True)
                 comfy_service.require_idle_queue(PORT)

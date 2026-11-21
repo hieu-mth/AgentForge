@@ -48,6 +48,24 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual(len(config["capabilities"]), 9)
         self.assertFalse(config["owner_override"])
 
+    def test_draft_routes_use_configured_motion_profile_by_registry_id(self):
+        file = self.db.parent / "encoder.safetensors"
+        motion = model_hub.validate_profile({"id": "custom_motion_id", "provider": "comfyui",
+            "model": "ltxv-2b-0.9.8-distilled-fp8.safetensors", "enabled": True,
+            "base_url": "http://127.0.0.1:8188", "motion_encoder": str(file)})
+        profiles = {"custom_motion_id": motion,
+                    "planner": {"provider": "ollama", "enabled": True},
+                    "painter": {"provider": "comfyui", "enabled": True, "flux": {}}}
+        settings = {**policy.defaults(), "permissions": dict.fromkeys(policy.defaults()["permissions"], True),
+                    "tools": ["ffmpeg"], "mappings": {"film.motion": "custom_motion_id"}}
+        state = {"routes": {"general.text": "planner", "film.storyboard": "planner",
+                            "image.generate": "painter"}, "orchestrator": settings}
+        with (patch.object(model_hub, "_read_state", return_value=(20, state)),
+              patch.object(model_hub, "_profiles", return_value=profiles)):
+            revision, bindings = model_hub.draft_routes(db_path=self.db)
+        self.assertEqual(revision, 20)
+        self.assertEqual(bindings["film.motion"], motion)
+
     def test_schema_rejects_unsafe_or_unsupported_settings(self):
         for change in (
             {"schema_version": 2}, {"mode": "legacy"}, {"gpu_concurrency": 2},

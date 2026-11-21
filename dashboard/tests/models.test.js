@@ -40,3 +40,12 @@ test('Owner settings deep-link includes Model Hub',()=>{
   assert.equal(hashFor('models'),'#/models');
   assert.equal(parseSection('#/models'),'models');
 });
+
+test('LTX encoder is sent only for a compatible ComfyUI adapter',()=>{
+  const values={id:'motion_profile',model:'ltxv-2b-0.9.8-distilled-fp8.safetensors',
+    enabled:true,base_url:'http://127.0.0.1:8188',motion_encoder:' C:/models/t5.safetensors '};
+  const adapter={id:'comfyui',defaults:{base_url:''}};
+  assert.ok(!('motion_encoder' in profilePayload(values,adapter)));
+  assert.equal(profilePayload(values,{...adapter,motion_encoder_supported:true}).motion_encoder,
+    'C:/models/t5.safetensors');
+});

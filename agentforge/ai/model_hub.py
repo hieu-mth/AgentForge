@@ -114,6 +114,7 @@ ADAPTERS = {
         "description": "Hồ sơ ảnh hoặc video. Đăng ký chỉ lưu cấu hình cho ComfyUI.",
         "defaults": {"base_url": "http://127.0.0.1:8188"}, "local_probe": False,
         "flux_workflow_max_bytes": flux_workflow.MAX_WORKFLOW_BYTES,
+        "motion_encoder_supported": True,
     },
     "anthropic": {
         "label": "Anthropic-compatible", "connection": "cloud", "model_label": "Model ID",
@@ -175,7 +176,7 @@ def validate_profile(value, *, profile_id=None):
         "base_url_env", "api_key_env", "api_key_protected",
     }
     if value.get("provider") == "comfyui":
-        allowed.add("flux")
+        allowed.update(("flux", "motion_encoder"))
     if not value.keys() <= allowed:
         raise ModelConfigError("Unknown or sensitive model profile fields")
     ident = _required_text(value.get("id", profile_id), ID_RE, "model ID")
@@ -193,11 +194,18 @@ def validate_profile(value, *, profile_id=None):
     fields = value.keys() - common.keys()
     if ADAPTERS[provider]["connection"] == "local":
         if fields != {"base_url"} and not (
-                provider == "comfyui" and fields == {"base_url", "flux"}):
+                provider == "comfyui" and fields in ({"base_url", "flux"}, {"base_url", "motion_encoder"})):
             raise ModelConfigError("Fields do not match the selected adapter")
         common["base_url"] = _local_url(value.get("base_url"))
         if "flux" in fields:
             common["flux"] = flux_workflow.validate(value["flux"], model, common["base_url"])
+        if "motion_encoder" in fields:
+            encoder = value["motion_encoder"]
+            if (not isinstance(encoder, str) or not 1 <= len(encoder) <= 512
+                    or not Path(encoder).is_absolute() or encoder.startswith(("\\\\", "//"))
+                    or any(ord(char) < 32 for char in encoder)):
+                raise ModelConfigError("Motion encoder must be a local absolute file path")
+            common["motion_encoder"] = encoder
     elif fields == {"base_url", "api_key_protected"} and profile_id is not None:
         key = value["api_key_protected"]
         try:
@@ -402,7 +410,7 @@ def draft_routes(*, db_path=None):
         raise PermissionError("Enable local planning, assignment, model calls and FFmpeg in AI Orchestrator")
     profiles = _profiles(state=state)
     bindings = {}
-    for capability in ("general.text", "film.storyboard", "character.select", "image.generate"):
+    for capability in ("general.text", "film.storyboard", "character.select", "image.generate", "film.motion"):
         ref = state["routes"].get(capability, policy["mappings"].get(capability))
         decision = orchestrator_policy.resolve(capability, policy, profiles, ref)
         profile = profiles.get(decision.get("model_ref"))

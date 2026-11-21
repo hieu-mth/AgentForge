@@ -121,6 +121,10 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         <Alert type="warning" showIcon message="Backend đang chạy chưa hỗ trợ đăng ký workflow FLUX."/>}
       {provider==='comfyui'&&adapter.flux_workflow_max_bytes&&<>
         <Form.Item name="flux_enabled" label="Workflow FLUX GGUF" valuePropName="checked"><Switch/></Form.Item>
+        {!fluxEnabled&&adapter.motion_encoder_supported&&
+          <Form.Item name="motion_encoder" label="Đường dẫn tuyệt đối tới encoder LTX">
+            <Input placeholder="t5xxl_fp8_e4m3fn.safetensors" spellCheck={false}/>
+          </Form.Item>}
         {fluxEnabled&&<>
           <Form.Item name={['flux_settings','workflow']} label="Workflow API JSON" rules={[
             {required:true},{validator:(_,value)=>{

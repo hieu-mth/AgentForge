@@ -6,6 +6,8 @@ export function profilePayload(values,adapter) {
   if(adapter.id==='comfyui'&&adapter.flux_workflow_max_bytes&&values.flux_enabled) {
     const {workflow,max_resolution,max_steps,timeout_seconds,output_dir}=values.flux_settings;
     profile.flux={workflow:JSON.parse(workflow),max_resolution,max_steps,timeout_seconds,output_dir};
+  } else if(adapter.id==='comfyui'&&adapter.motion_encoder_supported&&values.motion_encoder?.trim()) {
+    profile.motion_encoder=values.motion_encoder.trim();
   }
   return profile;
 }

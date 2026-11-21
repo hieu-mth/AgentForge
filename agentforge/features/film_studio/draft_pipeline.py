@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 from agentforge import ops_control
 from agentforge.ai import model_hub
 from agentforge.features.film_studio import characters
-from agentforge.features.film_studio import draft_resources
+from agentforge.features.film_studio import draft_motion, draft_resources
 from agentforge.features.media import flux_runtime, flux_workflow, render, visual_jobs
 from agentforge.integrations import comfy_service
 from agentforge.ops import runtime_certification as runtime
@@ -422,7 +422,8 @@ def _write_board(job, bindings):
     _activity(job, "STORYBOARD", "storyboard", bindings["film.storyboard"])
     with _measured(job, "storyboard", comfy):
         data = _ask(bindings["film.storyboard"],
-                "Write a coherent Vietnamese storyboard for a silent motion slideshow. "
+                "Write a coherent Vietnamese storyboard for a silent video. Describe a concrete "
+                "visible movement in each scene description. "
                 "Use English visual prompts with stable setting and character appearance. "
                 "Use only supplied cast IDs, or an empty character_ids array if cast is empty. "
                 "Describe any invented characters only in the prompt. Add optional audio notes.",
@@ -450,6 +451,8 @@ def _image(job, index, scene, revision, profile):
     if prior and prior["status"] in {"SUBMITTING", "SUBMITTED", "SUBMIT_UNCERTAIN", "COLLECTING"}:
         raise ValueError("The prior ComfyUI scene job needs reconciliation before retry")
     if not prior or prior["status"] != "ASSET_READY":
+        if job["brief"].get("mode") == "motion" and scene["job_id"]:
+            raise ValueError("Review the existing FLUX job before creating a new motion draft")
         if scene["attempts"] >= IMG_RETRIES:
             raise ValueError("Scene reached its retry limit")
         previous_job = scene["job_id"]
@@ -496,11 +499,18 @@ def _image(job, index, scene, revision, profile):
 
 def _render(job):
     folder = _folder(job["id"])
-    width, height = SIZES[job["brief"]["ratio"]]
+    moving = job["brief"].get("mode") == "motion"
+    width, height = (512, 288) if moving else SIZES[job["brief"]["ratio"]]
     ffmpeg = render._ffmpeg()
     command = [ffmpeg, "-nostdin", "-n", "-v", "error"]
     filters, streams = [], []
     for index, scene in enumerate(job["board"]["scenes"]):
+        if moving:
+            command += ["-i", str(draft_motion.clip_path(scene))]
+            frames = scene["seconds"] * 24
+            filters.append(f"[{index}:v]trim=end_frame={frames},setpts=PTS-STARTPTS,setsar=1[v{index}]")
+            streams.append(f"[v{index}]")
+            continue
         command += ["-i", str(ensure_local_root(folder / f"scene-{index+1:02d}.png"))]
         frames = scene["seconds"] * 24
         filters.append(f"[{index}:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
@@ -540,8 +550,14 @@ def _work(job, slot):
         if _cancellation(job["id"]):
             raise DraftCancelled
         ops_control.require_active()
+        moving = job["brief"].get("mode") == "motion"
         with model_hub.local_inference_slot():
             revision, bindings = model_hub.draft_routes()
+            if moving and revision != job["motion_revision"]:
+                raise ValueError("Model routing changed after approval; review and create a new motion draft")
+            motion_profile = draft_motion.binding(bindings) if moving else None
+            if moving:
+                draft_motion.require_resolved_ledger(job)
             image_profile = bindings["image.generate"]
             board = job.get("board")
             needs_gpu = not board or any(not scene["asset"] for scene in board["scenes"])
@@ -562,6 +578,23 @@ def _work(job, slot):
                     with _measured(job, "image", image_profile):
                         used_flux = True
                         _image(job, index, scene, revision, bindings["image.generate"])
+            if moving and used_flux:
+                _release_idle_comfy(image_profile)
+        if moving:
+            prepared = draft_motion.prepare(job, folder)
+            for index, scene in enumerate(job["board"]["scenes"]):
+                if _cancellation(job["id"]):
+                    raise DraftCancelled
+                if model_hub.draft_routes()[0] != job["motion_revision"]:
+                    raise ValueError("Model routing changed after approval; review and create a new motion draft")
+                _activity(job, "MOTION", "motion", motion_profile, scene=index + 1)
+                try:
+                    draft_motion.run_shot(scene, index, prepared, motion_profile,
+                                          lambda: _save(job), lambda: _cancellation(job["id"]))
+                finally:
+                    if _cancellation(job["id"]):
+                        raise DraftCancelled
+        with model_hub.local_inference_slot():
             ops_control.require_active()
             _activity(job, "RENDER", "render")
             with _measured(job, "render"):
@@ -639,7 +672,7 @@ def _dispatch():
 
 def submit(data):
     ident = _id(data["id"])
-    seconds = _number(data["seconds"], 6, 60)
+    seconds = _number(data["seconds"], 4 if data.get("mode") == "motion" else 6, 60)
     count = _number(data["scene_count"], 2, 6)
     if seconds < count * 2 or not isinstance(data["ratio"], str) or data["ratio"] not in SIZES:
         raise ValueError("Choose a supported ratio and at least two seconds per scene")
@@ -654,6 +687,15 @@ def submit(data):
         _script_ranges(idea, count, seconds)
     brief = {"idea": idea, "seconds": seconds,
              "scene_count": count, "ratio": data["ratio"]}
+    mode = data.get("mode", "still")
+    if mode not in ("still", "motion"):
+        raise ValueError("Invalid video mode")
+    if mode == "motion":
+        if data.get("motion_approved") is not True:
+            raise PermissionError("Owner approval is required for the motion shots")
+        if count > draft_motion.MAX_SHOTS or seconds != count * draft_motion.SECONDS_PER_SHOT or brief["ratio"] != "16:9":
+            raise ValueError("Motion supports 3 shots maximum, exactly 2 seconds per shot, in 16:9")
+        brief["mode"] = mode
     try:
         prior = _read(ident)
     except KeyError:
@@ -663,11 +705,17 @@ def submit(data):
             raise ValueError("Production ID already belongs to another brief")
         return prior
     ops_control.require_active()
-    model_hub.draft_routes()
+    if mode == "motion":
+        revision, bindings = model_hub.draft_routes()
+        draft_motion.binding(bindings)
+    else:
+        model_hub.draft_routes()
     render._ffmpeg()
     created_at = visual_jobs._now()
     job = {"id": ident, "brief": brief, "stage": "QUEUED", "status": "QUEUED",
            "video_sha": None, "created_at": created_at, "updated_at": created_at}
+    if mode == "motion":
+        job["motion_revision"] = revision
     with comfy_service.LOCK, _db(True) as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute("SELECT body FROM drafts WHERE id=?", (ident,)).fetchone()
@@ -730,6 +778,8 @@ def act(ident, action, data):
             _save(job)
             return job
         if action == "edit":
+            if job["brief"].get("mode") == "motion":
+                raise ValueError("Create and approve a new motion draft to change its storyboard")
             if job["status"] == "APPROVED" or not job.get("board"):
                 raise ValueError("Scene cannot be edited")
             scene = job["board"]["scenes"][_number(data["index"], 0, len(job["board"]["scenes"]) - 1)]
