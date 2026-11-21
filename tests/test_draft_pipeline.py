@@ -7,6 +7,7 @@ from unittest.mock import patch
 from contextlib import nullcontext
 
 from agentforge.features.film_studio import draft_pipeline as draft
+from tests import owner_http_fixture
 
 
 class DraftTests(unittest.TestCase):
@@ -30,6 +31,64 @@ class DraftTests(unittest.TestCase):
         scene = {"description": "Mèo ngắm rừng", "image_prompt": "Cat in a forest",
                  "character_ids": ["cat"], "audio": "Im lặng"}
         return {"title": "Mèo", "continuity": "Orange cat, morning", "scenes": [scene, scene]}
+
+    def test_script_ranges_keep_exact_text_and_reject_insufficient_capacity(self):
+        self.assertFalse(draft._needs_scene_analysis("Một chú mèo đi tìm bạn."))
+        text = "Cảnh 1 — Miu nhìn ra cửa sổ 🐱\nMiu: Chào bạn!\n\nCảnh 2 — Miu chạy ra vườn."
+        self.assertTrue(draft._needs_scene_analysis(text))
+        ranges = draft._script_ranges(text, 2, 12)
+        self.assertEqual("".join(text[start:end] for start,end in ranges), text)
+        self.assertTrue(text[ranges[1][0]:].startswith("Cảnh 2"))
+        with self.assertRaisesRegex(ValueError, "3 cảnh"):
+            draft._script_ranges(text+"\nCảnh 3 — Trời tối.", 2, 12)
+        with self.assertRaisesRegex(ValueError, "Thời lượng"):
+            draft._script_ranges(text+"\nMiu: "+"chào "*50, 2, 6)
+
+    def test_long_script_analysis_uses_bounded_excerpts_before_storyboard(self):
+        source = "Cảnh 1 — Miu\n" + "Miu nhìn ra cửa sổ. 🐱\n" * 140 + "\nCảnh 2 — Miu chạy ra vườn."
+        job = {"id": self.ident, "status": "RUNNING", "brief":{
+            **self.brief, "idea": source}}
+        provider = {"provider":"ollama", "model":"fixture"}
+        excerpts = []
+        def respond(profile, instructions, data, schema, comfy):
+            if "excerpt" in data:
+                excerpts.append(data["excerpt"])
+                self.assertLessEqual(len(data["excerpt"]), 900)
+                return {"facts": "Miu chờ bên cửa sổ."}
+            self.assertLess(len(str(data)), len(source))
+            return {"title":"Miu", "continuity":"Orange cat", "description":"Miu đợi",
+                    "image_prompt":"Orange cat by a window", "audio":"Yên tĩnh"}
+        with (patch.object(draft, "_measured", return_value=nullcontext()),
+              patch.object(draft, "_ask", side_effect=respond)):
+            draft._write_board(job, {"film.storyboard":provider, "image.generate":{}})
+        board = draft._read(self.ident)["board"]
+        self.assertEqual(len(board["scenes"]), 2)
+        self.assertEqual("".join(excerpts), source[:board["scenes"][1]["script_range"][0]])
+        self.assertEqual("".join(source[start:end] for start,end in
+                                 (scene["script_range"] for scene in board["scenes"])), source)
+
+    def test_long_vietnamese_script_http_sqlite_roundtrip_and_limit(self):
+        client = owner_http_fixture.OwnerHttpFixture()
+        client.setUp()
+        self.addCleanup(client.doCleanups)
+        client.server.allow_external_actions = True
+        client.login()
+        prefix = "Cảnh 1 — Miu nhìn ra cửa sổ.\nMiu: Chào bạn!\n"
+        suffix = "\n\nCảnh 2 — Miu chạy ra vườn.\n"
+        source = prefix + "🐱" * (20_000 - len(prefix) - len(suffix)) + suffix
+        body = {**self.brief, "id":self.ident, "idea":source}
+        with (patch.object(draft.model_hub, "draft_routes"), patch.object(draft.render, "_ffmpeg"),
+              patch.object(draft, "_dispatch")):
+            status, result, _ = client.req("POST", "/api/film/drafts/start", body)
+            self.assertEqual(status, 200, result.get("message"))
+            self.assertEqual(result["brief"]["idea"], source)
+            status, result, _ = client.req("GET", "/api/film/drafts")
+            self.assertEqual(status, 200)
+            self.assertEqual(result["drafts"][0]["brief"]["idea"], source)
+            status, error, _ = client.req("POST", "/api/film/drafts/start",
+                                         {**body, "idea":source+"đ"})
+            self.assertEqual(status, 400)
+            self.assertIn("20,000", error["message"])
 
     def test_submission_validation_and_idempotence(self):
         with self.assertRaises(ValueError):
@@ -116,11 +175,15 @@ class DraftTests(unittest.TestCase):
     def test_queue_limit_idempotence_and_queued_cancel(self):
         with (patch.object(draft.model_hub, "draft_routes"), patch.object(draft.render, "_ffmpeg"),
               patch.object(draft, "_queue_limit", return_value=1), patch.object(draft, "_dispatch")):
-            self.assertEqual(draft.submit({"id": self.ident, **self.brief})["status"], "QUEUED")
+            submitted = draft.submit({"id": self.ident, **self.brief})
+            self.assertEqual(submitted["status"], "QUEUED")
+            self.assertEqual(submitted["created_at"], submitted["updated_at"])
             self.assertEqual(draft.submit({"id": self.ident, **self.brief})["id"], self.ident)
             with self.assertRaisesRegex(ValueError, "queue"):
                 draft.submit({"id": "b" * 32, **self.brief})
-            self.assertEqual(draft.act(self.ident, "cancel", {})["status"], "CANCELLED")
+            cancelled = draft.act(self.ident, "cancel", {})
+            self.assertEqual(cancelled["status"], "CANCELLED")
+            self.assertEqual(draft._read(self.ident)["created_at"], submitted["created_at"])
             self.assertEqual(draft.submit({"id": "b" * 32, **self.brief})["status"], "QUEUED")
 
     def test_running_cancel_keeps_committed_scene_and_skips_render(self):

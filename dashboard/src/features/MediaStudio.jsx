@@ -1,8 +1,8 @@
 import {useRef,useState} from 'react';
 import {Button,Card,Empty,Radio,Space} from 'antd';
-import {ClockCircleOutlined,EyeOutlined,FolderOpenOutlined,PlayCircleOutlined,ReloadOutlined,
-  SettingOutlined,ToolOutlined,VideoCameraOutlined,WarningOutlined} from '@ant-design/icons';
-import {SectionTitle,SettingsHeading,SettingsStatus,Stat} from '../components/settings.jsx';
+import {FolderOpenOutlined,PlayCircleOutlined,ReloadOutlined,
+  SettingOutlined,ToolOutlined,VideoCameraOutlined} from '@ant-design/icons';
+import {SectionTitle,SettingsHeading,SettingsStatus} from '../components/settings.jsx';
 import {useResource,ResourceStatus} from '../use_resource.jsx';
 import {useScreenRefresh} from '../refresh_scope.jsx';
 import {FilmProduction,MotionClips} from './FilmProduction.jsx';
@@ -60,14 +60,8 @@ export function MediaStudio({onNavigate,mutate}){
 
     <StudioDrafts mutate={mutate} onCharacters={()=>onNavigate('characters')}/>
 
-    {projects&&<div className="env-stat-grid studio-stats" aria-label="Trạng thái ưu tiên của các dự án tìm thấy">
-      <Stat icon={<ClockCircleOutlined/>} label="Dự án chờ dựng" value={projects.filter(row=>row.group==='prepared').length}/>
-      <Stat icon={<EyeOutlined/>} label="Dự án chờ xem bản dựng" value={projects.filter(row=>row.group==='review').length}/>
-      <Stat icon={<WarningOutlined/>} label="Dự án cần xử lý" value={projects.filter(row=>row.group==='attention').length}/>
-    </div>}
-
-    <Card className="env-panel studio-projects" title={<SectionTitle icon={<FolderOpenOutlined/>}
-      title="Dự án sản xuất" description="Nhóm các tập đã tải theo mã phim. Mỗi dự án hiển thị việc có ưu tiên cao nhất."/>}
+    {(projects?.length>0||episodesResource.error)&&<Card className="env-panel studio-projects"
+      title={<SectionTitle icon={<FolderOpenOutlined/>} title="Tập phim trong workspace"/>}
       extra={<Button icon={<ReloadOutlined/>} onClick={episodesResource.reload}
         loading={episodesResource.loading}>Làm mới</Button>}>
       <ResourceStatus resource={episodesResource} label="danh sách tập phim"/>
@@ -88,12 +82,9 @@ export function MediaStudio({onNavigate,mutate}){
           </div>
         </li>)}
       </ul>}
-      {visible?.length===0&&!episodesResource.loading&&<Empty image={Empty.PRESENTED_IMAGE_SIMPLE}
-        description={projects.length?'Không có dự án ở trạng thái này.':'Chưa có tập phim trong workspace.'}/>}
-      {projects?.length>0&&<p className="env-muted studio-panel-note">
-        Số dự án đang chạy và đã duyệt chưa có dữ liệu tổng hợp.
-      </p>}
-    </Card>
+      {projects?.length>0&&visible?.length===0&&!episodesResource.loading&&
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Không có dự án ở trạng thái này."/>}
+    </Card>}
 
     <section className="studio-advanced" aria-labelledby="studio-advanced-title">
       <Card className="env-panel" title={<SectionTitle icon={<ToolOutlined/>}

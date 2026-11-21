@@ -1,3 +1,56 @@
+.draft-form-options {
+  --draft-label-height: 30px;
+  --draft-control-height: 40px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.15fr);
+  align-items: start;
+  gap: 12px;
+  max-width: 620px;
+  margin-top: 8px;
+}
+.draft-form-options .ant-form-item { margin-bottom: 0; }
+.draft-form-options .ant-form-item-label {
+  min-height: var(--draft-label-height);
+  padding-bottom: 4px;
+}
+.draft-form-options .ant-input-number,
+.draft-form-options .ant-select,
+.draft-form-options .draft-submit {
+  width: 100%;
+  height: var(--draft-control-height);
+}
+.draft-form-options .draft-submit { margin-top: var(--draft-label-height); }
+@media (max-width: 620px) {
+  .draft-form-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.draft-resource-details { margin-top: 12px; }
+.draft-resource-details summary { cursor: pointer; width: fit-content; }
+.draft-resource-details[open] summary { margin-bottom: 8px; }
+.draft-filters.ant-tabs > .ant-tabs-nav { margin-bottom: 12px; }
+.draft-filters .ant-tabs-tab { padding: 6px 0 10px; }
+.draft-row-label { min-width: 0; }
+.draft-row-heading, .draft-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.draft-row-heading strong {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draft-row-meta { font-size: 12px; margin-top: 4px; }
+.draft-row-meta span:not(:first-child)::before { content: "·"; margin-right: 8px; }
+.draft-list .ant-collapse-header-text { min-width: 0; }
+.draft-list .ant-collapse-extra { margin-inline-start: 8px; }
+@media (max-width: 480px) {
+  .draft-list .ant-collapse-extra .ant-btn { white-space: normal; height: auto; max-width: 100px; }
+}
+
 .draft-progress {
   padding: 14px 16px;
   margin: 10px 0 14px;
@@ -48,3 +101,6 @@
 @media (prefers-reduced-motion: reduce) {
   .draft-progress-spinner { animation: none; }
 }
+.draft-editor-field.ant-form-item { margin-bottom: 8px; }
+.draft-editor-count { display: block; text-align: end; }
+.draft-source-text { white-space: pre-wrap; overflow-wrap: anywhere; }

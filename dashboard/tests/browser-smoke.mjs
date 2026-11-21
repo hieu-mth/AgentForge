@@ -86,6 +86,7 @@ try {
     ],
   };
   let projectRows=[];
+  let overviewDrafts=[];
   let clipRequests=0;
   let episodeRequests=0;
   const studioEpisodes=[
@@ -122,6 +123,7 @@ try {
     });
     const payload=p==='/api/session'?{csrf:'fixture-only-csrf'}:
       p==='/api/video-studio/projects'?{projects:projectRows,canonical_engine:'film_studio'}:
+      p==='/api/film/drafts'?{drafts:overviewDrafts}:
       p==='/api/characters'?{characters:[]}:
       p==='/api/film/motion'?{gpu:{status:'COMFYUI_UNAVAILABLE'},jobs:[{job_id:'demo-job',film_slug:'demo',shot_id:'001',
         status:'COMPLETE_UNVERIFIED',state:'COMPLETE_UNVERIFIED',plan_sha:'example-plan',
@@ -149,10 +151,8 @@ try {
   if(clipRequests||!episodeRequests)throw new Error('Studio did not separate production reads from motion tools');
   await page2.setViewportSize({width:390,height:850});
   const studio=page2.locator('.studio-page');
-  await studio.locator('.studio-stats .env-stat-value').last().waitFor();
-  if((await studio.locator('.studio-stats .env-stat-value').allTextContents()).join(',')!=='1,1,1')
-    throw new Error('Studio counters do not match episode stages');
-  if(await studio.locator('.studio-episode').count()!==3||!await studio.getByLabel('Ý tưởng video').isEnabled())
+  await studio.getByText('Tập phim trong workspace',{exact:true}).waitFor();
+  if(await studio.locator('.studio-episode').count()!==3||!await studio.getByLabel('Nội dung video').isEnabled())
     throw new Error('Studio duplicated projects or disabled the idea input');
   for(const width of [1440,1280,900,390]){
     await page2.setViewportSize({width,height:850});
@@ -179,7 +179,7 @@ try {
   await page2.keyboard.press('Escape');
   await episodeDrawer.waitFor({state:'hidden'});
   studioReadError=true;
-  await studio.getByRole('button',{name:'Làm mới',exact:false}).click();
+  await studio.locator('.studio-projects').getByRole('button',{name:'Làm mới',exact:false}).click();
   await studio.getByText('Đang đọc danh sách tập phim…',{exact:true}).waitFor();
   await studio.getByText('Không đọc được danh sách tập phim',{exact:true}).waitFor();
   studioReadError=false;
@@ -303,22 +303,28 @@ try {
   await page2.goto(origin+'/dashboard/#/workspace',{waitUntil:'networkidle'});
   await page2.getByText('Tổng quan Video Studio',{exact:true}).waitFor();
   const overview=page2.locator('.overview-page');
-  await overview.getByText('Chưa tìm thấy tập phim trong workspace',{exact:true}).waitFor();
+  await overview.getByText('Chưa có video đã dựng hoặc tập phim trong workspace',{exact:true}).waitFor();
   await overview.getByRole('button',{name:'Mở Video Studio'}).click();
   await page2.waitForURL('**/#/media-studio');
+  overviewDrafts=[{id:'d'.repeat(32),board:{title:'Video đã duyệt'},status:'APPROVED',video_sha:'fixture'}];
+  await page2.goto(origin+'/dashboard/#/overview',{waitUntil:'networkidle'});
+  await overview.getByText('Video đã duyệt',{exact:true}).waitFor();
+  await overview.getByRole('button',{name:'Xem MP4',exact:true}).waitFor();
+  if(await overview.getByText('Chưa có video đã dựng hoặc tập phim trong workspace').count())
+    throw new Error('Overview displayed an empty state despite a rendered draft');
   projectRows=[
     {project_id:'film:demo:ep01',film_slug:'demo',episode_id:'ep01',state:'PREPARED_NOT_RENDERED'},
     {project_id:'film:demo:ep02',film_slug:'demo',episode_id:'ep02',state:'RENDER_RECEIPT_PRESENT_UNINSPECTED'},
     {project_id:'film:demo:ep03',film_slug:'demo',episode_id:'ep03',state:'INVALID_NEEDS_OWNER_REVIEW'},
   ];
   await page2.setViewportSize({width:390,height:850});
-  await page2.goto(origin+'/dashboard/#/overview',{waitUntil:'networkidle'});
+  await page2.reload({waitUntil:'networkidle'});
   await overview.getByText('Cần Owner xem bản dựng',{exact:true}).waitFor();
   await overview.getByText('Cần kiểm tra hồ sơ tập',{exact:true}).waitFor();
-  if((await overview.locator('.env-stat-value').allTextContents()).join(',')!=='3,1,1')
+  if((await overview.locator('.env-stat-value').allTextContents()).join(',')!=='1,1,1')
     throw new Error('Overview counters do not match project states');
-  const overviewOverflow=await overview.locator('.ant-table-content').evaluate(
-    table=>table.scrollWidth>table.clientWidth+2);
+  const overviewOverflow=await overview.locator('.ant-table-content').evaluateAll(
+    tables=>tables.some(table=>table.scrollWidth>table.clientWidth+2));
   if(overviewOverflow)throw new Error('Overview table overflows on mobile');
   await overview.getByRole('button',{name:'Xem dự án',exact:true}).click();
   await page2.waitForURL('**/#/projects');
@@ -358,12 +364,15 @@ try {
     vram_total_mib:12*1024,vram_free_mib:3*1024,
   }}));
   await settings.goto(policyOrigin+'/dashboard/#/media-studio',{waitUntil:'networkidle'});
-  await settings.getByText('RAM dùng / khả dụng: 24.0 / 8.0 GiB',{exact:true}).waitFor();
-  await settings.getByText('VRAM dùng / khả dụng: 9.0 / 3.0 GiB',{exact:true}).waitFor();
-  await settings.getByText('Chưa có tập phim trong workspace.',{exact:true}).waitFor();
+  await settings.locator('.draft-resource-details summary').click();
+  await settings.getByText('RAM dùng / khả dụng: 24 GB / 8 GB',{exact:true}).waitFor();
+  await settings.getByText('VRAM dùng / khả dụng: 9 GB / 3 GB',{exact:true}).waitFor();
+  if(await settings.locator('.studio-projects').count())
+    throw new Error('Studio displays an empty episode panel');
   await settings.getByText('Tạo video từ ý tưởng',{exact:true}).waitFor();
   await settings.getByText('Chưa có bản nháp',{exact:true}).waitFor();
   let draftFixture=null;
+  let cancelledDraft=null;
   let draftListStatus=404;
   let draftReads=0;
   let holdDraftRead;
@@ -374,7 +383,7 @@ try {
     if(draftListStatus===503)return route.fulfill({status:503,json:{
       error:'draft_storage_unavailable',message:'Fixture SQLite unavailable',
     }});
-    return route.fulfill({json:{drafts:draftFixture?[draftFixture]:[]}});
+    return route.fulfill({json:{drafts:[draftFixture,cancelledDraft].filter(Boolean)}});
   });
   await settings.reload();
   await settings.getByText(/Backend đang chạy chưa hỗ trợ bản nháp/).waitFor();
@@ -393,7 +402,7 @@ try {
       activity:{operation:'plan',provider:'ollama',model:'fixture-planner'}};
     return route.fulfill({json:draftFixture});
   });
-  await settings.getByLabel('Ý tưởng video',{exact:true}).fill('Chú mèo cam khám phá khu rừng');
+  await settings.getByLabel('Nội dung video',{exact:true}).fill('Chú mèo cam khám phá khu rừng');
   await settings.getByRole('button',{name:'Tạo bản nháp',exact:true}).click();
   const draftProgress=settings.getByRole('region',{name:'Tiến độ tạo bản nháp'});
   await draftProgress.getByText('Đang lập kế hoạch',{exact:true}).waitFor();
@@ -422,14 +431,51 @@ try {
   await settings.getByRole('button',{name:'Tiếp tục từ checkpoint'}).click();
   await settings.getByText(/Bản nháp này không còn tồn tại/).waitFor();
   await settings.getByText('Fixture SQLite unavailable',{exact:true}).waitFor();
-  await settings.getByText('Chú mèo cam khám phá khu rừng',{exact:true}).waitFor({state:'hidden'});
+  await settings.getByRole('tab',{name:/^Chú mèo cam khám phá khu rừng/}).waitFor({state:'hidden'});
   const failedReads=draftReads;
   await sleep(2800);
   if(draftReads!==failedReads)throw new Error('Draft list retried automatically after an API failure');
   draftListStatus=200;
-  await settings.getByLabel('Ý tưởng video',{exact:true}).fill('Ý tưởng mới');
+  await settings.getByLabel('Nội dung video',{exact:true}).fill('Ý tưởng mới');
   await settings.getByRole('button',{name:'Tạo bản nháp',exact:true}).click();
   await settings.getByRole('tab',{name:/^Ý tưởng mới/}).waitFor();
+  cancelledDraft={...draftFixture,id:'c'.repeat(32),status:'CANCELLED',worker_active:false,
+    brief:{...draftFixture.brief,idea:'Bản nháp đã hủy'}};
+  draftFixture={...draftFixture,status:'REVIEW',worker_active:false,
+    created_at:'2026-06-20T03:00:00Z',video_sha:'fixture-video'};
+  await settings.locator('.studio-drafts-list').getByRole('button',{name:'Làm mới',exact:false}).click();
+  await settings.getByText('Chờ duyệt',{exact:true}).waitFor();
+  await settings.locator('.draft-row-meta time[datetime="2026-06-20T03:00:00Z"]').waitFor();
+  await settings.getByRole('tab',{name:/^Bản nháp đã hủy/}).waitFor({state:'hidden'});
+  await settings.route('**/api/film/drafts/*/preview*',route=>route.fulfill({status:404}));
+  await settings.getByRole('button',{name:'Xem bản nháp MP4'}).click();
+  const draftPreview=settings.getByRole('dialog',{name:'Xem bản nháp MP4'});
+  await draftPreview.getByRole('button',{name:'Duyệt bản nháp'}).waitFor();
+  await draftPreview.getByText('Không phát được MP4').waitFor();
+  await settings.keyboard.press('Escape');
+  await draftPreview.waitFor({state:'hidden'});
+  await settings.getByRole('tab',{name:'Đã kết thúc',exact:true}).click();
+  await settings.getByRole('tab',{name:/^Bản nháp đã hủy/}).waitFor();
+  const editor=settings.getByLabel('Nội dung video',{exact:true});
+  const longScript='Cảnh 1 — Miu ngắm mưa.\n\n'+'Miu đi chậm về phía cửa sổ. 🐱\n\n'.repeat(520);
+  await editor.fill(longScript);
+  await settings.reload();
+  await editor.waitFor();
+  if(await editor.inputValue()!==longScript||await editor.count()!==1||await settings.getByRole('radio').count())
+    throw new Error('Long Vietnamese script was not restored after refreshing');
+  await settings.getByText('Kịch bản khá dày',{exact:false}).waitFor();
+  await settings.route('**/api/film/drafts/start',route=>{
+    const {id,...brief}=route.request().postDataJSON();
+    if(brief.idea!==longScript||Object.keys(brief).sort().join()!=='idea,ratio,scene_count,seconds')
+      throw new Error('Studio did not submit the single content field unchanged');
+    return route.fulfill({json:{id,brief,status:'QUEUED'}});
+  });
+  const longSubmit=settings.waitForResponse(r=>r.url().endsWith('/api/film/drafts/start'));
+  await settings.getByRole('button',{name:'Tạo bản nháp',exact:true}).click();
+  await longSubmit;
+  await editor.fill('đ'.repeat(20001));
+  if(!await settings.getByRole('button',{name:'Tạo bản nháp',exact:true}).isDisabled())
+    throw new Error('Oversized script could be submitted');
   // Fresh checkout starts with zero registered model profiles.
   await settings.goto(policyOrigin+'/dashboard/#/models',{waitUntil:'networkidle'});
   await settings.getByText('Chưa đăng ký model. Chọn Đăng ký model để bắt đầu.',{exact:true}).waitFor();

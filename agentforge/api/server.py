@@ -96,15 +96,15 @@ class _Handler(BaseHTTPRequestHandler):
         except (ValueError, KeyError, PermissionError, TypeError, FileNotFoundError):
             return self._blocked(404, "not_found")
 
-    def _read_json(self):
+    def _read_json(self, max_body=MAX_BODY):
         if self.headers.get("Content-Type", "").lower() != "application/json":
             raise ValueError("Content-Type must be application/json")
         length_text = self.headers.get("Content-Length", "")
         if not length_text.isdecimal():
             raise ValueError("Content-Length required")
         length = int(length_text)
-        if not 2 <= length <= MAX_BODY:
-            raise ValueError(f"Request must be 2–{MAX_BODY} bytes")
+        if not 2 <= length <= max_body:
+            raise ValueError(f"Request must be 2–{max_body} bytes")
         raw = self.rfile.read(length)
         if len(raw) != length:
             raise ValueError("Incomplete request")
@@ -124,7 +124,7 @@ class _Handler(BaseHTTPRequestHandler):
             return self._blocked(error="invalid_fetch_site")
         path = urlsplit(self.path).path
         try:
-            data = self._read_json()
+            data = self._read_json(256 * 1024 if path == "/api/film/drafts/start" else MAX_BODY)
         except (UnicodeError, json.JSONDecodeError, ValueError):
             return self._blocked(400, "bad_json")
         if path == "/api/login":

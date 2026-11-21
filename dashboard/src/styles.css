@@ -326,8 +326,6 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .studio-start .ant-input{margin-top:10px;resize:none}
 .studio-start-icon{display:grid;place-items:center;width:42px;height:42px;flex-shrink:0;
   border-radius:12px;background:var(--env-hero);color:var(--primary);font-size:19px}
-.studio-stats{grid-template-columns:repeat(3,minmax(0,1fr))}
-.studio-stats .env-stat{min-height:108px}
 .studio-filters{margin-bottom:16px;display:flex;flex-wrap:wrap;gap:6px}
 .studio-filters .ant-radio-button-wrapper{border:1px solid var(--env-border);border-radius:8px}
 .studio-filters .ant-radio-button-wrapper::before{display:none}
@@ -368,9 +366,6 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 @media(width < 680px){
   .studio-start{padding:14px;flex-wrap:wrap;align-items:flex-start;gap:12px}
   .studio-start > .ant-btn{margin-left:54px}
-  .studio-stats{grid-template-columns:1fr;gap:8px}
-  .studio-stats .env-stat{min-height:0;padding:12px 16px}
-  .studio-stats .env-stat-top{margin-bottom:6px}
   .studio-page .env-panel .ant-card-head-wrapper{flex-wrap:wrap;row-gap:8px}
 }
 .model-history{display:flex;justify-content:flex-end}

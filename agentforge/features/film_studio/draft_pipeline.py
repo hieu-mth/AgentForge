@@ -26,6 +26,9 @@ SIZES = {"9:16": (720, 1280), "16:9": (1280, 720)}
 LOCK = threading.Lock()
 ACTIVE = None
 IMG_RETRIES = 3
+BRIEF_LIMIT = 20_000
+SCRIPT_HEADING = re.compile(r"(?im)^[ \t]*(?:cảnh|scene)\s+[0-9]+\b")
+SCRIPT_DIALOGUE = re.compile(r"(?m)^[ \t]*([^\W\d][^:\n]{0,27}):[ \t]*(\S[^\n]*)")
 _QUEUE_STATES = {"QUEUED", "RUNNING", "WAITING_RESOURCES"}
 
 
@@ -298,12 +301,114 @@ def _activity(job, stage, operation, profile=None, **details):
     _save(job)
 
 
+def _needs_scene_analysis(text):
+    return (len(text) > 500 or SCRIPT_HEADING.search(text) is not None
+            or SCRIPT_DIALOGUE.search(text) is not None or "\n\n" in text.strip())
+
+
+def _script_ranges(script, count, seconds):
+    headings = [match.start() for match in SCRIPT_HEADING.finditer(script)]
+    if len(headings) > count:
+        raise ValueError(f"Kịch bản có {len(headings)} cảnh đánh số. Hãy tăng số cảnh hoặc chia thành nhiều bản nháp.")
+    dialogue = sum(len(match[2].split()) for match in SCRIPT_DIALOGUE.finditer(script)
+                   if not SCRIPT_HEADING.match(match[1]))
+    if dialogue > seconds * 3:
+        raise ValueError("Thời lượng có thể không đủ cho các dòng lời thoại. Hãy tăng thời lượng hoặc chia kịch bản.")
+    points = [0, *headings[1:], len(script)]
+    while len(points) <= count:
+        # Preserve explicit scene boundaries and prefer paragraph, then line, then word breaks.
+        candidates = []
+        for start, end in zip(points, points[1:]):
+            section = script[start:end]
+            first = len(section) - len(section.lstrip())
+            last = len(section.rstrip())
+            for separator in (r"\n[ \t]*\n", r"\n", r"\s+"):
+                breaks = [match.end() for match in re.finditer(separator, section)
+                          if match.start() > first and match.end() < last]
+                if breaks:
+                    middle = min(breaks, key=lambda at: abs(at - len(section) / 2))
+                    candidates.append((end-start, start+middle))
+                    break
+        if not candidates:
+            raise ValueError("Kịch bản không có đủ đoạn để chia theo số cảnh đã chọn.")
+        points.append(max(candidates)[1])
+        points.sort()
+    return list(zip(points, points[1:]))
+
+
+def _script_scene(job, profile, comfy, source, continuity, index):
+    _activity(job, "STORYBOARD", "script", profile, scene=index + 1)
+    seconds, extra = divmod(job["brief"]["seconds"], job["brief"]["scene_count"])
+    if len(source) > 1000:
+        facts = []
+        start = 0
+        while start < len(source):
+            end = min(start + 900, len(source))
+            if end < len(source):
+                boundary = max(source.rfind("\n", start + 600, end),
+                               source.rfind(" ", start + 600, end))
+                if boundary != -1:
+                    end = boundary + 1
+            with _measured(job, "storyboard", comfy):
+                output = _ask(profile,
+                              "Extract the essential character names, actions, setting and key dialogue "
+                              "from this consecutive script excerpt. Keep the source language. Do not invent. "
+                              "Return at most 240 characters in facts.",
+                              {"excerpt": source[start:end]}, _object(facts=STRING), comfy)
+            facts.append(_text(output["facts"], 240))
+            start = end
+        if sum(map(len, facts)) > 3200:
+            raise ValueError("Một cảnh có quá nhiều nội dung. Hãy thêm ranh giới cảnh hoặc chia kịch bản.")
+        source = facts
+    with _measured(job, "storyboard", comfy):
+        return _ask(profile,
+                    "Adapt only this scene from the original script or its ordered excerpt notes. "
+                    "Preserve characters, events and their order. Prior continuity is for visual consistency only. "
+                    "Use Vietnamese title and description, and an English image_prompt. Return audio notes; "
+                    "the preview is silent and the original dialogue is stored separately. "
+                    "Use a title up to 100 characters, continuity up to 240, description up to 350, "
+                    "image_prompt up to 600 and audio up to 160.",
+                    {"source": source, "prior_continuity": continuity, "scene": index + 1,
+                     "seconds": seconds + (index < extra)},
+                    _object(title=STRING, continuity=STRING, description=STRING,
+                            image_prompt=STRING, audio=STRING), comfy)
+
+
+def _write_script_board(job, bindings):
+    brief = job["brief"]
+    script = brief["idea"]
+    ranges = _script_ranges(script, brief["scene_count"], brief["seconds"])
+    scenes = []
+    visual_continuity = []
+    title = continuity = ""
+    for index, (start, end) in enumerate(ranges):
+        data = _script_scene(job, bindings["film.storyboard"], bindings["image.generate"],
+                             script[start:end], continuity, index)
+        scene_title = _text(data.pop("title"), 100)
+        title = title or scene_title
+        continuity = _text(data.pop("continuity"), 240)
+        visual_continuity.append(continuity)
+        scenes.append({**data, "character_ids": []})
+    board = _story({"title": title, "continuity": continuity, "scenes": scenes},
+                   brief["scene_count"], brief["seconds"], {})
+    for scene, (start, end), notes in zip(board["scenes"], ranges, visual_continuity):
+        scene["script_range"] = [start, end]
+        scene["continuity"] = notes
+    job.update(board=board, cast={})
+    _save(job)
+
+
 def _write_board(job, bindings):
+    if job["brief"].get("input_type") == "script" or _needs_scene_analysis(job["brief"]["idea"]):
+        return _write_script_board(job, bindings)
     comfy = bindings["image.generate"]
     if not job.get("plan"):
         _activity(job, "PLANNING", "plan", bindings["general.text"])
         with _measured(job, "plan", comfy):
-            output = _ask(bindings["general.text"], "Plan a short coherent video. Return Vietnamese outline.",
+            output = _ask(bindings["general.text"],
+                          "Plan a coherent video and return a Vietnamese outline. Develop a short premise. "
+                          "When the input supplies story details, preserve its events, people and dialogue "
+                          "and fill only missing details.",
                           job["brief"], _object(outline=STRING), comfy)
         job["plan"] = _text(output["outline"], 700)
         _save(job)
@@ -372,7 +477,7 @@ def _image(job, index, scene, revision, profile):
         _save(job)
         cast = job["cast"]
         identity = ". ".join(cast[key]["name"] + ": " + cast[key]["appearance"] for key in scene["character_ids"])
-        prompt = ". ".join((job["board"]["continuity"], identity, scene["image_prompt"]))
+        prompt = ". ".join((scene.get("continuity", job["board"]["continuity"]), identity, scene["image_prompt"]))
         cfg = profile["flux"]
         long = min(768, cfg["max_resolution"] // 16 * 16)
         short = max(256, (long * 9 // 16) // 16 * 16)
@@ -545,7 +650,16 @@ def submit(data):
     count = _number(data["scene_count"], 2, 6)
     if seconds < count * 2 or not isinstance(data["ratio"], str) or data["ratio"] not in SIZES:
         raise ValueError("Choose a supported ratio and at least two seconds per scene")
-    brief = {"idea": _text(data["idea"], 500), "seconds": seconds,
+    idea = data["idea"]
+    if not isinstance(idea, str) or not idea.strip() or len(idea) > BRIEF_LIMIT:
+        raise ValueError(f"Nội dung video phải có từ 1 đến {BRIEF_LIMIT:,} ký tự.")
+    try:
+        idea.encode("utf-8")
+    except UnicodeError:
+        raise ValueError("Nội dung có ký tự Unicode không hợp lệ.") from None
+    if _needs_scene_analysis(idea):
+        _script_ranges(idea, count, seconds)
+    brief = {"idea": idea, "seconds": seconds,
              "scene_count": count, "ratio": data["ratio"]}
     try:
         prior = _read(ident)
@@ -558,8 +672,9 @@ def submit(data):
     ops_control.require_active()
     model_hub.draft_routes()
     render._ffmpeg()
+    created_at = visual_jobs._now()
     job = {"id": ident, "brief": brief, "stage": "QUEUED", "status": "QUEUED",
-           "video_sha": None, "updated_at": visual_jobs._now()}
+           "video_sha": None, "created_at": created_at, "updated_at": created_at}
     with comfy_service.LOCK, _db(True) as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute("SELECT body FROM drafts WHERE id=?", (ident,)).fetchone()

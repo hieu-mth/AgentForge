@@ -2,8 +2,8 @@ import {useState} from 'react';
 import {Alert,Button,Space,Tooltip} from 'antd';
 import {DownloadOutlined} from '@ant-design/icons';
 
-export function StudioPreview({url,filename,label,reviewActions}){
-  const [preview,setPreview]=useState('idle');
+export function StudioPreview({url,filename,label,reviewActions,initiallyOpen=false}){
+  const [preview,setPreview]=useState(initiallyOpen?'open':'idle');
   return <>
     <div className="studio-preview-actions">
       <Space wrap>
