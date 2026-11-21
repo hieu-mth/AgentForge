@@ -56,6 +56,87 @@ class MotionError(ValueError):
     """Invalid or unsupported motion request (no GPU inference started)."""
 
 
+_JOB_COLUMNS = ("job_id, film_slug, shot_id, plan_sha, workflow_sha, prompt_sha, "
+                "seed, provider_id, state, created_at, updated_at")
+_LEDGER_VERSION = 1
+
+
+def _create_jobs(conn, table):
+    conn.execute(f"""CREATE TABLE {table}(
+        job_id TEXT PRIMARY KEY, film_slug TEXT NOT NULL, shot_id TEXT NOT NULL,
+        plan_sha TEXT NOT NULL, workflow_sha TEXT NOT NULL, prompt_sha TEXT NOT NULL,
+        seed INTEGER NOT NULL, provider_id TEXT, state TEXT NOT NULL,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""")
+
+
+def _ledger_counts(conn):
+    return {table: conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in ("motion_jobs", "motion_sources")}
+
+
+def _init_ledger(conn, path):
+    with conn:
+        conn.execute("BEGIN IMMEDIATE")
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        if version == _LEDGER_VERSION:
+            return {"migrated": False}
+        if version != 0:
+            raise MotionError("Unsupported Motion ledger version")
+        existing = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                                "AND name='motion_jobs'").fetchone()
+        if existing:
+            before = _ledger_counts(conn)
+            backup = path.with_name(f"{path.name}.before-attempts-{uuid4().hex}.bak")
+            # The reserved write lock prevents concurrent commits while a second,
+            # read-only connection snapshots the original database, including its WAL.
+            with backup.open("xb"):
+                pass
+            with (closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as source,
+                  closing(sqlite3.connect(backup)) as target):
+                source.backup(target)
+                if (target.execute("PRAGMA integrity_check").fetchone()[0] != "ok"
+                        or _ledger_counts(target) != before):
+                    raise MotionError("Motion ledger backup verification failed")
+            _create_jobs(conn, "motion_jobs_next")
+            conn.execute(f"INSERT INTO motion_jobs_next ({_JOB_COLUMNS}) "
+                         f"SELECT {_JOB_COLUMNS} FROM motion_jobs")
+            conn.execute("DROP TABLE motion_jobs")
+            conn.execute("ALTER TABLE motion_jobs_next RENAME TO motion_jobs")
+            after = _ledger_counts(conn)
+            if after != before:
+                raise MotionError("Motion ledger record counts changed during migration")
+        else:
+            _create_jobs(conn, "motion_jobs")
+            conn.execute("""CREATE TABLE motion_sources(
+                job_id TEXT PRIMARY KEY, model_id TEXT NOT NULL, image_job TEXT NOT NULL,
+                image_sha TEXT NOT NULL)""")
+        conn.execute("CREATE INDEX motion_jobs_shot ON motion_jobs(film_slug, shot_id, plan_sha)")
+        conn.execute("PRAGMA user_version=1")
+        return ({"migrated": True, "backup": str(backup), "before": before, "after": after}
+                if existing else {"migrated": False})
+
+
+def _check_attempt(conn, film_slug, shot_id, plan_sha, confirmed):
+    rows = conn.execute("""SELECT j.state, j.provider_id, s.model_id
+        FROM motion_jobs j LEFT JOIN motion_sources s ON s.job_id=j.job_id
+        WHERE j.film_slug=? AND j.shot_id=? AND j.plan_sha=?""",
+        (film_slug, shot_id, plan_sha)).fetchall()
+    for row in rows:
+        state, provider_id, model_id = row
+        if state == "COMPLETE_UNVERIFIED":
+            raise PermissionError("A completed motion attempt already exists for this shot")
+        # In the legacy and current ledger, only the LTX pre-dispatch error
+        # path sets FAILED without a provider ID. An ambiguous POST remains SUBMITTING.
+        if state == "FAILED" and provider_id is None and model_id == motion_ltx.MODEL_ID:
+            continue
+        if (state in {"FAILED", "FAILED_RESOURCE"} and provider_id is not None
+                and re.fullmatch(r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", provider_id)):
+            continue
+        raise PermissionError("Motion attempt unresolved; reconcile it before starting a new attempt")
+    if rows and confirmed is not True:
+        raise PermissionError("Owner must explicitly confirm a new motion attempt")
+
+
 def _now():
     return datetime.now(timezone.utc).isoformat()
 
@@ -218,22 +299,26 @@ def _db(path: Path, *, write=False):
     conn = sqlite3.connect(path, timeout=15)
     conn.row_factory = sqlite3.Row
     if write:
-        conn.execute("""CREATE TABLE IF NOT EXISTS motion_jobs(
-            job_id TEXT PRIMARY KEY, film_slug TEXT NOT NULL, shot_id TEXT NOT NULL,
-            plan_sha TEXT NOT NULL, workflow_sha TEXT NOT NULL, prompt_sha TEXT NOT NULL,
-            seed INTEGER NOT NULL, provider_id TEXT, state TEXT NOT NULL,
-            created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-            UNIQUE(film_slug, shot_id, plan_sha))""")
-        conn.execute("""CREATE TABLE IF NOT EXISTS motion_sources(
-            job_id TEXT PRIMARY KEY, model_id TEXT NOT NULL, image_job TEXT NOT NULL,
-            image_sha TEXT NOT NULL)""")
-        conn.commit()
+        try:
+            _init_ledger(conn, path)
+        except Exception:
+            conn.close()
+            raise
     return conn
+
+
+def migrate_ledger(path=DB):
+    conn = _db(path)
+    if conn is None:
+        raise MotionError("Motion ledger does not exist")
+    with closing(conn):
+        return _init_ledger(conn, Path(path))
 
 
 def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
                 workflow_sha, seed, confirmed=False,
                 image_job=None, image_sha=None, ltx_encoder=None, confirm_ltx_gate_b=False,
+                confirm_new_attempt=False,
                 film_root: Path = FILMS, db_path: Path = DB):
     """One-shot owner dispatch, checkpointed BEFORE any GPU/HTTP work.
 
@@ -265,6 +350,8 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
                    or not isinstance(image_sha, str) or not SHA.fullmatch(image_sha) or ltx_encoder is None):
         raise PermissionError("LTX requires Gate B confirmation, a reviewed FLUX image ID/SHA and encoder path")
     with model_hub.local_inference_slot():
+        with closing(_db(db_path, write=True)) as conn:
+            _check_attempt(conn, film_slug, shot_id, plan_sha, confirm_new_attempt)
         operation = "ltx" if is_ltx else "motion"
         draft_resources.require_gpu(operation)
         if is_ltx:
@@ -292,6 +379,7 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
         now = _now()
         with closing(_db(db_path, write=True)) as conn, conn:
             conn.execute("BEGIN IMMEDIATE")
+            _check_attempt(conn, film_slug, shot_id, plan_sha, confirm_new_attempt)
             active = conn.execute("SELECT COUNT(*) FROM motion_jobs WHERE state IN "
                                   "('SUBMITTING','SUBMITTED')").fetchone()[0]
             if active >= MAX_ACTIVE_JOBS:
@@ -429,6 +517,7 @@ def main(argv=None):
     inspect.add_argument("--workflow", type=Path, required=True)
     choices.add_parser("ltx-workflow")
     choices.add_parser("ltx-readiness")
+    choices.add_parser("migrate-ledger")
     submit = choices.add_parser("submit")
     for name in ("film-slug", "shot-id", "plan-sha", "workflow-sha"):
         submit.add_argument("--" + name, required=True)
@@ -438,6 +527,7 @@ def main(argv=None):
     submit.add_argument("--seed", type=int, required=True)
     submit.add_argument("--confirm-gpu-run", action="store_true")
     submit.add_argument("--confirm-ltx-gate-b", action="store_true")
+    submit.add_argument("--confirm-new-attempt", action="store_true")
     submit.add_argument("--image-job")
     submit.add_argument("--image-sha")
     submit.add_argument("--ltx-encoder", type=Path)
@@ -458,6 +548,8 @@ def main(argv=None):
         result = health()
     elif args.action == "ltx-workflow":
         result = motion_ltx.workflow()
+    elif args.action == "migrate-ledger":
+        result = migrate_ledger()
     elif args.action == "ltx-readiness":
         result = {"nodes": motion_ltx.check_runtime(PORT), "inference_verified": False,
                   "model_weights_verified": False}
@@ -487,7 +579,8 @@ def main(argv=None):
             prompt=args.prompt_file.read_text(encoding="utf-8"),
             seed=args.seed, confirmed=args.confirm_gpu_run, image_job=args.image_job,
             image_sha=args.image_sha, ltx_encoder=args.ltx_encoder,
-            confirm_ltx_gate_b=args.confirm_ltx_gate_b)
+            confirm_ltx_gate_b=args.confirm_ltx_gate_b,
+            confirm_new_attempt=args.confirm_new_attempt)
     print(json.dumps(result, ensure_ascii=True, indent=2))
 
 
