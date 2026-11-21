@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 
 from agentforge import ops_control
 from agentforge.ai import model_hub
+from agentforge.features.film_studio import draft_resources
 from agentforge.features.media import flux_workflow, visual_jobs
 from agentforge.integrations import comfy_service, comfyui
 from agentforge.paths import WORKSPACE_DIR, ensure_local_root
@@ -68,7 +69,7 @@ def _output(history, ident, output_node):
            for row in messages):
         raise JobError("CANCELLED")
     if status.get("status_str") != "success" or status.get("completed") is not True:
-        raise JobError("EXECUTION_FAILED")
+        raise JobError("GPU_RESOURCE_FAILURE" if draft_resources.provider_memory_error(status) else "EXECUTION_FAILED")
     images = history.get("outputs", {}).get(output_node, {}).get("images", [])
     if not isinstance(images, list) or len(images) != 1 or not isinstance(images[0], dict):
         raise JobError("OUTPUT_MISSING")
@@ -144,6 +145,7 @@ def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=No
         import PIL.Image  # Require the decoder before submitting GPU work.
     except ImportError:
         raise ValueError("FLUX image verification requires the AgentForge media extra") from None
+    draft_resources.require_gpu("image")
     ready = readiness(config, port)
     if ready == "COMFYUI_UNAVAILABLE":
         try:
@@ -155,6 +157,7 @@ def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=No
         ready = readiness(config, port)
     if ready != "READY":
         raise comfy_service.StartupError(ready)
+    comfy_service.require_other_queue_idle(port)
     metadata = {
         "prompt": prompt.strip(), "seed": seed, "width": width, "height": height,
         "steps": steps, "scene": scene, "model": profile["model"], "profile_id": profile["id"],
@@ -173,13 +176,10 @@ def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=No
             raise PermissionError("An AgentForge visual job is already outstanding")
         try:
             queue = _json("/queue", port=port)
-            active, pending = queue["queue_running"], queue["queue_pending"]
-            if not isinstance(active, list) or not isinstance(pending, list):
-                raise ValueError("Invalid ComfyUI queue")
-        except (OSError, RuntimeError, ValueError, KeyError, TypeError):
-            raise ValueError("COMFYUI_QUEUE_UNAVAILABLE") from None
-        if active or pending:
-            raise PermissionError("ComfyUI GPU queue is busy")
+        except (OSError, RuntimeError, ValueError, http.client.HTTPException):
+            raise draft_resources.ResourceBlocked("COMFYUI_QUEUE_UNAVAILABLE") from None
+        comfy_service.validate_idle_queue(queue)
+        draft_resources.require_gpu("image")
         ensure_local_root(directory).mkdir(parents=True, exist_ok=True)
         now = visual_jobs._now()
         db.execute("INSERT INTO visual_jobs VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", (

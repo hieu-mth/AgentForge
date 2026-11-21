@@ -1,5 +1,6 @@
 import os
 import subprocess
+import sys
 import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -12,8 +13,50 @@ from unittest.mock import patch
 from agentforge import ops_control
 from agentforge.ai import model_hub
 from agentforge.features.film_studio import draft_pipeline
+from agentforge.features.film_studio import draft_resources
 from agentforge.features.media import visual_jobs
 from agentforge.integrations import comfy_service as service
+
+
+class GPUAdmissionTests(unittest.TestCase):
+    def test_os_releases_orphaned_lock_file_and_blocks_other_process(self):
+        path = Path(self.enterContext(TemporaryDirectory())) / "gpu.worker"
+        child = "from agentforge.ai.model_hub import local_process_slot\n"
+        child += "import os,sys\nfrom pathlib import Path\n"
+        child += "try:\n with local_process_slot(Path(sys.argv[1]), 'busy'): os._exit(0)\n"
+        child += "except PermissionError: sys.exit(9)\n"
+        with model_hub.local_process_slot(path, "busy"):
+            self.assertEqual(subprocess.run([sys.executable, "-c", child, str(path)], timeout=10).returncode, 9)
+        self.assertEqual(subprocess.run([sys.executable, "-c", child, str(path)], timeout=10).returncode, 0)
+        self.assertTrue(path.exists())
+        with model_hub.local_process_slot(path, "busy"):
+            pass
+
+    def test_missing_measurements_and_threshold_override(self):
+        env = {"AGENTFORGE_IMAGE_MIN_COMMIT_MIB": "10000"}
+        sample = {"ram_available": 8 << 30, "commit_used": 15 << 30,
+                  "commit_limit": 24 << 30, "vram_free_mib": 9000}
+        with patch.object(draft_resources, "os", SimpleNamespace(name="nt", environ=env)):
+            with self.assertRaisesRegex(draft_resources.ResourceBlocked, "COMMIT_LOW"):
+                draft_resources.require_gpu("image", sample)
+            with self.assertRaisesRegex(draft_resources.ResourceBlocked, "VRAM_UNAVAILABLE"):
+                draft_resources.require_gpu("image", {**sample, "commit_used": 0, "vram_free_mib": None})
+            draft_resources.require_gpu("image", {**sample, "commit_used": 0})
+
+    def test_queue_busy_invalid_and_idle(self):
+        for state, reason in (({"queue_running": [1], "queue_pending": []}, "COMFYUI_QUEUE_BUSY"),
+                              ({"queue_running": []}, "COMFYUI_QUEUE_UNAVAILABLE")):
+            with self.subTest(state=state), self.assertRaisesRegex(draft_resources.ResourceBlocked, reason):
+                service.validate_idle_queue(state)
+        service.validate_idle_queue({"queue_running": [], "queue_pending": []})
+
+    def test_alternate_endpoints_share_admission(self):
+        with (patch.object(service, "_settings", return_value={"port": 8192}),
+              patch.object(service, "require_idle_queue", side_effect=draft_resources.ResourceBlocked(
+                  "COMFYUI_QUEUE_BUSY")) as queue):
+            with self.assertRaisesRegex(draft_resources.ResourceBlocked, "COMFYUI_QUEUE_BUSY"):
+                service.require_other_queue_idle(8192)
+            queue.assert_called_once_with(8188, allow_offline=True)
 
 
 class ComfyServiceTests(unittest.TestCase):

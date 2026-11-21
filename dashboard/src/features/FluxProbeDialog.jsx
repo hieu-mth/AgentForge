@@ -7,6 +7,8 @@ export const fluxStatus={
   MODEL_UNAVAILABLE:'Thiếu model trong ComfyUI',WORKFLOW_NODE_UNAVAILABLE:'ComfyUI thiếu node của workflow',
   COMFYUI_UNAVAILABLE:'Không kết nối được ComfyUI',COMFYUI_TIMEOUT:'ComfyUI phản hồi quá chậm',
   COMFYUI_QUEUE_UNAVAILABLE:'Không kiểm tra được hàng đợi ComfyUI',
+  COMFYUI_QUEUE_BUSY:'ComfyUI còn tác vụ trong hàng đợi',
+  GPU_RESOURCE_FAILURE:'ComfyUI báo lỗi bộ nhớ. Kiểm tra tài nguyên trước khi thử lại.',
   COMFYUI_HTTP_ERROR:'ComfyUI trả lỗi HTTP',COMFYUI_INVALID_RESPONSE:'Phản hồi ComfyUI không hợp lệ',
   AUTH_REQUIRED:'ComfyUI yêu cầu xác thực',WORKFLOW_REJECTED:'ComfyUI từ chối workflow',
   EXECUTION_FAILED:'ComfyUI báo lỗi khi tạo ảnh',CANCELLED:'Tác vụ đã bị hủy tại ComfyUI',

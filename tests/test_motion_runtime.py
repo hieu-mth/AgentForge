@@ -24,6 +24,9 @@ TEST_MP4 = b"\x00\x00\x00\x18ftypisom" + b"local-test-video" * 200
 
 class MotionRuntimeTests(unittest.TestCase):
     def setUp(self):
+        self.enterContext(patch.object(motion, "BLOCKED_MODELS", frozenset()))
+        self.enterContext(patch.object(motion.draft_resources, "require_gpu"))
+        self.enterContext(patch.object(motion.comfy_service, "require_idle_queue"))
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)

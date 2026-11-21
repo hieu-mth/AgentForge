@@ -68,13 +68,16 @@ def _measured(job, operation, comfy_profile=None):
     job["resources"] = (job.get("resources", []) + [point])[-24:]
     _save(job)
     try:
-        reason = draft_resources.pressure(before, operation)
+        admission_sample = before
+        reason = draft_resources.pressure(admission_sample, operation)
         if reason == "VRAM_LOW" and comfy_profile and comfy_profile.get("base_url"):
             if _release_idle_comfy(comfy_profile):
-                point["after_release"] = draft_resources.snapshot()
-                reason = draft_resources.pressure(point["after_release"], operation)
+                admission_sample = point["after_release"] = draft_resources.snapshot()
+                reason = draft_resources.pressure(admission_sample, operation)
         if reason:
             raise ResourceWait(reason)
+        if operation in {"plan", "cast", "storyboard"}:
+            draft_resources.require_gpu("image", admission_sample)
         yield
     finally:
         point["after"] = draft_resources.snapshot()
@@ -188,25 +191,8 @@ def _worker_slot():
     if not LOCK.acquire(blocking=False):
         raise PermissionError("A draft production is already running")
     try:
-        parent = ensure_local_root(DB.parent)
-        parent.mkdir(parents=True, exist_ok=True)
-        path = ensure_local_root(parent / "video_drafts.worker")
-        with path.open("a+b") as stream:
-            if not stream.tell():
-                stream.write(b"0")
-                stream.flush()
-            stream.seek(0)
-            try:
-                import msvcrt
-            except ImportError:
-                import fcntl
-                lock = lambda: fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            else:
-                lock = lambda: msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
-            try:
-                lock()
-            except OSError:
-                raise PermissionError("A draft production is already running") from None
+        with model_hub.local_process_slot(DB.parent / "video_drafts.worker",
+                                          "A draft production is already running"):
             yield
     finally:
         LOCK.release()
@@ -249,15 +235,10 @@ def _ask(profile, instructions, data, schema, comfy_profile):
     try:
         message = runtime._http_json(host, port, "/api/chat", timeout=150, max_request_bytes=16384, payload=payload)
     except runtime.LocalProviderHTTPError as exc:
-        if exc.status != 500:
-            raise ValueError(f"Ollama rejected the request (HTTP {exc.status}): {profile['id']}") from None
-        # A prior FLUX call can leave weights resident even when its queue is idle.
-        if not _release_idle_comfy(comfy_profile):
-            payload["options"]["num_gpu"] = 0
-        try:
-            message = runtime._http_json(host, port, "/api/chat", timeout=150, max_request_bytes=16384, payload=payload)
-        except runtime.LocalProviderHTTPError as retry:
-            raise ValueError(f"Ollama failed after one resource retry (HTTP {retry.status}): {profile['id']}") from None
+        # Ollama's transport does not distinguish OOM from other server-side failures.
+        if exc.status == 500:
+            raise ResourceWait("OLLAMA_RESOURCE_OR_SERVER_ERROR") from None
+        raise ValueError(f"Ollama rejected the request (HTTP {exc.status}): {profile['id']}") from None
     if message.get("done") is not True or message.get("done_reason") == "length":
         raise ValueError("Ollama did not complete the structured response")
     return json.loads(message["message"]["content"])
@@ -486,10 +467,12 @@ def _image(job, index, scene, revision, profile):
             output = flux_runtime.generate(prompt, width=width, height=height, automated=True,
                                            scene=f"{job['id']}/episode-01/scene-{index+1:02d}",
                                            production_job=scene["job_id"], production_revision=revision)
-        except comfy_service.StartupError:
+        except (comfy_service.StartupError, draft_resources.ResourceBlocked):
             scene["job_id"] = previous_job
             scene["attempts"] -= 1
             raise
+        if output["status"] == "GPU_RESOURCE_FAILURE":
+            raise ResourceWait("GPU_RESOURCE_FAILURE")
         if output["status"] != "ASSET_READY":
             raise ValueError("ComfyUI scene result: " + output["status"])
     temporary = ensure_local_root(path.with_name(uuid4().hex + ".tmp"))
@@ -560,6 +543,12 @@ def _work(job, slot):
         with model_hub.local_inference_slot():
             revision, bindings = model_hub.draft_routes()
             image_profile = bindings["image.generate"]
+            board = job.get("board")
+            needs_gpu = not board or any(not scene["asset"] for scene in board["scenes"])
+            if needs_gpu and image_profile.get("base_url"):
+                port = urlsplit(image_profile["base_url"]).port
+                comfy_service.require_other_queue_idle(port)
+                comfy_service.require_idle_queue(port, allow_offline=True)
             folder = _folder(job["id"])
             folder.mkdir(parents=True, exist_ok=True)
             if not job.get("board"):
@@ -578,7 +567,7 @@ def _work(job, slot):
             with _measured(job, "render"):
                 job["video_sha"] = _render(job)
             job["status"] = "REVIEW"
-    except (ResourceWait, comfy_service.StartupPressure) as exc:
+    except (ResourceWait, comfy_service.StartupPressure, draft_resources.ResourceBlocked) as exc:
         job.update(status="WAITING_RESOURCES", error=str(exc))
     except DraftCancelled:
         job.update(status="CANCELLED", error=None, video_sha=None)
@@ -591,8 +580,12 @@ def _work(job, slot):
         job.update(status="FAILED", error="Local runtime failed at " + job["stage"] + "; check Ollama, ComfyUI or FFmpeg before resuming.")
     finally:
         try:
-            if used_flux and image_profile.get("base_url"):
-                _release_idle_comfy(image_profile)
+            if used_flux and job.get("status") != "WAITING_RESOURCES" and image_profile.get("base_url"):
+                try:
+                    with model_hub.local_inference_slot():
+                        _release_idle_comfy(image_profile)
+                except OSError:
+                    pass
             job.pop("activity", None)
             _save(job)
         finally:

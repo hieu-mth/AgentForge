@@ -46,6 +46,9 @@ def sample_plan(seconds=4):
 
 class MotionAdapterTests(unittest.TestCase):
     def setUp(self):
+        self.enterContext(patch.object(motion, "BLOCKED_MODELS", frozenset()))
+        self.enterContext(patch.object(motion.draft_resources, "require_gpu"))
+        self.enterContext(patch.object(motion.comfy_service, "require_idle_queue"))
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
@@ -121,6 +124,12 @@ class MotionAdapterTests(unittest.TestCase):
         self.assertTrue(graph["10"]["inputs"]["filename_prefix"].startswith("af_motion_"))
         with self.assertRaises(PermissionError):
             self.submit()
+
+    def test_fp16_is_blocked_before_provider_submission(self):
+        with (patch.object(motion, "BLOCKED_MODELS", {motion.PILOT_MODEL_ID}),
+              self.assertRaisesRegex(motion.MotionError, "WAN_FP16_BLOCKED")):
+            self.submit()
+        self.assertFalse(self.db.exists())
 
     def test_uncertain_http_failure_keeps_submitting_checkpoint_and_no_retry(self):
         with patch.object(motion.ops_control, "require_active"), \

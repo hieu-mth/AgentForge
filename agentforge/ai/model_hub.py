@@ -54,8 +54,32 @@ def local_inference_busy():
 
 
 @contextmanager
+def local_process_slot(path, reason):
+    """OS-backed reservation releases when the handle closes, including after a crash."""
+    path = ensure_local_root(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+b") as stream:
+        if not stream.tell():
+            stream.write(b"0")
+            stream.flush()
+        stream.seek(0)
+        try:
+            import msvcrt
+        except ImportError:
+            import fcntl
+            lock = lambda: fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        else:
+            lock = lambda: msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+        try:
+            lock()
+        except OSError:
+            raise PermissionError(reason) from None
+        yield
+
+
+@contextmanager
 def local_inference_slot(*, observe=True):
-    """Serialize interactive local inference in the dashboard API process."""
+    """Serialize inference across AgentForge processes using the same workspace."""
     global last_local_inference
     with _LOCAL_ADMISSION:
         if not _LOCAL_INFERENCE.acquire(blocking=False):
@@ -63,12 +87,14 @@ def local_inference_slot(*, observe=True):
         if not observe:
             # New GPU requests wait for the final idle transition, then can auto-start.
             try:
-                yield
+                with local_process_slot(DB_PATH.parent / "local_inference.worker", "LOCAL_INFERENCE_BUSY"):
+                    yield
             finally:
                 _LOCAL_INFERENCE.release()
             return
     try:
-        yield
+        with local_process_slot(DB_PATH.parent / "local_inference.worker", "LOCAL_INFERENCE_BUSY"):
+            yield
     finally:
         last_local_inference = monotonic()
         _LOCAL_INFERENCE.release()

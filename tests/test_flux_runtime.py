@@ -35,6 +35,10 @@ def profile():
 
 
 class FluxRuntimeTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(patch.object(flux_runtime.draft_resources, "require_gpu"))
+        self.enterContext(patch.object(flux_runtime.comfy_service, "_settings", return_value=None))
+
     def test_workflow_limit_counts_utf8_bytes(self):
         row = profile()
         graph = row["flux"]["workflow"]
@@ -164,6 +168,13 @@ class FluxRuntimeTests(unittest.TestCase):
               patch.object(flux_runtime.comfy_service, "managed_exited", return_value=True)):
             with self.assertRaisesRegex(flux_runtime.JobError, "COMFYUI_STOPPED"):
                 flux_runtime._collect("provider-id", "a" * 32, 8188, profile()["flux"], {})
+
+    def test_provider_host_buffer_error_has_resource_status(self):
+        status = {"status_str": "error", "messages": [
+            ["execution_error", {"exception_message": "HostBuffer.read_file_slice failed"}],
+        ]}
+        with self.assertRaisesRegex(flux_runtime.JobError, "GPU_RESOURCE_FAILURE"):
+            flux_runtime._output({"status": status}, "a" * 32, "9")
 
     def test_owner_policy_and_concurrent_gpu_admission(self):
         try:
