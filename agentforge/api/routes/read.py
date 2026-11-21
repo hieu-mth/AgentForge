@@ -43,6 +43,22 @@ def dispatch(self, route):
                                headers=(("Content-Disposition", 'attachment; filename="captions.srt"'),))
         if parts[5].startswith("scene-") and parts[5][6:].isascii() and parts[5][6:].isdecimal():
             return self._reply(200, draft_pipeline.image(job, int(parts[5][6:])), mime="image/png")
+        if parts[5].startswith("motion-") and parts[5][7:].isascii() and parts[5][7:].isdecimal():
+            from agentforge.features.film_studio import draft_motion, motion_comfy, motion_verify
+            scenes = job.get("board", {}).get("scenes", [])
+            index = draft_pipeline._number(int(parts[5][7:]), 0, len(scenes)-1)
+            scene = scenes[index]
+            if not scene.get("motion_sha"):
+                return self._blocked(404, "film_preview_unavailable")
+
+            def verify_motion(stream):
+                receipt = motion_verify.inspect_receipt(scene["motion_job"], film_root=motion_comfy.FILMS,
+                                                       db_path=motion_comfy.DB, video_stream=stream)
+                if receipt["clip_sha256"] != scene["motion_sha"]:
+                    raise ValueError("Motion clip hash mismatch")
+
+            path = draft_motion.clip_path(scene)
+            return _serve(self, path, motion_verify.MAX_MP4_BYTES, "motion.mp4", verify_motion)
         raise ValueError("Invalid draft asset route")
     if route == "/api/characters":
         from agentforge.features.film_studio.characters import list_characters

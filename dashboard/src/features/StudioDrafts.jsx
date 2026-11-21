@@ -148,6 +148,7 @@ export function StudioDrafts({mutate,onCharacters}) {
   const busy=useRef(false);
   const request=useRef(null);
   const [pending,setPending]=useState(false);
+  const [scenePreview,setScenePreview]=useState(null);
   const [starting,setStarting]=useState(false);
   const [error,setError]=useState(null);
   const [editor,setEditor]=useState(null);
@@ -315,6 +316,13 @@ export function StudioDrafts({mutate,onCharacters}) {
             job.board.scenes.length<Math.min(6,Math.floor(job.brief.seconds/2)))&&
             <Button disabled={pending||running} onClick={()=>setEditor({job,adding:true,index:job.board.scenes.length,scene:{}})}>Thêm cảnh</Button>}
         </Space>}
+        {!!job.storyboard_history?.length&&<details>
+          <summary>Lịch sử storyboard</summary>
+          <ul>{job.storyboard_history.map(entry=><li key={entry.sha256}>
+            Phiên bản {entry.storyboard.version} · {entry.storyboard.scenes.length} cảnh
+            {entry.video_sha?' · Có MP4 đã lưu':''}
+          </li>)}</ul>
+        </details>}
         {job.board&&<ul className="studio-shot-list">{job.board.scenes.map((scene,index)=><li key={scene.shot_id??index}>
           <strong>Cảnh {index+1} · {Number(scene.seconds.toFixed(2)).toLocaleString('vi-VN')} giây</strong>
           <p>{scene.description}</p>
@@ -336,6 +344,8 @@ export function StudioDrafts({mutate,onCharacters}) {
           {job.storyboard_version||job.brief.mode==='motion'?<div>
             {scene.asset&&<Tag>Đã tạo ảnh</Tag>}
             {scene.motion_sha&&<Tag color="green">Đã xác minh clip chuyển động</Tag>}
+            {scene.motion_sha&&<Button size="small"
+              onClick={()=>setScenePreview({id:job.id,index,sha:scene.motion_sha})}>Xem chuyển động</Button>}
             {job.storyboard_version&&['STORYBOARD_REVIEW','FAILED','REVIEW','APPROVED','REJECTED'].includes(job.status)&&
               <Space size="small" wrap>
                 <Button size="small" disabled={pending||running} onClick={()=>setEditor({job,index,scene})}>Sửa cảnh</Button>
@@ -352,6 +362,11 @@ export function StudioDrafts({mutate,onCharacters}) {
       </>,
     }))}/>}
     </Card>
+    {scenePreview&&<Modal open title={'Chuyển động cảnh '+(scenePreview.index+1)} footer={null}
+      onCancel={()=>setScenePreview(null)}>
+      <StudioPreview key={scenePreview.sha} initiallyOpen label="Xem clip chuyển động" filename="motion.mp4"
+        url={API+'/'+scenePreview.id+'/motion-'+scenePreview.index+'?v='+scenePreview.sha}/>
+    </Modal>}
     {preview&&<Modal open title={preview.board?.title||'Xem bản nháp MP4'} footer={null}
       onCancel={()=>setPreviewId(null)}>
       <StudioPreview key={preview.video_sha} url={API+'/'+preview.id+'/preview?v='+preview.video_sha}

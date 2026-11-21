@@ -198,6 +198,7 @@ class DraftTests(unittest.TestCase):
             self.assertTrue(job["video_sha"])
             self.assertTrue(all(scene.get("motion_sha") for scene in job["board"]["scenes"]))
             self.assertEqual(calls, ["image", "image", "motion", "motion", "render"])
+            self.assertEqual(client.req("GET", f"/api/film/drafts/{self.ident}/motion-0")[0], 200)
             self.assertTrue(draft.video_path(job).with_suffix(".receipt.json").is_file())
             before = job["board"]["scenes"][1]["motion_sha"]
             edit = approval.replace("storyboard-approve", "storyboard-edit")
