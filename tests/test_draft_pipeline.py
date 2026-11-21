@@ -288,6 +288,33 @@ class DraftTests(unittest.TestCase):
             importer.assert_called_once()
         self.assertFalse(list(self.root.glob("motion-output-*")))
 
+    def test_motion_cancel_targets_provider_and_disconnection_can_resume_existing_job(self):
+        runner = draft.draft_motion
+        provider = str(uuid4())
+        scene = {"motion_job": "b"*32}
+        prepared = ("film", "plan", self.root/"graph.json", "sha")
+        queue = ('{"queue_pending":[],"queue_running":[[0,"' + provider + '"]]}').encode()
+        with (patch.object(runner.motion_verify, "_job", return_value={"provider_id": provider}),
+              patch.object(runner.motion_comfy, "job_status") as status,
+              patch.object(runner.motion_comfy, "submit_shot") as submit,
+              patch.object(runner.motion_verify, "inspect_receipt", return_value={"clip_sha256": "verified"}),
+              patch.object(runner.comfy_service.comfyui, "request_image_bytes", return_value=queue),
+              patch.object(runner.http.client, "HTTPConnection") as transport,
+              patch.object(runner.time, "sleep")):
+            transport.return_value.getresponse.return_value.status = 200
+            status.side_effect = [{"status": "PROVIDER_QUEUED_OR_UNKNOWN"}, TimeoutError()]
+            with self.assertRaises(runner.NeedsReconciliation):
+                runner.run_shot(scene, 0, prepared, {}, lambda: None, lambda: True)
+            request = transport.return_value.request.call_args
+            self.assertEqual(request.args, ("POST", "/interrupt"))
+            self.assertIn(provider, request.kwargs["body"])
+            self.assertEqual(scene, {"motion_job": "b"*32})
+            status.side_effect = None
+            status.return_value = {"status": runner.motion_verify.TECHNICAL}
+            runner.run_shot(scene, 0, prepared, {}, lambda: None, lambda: False)
+            self.assertEqual(scene["motion_sha"], "verified")
+            submit.assert_not_called()
+
     def test_storyboard_rejects_unknown_cast_and_distributes_exact_duration(self):
         with self.assertRaisesRegex(ValueError, "unknown character"):
             draft._story(self.board(), 2, 7, {})

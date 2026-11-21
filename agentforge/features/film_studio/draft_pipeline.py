@@ -938,6 +938,11 @@ def act(ident, action, data):
             return job
         if action != "resume" or job["status"] not in {"RUNNING", "FAILED", "WAITING_RESOURCES", "NEEDS_RECONCILIATION"}:
             raise ValueError("Draft cannot be resumed")
+        if job["status"] == "NEEDS_RECONCILIATION" and _cancellation(ident):
+            if draft_motion.reconcile_cancelled(job):
+                job.update(status="CANCELLED", error=None, video_sha=None)
+                _save(job)
+            return job
         with _db() as conn:
             if conn.execute("SELECT 1 FROM drafts WHERE id<>? AND json_extract(body,'$.status')="
                             "'WAITING_RESOURCES' LIMIT 1", (ident,)).fetchone():

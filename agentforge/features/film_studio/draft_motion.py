@@ -78,6 +78,20 @@ def require_resolved_ledger(job):
                 raise draft_resources.ResourceBlocked("MOTION_RECONCILIATION_REQUIRED")
 
 
+def reconcile_cancelled(job):
+    terminal = {"COMFY_COMPLETE_NOT_IMPORTED_OR_VERIFIED", motion_verify.TECHNICAL,
+                "PROVIDER_FAILED", "GPU_RESOURCE_FAILURE"}
+    for scene in job["board"]["scenes"]:
+        if scene.get("motion_job"):
+            try:
+                status = motion_comfy.job_status(scene["motion_job"], db_path=motion_comfy.DB)["status"]
+            except (OSError, RuntimeError, ValueError, http.client.HTTPException):
+                return False
+            if status not in terminal:
+                return False
+    return True
+
+
 def _provider(job_id, cancelled):
     row = motion_verify._job(job_id, motion_comfy.DB)
     if not row["provider_id"]:
