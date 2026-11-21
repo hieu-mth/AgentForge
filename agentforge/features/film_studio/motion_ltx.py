@@ -136,8 +136,14 @@ def upload_source(port, job_id, data):
         raw = response.read(4097)
         if len(raw) > 4096:
             raise ValueError("Invalid ComfyUI upload response")
-        saved = json.loads(raw)
-        if saved != {"name": name, "subfolder": "", "type": "input"}:
+        try:
+            saved = json.loads(raw)
+        except (ValueError, RecursionError):
+            raise ValueError("Invalid ComfyUI upload response") from None
+        if not isinstance(saved, dict) or ("asset" in saved and not isinstance(saved["asset"], dict)):
+            raise ValueError("Invalid ComfyUI upload response")
+        # ComfyUI may include asset metadata. Only the upload identity binds the graph.
+        if saved.get("name") != name or saved.get("subfolder") != "" or saved.get("type") != "input":
             raise ValueError("ComfyUI returned an unexpected input filename")
     finally:
         with_connection.close()
