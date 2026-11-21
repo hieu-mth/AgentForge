@@ -1,25 +1,40 @@
 """Finite Studio motion budgets and versioned storyboard contracts."""
 import hashlib
 import json
+import math
 
 FPS = 24
-MOTION_PRESETS = {4: (2, 2), 6: (3, 3), 15: (8, 9)}
+LTX_CLIP_FRAMES = 49
+MOTION_PRODUCTION_SHOT_BUDGET = 16
+MOTION_PRESETS = {4: (2, 2), 6: (3, 3), 15: (8, 9),
+                  30: (math.ceil(30 * FPS / LTX_CLIP_FRAMES), MOTION_PRODUCTION_SHOT_BUDGET)}
 MAX_VERSIONS = 12
 STORY_FIELDS = ("description", "image_prompt", "motion_prompt", "character_ids",
-                "audio", "continuity", "script_range", "shot_id", "frames", "caption", "scene_notes")
+                "audio", "continuity", "script_range", "shot_id", "frames", "caption", "scene_notes", "duration_weight")
 
 
 def shot_limits(seconds):
     if seconds not in MOTION_PRESETS:
-        raise ValueError("Phim chuyển động hỗ trợ 4, 6 hoặc 15 giây.")
+        raise ValueError("Phim chuyển động hỗ trợ 4, 6, 15 hoặc 30 giây.")
     return MOTION_PRESETS[seconds]
 
 
-def timeline(seconds, count):
+def timeline(seconds, count, weights=None):
     minimum, maximum = shot_limits(seconds)
     if not minimum <= count <= maximum:
         raise ValueError("Số cảnh vượt ngân sách của preset thời lượng.")
-    frames, extra = divmod(seconds * FPS, count)
+    total = seconds * FPS
+    if seconds == 30 and weights is not None:
+        if len(weights) != count or any(type(weight) is not int or not 1 <= weight <= 3 for weight in weights):
+            raise ValueError("Trọng số thời lượng cảnh phải nằm trong khoảng 1–3.")
+        floor = 40
+        frames = [floor] * count
+        for _ in range(total - floor * count):
+            index = min((i for i in range(count) if frames[i] < LTX_CLIP_FRAMES),
+                        key=lambda i: ((frames[i] - floor + 1) / weights[i], i))
+            frames[index] += 1
+        return frames
+    frames, extra = divmod(total, count)
     return [frames + (index < extra) for index in range(count)]
 
 

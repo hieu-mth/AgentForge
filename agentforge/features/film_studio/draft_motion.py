@@ -12,11 +12,11 @@ from urllib.parse import urlencode, urlsplit
 from uuid import UUID
 
 from agentforge.ai import model_hub
-from agentforge.features.film_studio import draft_resources, long_form, motion_comfy, motion_ltx, motion_verify
+from agentforge.features.film_studio import draft_resources, draft_timeline, long_form, motion_comfy, motion_ltx, motion_verify
 from agentforge.integrations import comfy_service
 from agentforge.paths import ensure_local_root
 
-FRAMES = 49
+FRAMES = draft_timeline.LTX_CLIP_FRAMES
 MAX_SHOTS = 3
 SECONDS_PER_SHOT = 2
 
