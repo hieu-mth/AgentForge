@@ -266,7 +266,8 @@ def _story(value, count, duration, cast):
         raise ValueError("Storyboard scene count does not match the production")
     result = []
     for index, scene in enumerate(scenes):
-        if not isinstance(scene, dict) or scene.keys() != {"description", "image_prompt", "character_ids", "audio"}:
+        fields = {"description", "image_prompt", "character_ids", "audio"}
+        if not isinstance(scene, dict) or not fields <= scene.keys() <= fields | {"duration_weight"}:
             raise ValueError("Invalid storyboard scene")
         ids = scene["character_ids"]
         if not isinstance(ids, list) or len(ids) > 2 or any(not isinstance(x, str) or x not in cast for x in ids):
@@ -276,6 +277,8 @@ def _story(value, count, duration, cast):
                        "character_ids": list(dict.fromkeys(ids)), "audio": _text(scene["audio"], 160),
                        "seconds": duration // count + (index < duration % count),
                        "asset": None, "job_id": None, "attempts": 0})
+        if "duration_weight" in scene:
+            result[-1]["duration_weight"] = _number(scene["duration_weight"], 1, 3)
     return {"title": _text(value["title"], 100), "continuity": _text(value["continuity"], 240),
             "scenes": result}
 
@@ -347,6 +350,11 @@ def _script_scene(job, profile, comfy, source, continuity, index):
         if sum(map(len, facts)) > 3200:
             raise ValueError("Một cảnh có quá nhiều nội dung. Hãy thêm ranh giới cảnh hoặc chia kịch bản.")
         source = facts
+    fields = {key: {**STRING, "minLength": 1, "maxLength": limit} for key, limit in
+              (("title", 100), ("continuity", 240), ("description", 350), ("image_prompt", 600), ("audio", 160))}
+    weighted = job["brief"]["seconds"] == 30 and job["brief"].get("mode") == "motion"
+    if weighted:
+        fields["duration_weight"] = {"type": "integer", "minimum": 1, "maximum": 3}
     with _measured(job, "storyboard", comfy):
         return _ask(profile,
                     "Adapt only this scene from the original script or its ordered excerpt notes. "
@@ -354,16 +362,17 @@ def _script_scene(job, profile, comfy, source, continuity, index):
                     "Use Vietnamese title and description, and an English image_prompt. Return audio notes; "
                     "the preview is silent and the original dialogue is stored separately. "
                     "Use a title up to 100 characters, continuity up to 240, description up to 350, "
-                    "image_prompt up to 600 and audio up to 160.",
+                    "image_prompt up to 600 and audio up to 160. "
+                    + ("Set duration_weight to 1 for a quick beat, 2 for normal motion or 3 for sustained action."
+                       if weighted else ""),
                     {"source": source, "prior_continuity": continuity, "scene": index + 1,
                      "seconds": seconds + (index < extra)},
-                    _object(title=STRING, continuity=STRING, description=STRING,
-                            image_prompt=STRING, audio=STRING), comfy)
+                    _object(**fields), comfy)
 
 
-def _write_script_board(job, bindings):
+def _write_script_board(job, bindings, *, outline=None):
     brief = job["brief"]
-    script = brief["idea"]
+    script = outline if outline is not None else brief["idea"]
     ranges = _script_ranges(script, brief["scene_count"], brief["seconds"])
     scenes = []
     visual_continuity = []
@@ -379,13 +388,40 @@ def _write_script_board(job, bindings):
     board = _story({"title": title, "continuity": continuity, "scenes": scenes},
                    brief["scene_count"], brief["seconds"], {})
     for scene, (start, end), notes in zip(board["scenes"], ranges, visual_continuity):
-        scene["script_range"] = [start, end]
+        if outline is None:
+            scene["script_range"] = [start, end]
         scene["continuity"] = notes
     job.update(board=board, cast={})
     _save(job)
 
 
 def _write_board(job, bindings):
+    if job["brief"]["seconds"] == 30 and job["brief"].get("mode") == "motion":
+        brief = job["brief"]
+        scripted = _needs_scene_analysis(brief["idea"])
+        if not job.get("plan"):
+            minimum, maximum = draft_timeline.shot_limits(30)
+            minimum = max(minimum, len(SCRIPT_HEADING.findall(brief["idea"])))
+            if scripted and maximum > minimum:
+                try:
+                    _script_ranges(brief["idea"], maximum, 30)
+                except ValueError:
+                    maximum = minimum
+            _activity(job, "PLANNING", "plan", bindings["general.text"])
+            fields = _object(outline={**STRING, "minLength": 1, "maxLength": OUTLINE_LIMIT},
+                             scene_count={"type": "integer", "minimum": minimum, "maximum": maximum})
+            with _measured(job, "plan", bindings["image.generate"]):
+                result = _ask(bindings["general.text"],
+                    f"Choose {minimum} to {maximum} distinct short shots based on the action. "
+                    "Keep the story order and important actions. Write an outline of at most 700 characters "
+                    "with at least 16 words; prefer distinct action beats over repeated establishing shots.",
+                    {"excerpt": brief["idea"][:2000], "explicit_scenes": len(SCRIPT_HEADING.findall(brief["idea"]))},
+                    fields, bindings["image.generate"])
+            count = _number(result.get("scene_count"), minimum, maximum)
+            job["plan"] = _text(result.get("outline"), OUTLINE_LIMIT, label="Dàn ý do AI trả về")
+            brief["scene_count"] = count
+            _save(job)
+        return _write_script_board(job, bindings, outline=None if scripted else job["plan"])
     if job["brief"].get("input_type") == "script" or _needs_scene_analysis(job["brief"]["idea"]):
         return _write_script_board(job, bindings)
     comfy = bindings["image.generate"]
@@ -455,7 +491,7 @@ def _scene_path(job, index):
 
 def _stamp_storyboard(job):
     board = job["board"]
-    layout = _storyboard_layout(job, len(board["scenes"]))
+    layout = _storyboard_layout(job, len(board["scenes"]), [s.get("duration_weight", 2) for s in board["scenes"]])
     moving = job["brief"].get("mode") == "motion"
     for scene, frames in zip(board["scenes"], layout):
         scene.setdefault("shot_id", uuid4().hex)
@@ -466,10 +502,10 @@ def _stamp_storyboard(job):
     job.pop("approved_storyboard_sha", None)
 
 
-def _storyboard_layout(job, count):
+def _storyboard_layout(job, count, weights=None):
     brief = job["brief"]
     if brief.get("mode") == "motion":
-        return draft_timeline.timeline(brief["seconds"], count)
+        return draft_timeline.timeline(brief["seconds"], count, weights)
     if not 2 <= count <= 6 or count * 2 > brief["seconds"]:
         raise ValueError("Bản nháp ảnh tĩnh cần 2–6 cảnh và ít nhất 2 giây mỗi cảnh.")
     length, extra = divmod(brief["seconds"], count)
@@ -540,6 +576,10 @@ def _image(job, index, scene, revision, profile):
 def _render(job):
     folder = _folder(job["id"])
     moving = job["brief"].get("mode") == "motion"
+    if moving and job["brief"]["seconds"] == 30:
+        ids = [scene.get("motion_job") for scene in job["board"]["scenes"]]
+        if None in ids or len(set(ids)) != len(ids):
+            raise ValueError("Phim 30 giây cần clip riêng cho từng cảnh.")
     width, height = (512, 288) if moving else SIZES[job["brief"]["ratio"]]
     ffmpeg = render._ffmpeg()
     command = [ffmpeg, "-nostdin", "-n", "-v", "error"]
@@ -573,6 +613,8 @@ def _render(job):
                             cwd=folder, timeout=150)
         if not 1024 <= temporary.stat().st_size <= MAX_VIDEO:
             raise ValueError("Unexpected MP4 size")
+        if job.get("status") == "RUNNING":
+            _activity(job, "VERIFY", "verify")
         verification = render._run_process([ffmpeg, "-nostdin", "-v", "error", "-xerror", "-i", str(temporary),
                                             "-map", "0:v:0", "-progress", "pipe:1", "-f", "null", "-"],
                                            cwd=folder, timeout=60)
@@ -707,7 +749,9 @@ def _work(job, slot):
                         _release_idle_comfy(image_profile)
                 except OSError:
                     pass
-            job.pop("activity", None)
+            activity = job.pop("activity", {})
+            if job["status"] == "FAILED" and activity.get("scene"):
+                job["failed_scene"] = activity["scene"]
             with comfy_service.LOCK:
                 if job["status"] != "NEEDS_RECONCILIATION" and _cancellation(job["id"]):
                     job.update(status="CANCELLED", error=None, video_sha=None)
@@ -726,6 +770,8 @@ def _start(job, slot):
             raise DraftCancelled
         comfy_service.reset_idle()
         job.update(status="RUNNING", error=None)
+        job.setdefault("started_at", visual_jobs._now())
+        job.pop("failed_scene", None)
         job.pop("activity", None)
         _save(job)
         snapshot = copy.deepcopy(job)
@@ -767,7 +813,7 @@ def submit(data):
     ident = _id(data["id"])
     seconds = _number(data["seconds"], 4 if data.get("mode") == "motion" else 6, 60)
     motion_mode = data.get("mode") == "motion"
-    count = _number(data["scene_count"], 2, 9 if motion_mode else 6)
+    count = _number(data["scene_count"], 2, draft_timeline.shot_limits(seconds)[1] if motion_mode else 6)
     if (not motion_mode and seconds < count * 2) or not isinstance(data["ratio"], str) or data["ratio"] not in SIZES:
         raise ValueError("Choose a supported ratio and at least two seconds per scene")
     idea = data["idea"]
@@ -778,7 +824,12 @@ def submit(data):
     except UnicodeError:
         raise ValueError("Nội dung có ký tự Unicode không hợp lệ.") from None
     if _needs_scene_analysis(idea):
-        _script_ranges(idea, count, seconds)
+        if motion_mode and seconds == 30:
+            minimum, maximum = draft_timeline.shot_limits(seconds)
+            count_for_script = min(maximum, max(minimum, len(SCRIPT_HEADING.findall(idea))))
+        else:
+            count_for_script = count
+        _script_ranges(idea, count_for_script, seconds)
     brief = {"idea": idea, "seconds": seconds,
              "scene_count": count, "ratio": data["ratio"]}
     mode = data.get("mode", "still")
@@ -794,7 +845,7 @@ def submit(data):
     except KeyError:
         prior = None
     if prior:
-        if prior["brief"] != brief:
+        if prior.get("submitted_brief", prior["brief"]) != brief:
             raise ValueError("Production ID already belongs to another brief")
         return prior
     ops_control.require_active()
@@ -803,12 +854,13 @@ def submit(data):
     job = {"id": ident, "brief": brief, "stage": "QUEUED", "status": "QUEUED",
            "video_sha": None, "created_at": created_at, "updated_at": created_at}
     job["storyboard_version"] = 1
+    job["submitted_brief"] = dict(brief)
     with comfy_service.LOCK, _db(True) as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute("SELECT body FROM drafts WHERE id=?", (ident,)).fetchone()
         if row:
             prior = _decode_row(row)
-            if prior["brief"] != brief:
+            if prior.get("submitted_brief", prior["brief"]) != brief:
                 raise ValueError("Production ID already belongs to another brief")
             return prior
         statuses = [row[0] for row in conn.execute("SELECT json_extract(body,'$.status') FROM drafts "

@@ -233,9 +233,34 @@ class DraftTests(unittest.TestCase):
                 self.assertEqual(sum(timeline), seconds * 24)
                 self.assertEqual(len(timeline), scene_count)
                 self.assertLessEqual(max(timeline), 49)
-        for seconds in (30, 60):
+        for seconds in (60,):
             with self.assertRaises(ValueError):
                 draft.draft_timeline.timeline(seconds, 9)
+
+    def test_30_second_storyboard_uses_ai_count_and_preserves_script_order(self):
+        text = "\n\n".join(f"Cảnh {i} — Miu mở cánh cửa rồi nhìn quanh." for i in range(1, 16))
+        job = {"id": self.ident, "status": "RUNNING", "storyboard_version": 1,
+               "brief": {"idea": text, "seconds": 30, "mode": "motion", "scene_count": 15, "ratio": "16:9"}}
+        provider = {"provider": "ollama", "model": "fixture"}
+        bindings = {"general.text": provider, "film.storyboard": provider, "image.generate": {}}
+        with (patch.object(draft, "_measured", return_value=nullcontext()),
+              patch.object(draft, "_ask", return_value={"outline": "Miu waits and checks each door.", "scene_count": 16}),
+              patch.object(draft, "_script_scene", side_effect=lambda *args: {
+                  "title": "Miu", "continuity": "orange tabby", "description": "Cat opens the door",
+                  "image_prompt": "A cat by the door", "audio": "silent", "duration_weight": 1 + args[-1]%3})):
+            draft._write_board(job, bindings)
+        draft._stamp_storyboard(job)
+        scenes = job["board"]["scenes"]
+        self.assertEqual(len(scenes), 16)
+        self.assertEqual(sum(s["frames"] for s in scenes), 720)
+        self.assertTrue(all(40 <= s["frames"] <= 49 for s in scenes))
+        self.assertGreater(len({s["frames"] for s in scenes}), 1)
+        self.assertEqual("".join(text[start:end] for start,end in (s["script_range"] for s in scenes)), text)
+        self.assertEqual(job["status"], "STORYBOARD_REVIEW")
+        self.assertEqual(sum(draft.draft_timeline.timeline(30, 15)), 720)
+        for invalid in (14, 17):
+            with self.assertRaises(ValueError):
+                draft.draft_timeline.timeline(30, invalid)
 
     def test_new_still_draft_also_waits_for_storyboard_approval(self):
         def storyboard(job, _):

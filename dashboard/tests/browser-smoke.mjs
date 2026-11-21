@@ -422,7 +422,7 @@ try {
   await settings.reload();
   await settings.getByRole('tab',{name:/^Chú mèo cam khám phá khu rừng/}).waitFor();
   draftFixture={...draftFixture,status:'FAILED',worker_active:false,error:'Fixture runtime unavailable'};
-  await settings.getByText('Cần xử lý',{exact:true}).click();
+  await settings.getByRole('tab',{name:/^Chú mèo cam khám phá khu rừng/}).click();
   await settings.getByText('Fixture runtime unavailable',{exact:true}).waitFor();
   await settings.route('**/api/film/drafts/*/resume',route=>{
     draftFixture=null;
@@ -453,18 +453,26 @@ try {
     return route.fulfill({json:draftFixture});
   });
   await settings.locator('.studio-drafts-list').getByRole('button',{name:'Làm mới',exact:false}).click();
-  await settings.getByText('Storyboard chờ duyệt',{exact:true}).waitFor();
+  await draftProgress.locator('.production-header').getByText('Storyboard chờ duyệt',{exact:true}).waitFor();
   await settings.getByRole('tab',{name:/^Ý tưởng mới/}).click();
   await settings.getByRole('button',{name:'Duyệt storyboard',exact:true}).click();
   await settings.getByRole('button',{name:'Duyệt và tạo phim',exact:true}).click();
   await draftProgress.getByText('Đang tạo chuyển động cảnh 2/3',{exact:true}).waitFor();
   await draftProgress.getByText('1/3 clip đã xác minh',{exact:true}).waitFor();
+  const viewport=settings.viewportSize();
+  if(process.env.AGENTFORGE_PROGRESS_SCREENSHOT)
+    await draftProgress.screenshot({path:process.env.AGENTFORGE_PROGRESS_SCREENSHOT});
+  await settings.setViewportSize({width:390,height:844});
+  if(await draftProgress.evaluate(node=>node.scrollWidth>node.clientWidth+1))
+    throw new Error('Production progress overflows mobile');
+  if(viewport)await settings.setViewportSize(viewport);
   cancelledDraft={...draftFixture,id:'c'.repeat(32),status:'CANCELLED',worker_active:false,board:null,
     brief:{...draftFixture.brief,idea:'Bản nháp đã hủy'}};
   draftFixture={...draftFixture,status:'REVIEW',worker_active:false,
-    created_at:'2026-06-20T03:00:00Z',video_sha:'fixture-video'};
+    created_at:'2026-06-20T03:00:00Z',video_sha:'fixture-video',receipt_sha:'fixture-receipt'};
   await settings.locator('.studio-drafts-list').getByRole('button',{name:'Làm mới',exact:false}).click();
-  await settings.getByText('Phim hoàn chỉnh · chờ duyệt',{exact:true}).waitFor();
+  await settings.locator('.production-header').getByText('Phim hoàn chỉnh · chờ duyệt',{exact:true}).waitFor();
+  await draftProgress.getByText('100%',{exact:true}).waitFor();
   await settings.locator('.draft-row-meta time[datetime="2026-06-20T03:00:00Z"]').waitFor();
   await settings.getByRole('tab',{name:/^Bản nháp đã hủy/}).waitFor({state:'hidden'});
   await settings.route('**/api/film/drafts/*/preview*',route=>route.fulfill({status:404}));
