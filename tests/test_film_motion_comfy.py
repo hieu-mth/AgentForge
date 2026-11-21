@@ -150,6 +150,23 @@ class MotionAdapterTests(unittest.TestCase):
                 (ltx, "check_runtime", []),
             ):
                 mocks.enter_context(patch.object(target, name, return_value=value))
+            with (patch.object(ltx, "upload_source", side_effect=ValueError("Invalid ComfyUI upload response")) as upload,
+                  patch.object(motion, "_json_request") as request,
+                  patch.object(motion.ops_control, "require_active"),
+                  patch.object(motion, "health", return_value={"status": "GPU_DETECTED_UNBENCHMARKED"}),
+                  self.assertRaisesRegex(ValueError, "Invalid ComfyUI upload response")):
+                motion.submit_shot(film_slug="pilot", shot_id="sh-00001",
+                                   plan_sha=self.plan["plan_sha256"], prompt=self.prompt,
+                                   workflow_path=self.workflow, workflow_sha=digest,
+                                   seed=7, confirmed=True, confirm_ltx_gate_b=True,
+                                   image_job="a" * 32, image_sha="b" * 64,
+                                   ltx_encoder=self.root / ltx.ENCODER,
+                                   film_root=self.films, db_path=self.db.with_name("failed.sqlite3"))
+            upload.assert_called_once()
+            request.assert_not_called()
+            with closing(motion._db(self.db.with_name("failed.sqlite3"))) as conn:
+                self.assertEqual(conn.execute("SELECT state, provider_id FROM motion_jobs").fetchone()[:],
+                                 ("FAILED", None))
             result, transport = self.submit(workflow_sha=digest, confirm_ltx_gate_b=True,
                                             image_job="a" * 32, image_sha="b" * 64,
                                             ltx_encoder=self.root / ltx.ENCODER)
@@ -162,8 +179,39 @@ class MotionAdapterTests(unittest.TestCase):
         self.assertEqual(graph["13"]["inputs"]["format.codec"], "h264")
         self.assertEqual(result["model_id"], ltx.MODEL_ID)
         with closing(motion._db(self.db)) as conn:
-            row = conn.execute("SELECT model_id,image_sha FROM motion_sources").fetchone()
+            row = conn.execute("SELECT model_id,image_sha FROM motion_sources WHERE job_id=?",
+                               (result["job_id"],)).fetchone()
         self.assertEqual(tuple(row), (ltx.MODEL_ID, "b" * 64))
+
+    def test_ltx_upload_response_contract(self):
+        ltx = motion.motion_ltx
+        job_id = "c" * 32
+        name = f"af_motion_source_{job_id}.png"
+        core = {"name": name, "subfolder": "", "type": "input"}
+        asset = {"id": "fixture", "name": name, "size": 20, "mime_type": "image/png",
+                 "tags": ["input"], "preview_url": "/api/assets/fixture/preview"}
+        valid = (core, {**core, "asset": asset}, {**core, "metadata": {"version": 1}})
+        invalid = ({"name": "another.png"}, {"subfolder": "other"}, {"type": "output"},
+                   {"name": [name]}, {"subfolder": None}, {"type": 1}, {"asset": []})
+        cases = [(json.dumps(value).encode(), True) for value in valid]
+        cases.extend((json.dumps({**core, **value}).encode(), False) for value in invalid)
+        cases.extend((raw, False) for raw in (b"{", b"<html>", b"[]", b"null", b" " * 4097,
+                                              b"\xff", b'{"name":"missing-fields.png"}'))
+        for raw, accepted in cases:
+            with self.subTest(raw=raw[:150], accepted=accepted), patch.object(ltx.http.client, "HTTPConnection") as client:
+                connection = client.return_value
+                response = connection.getresponse.return_value
+                response.status = 200
+                response.read.return_value = raw
+                if accepted:
+                    self.assertEqual(ltx.upload_source(8188, job_id, b"fixture"), name)
+                else:
+                    with self.assertRaisesRegex(ValueError, "ComfyUI .*upload response|unexpected input filename"):
+                        ltx.upload_source(8188, job_id, b"fixture")
+                connection.request.assert_called_once()
+                self.assertEqual(connection.request.call_args.args, ("POST", "/upload/image"))
+                response.read.assert_called_once_with(4097)
+                connection.close.assert_called_once()
 
     def test_ltx_rejects_path_injection_and_sampling_mutation(self):
         ltx = motion.motion_ltx
