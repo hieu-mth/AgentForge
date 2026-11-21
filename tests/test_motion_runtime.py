@@ -215,6 +215,24 @@ class MotionRuntimeTests(unittest.TestCase):
             self.assertIn("-nostdin", commands[1][0])
             self.assertEqual(commands[0][0][-1], str(path))
 
+    def test_ltx_mp4_contract_uses_distinct_filename_and_expected_frames(self):
+        job_id = "a" * 32
+        path = self.outputs / f"af_motion_{job_id}_00001_.mp4"
+        path.write_bytes(b"x" * 1024)
+        self.assertEqual(verify._output_source(self.outputs, path.name, job_id, ltx=True), path)
+        with self.assertRaises(verify.MotionVerificationError):
+            verify._output_source(self.outputs, path.name, job_id)
+        stream = {"codec_name":"h264", "width":512, "height":288,
+                  "avg_frame_rate":"24/1", "nb_read_frames":"33"}
+        metadata = {"streams":[stream], "format":{"duration":"1.375", "format_name":"mov,mp4"}}
+        with patch.object(verify, "_run", return_value=json.dumps(metadata).encode()) as runner:
+            self.assertEqual(verify._probe(path, ltx=True)["frames_decoded"], 33)
+            self.assertEqual([call.args[0] for call in runner.call_args_list], ["ffprobe", "ffmpeg"])
+        stream["nb_read_frames"] = "32"
+        with (patch.object(verify, "_run", return_value=json.dumps(metadata).encode()),
+              self.assertRaises(verify.MotionVerificationError)):
+            verify._probe(path, ltx=True)
+
     def test_health_is_gpu_snapshot_not_measured_peak(self):
         with patch.object(motion, "_json_request", return_value={
             "devices": [{"type": "cuda", "vram_total": 12 * 2**30,

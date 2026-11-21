@@ -21,7 +21,7 @@ from uuid import UUID, uuid4
 from agentforge import ops_control
 from agentforge.ai import model_hub
 from agentforge.integrations import comfy_service, comfyui as _comfyui
-from agentforge.features.film_studio import draft_resources, long_form
+from agentforge.features.film_studio import draft_resources, long_form, motion_ltx
 from agentforge.paths import DATA_DIR, WORKSPACE_DIR
 
 FILMS = WORKSPACE_DIR / "films"
@@ -86,6 +86,11 @@ def inspect_workflow(path: Path):
         record = json.loads(raw)
     except (UnicodeError, ValueError) as exc:
         raise MotionError("Invalid workflow JSON") from exc
+    if isinstance(record, dict) and record.get("format") == motion_ltx.FORMAT:
+        if json.dumps(record, sort_keys=True) != json.dumps(motion_ltx.workflow(), sort_keys=True):
+            raise MotionError("LTX graph differs from the pinned pilot workflow")
+        return {"sha256": _sha(raw), "workflow": record, "profile": dict(motion_ltx.PROFILE),
+                "model_id": motion_ltx.MODEL_ID, "validated_structure_only": True, "model_installed": False}
     keys = {"format", "positive_node", "seed_node", "size_node", "fps_node",
             "output_node", "api"}
     if not isinstance(record, dict) or set(record) != keys or record["format"] != "agentforge.film.comfy.t2v.v1":
@@ -155,7 +160,7 @@ def inspect_workflow(path: Path):
     if (save.get("format", "auto") not in {"mp4", "auto"}
             or save.get("filename_prefix", "").find("/") >= 0):
         raise MotionError("Pilot requires local MP4 output without a folder prefix")
-    return {"sha256": _sha(raw), "workflow": record, "profile": dict(PROFILE),
+    return {"sha256": _sha(raw), "workflow": record, "profile": dict(PROFILE), "model_id": PILOT_MODEL_ID,
             "validated_structure_only": True, "model_installed": False}
 
 
@@ -219,12 +224,16 @@ def _db(path: Path, *, write=False):
             seed INTEGER NOT NULL, provider_id TEXT, state TEXT NOT NULL,
             created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
             UNIQUE(film_slug, shot_id, plan_sha))""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS motion_sources(
+            job_id TEXT PRIMARY KEY, model_id TEXT NOT NULL, image_job TEXT NOT NULL,
+            image_sha TEXT NOT NULL)""")
         conn.commit()
     return conn
 
 
 def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
                 workflow_sha, seed, confirmed=False,
+                image_job=None, image_sha=None, ltx_encoder=None, confirm_ltx_gate_b=False,
                 film_root: Path = FILMS, db_path: Path = DB):
     """One-shot owner dispatch, checkpointed BEFORE any GPU/HTTP work.
 
@@ -248,11 +257,28 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
     template = inspect_workflow(workflow_path)
     if not isinstance(workflow_sha, str) or template["sha256"] != workflow_sha:
         raise PermissionError("Trusted workflow SHA is stale; inspect it again")
-    if PILOT_MODEL_ID in BLOCKED_MODELS:
+    model_id = template["model_id"]
+    is_ltx = model_id == motion_ltx.MODEL_ID
+    if model_id in BLOCKED_MODELS:
         raise MotionError("WAN_FP16_BLOCKED: preset disabled after Windows commit exhaustion")
+    if is_ltx and (confirm_ltx_gate_b is not True or not isinstance(image_job, str)
+                   or not isinstance(image_sha, str) or not SHA.fullmatch(image_sha) or ltx_encoder is None):
+        raise PermissionError("LTX requires Gate B confirmation, a reviewed FLUX image ID/SHA and encoder path")
     with model_hub.local_inference_slot():
-        draft_resources.require_gpu("motion")
-        comfy_service.require_other_queue_idle(PORT)
+        operation = "ltx" if is_ltx else "motion"
+        draft_resources.require_gpu(operation)
+        if is_ltx:
+            comfy_service.require_other_queue_idle(PORT, include_profiles=True)
+        else:
+            comfy_service.require_other_queue_idle(PORT)
+        if is_ltx:
+            config = comfy_service._settings()
+            if not config or config["port"] != PORT:
+                raise MotionError("Register the Portable launcher on the Motion endpoint")
+            motion_ltx.verify_weights(config["install_root"], ltx_encoder)
+            image = motion_ltx.read_source(image_job, image_sha)
+            comfy_service.ensure_running(PORT)
+            motion_ltx.check_runtime(PORT, require_models=True)
         comfy_service.require_idle_queue(PORT)
         environment = health()
         if environment["status"] != "GPU_DETECTED_UNBENCHMARKED":
@@ -260,7 +286,7 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
         graph = copy.deepcopy(template["workflow"]["api"])
         bindings = template["workflow"]
         graph[bindings["positive_node"]]["inputs"]["text"] = prompt.strip()
-        graph[bindings["seed_node"]]["inputs"]["seed"] = seed
+        graph[bindings["seed_node"]]["inputs"]["noise_seed" if is_ltx else "seed"] = seed
         job_id = uuid4().hex
         graph[bindings["output_node"]]["inputs"]["filename_prefix"] = "af_motion_" + job_id
         now = _now()
@@ -276,6 +302,21 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
                 VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'SUBMITTING', ?, ?)""",
                 (job_id, film_slug, shot_id, plan_sha, workflow_sha,
                  _sha(prompt.strip().encode("utf-8")), seed, now, now))
+            if is_ltx:
+                conn.execute("INSERT INTO motion_sources VALUES (?,?,?,?)",
+                             (job_id, model_id, image_job, image_sha))
+        if is_ltx:
+            try:
+                graph[bindings["image_node"]]["inputs"]["image"] = motion_ltx.upload_source(PORT, job_id, image)
+                comfy_service.require_other_queue_idle(PORT, include_profiles=True)
+                comfy_service.require_idle_queue(PORT)
+                draft_resources.require_gpu(operation)
+            except (OSError, ValueError, RuntimeError, http.client.HTTPException):
+                # No prompt has been attempted. Preserve the receipt without holding the active quota.
+                with closing(_db(db_path, write=True)) as conn, conn:
+                    conn.execute("UPDATE motion_jobs SET state='FAILED', updated_at=? WHERE job_id=?",
+                                 (_now(), job_id))
+                raise
         # Network failure leaves SUBMITTING_UNCERTAIN (must reconcile manually).
         result = _json_request("/prompt", body={"prompt": graph}, timeout=12)
         if not isinstance(result, dict) or not isinstance(result.get("prompt_id"), str):
@@ -291,7 +332,7 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
                 raise RuntimeError("Motion job ledger changed after dispatch")
         return {"job_id": job_id, "status": "SUBMITTED", "provider": "LOCAL_COMFYUI",
                 "shot_id": shot_id, "video_verified": False, "youtube_uploaded": False,
-                "model_id": PILOT_MODEL_ID,
+                "model_id": model_id,
                 "model_quality_verified": False}
 
 
@@ -386,6 +427,8 @@ def main(argv=None):
     choices.add_parser("health")
     inspect = choices.add_parser("inspect-workflow")
     inspect.add_argument("--workflow", type=Path, required=True)
+    choices.add_parser("ltx-workflow")
+    choices.add_parser("ltx-readiness")
     submit = choices.add_parser("submit")
     for name in ("film-slug", "shot-id", "plan-sha", "workflow-sha"):
         submit.add_argument("--" + name, required=True)
@@ -394,6 +437,10 @@ def main(argv=None):
                         help="Local Owner-authored shot prompt; avoids command-line prompt history")
     submit.add_argument("--seed", type=int, required=True)
     submit.add_argument("--confirm-gpu-run", action="store_true")
+    submit.add_argument("--confirm-ltx-gate-b", action="store_true")
+    submit.add_argument("--image-job")
+    submit.add_argument("--image-sha")
+    submit.add_argument("--ltx-encoder", type=Path)
     status = choices.add_parser("status")
     status.add_argument("--job-id", required=True)
     jobs = choices.add_parser("jobs")
@@ -409,6 +456,11 @@ def main(argv=None):
     args = p.parse_args(argv)
     if args.action == "health":
         result = health()
+    elif args.action == "ltx-workflow":
+        result = motion_ltx.workflow()
+    elif args.action == "ltx-readiness":
+        result = {"nodes": motion_ltx.check_runtime(PORT), "inference_verified": False,
+                  "model_weights_verified": False}
     elif args.action == "inspect-workflow":
         info = inspect_workflow(args.workflow)
         result = {k: v for k, v in info.items() if k != "workflow"}
@@ -433,7 +485,9 @@ def main(argv=None):
             plan_sha=args.plan_sha, workflow_path=args.workflow,
             workflow_sha=args.workflow_sha,
             prompt=args.prompt_file.read_text(encoding="utf-8"),
-            seed=args.seed, confirmed=args.confirm_gpu_run)
+            seed=args.seed, confirmed=args.confirm_gpu_run, image_job=args.image_job,
+            image_sha=args.image_sha, ltx_encoder=args.ltx_encoder,
+            confirm_ltx_gate_b=args.confirm_ltx_gate_b)
     print(json.dumps(result, ensure_ascii=True, indent=2))
 
 
