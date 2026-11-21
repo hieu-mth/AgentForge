@@ -35,6 +35,10 @@ def profile():
 
 
 class FluxRuntimeTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(patch.object(flux_runtime.draft_resources, "require_gpu"))
+        self.enterContext(patch.object(flux_runtime.comfy_service, "_settings", return_value=None))
+
     def test_workflow_limit_counts_utf8_bytes(self):
         row = profile()
         graph = row["flux"]["workflow"]
@@ -142,6 +146,7 @@ class FluxRuntimeTests(unittest.TestCase):
             model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0, profile=profile(), db_path=hub)
             with (patch.object(flux_runtime, "WORKSPACE_DIR", root / "workspace"),
                   patch.object(flux_runtime, "readiness", side_effect=["COMFYUI_UNAVAILABLE", "READY"]),
+                  patch.object(flux_runtime.comfy_service, "require_idle_queue") as alternate_queue,
                   patch.object(flux_runtime.comfy_service, "ensure_running",
                                side_effect=lambda port: calls.append("start")),
                   patch.object(flux_runtime, "_json", side_effect=provider),
@@ -154,6 +159,7 @@ class FluxRuntimeTests(unittest.TestCase):
                                                width=256, height=256, seed=42, hub_db=hub, db_path=db)
                 self.assertTrue(visual_jobs.report(db_path=db)["jobs"][0]["probe"])
                 self.assertEqual(visual_jobs.image_for_job(result["job_id"], db_path=db)[0], png.getvalue())
+                alternate_queue.assert_called_once_with(8188, allow_offline=True)
             self.assertEqual(calls, ["start", "/queue", "/prompt", "/history/" + pid])
             self.assertEqual(download.call_args.kwargs["max_response_bytes"], visual_jobs.MAX_IMAGE)
             self.assertEqual(result["status"], "ASSET_READY")
@@ -164,6 +170,13 @@ class FluxRuntimeTests(unittest.TestCase):
               patch.object(flux_runtime.comfy_service, "managed_exited", return_value=True)):
             with self.assertRaisesRegex(flux_runtime.JobError, "COMFYUI_STOPPED"):
                 flux_runtime._collect("provider-id", "a" * 32, 8188, profile()["flux"], {})
+
+    def test_provider_host_buffer_error_has_resource_status(self):
+        status = {"status_str": "error", "messages": [
+            ["execution_error", {"exception_message": "HostBuffer.read_file_slice failed"}],
+        ]}
+        with self.assertRaisesRegex(flux_runtime.JobError, "GPU_RESOURCE_FAILURE"):
+            flux_runtime._output({"status": status}, "a" * 32, "9")
 
     def test_owner_policy_and_concurrent_gpu_admission(self):
         try:

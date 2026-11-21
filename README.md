@@ -39,4 +39,8 @@ Lệnh tạo ba bản nháp liên tiếp bằng model thật trong workspace ki�
 
 Worker Studio xử lý một bản nháp mỗi lượt, mặc định giới hạn ba job đang chạy hoặc đang chờ. Có thể đặt `AGENTFORGE_DRAFT_QUEUE_LIMIT` từ 1 đến 8 khi khởi động backend. Khi thiếu tài nguyên, job dừng ở checkpoint và có thể tiếp tục bằng nút **Tiếp tục từ checkpoint**. Yêu cầu hủy đang chạy có hiệu lực tại checkpoint kế tiếp.
 
+Studio, FLUX và Motion dùng chung quyền gửi GPU giữa các tiến trình AgentForge trong cùng workspace. Trước khi gửi, AgentForge kiểm tra queue ComfyUI và RAM, commit Windows, VRAM khả dụng. Các mức sàn tính bằng MiB cho ảnh là `4096 / 8192 / 3072`, cho Motion là `8192 / 12288 / 6144`. Có thể tăng từng mức bằng biến môi trường của backend `AGENTFORGE_{IMAGE|MOTION}_MIN_{RAM|COMMIT|VRAM}_MIB`. Đây là số đo lúc nhận job, không dự báo peak. Thiếu dữ liệu đo sẽ chặn GPU inference. ComfyUI mở trực tiếp không dùng khóa này, nên không bấm Run trong ComfyUI khi AgentForge đang dùng GPU.
+
+Preset Wan 2.2 TI2V 5B FP16 đã bị chặn ở bước gửi Motion sau sự cố cạn commit. Các biên nhận đã có vẫn đọc được. ComfyUI và Ollama báo lỗi bộ nhớ hoặc lỗi server trong Studio sẽ giữ checkpoint để Owner xem xét trước khi chạy lại.
+
 Nếu job dừng ở `COMMIT_LOW` ngay sau ảnh đầu, so sánh mốc sau cảnh 1 với mốc trước cảnh 2 trong biên nhận. Khi ComfyUI vẫn giữ nhiều private memory dù hàng đợi rỗng, có thể thử thêm `--cache-none` vào lệnh khởi chạy một phiên ComfyUI kiểm thử. Cờ này chạy lại từng node, có thể làm mỗi cảnh lâu hơn và có thể giảm bộ nhớ giữ lại giữa các cảnh. Giữ nguyên ngưỡng tài nguyên và đo lại cả ba clip trước khi áp dụng cho phiên Owner.

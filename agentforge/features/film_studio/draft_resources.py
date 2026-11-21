@@ -9,6 +9,50 @@ from agentforge.ops import discovery
 MIB = 1024 * 1024
 MIN_RAM_MIB = {"plan": 4096, "cast": 4096, "storyboard": 4096, "image": 4096, "render": 2048}
 MIN_VRAM_MIB = {"plan": 6144, "cast": 6144, "storyboard": 6144, "image": 2048}
+GPU_FLOORS = {"image": (4096, 8192, 3072), "motion": (8192, 12288, 6144)}
+
+
+class ResourceBlocked(ValueError):
+    """GPU admission failed or the provider reported resource exhaustion."""
+
+
+def require_gpu(operation, sample=None):
+    """Conservative admission floors in MiB, not estimates of peak consumption."""
+    sample = snapshot() if sample is None else sample
+    ram = sample.get("ram_available")
+    used, limit = sample.get("commit_used"), sample.get("commit_limit")
+    commit = None if used is None or limit is None else limit - used
+    readings = (ram / MIB if ram is not None else None,
+                commit / MIB if commit is not None else None, sample.get("vram_free_mib"))
+    for name, value, floor in zip(("RAM", "COMMIT", "VRAM"), readings, GPU_FLOORS[operation]):
+        if name == "COMMIT" and os.name != "nt":
+            continue
+        key = f"AGENTFORGE_{operation.upper()}_MIN_{name}_MIB"
+        try:
+            floor = max(floor, int(os.environ.get(key, floor)))
+        except ValueError:
+            raise ResourceBlocked(f"Invalid resource threshold: {key}") from None
+        if value is None:
+            raise ResourceBlocked(name + "_UNAVAILABLE")
+        if value < floor:
+            raise ResourceBlocked(name + "_LOW")
+
+
+def provider_memory_error(status):
+    if not isinstance(status, dict):
+        return False
+    messages = status.get("messages")
+    if not isinstance(messages, list):
+        return False
+    return any(
+        isinstance(row, list) and len(row) > 1 and row[0] == "execution_error"
+        and isinstance(row[1], dict)
+        and any(marker in str(row[1].get("exception_message", "")).lower() for marker in (
+            "out of memory", "hostbuffer.read_file_slice failed", "paging file",
+            "insufficient system resources",
+        ))
+        for row in messages
+    )
 
 
 def _windows_commit():

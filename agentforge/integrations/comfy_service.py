@@ -140,10 +140,40 @@ def _occupied(port):
 
 def _queue_busy(port):
     try:
-        data = json.loads(comfyui.request_image_bytes("/queue", port=port, timeout=3))
-        return data.get("queue_running") != [] or data.get("queue_pending") != []
-    except (OSError, RuntimeError, ValueError, AttributeError, http.client.HTTPException):
+        require_idle_queue(port)
+    except draft_resources.ResourceBlocked:
         return True
+    return False
+
+
+def validate_idle_queue(data):
+    if not isinstance(data, dict) or any(not isinstance(data.get(key), list)
+                                         for key in ("queue_running", "queue_pending")):
+        raise draft_resources.ResourceBlocked("COMFYUI_QUEUE_UNAVAILABLE")
+    if data["queue_running"] or data["queue_pending"]:
+        raise draft_resources.ResourceBlocked("COMFYUI_QUEUE_BUSY")
+
+
+def require_idle_queue(port, *, allow_offline=False):
+    try:
+        data = json.loads(comfyui.request_image_bytes("/queue", port=port, timeout=3))
+    except ConnectionRefusedError:
+        if allow_offline:
+            return
+        raise draft_resources.ResourceBlocked("COMFYUI_QUEUE_UNAVAILABLE") from None
+    except (OSError, RuntimeError, ValueError, http.client.HTTPException):
+        raise draft_resources.ResourceBlocked("COMFYUI_QUEUE_UNAVAILABLE") from None
+    validate_idle_queue(data)
+
+
+def require_other_queue_idle(port):
+    """Observe the fixed Motion endpoint and the registered managed endpoint."""
+    settings = _settings()
+    ports = {comfyui.DEFAULT_PORT}
+    if settings:
+        ports.add(settings["port"])
+    for other in sorted(ports - {port}):
+        require_idle_queue(other, allow_offline=True)
 
 
 def _jobs_pending():

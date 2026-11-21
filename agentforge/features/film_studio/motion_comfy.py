@@ -19,8 +19,9 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from agentforge import ops_control
-from agentforge.integrations import comfyui as _comfyui
-from agentforge.features.film_studio import long_form
+from agentforge.ai import model_hub
+from agentforge.integrations import comfy_service, comfyui as _comfyui
+from agentforge.features.film_studio import draft_resources, long_form
 from agentforge.paths import DATA_DIR, WORKSPACE_DIR
 
 FILMS = WORKSPACE_DIR / "films"
@@ -43,6 +44,7 @@ ALLOWED_NODES = frozenset({
 VIDEO_LATENTS = frozenset({"EmptyHunyuanLatentVideo", "EmptyWanLatentVideo",
                            "Wan22ImageToVideoLatent"})
 PILOT_MODEL_ID = "wan2.2_ti2v_5B_fp16"
+BLOCKED_MODELS = frozenset({PILOT_MODEL_ID})
 PILOT_WEIGHTS = {
     "UNETLoader": ("unet_name", "wan2.2_ti2v_5B_fp16.safetensors"),
     "CLIPLoader": ("clip_name", "umt5_xxl_fp8_e4m3fn_scaled.safetensors"),
@@ -246,45 +248,51 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
     template = inspect_workflow(workflow_path)
     if not isinstance(workflow_sha, str) or template["sha256"] != workflow_sha:
         raise PermissionError("Trusted workflow SHA is stale; inspect it again")
-    environment = health()
-    if environment["status"] != "GPU_DETECTED_UNBENCHMARKED":
-        raise RuntimeError("ComfyUI with a local GPU is not ready")
-    graph = copy.deepcopy(template["workflow"]["api"])
-    bindings = template["workflow"]
-    graph[bindings["positive_node"]]["inputs"]["text"] = prompt.strip()
-    graph[bindings["seed_node"]]["inputs"]["seed"] = seed
-    job_id = uuid4().hex
-    graph[bindings["output_node"]]["inputs"]["filename_prefix"] = "af_motion_" + job_id
-    now = _now()
-    with closing(_db(db_path, write=True)) as conn, conn:
-        conn.execute("BEGIN IMMEDIATE")
-        active = conn.execute("SELECT COUNT(*) FROM motion_jobs WHERE state IN "
-                              "('SUBMITTING','SUBMITTED')").fetchone()[0]
-        if active >= MAX_ACTIVE_JOBS:
-            raise PermissionError("Only one outstanding GPU shot is allowed in pilot")
-        conn.execute("""INSERT INTO motion_jobs
-            (job_id, film_slug, shot_id, plan_sha, workflow_sha, prompt_sha,
-             seed, provider_id, state, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'SUBMITTING', ?, ?)""",
-            (job_id, film_slug, shot_id, plan_sha, workflow_sha,
-             _sha(prompt.strip().encode("utf-8")), seed, now, now))
-    # Network failure leaves SUBMITTING_UNCERTAIN (must reconcile manually).
-    result = _json_request("/prompt", body={"prompt": graph}, timeout=12)
-    if not isinstance(result, dict) or not isinstance(result.get("prompt_id"), str):
-        raise MotionError("Local ComfyUI did not return prompt_id; dispatch uncertain")
-    provider_id = str(UUID(result["prompt_id"]))
-    with closing(_db(db_path, write=True)) as conn, conn:
-        conn.execute("BEGIN IMMEDIATE")
-        updated = conn.execute("""UPDATE motion_jobs
-            SET provider_id=?, state='SUBMITTED', updated_at=?
-            WHERE job_id=? AND state='SUBMITTING'""",
-            (provider_id, _now(), job_id))
-        if updated.rowcount != 1:
-            raise RuntimeError("Motion job ledger changed after dispatch")
-    return {"job_id": job_id, "status": "SUBMITTED", "provider": "LOCAL_COMFYUI",
-            "shot_id": shot_id, "video_verified": False, "youtube_uploaded": False,
-            "model_id": PILOT_MODEL_ID,
-            "model_quality_verified": False}
+    if PILOT_MODEL_ID in BLOCKED_MODELS:
+        raise MotionError("WAN_FP16_BLOCKED: preset disabled after Windows commit exhaustion")
+    with model_hub.local_inference_slot():
+        draft_resources.require_gpu("motion")
+        comfy_service.require_other_queue_idle(PORT)
+        comfy_service.require_idle_queue(PORT)
+        environment = health()
+        if environment["status"] != "GPU_DETECTED_UNBENCHMARKED":
+            raise RuntimeError("ComfyUI with a local GPU is not ready")
+        graph = copy.deepcopy(template["workflow"]["api"])
+        bindings = template["workflow"]
+        graph[bindings["positive_node"]]["inputs"]["text"] = prompt.strip()
+        graph[bindings["seed_node"]]["inputs"]["seed"] = seed
+        job_id = uuid4().hex
+        graph[bindings["output_node"]]["inputs"]["filename_prefix"] = "af_motion_" + job_id
+        now = _now()
+        with closing(_db(db_path, write=True)) as conn, conn:
+            conn.execute("BEGIN IMMEDIATE")
+            active = conn.execute("SELECT COUNT(*) FROM motion_jobs WHERE state IN "
+                                  "('SUBMITTING','SUBMITTED')").fetchone()[0]
+            if active >= MAX_ACTIVE_JOBS:
+                raise PermissionError("Only one outstanding GPU shot is allowed in pilot")
+            conn.execute("""INSERT INTO motion_jobs
+                (job_id, film_slug, shot_id, plan_sha, workflow_sha, prompt_sha,
+                 seed, provider_id, state, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'SUBMITTING', ?, ?)""",
+                (job_id, film_slug, shot_id, plan_sha, workflow_sha,
+                 _sha(prompt.strip().encode("utf-8")), seed, now, now))
+        # Network failure leaves SUBMITTING_UNCERTAIN (must reconcile manually).
+        result = _json_request("/prompt", body={"prompt": graph}, timeout=12)
+        if not isinstance(result, dict) or not isinstance(result.get("prompt_id"), str):
+            raise MotionError("Local ComfyUI did not return prompt_id; dispatch uncertain")
+        provider_id = str(UUID(result["prompt_id"]))
+        with closing(_db(db_path, write=True)) as conn, conn:
+            conn.execute("BEGIN IMMEDIATE")
+            updated = conn.execute("""UPDATE motion_jobs
+                SET provider_id=?, state='SUBMITTED', updated_at=?
+                WHERE job_id=? AND state='SUBMITTING'""",
+                (provider_id, _now(), job_id))
+            if updated.rowcount != 1:
+                raise RuntimeError("Motion job ledger changed after dispatch")
+        return {"job_id": job_id, "status": "SUBMITTED", "provider": "LOCAL_COMFYUI",
+                "shot_id": shot_id, "video_verified": False, "youtube_uploaded": False,
+                "model_id": PILOT_MODEL_ID,
+                "model_quality_verified": False}
 
 
 def job_status(job_id, *, db_path: Path = DB):
@@ -299,9 +307,10 @@ def job_status(job_id, *, db_path: Path = DB):
         raise KeyError("Motion job does not exist")
     # Terminal provider error is durable. Never poll/retry or reserve quota
     # again just because the remote ComfyUI history was later pruned.
-    if row["state"] == "FAILED":
+    if row["state"] in {"FAILED", "FAILED_RESOURCE"}:
         return {"job_id": job_id, "film_slug": row["film_slug"],
-                "shot_id": row["shot_id"], "status": "PROVIDER_FAILED",
+                "shot_id": row["shot_id"], "status": (
+                    "GPU_RESOURCE_FAILURE" if row["state"] == "FAILED_RESOURCE" else "PROVIDER_FAILED"),
                 "plan_sha": row["plan_sha"], "workflow_sha": row["workflow_sha"],
                 "video_verified": False, "youtube_uploaded": False,
                 "automatic_retry": False}
@@ -335,21 +344,23 @@ def job_status(job_id, *, db_path: Path = DB):
               and details["status"].get("status_str") in {"error", "failed"}):
             # Explicit ComfyUI terminal error, not a timeout, missing history,
             # ambiguous dispatch or an incomplete/pending provider state.
-            status = "PROVIDER_FAILED"
+            status = ("GPU_RESOURCE_FAILURE" if draft_resources.provider_memory_error(details["status"])
+                      else "PROVIDER_FAILED")
         else:
             status = "PROVIDER_QUEUED_OR_UNKNOWN"
-    if status == "PROVIDER_FAILED":
+    if status in {"PROVIDER_FAILED", "GPU_RESOURCE_FAILURE"}:
+        terminal = "FAILED_RESOURCE" if status == "GPU_RESOURCE_FAILURE" else "FAILED"
         with closing(_db(db_path, write=True)) as conn, conn:
             conn.execute("BEGIN IMMEDIATE")
-            changed = conn.execute("""UPDATE motion_jobs SET state='FAILED',
+            changed = conn.execute("""UPDATE motion_jobs SET state=?,
                 updated_at=? WHERE job_id=? AND state='SUBMITTED'
-                AND provider_id=?""", (_now(), job_id, row["provider_id"]))
+                AND provider_id=?""", (terminal, _now(), job_id, row["provider_id"]))
             if changed.rowcount != 1:
                 # A concurrent successful import/reconciliation must not be
                 # overwritten or misreported as a freshly failed job.
                 current = conn.execute("SELECT state FROM motion_jobs WHERE job_id=?",
                                        (job_id,)).fetchone()
-                if current is None or current["state"] != "FAILED":
+                if current is None or current["state"] != terminal:
                     return {"job_id": job_id, "film_slug": row["film_slug"],
                             "shot_id": row["shot_id"], "status": "STATE_CHANGED_REVIEW_REQUIRED",
                             "plan_sha": row["plan_sha"], "workflow_sha": row["workflow_sha"],
@@ -366,7 +377,7 @@ def job_status(job_id, *, db_path: Path = DB):
                 AND provider_id=?""", (_now(), job_id, row["provider_id"]))
     return {"job_id": job_id, "film_slug": row["film_slug"], "shot_id": row["shot_id"],
             "status": status, "plan_sha": row["plan_sha"], "workflow_sha": row["workflow_sha"],
-            "video_verified": False, "youtube_uploaded": False}
+            "video_verified": False, "youtube_uploaded": False, "automatic_retry": False}
 
 
 def main(argv=None):

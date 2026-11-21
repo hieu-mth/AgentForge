@@ -198,6 +198,8 @@ class DraftTests(unittest.TestCase):
 
         profile = {"base_url": "http://127.0.0.1:8188", "provider": "comfyui", "model": "fixture.gguf"}
         with (patch.object(draft.model_hub, "draft_routes", return_value=(1, {"image.generate": profile})),
+              patch.object(draft.comfy_service, "require_other_queue_idle"),
+              patch.object(draft.comfy_service, "require_idle_queue"),
               patch.object(draft, "_image", side_effect=complete_scene) as image,
               patch.object(draft, "_render") as render,
               patch.object(draft, "_release_idle_comfy") as release):
@@ -214,6 +216,15 @@ class DraftTests(unittest.TestCase):
               patch.object(draft.flux_runtime, "_json") as request):
             self.assertFalse(draft._release_idle_comfy({"base_url": "http://127.0.0.1:8188"}))
             request.assert_not_called()
+
+    def test_ollama_500_does_not_retry(self):
+        profile = {"id": "fixture", "model": "fixture", "base_url": "http://127.0.0.1:11434"}
+        with (patch.object(draft.runtime, "_installed_local_model", return_value=True),
+              patch.object(draft.runtime, "_http_json",
+                           side_effect=draft.runtime.LocalProviderHTTPError(500)) as request,
+              self.assertRaisesRegex(draft.ResourceWait, "OLLAMA_RESOURCE_OR_SERVER_ERROR")):
+            draft._ask(profile, "Plan", {}, {}, {})
+        request.assert_called_once()
 
     def test_local_render_integrity_and_review_checkpoint(self):
         try:

@@ -20,11 +20,12 @@ const statusLabels={
   SUBMITTING_UNCERTAIN:'Cần đối chiếu lượt gửi',
   RUNNING:'Đang chạy',
   FAILED:'Có lỗi',
+  FAILED_RESOURCE:'Lỗi tài nguyên GPU',
 };
 
 export function ProductionStatus({state,verified}){
   const warning=['RENDER_RECEIPT_PRESENT_UNINSPECTED','COMPLETE_UNVERIFIED','SUBMITTING_UNCERTAIN'].includes(state);
-  const error=state==='FAILED'||state?.includes('REVIEW_REQUIRED')||state==='INVALID_NEEDS_OWNER_REVIEW';
+  const error=['FAILED','FAILED_RESOURCE'].includes(state)||state?.includes('REVIEW_REQUIRED')||state==='INVALID_NEEDS_OWNER_REVIEW';
   return <SettingsStatus tone={verified?'good':error?'bad':warning?'warn':'info'} title={state}>
     {verified?'MP4 đã qua kiểm tra kỹ thuật':statusLabels[state]||'Xem chi tiết trạng thái'}
   </SettingsStatus>;

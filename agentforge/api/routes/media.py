@@ -112,8 +112,13 @@ def handle(server, path, request, session=None):
                 or request.get("ack") != "GENERATE_AI_VISUALS"):
             raise PermissionError("Explicit visual GPU batch approval required")
         from agentforge.ai.model_hub import local_inference_slot
+        from agentforge.features.film_studio import draft_resources
         from agentforge.features.media import visual_jobs
+        from agentforge.integrations import comfy_service, comfyui
         with local_inference_slot():
+            draft_resources.require_gpu("image")
+            comfy_service.require_other_queue_idle(comfyui.DEFAULT_PORT)
+            comfy_service.require_idle_queue(comfyui.DEFAULT_PORT)
             return visual_jobs.submit(
                 request["purpose"], request["topic"], request["scenes"],
                 request["checkpoint"], confirm_generation=True)
