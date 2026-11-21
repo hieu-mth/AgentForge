@@ -1,0 +1,31 @@
+.production-progress {
+  display: grid; gap: 16px; min-width: 0; margin: 16px 0;
+  padding: clamp(12px, 3vw, 22px); border: 1px solid var(--prod-line); border-radius: 18px;
+  background: var(--prod-bg); color: var(--prod-text); box-shadow: 0 8px 24px rgb(22 33 65 / 7%);
+}
+.production-header,.production-title,.production-meta {display:flex; align-items:center; gap:10px; min-width:0; flex-wrap:wrap}
+.production-header {justify-content:space-between}
+.production-title {flex:1 1 260px; flex-wrap:nowrap}
+.production-title > div {min-width:0}
+.production-title h3 {margin:0 0 4px; font-size:clamp(15px,2.2vw,19px); overflow-wrap:anywhere}
+.production-mark {display:grid; place-items:center; flex:0 0 42px; height:42px; border-radius:12px;
+  color:var(--prod-primary); background:var(--prod-tint); font-size:20px}
+.production-meta,.production-progress small {color:var(--prod-muted);font-size:12px}
+.production-overall {padding:12px 14px;border-radius:12px;background:var(--prod-fill);overflow-wrap:anywhere}
+.production-overall .ant-progress-bg {transition:width .35s ease}
+.production-error {margin:6px 0;color:var(--prod-error)}
+.production-steps,.production-scenes ul {list-style:none;margin:0;padding:0;display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,135px),1fr));gap:8px}
+.production-steps li,.production-scenes li {min-width:0; padding:9px 10px; border-radius:10px;
+  border:1px solid var(--prod-line); background:var(--prod-bg); overflow-wrap:anywhere}
+.production-steps li {display:flex; align-items:flex-start; gap:8px; font-size:13px}
+.production-steps small,.production-scenes small {display:block;margin-top:3px}
+.production-steps [data-state='done'] > .anticon,.production-scenes strong .anticon {color:var(--prod-success)}
+.production-steps [data-state='active'],.production-scenes [data-active='true'] {
+  border-color:var(--prod-primary); background:var(--prod-tint); transition:background-color .25s ease}
+.production-steps [data-state='error'],.production-scenes [data-error='true'] {border-color:var(--prod-error)}
+.production-scenes summary {cursor:pointer;font-weight:600;margin-bottom:8px}
+.production-scenes ul {max-height:250px; overflow:auto}
+@media (prefers-reduced-motion: reduce) {
+  .production-progress *, .production-progress *::before {animation:none!important;transition:none!important}
+}

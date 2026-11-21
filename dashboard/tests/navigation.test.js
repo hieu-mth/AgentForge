@@ -54,3 +54,26 @@ test('current video shell has no retired UI styles',()=>{
   for(const obsolete of ['workspace-owner','goal-owner','prompt-composer','visual-picker','overview-chart'])
     assert.equal(css.includes('.'+obsolete),false,obsolete);
 });
+import { productionProgress } from '../src/features/studioProgress.js';
+
+test('production progress reflects persisted checkpoints and verified output',()=>{
+  assert.equal(productionProgress().percent,0);
+  const job={status:'RUNNING',stage:'IMAGES',brief:{mode:'motion',scene_count:2},storyboard_version:1,
+    board:{scenes:[{asset:'png'},{}]}};
+  const images=productionProgress(job);
+  assert.equal(images.images,1);
+  assert.equal(images.clips,0);
+  const resumed=productionProgress(JSON.parse(JSON.stringify(job)));
+  assert.equal(resumed.percent,images.percent);
+  job.stage='MOTION';
+  job.status='WAITING_RESOURCES';
+  assert.equal(productionProgress(job).stages.find(s=>s.key==='MOTION').state,'waiting');
+  job.status='FAILED';
+  assert.equal(productionProgress(job).stages.find(s=>s.key==='MOTION').state,'error');
+  job.stage='VERIFY';
+  job.status='REVIEW';
+  job.video_sha='video';
+  assert.ok(productionProgress(job).percent<100);
+  job.receipt_sha='receipt';
+  assert.equal(productionProgress(job).percent,100);
+});
