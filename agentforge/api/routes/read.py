@@ -30,6 +30,17 @@ def dispatch(self, route):
                 draft_pipeline.verify_video(job, stream)
                 self._session().setdefault("draft_previews", {})[job["id"]] = job["video_sha"]
             return _serve(self, draft_pipeline.video_path(job), draft_pipeline.MAX_VIDEO, "draft.mp4", verify)
+        if parts[5] == "receipt":
+            return self._reply(200, draft_pipeline.verified_receipt(job), mime="application/json",
+                               headers=(("Content-Disposition", 'attachment; filename="draft.receipt.json"'),))
+        if parts[5] == "captions" and job.get("subtitle_sha"):
+            from agentforge.features.film_studio import draft_timeline
+            draft_pipeline.verified_receipt(job)
+            captions = draft_timeline.captions(job["board"]["scenes"])
+            if draft_pipeline._sha(captions) != job["subtitle_sha"]:
+                raise ValueError("Draft subtitle hash mismatch")
+            return self._reply(200, captions, mime="application/x-subrip",
+                               headers=(("Content-Disposition", 'attachment; filename="captions.srt"'),))
         if parts[5].startswith("scene-") and parts[5][6:].isascii() and parts[5][6:].isdecimal():
             return self._reply(200, draft_pipeline.image(job, int(parts[5][6:])), mime="image/png")
         raise ValueError("Invalid draft asset route")

@@ -110,13 +110,8 @@ class DraftTests(unittest.TestCase):
         self.addCleanup(client.doCleanups)
         client.server.allow_external_actions = True
         client.login()
-        body = {**self.brief, "id": self.ident, "seconds": 4,
-                "mode": "motion", "motion_approved": False}
+        body = {**self.brief, "id": self.ident, "seconds": 4, "mode": "motion"}
         route = "/api/film/drafts/start"
-        status, denied, _ = client.req("POST", route, body)
-        self.assertEqual(status, 400)
-        self.assertIn("Owner approval", denied["message"])
-        body["motion_approved"] = True
         self.assertEqual(client.req("POST", route, {**body, "seconds": 6})[0], 400)
         profile = {"id": "selected_by_registry", "provider": "comfyui", "model": ltx.CHECKPOINT,
                    "motion_encoder": str(self.root / ltx.ENCODER), "base_url": "http://127.0.0.1:8188"}
@@ -192,10 +187,54 @@ class DraftTests(unittest.TestCase):
             self.assertEqual(response, 200)
             draft._work(draft._read(self.ident), nullcontext())
             job = draft._read(self.ident)
+            self.assertEqual(job["status"], "STORYBOARD_REVIEW", job.get("error"))
+            self.assertEqual(calls, [])
+            approval = route.removesuffix("/start") + f"/{self.ident}/storyboard-approve"
+            self.assertEqual(client.req("POST", approval, {"sha256": "stale"})[0], 400)
+            self.assertEqual(client.req("POST", approval, {"sha256": job["storyboard_sha"]})[0], 200)
+            draft._work(draft._read(self.ident), nullcontext())
+            job = draft._read(self.ident)
             self.assertEqual(job["status"], "REVIEW", job.get("error"))
             self.assertTrue(job["video_sha"])
             self.assertTrue(all(scene.get("motion_sha") for scene in job["board"]["scenes"]))
             self.assertEqual(calls, ["image", "image", "motion", "motion", "render"])
+            self.assertTrue(draft.video_path(job).with_suffix(".receipt.json").is_file())
+            before = job["board"]["scenes"][1]["motion_sha"]
+            edit = approval.replace("storyboard-approve", "storyboard-edit")
+            fields = {"sha256": job["storyboard_sha"], "index": 0, "description": "Miu looks at the window",
+                      "image_prompt": "An orange tabby cat in a forest", "motion_prompt": "Cat turns its head",
+                      "caption": "Miu nhìn ra cửa sổ."}
+            self.assertEqual(client.req("POST", edit, fields)[0], 200)
+            revised = draft._read(self.ident)
+            self.assertEqual(revised["storyboard_version"], 2)
+            self.assertEqual(revised["status"], "STORYBOARD_REVIEW")
+            self.assertNotIn("approved_storyboard_sha", revised)
+            self.assertEqual(revised["board"]["scenes"][1]["motion_sha"], before)
+            self.assertEqual(client.req("POST", approval, {"sha256": job["storyboard_sha"]})[0], 400)
+            self.assertEqual(client.req("POST", approval, {"sha256": revised["storyboard_sha"]})[0], 200)
+            draft._work(draft._read(self.ident), nullcontext())
+            result = draft._read(self.ident)
+            self.assertEqual(result["status"], "REVIEW")
+            self.assertEqual(calls[-3:], ["image", "motion", "render"])
+            self.assertEqual(client.req("GET", f"/api/film/drafts/{self.ident}/captions")[0], 200)
+            current_video = draft.video_path(result)
+            self.assertTrue(current_video.with_name("draft-v01.mp4").is_file())
+            with current_video.open("rb") as stream:
+                draft.verify_video(result, stream)
+            current_video.with_suffix(".receipt.json").write_text("{}")
+            with current_video.open("rb") as stream, self.assertRaisesRegex(ValueError, "receipt hash"):
+                draft.verify_video(result, stream)
+
+    def test_motion_timeline_is_exact_without_extending_ltx_output(self):
+        for seconds, minimum, maximum in ((4, 2, 2), (6, 3, 3), (15, 8, 9)):
+            for scene_count in {minimum, maximum}:
+                timeline = draft.draft_timeline.timeline(seconds, scene_count)
+                self.assertEqual(sum(timeline), seconds * 24)
+                self.assertEqual(len(timeline), scene_count)
+                self.assertLessEqual(max(timeline), 49)
+        for seconds in (30, 60):
+            with self.assertRaises(ValueError):
+                draft.draft_timeline.timeline(seconds, 9)
 
     def test_motion_failure_does_not_render_or_dispatch_another_shot(self):
         job = {"id": self.ident, "brief": {**self.brief, "mode": "motion", "seconds": 4},

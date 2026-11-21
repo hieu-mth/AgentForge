@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 from agentforge import ops_control
 from agentforge.ai import model_hub
 from agentforge.features.film_studio import characters
-from agentforge.features.film_studio import draft_motion, draft_resources
+from agentforge.features.film_studio import draft_motion, draft_resources, draft_timeline
 from agentforge.features.media import flux_runtime, flux_workflow, render, visual_jobs
 from agentforge.integrations import comfy_service
 from agentforge.ops import runtime_certification as runtime
@@ -22,6 +22,7 @@ from agentforge.paths import COMPANY_DATA_DIR, WORKSPACE_DIR, ensure_local_root
 
 DB = COMPANY_DATA_DIR / "video_drafts.sqlite3"
 MAX_VIDEO = 80 * 1024 * 1024
+MAX_MOTION_INPUTS = 256 * 1024 * 1024
 SIZES = {"9:16": (720, 1280), "16:9": (1280, 720)}
 LOCK = threading.Lock()
 ACTIVE = None
@@ -174,7 +175,11 @@ def list_drafts():
         if conn is None:
             return []
         jobs = [_decode_row(row) for row in conn.execute("SELECT body FROM drafts ORDER BY rowid DESC LIMIT 30")]
-    return [{**job, "worker_active": job["id"] == ACTIVE} for job in jobs]
+    for job in jobs:
+        job["worker_active"] = job["id"] == ACTIVE
+        if job["status"] == "RUNNING" and not job["worker_active"] and "storyboard_version" in job:
+            job["status"] = "INTERRUPTED"
+    return jobs
 
 
 def jobs_pending():
@@ -437,8 +442,27 @@ def _sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def _scene_path(job, index):
+    scene = job["board"]["scenes"][index]
+    ident = scene.get("image_key", scene.get("shot_id"))
+    name = f"scene-{_id(ident)}.png" if ident else f"scene-{index+1:02d}.png"
+    return ensure_local_root(_folder(job["id"]) / name)
+
+
+def _stamp_storyboard(job):
+    board = job["board"]
+    layout = draft_timeline.timeline(job["brief"]["seconds"], len(board["scenes"]))
+    for scene, frames in zip(board["scenes"], layout):
+        scene.setdefault("shot_id", uuid4().hex)
+        scene.setdefault("motion_prompt", scene["description"])
+        scene.update(frames=frames, seconds=frames / draft_timeline.FPS)
+    job["storyboard_sha"] = draft_timeline.digest(job)
+    job.update(status="STORYBOARD_REVIEW", stage="STORYBOARD", error=None)
+    job.pop("approved_storyboard_sha", None)
+
+
 def _image(job, index, scene, revision, profile):
-    path = ensure_local_root(_folder(job["id"]) / f"scene-{index+1:02d}.png")
+    path = _scene_path(job, index)
     if scene["asset"]:
         image(job, index)
         return
@@ -461,7 +485,8 @@ def _image(job, index, scene, revision, profile):
         _save(job)
         cast = job["cast"]
         identity = ". ".join(cast[key]["name"] + ": " + cast[key]["appearance"] for key in scene["character_ids"])
-        prompt = ". ".join((scene.get("continuity", job["board"]["continuity"]), identity, scene["image_prompt"]))
+        prompt = ". ".join((scene.get("continuity", job["board"]["continuity"]), identity,
+                            scene.get("scene_notes", ""), scene["image_prompt"]))
         cfg = profile["flux"]
         long = min(768, cfg["max_resolution"] // 16 * 16)
         short = max(256, (long * 9 // 16) // 16 * 16)
@@ -504,10 +529,15 @@ def _render(job):
     ffmpeg = render._ffmpeg()
     command = [ffmpeg, "-nostdin", "-n", "-v", "error"]
     filters, streams = [], []
+    input_bytes = 0
     for index, scene in enumerate(job["board"]["scenes"]):
         if moving:
-            command += ["-i", str(draft_motion.clip_path(scene))]
-            frames = scene["seconds"] * 24
+            clip = draft_motion.clip_path(scene)
+            input_bytes += clip.stat().st_size
+            if input_bytes > MAX_MOTION_INPUTS:
+                raise ValueError("Motion clips exceed the production assembly budget")
+            command += ["-i", str(clip)]
+            frames = scene.get("frames", int(scene["seconds"] * 24))
             filters.append(f"[{index}:v]trim=end_frame={frames},setpts=PTS-STARTPTS,setsar=1[v{index}]")
             streams.append(f"[v{index}]")
             continue
@@ -519,7 +549,7 @@ def _render(job):
                        f"fade=t=in:st=0:d=0.2,fade=t=out:st={scene['seconds']-0.2}:d=0.2[v{index}]")
         streams.append(f"[v{index}]")
     filters.append("".join(streams) + f"concat=n={len(streams)}:v=1:a=0[out]")
-    target = ensure_local_root(folder / "draft.mp4")
+    target = _video_file(job)
     temporary = ensure_local_root(folder / (uuid4().hex + ".mp4"))
     try:
         render._run_process(command + ["-filter_complex_threads", "1", "-filter_complex", ";".join(filters),
@@ -537,6 +567,25 @@ def _render(job):
         with temporary.open("rb") as stream:
             digest = hashlib.file_digest(stream, "sha256").hexdigest()
         temporary.replace(ensure_local_root(target))
+        if "storyboard_version" in job:
+            subtitles = draft_timeline.captions(job["board"]["scenes"])
+            receipt = {"production_id": job["id"], "version": job["storyboard_version"],
+                       "storyboard_sha": job["approved_storyboard_sha"], "video_sha": digest,
+                       "technical": {"frames_decoded": int(frames[-1]), "fps": 24, "width": width, "height": height},
+                       "visual_qa": "UNVERIFIED", "owner_qa": "PENDING",
+                       "subtitle_sha": _sha(subtitles) if subtitles else None,
+                       "shots": [{key: scene[key] for key in ("shot_id", "frames", "job_id", "asset",
+                                  "motion_job", "motion_sha")} for scene in job["board"]["scenes"]]}
+            record = ensure_local_root(target.with_suffix(".receipt.json"))
+            staged = ensure_local_root(folder / (uuid4().hex + ".json.tmp"))
+            try:
+                with staged.open("x", encoding="utf-8") as stream:
+                    json.dump(receipt, stream, ensure_ascii=False, indent=2)
+                staged.replace(record)
+            finally:
+                staged.unlink(missing_ok=True)
+            job["receipt_sha"] = _sha(record.read_bytes())
+            job["subtitle_sha"] = receipt["subtitle_sha"]
         return digest
     finally:
         temporary.unlink(missing_ok=True)
@@ -551,8 +600,25 @@ def _work(job, slot):
             raise DraftCancelled
         ops_control.require_active()
         moving = job["brief"].get("mode") == "motion"
+        reviewing = "storyboard_version" in job and not job.get("approved_storyboard_sha")
         with model_hub.local_inference_slot():
             revision, bindings = model_hub.draft_routes()
+            if reviewing:
+                draft_motion.require_resolved_ledger(job)
+                image_runtime = bindings["image.generate"].get("base_url")
+                if image_runtime:
+                    port = urlsplit(image_runtime).port
+                    comfy_service.require_other_queue_idle(port, include_profiles=True)
+                    comfy_service.require_idle_queue(port, allow_offline=True)
+                if not job.get("board"):
+                    _write_board(job, bindings)
+                if _cancellation(job["id"]):
+                    raise DraftCancelled
+                _stamp_storyboard(job)
+                return
+            if "storyboard_version" in job and (
+                    job["approved_storyboard_sha"] != draft_timeline.digest(job)):
+                raise ValueError("Storyboard đã thay đổi. Cần Owner duyệt lại.")
             if moving and revision != job["motion_revision"]:
                 raise ValueError("Model routing changed after approval; review and create a new motion draft")
             motion_profile = draft_motion.binding(bindings) if moving else None
@@ -591,9 +657,14 @@ def _work(job, slot):
                 try:
                     draft_motion.run_shot(scene, index, prepared, motion_profile,
                                           lambda: _save(job), lambda: _cancellation(job["id"]))
-                finally:
+                except draft_motion.NeedsReconciliation:
+                    raise
+                except Exception:
                     if _cancellation(job["id"]):
-                        raise DraftCancelled
+                        raise DraftCancelled from None
+                    raise
+                if _cancellation(job["id"]):
+                    raise DraftCancelled
         with model_hub.local_inference_slot():
             ops_control.require_active()
             _activity(job, "RENDER", "render")
@@ -604,6 +675,8 @@ def _work(job, slot):
         job.update(status="WAITING_RESOURCES", error=str(exc))
     except DraftCancelled:
         job.update(status="CANCELLED", error=None, video_sha=None)
+    except draft_motion.NeedsReconciliation as exc:
+        job.update(status="NEEDS_RECONCILIATION", error=str(exc))
     except (ValueError, PermissionError) as exc:
         if str(exc) == "LOCAL_INFERENCE_BUSY":
             job.update(status="WAITING_RESOURCES", error="GPU_BUSY")
@@ -620,17 +693,22 @@ def _work(job, slot):
                 except OSError:
                     pass
             job.pop("activity", None)
-            _save(job)
+            with comfy_service.LOCK:
+                if job["status"] != "NEEDS_RECONCILIATION" and _cancellation(job["id"]):
+                    job.update(status="CANCELLED", error=None, video_sha=None)
+                _save(job)
         finally:
             ACTIVE = None
             slot.__exit__(None, None, None)
-    if job["status"] != "WAITING_RESOURCES":
-        _dispatch()
+        if job["status"] != "WAITING_RESOURCES":
+            _dispatch()
 
 
 def _start(job, slot):
     global ACTIVE
     with comfy_service.LOCK:
+        if _cancellation(job["id"]):
+            raise DraftCancelled
         comfy_service.reset_idle()
         job.update(status="RUNNING", error=None)
         job.pop("activity", None)
@@ -673,8 +751,9 @@ def _dispatch():
 def submit(data):
     ident = _id(data["id"])
     seconds = _number(data["seconds"], 4 if data.get("mode") == "motion" else 6, 60)
-    count = _number(data["scene_count"], 2, 6)
-    if seconds < count * 2 or not isinstance(data["ratio"], str) or data["ratio"] not in SIZES:
+    motion_mode = data.get("mode") == "motion"
+    count = _number(data["scene_count"], 2, 9 if motion_mode else 6)
+    if (not motion_mode and seconds < count * 2) or not isinstance(data["ratio"], str) or data["ratio"] not in SIZES:
         raise ValueError("Choose a supported ratio and at least two seconds per scene")
     idea = data["idea"]
     if not isinstance(idea, str) or not idea.strip() or len(idea) > BRIEF_LIMIT:
@@ -691,10 +770,9 @@ def submit(data):
     if mode not in ("still", "motion"):
         raise ValueError("Invalid video mode")
     if mode == "motion":
-        if data.get("motion_approved") is not True:
-            raise PermissionError("Owner approval is required for the motion shots")
-        if count > draft_motion.MAX_SHOTS or seconds != count * draft_motion.SECONDS_PER_SHOT or brief["ratio"] != "16:9":
-            raise ValueError("Motion supports 3 shots maximum, exactly 2 seconds per shot, in 16:9")
+        draft_timeline.timeline(seconds, count)
+        if brief["ratio"] != "16:9":
+            raise ValueError("Phim chuyển động hiện hỗ trợ khung hình 16:9.")
         brief["mode"] = mode
     try:
         prior = _read(ident)
@@ -707,15 +785,14 @@ def submit(data):
     ops_control.require_active()
     if mode == "motion":
         revision, bindings = model_hub.draft_routes()
-        draft_motion.binding(bindings)
     else:
         model_hub.draft_routes()
-    render._ffmpeg()
+        render._ffmpeg()
     created_at = visual_jobs._now()
     job = {"id": ident, "brief": brief, "stage": "QUEUED", "status": "QUEUED",
            "video_sha": None, "created_at": created_at, "updated_at": created_at}
     if mode == "motion":
-        job["motion_revision"] = revision
+        job.update(motion_revision=revision, storyboard_version=1)
     with comfy_service.LOCK, _db(True) as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute("SELECT body FROM drafts WHERE id=?", (ident,)).fetchone()
@@ -734,31 +811,100 @@ def submit(data):
     return started if started and started["id"] == ident else _read(ident)
 
 
+def _storyboard_action(job, action, data):
+    if ("storyboard_version" not in job or not job.get("board")
+            or data["sha256"] != draft_timeline.digest(job)
+            or data["sha256"] != job.get("storyboard_sha")):
+        raise ValueError("Storyboard đã thay đổi. Tải lại trước khi tiếp tục.")
+    if action == "storyboard-approve":
+        if job["status"] != "STORYBOARD_REVIEW":
+            raise ValueError("Storyboard không chờ duyệt.")
+        ops_control.require_active()
+        revision, bindings = model_hub.draft_routes()
+        draft_motion.binding(bindings)
+        job.update(approved_storyboard_sha=job["storyboard_sha"], motion_revision=revision, status="QUEUED")
+        with comfy_service.LOCK, _db(True) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            statuses = [row[0] for row in conn.execute(
+                "SELECT json_extract(body,'$.status') FROM drafts "
+                "WHERE json_extract(body,'$.status') IN ('QUEUED','RUNNING','WAITING_RESOURCES')")]
+            if "WAITING_RESOURCES" in statuses or len(statuses) >= _queue_limit():
+                raise ValueError("Hàng đợi production đầy hoặc đang chờ tài nguyên.")
+            conn.execute("UPDATE drafts SET body=? WHERE id=?", (json.dumps(job, ensure_ascii=False), job["id"]))
+            comfy_service.reset_idle()
+        return job
+    if job["status"] not in {"STORYBOARD_REVIEW", "REVIEW", "FAILED", "APPROVED", "REJECTED"}:
+        raise ValueError("Storyboard chưa thể chỉnh ở trạng thái này.")
+    draft_motion.require_resolved_ledger({})  # A possible dispatch must be reconciled before edit.
+    if job["storyboard_version"] >= draft_timeline.MAX_VERSIONS:
+        raise ValueError("Đã đạt giới hạn phiên bản. Tạo phim mới để tiếp tục.")
+    original = draft_timeline.snapshot(job)
+    scenes = job["board"]["scenes"]
+    checkpoints = [{key: scene.get(key) for key in (
+        "shot_id", "image_key", "job_id", "asset", "motion_job", "motion_sha")} for scene in scenes]
+    index = _number(data["index"], 0, len(scenes) if action == "storyboard-add" else len(scenes)-1)
+    if action == "storyboard-remove":
+        draft_timeline.timeline(job["brief"]["seconds"], len(scenes)-1)
+        scenes.pop(index)
+    elif action == "storyboard-move":
+        target = _number(data["target"], 0, len(scenes)-1)
+        scenes.insert(target, scenes.pop(index))
+    else:
+        if action == "storyboard-add":
+            draft_timeline.timeline(job["brief"]["seconds"], len(scenes)+1)
+            scene = {"character_ids": [], "audio": "", "attempts": 0, "asset": None, "job_id": None}
+            scenes.insert(index, scene)
+        else:
+            scene = scenes[index]
+        if action == "storyboard-rewrite":
+            _, bindings = model_hub.draft_routes()
+            with model_hub.local_inference_slot(), _measured(job, "storyboard", bindings["image.generate"]):
+                data = _ask(bindings["film.storyboard"], "Rewrite only this shot. Preserve the cast. "
+                            "Return description, English image_prompt and motion_prompt.",
+                            {"scene": {key: scene[key] for key in draft_timeline.STORY_FIELDS if key in scene},
+                             "feedback": _text(data["feedback"], 350), "continuity": original["continuity"]},
+                            _object(description=STRING, image_prompt=STRING, motion_prompt=STRING),
+                            bindings["image.generate"])
+        prompts = {key: _text(data[key], limit) for key, limit in
+                   (("description", 350), ("image_prompt", 600), ("motion_prompt", 600))}
+        for key, limit in (("caption", 220), ("scene_notes", 240)):
+            if key in data:
+                prompts[key] = _text(data[key], limit).replace("\n", " ") if data[key] != "" else ""
+        notes = prompts.get("scene_notes", scene.get("scene_notes", ""))
+        changed_notes = notes != scene.get("scene_notes", "")
+        image_changed = changed_notes or prompts["image_prompt"] != scene.get("image_prompt")
+        motion_changed = image_changed or prompts["motion_prompt"] != scene.get("motion_prompt")
+        scene.update(prompts)
+        if image_changed:
+            scene.update(image_key=uuid4().hex, asset=None, job_id=None, attempts=0)
+        if motion_changed:
+            scene.pop("motion_job", None)
+            scene.pop("motion_sha", None)
+    job.setdefault("storyboard_history", []).append(
+        {"sha256": job["storyboard_sha"], "storyboard": original, "video_sha": job["video_sha"],
+         "receipt_sha": job.get("receipt_sha"), "checkpoints": checkpoints, "status": job["status"]})
+    job["storyboard_version"] += 1
+    job["brief"]["scene_count"] = len(scenes)
+    job["video_sha"] = None
+    job.pop("receipt_sha", None)
+    job.pop("subtitle_sha", None)
+    _stamp_storyboard(job)
+    _save(job)
+    return job
+
+
 def act(ident, action, data):
     if action == "cancel":
-        job = _read(ident)
-        if job["status"] not in _QUEUE_STATES:
-            raise ValueError("Draft cannot be cancelled")
-        _cancellation(ident, mark=True)
-        if job["status"] == "RUNNING":
-            try:
-                slot = _worker_slot()
-                slot.__enter__()
-            except PermissionError:
-                return job
-            try:
-                job = _read(ident)
-                if job["status"] != "RUNNING":
-                    return job
+        with comfy_service.LOCK:
+            job = _read(ident)
+            if job["status"] not in _QUEUE_STATES:
+                raise ValueError("Draft cannot be cancelled")
+            if job["status"] == "RUNNING" and not ACTIVE and job.get("stage") == "MOTION":
+                raise ValueError("Cần đối soát tác vụ chuyển động trước khi hủy.")
+            _cancellation(ident, mark=True)
+            if job["status"] != "RUNNING" or not ACTIVE:
                 job.update(status="CANCELLED", error=None)
                 _save(job)
-            finally:
-                slot.__exit__(None, None, None)
-            _dispatch()
-            return job
-        # A queued or waiting draft has no provider work to interrupt.
-        job.update(status="CANCELLED", error=None)
-        _save(job)
         _dispatch()
         return job
     if action == "resume" and _read(ident)["status"] == "QUEUED":
@@ -769,6 +915,8 @@ def act(ident, action, data):
     started = False
     try:
         job = _read(ident)
+        if action.startswith("storyboard-"):
+            return _storyboard_action(job, action, data)
         if action in {"approve", "reject"}:
             if job["status"] != "REVIEW" or data.get("sha256") != job["video_sha"]:
                 raise ValueError("Review the current draft version")
@@ -788,7 +936,7 @@ def act(ident, action, data):
             job.update(status="FAILED", video_sha=None, error="Scene changed. Resume to regenerate this scene.")
             _save(job)
             return job
-        if action != "resume" or job["status"] not in {"RUNNING", "FAILED", "WAITING_RESOURCES"}:
+        if action != "resume" or job["status"] not in {"RUNNING", "FAILED", "WAITING_RESOURCES", "NEEDS_RECONCILIATION"}:
             raise ValueError("Draft cannot be resumed")
         with _db() as conn:
             if conn.execute("SELECT 1 FROM drafts WHERE id<>? AND json_extract(body,'$.status')="
@@ -807,7 +955,7 @@ def act(ident, action, data):
 def image(job, index):
     scenes = job.get("board", {}).get("scenes", [])
     scene = scenes[_number(index, 0, len(scenes) - 1)]
-    path = ensure_local_root(_folder(job["id"]) / f"scene-{index+1:02d}.png")
+    path = _scene_path(job, index)
     if not scene["asset"] or not path.is_file() or path.stat().st_size > visual_jobs.MAX_IMAGE:
         raise ValueError("Scene image unavailable")
     data = path.read_bytes()
@@ -816,10 +964,16 @@ def image(job, index):
     return data
 
 
+def _video_file(job):
+    version = job.get("storyboard_version")
+    name = f"draft-v{_number(version, 1, draft_timeline.MAX_VERSIONS):02d}.mp4" if version else "draft.mp4"
+    return ensure_local_root(_folder(job["id"]) / name)
+
+
 def video_path(job):
     if not job.get("video_sha"):
         raise ValueError("Draft video unavailable")
-    return ensure_local_root(_folder(job["id"]) / "draft.mp4")
+    return _video_file(job)
 
 
 def verify_video(job, stream):
@@ -832,3 +986,15 @@ def verify_video(job, stream):
         digest.update(chunk)
     if not 1024 <= size or digest.hexdigest() != job["video_sha"]:
         raise ValueError("Draft video hash mismatch")
+    if "storyboard_version" in job:
+        verified_receipt(job)
+
+
+def verified_receipt(job):
+    record = ensure_local_root(video_path(job).with_suffix(".receipt.json"))
+    if not record.is_file() or record.stat().st_size > 16_384:
+        raise ValueError("Draft receipt unavailable")
+    data = record.read_bytes()
+    if _sha(data) != job.get("receipt_sha"):
+        raise ValueError("Draft receipt hash mismatch")
+    return data
