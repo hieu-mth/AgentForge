@@ -419,7 +419,7 @@ try {
     holdDraftRead=null;
   }
   await settings.reload();
-  await settings.getByText('Chú mèo cam khám phá khu rừng',{exact:true}).waitFor();
+  await settings.getByRole('tab',{name:/^Chú mèo cam khám phá khu rừng/}).waitFor();
   draftFixture={...draftFixture,status:'FAILED',worker_active:false,error:'Fixture runtime unavailable'};
   await settings.getByText('Cần xử lý',{exact:true}).click();
   await settings.getByText('Fixture runtime unavailable',{exact:true}).waitFor();
@@ -558,7 +558,7 @@ try {
     throw new Error('Cloud registration exposed the local endpoint field');
   await registerDialog.getByText('Local',{exact:true}).click();
   await registerDialog.getByRole('combobox',{name:'Runtime'}).click();
-  await openOptions.filter({hasText:/^ComfyUI$/}).click();
+  await openOptions.filter({hasText:/^ComfyUI$/}).evaluate(option=>option.click());
   await registerDialog.getByLabel('Mã checkpoint',{exact:true}).waitFor();
   await registerDialog.getByRole('combobox',{name:'Runtime'}).click();
   await openOptions.filter({hasText:/^Ollama$/}).click();
