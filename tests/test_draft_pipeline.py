@@ -4,7 +4,9 @@ import io
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from contextlib import nullcontext
+from contextlib import ExitStack, nullcontext
+from types import SimpleNamespace
+from uuid import uuid4
 
 from agentforge.features.film_studio import draft_pipeline as draft
 from tests import owner_http_fixture
@@ -98,6 +100,126 @@ class DraftTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             draft.submit({"id": self.ident, **self.brief, "idea": "Khác"})
         self.assertEqual(len(draft.list_drafts()), 1)
+
+    def test_motion_http_to_verified_mp4_without_gpu(self):
+        motion = draft.draft_motion.motion_comfy
+        runner = draft.draft_motion
+        ltx = runner.motion_ltx
+        client = owner_http_fixture.OwnerHttpFixture()
+        client.setUp()
+        self.addCleanup(client.doCleanups)
+        client.server.allow_external_actions = True
+        client.login()
+        body = {**self.brief, "id": self.ident, "seconds": 4,
+                "mode": "motion", "motion_approved": False}
+        route = "/api/film/drafts/start"
+        status, denied, _ = client.req("POST", route, body)
+        self.assertEqual(status, 400)
+        self.assertIn("Owner approval", denied["message"])
+        body["motion_approved"] = True
+        self.assertEqual(client.req("POST", route, {**body, "seconds": 6})[0], 400)
+        profile = {"id": "selected_by_registry", "provider": "comfyui", "model": ltx.CHECKPOINT,
+                   "motion_encoder": str(self.root / ltx.ENCODER), "base_url": "http://127.0.0.1:8188"}
+        bindings = {"film.motion": profile, "image.generate": {
+            "provider": "comfyui", "model": "fixture.gguf", "flux": {"max_resolution": 768}}}
+        output = self.root / "output"
+        output.mkdir()
+        asset = b"FLUX fixture"
+        calls = []
+        latest = {}
+
+        def provider(path, *, body=None, timeout=6):
+            if path == "/prompt":
+                calls.append("motion")
+                graph = body["prompt"]
+                self.assertEqual(graph["1"]["inputs"]["ckpt_name"], profile["model"])
+                self.assertEqual(graph["6"]["inputs"]["length"], 49)
+                file = graph["13"]["inputs"]["filename_prefix"] + "_00001_.mp4"
+                (output / file).write_bytes(b"MP4 fixture" * 150)
+                key = str(uuid4())
+                latest[key] = {"status": {"completed": True, "status_str": "success"},
+                               "outputs": {"13": {"images": [{"filename": file, "type": "output", "subfolder": ""}]}}}
+                return {"prompt_id": key}
+            return {path.split("/")[-1]: latest[path.split("/")[-1]]}
+
+        def image(*args, **kwargs):
+            calls.append("image")
+            return {"status": "ASSET_READY"}
+
+        def ffmpeg(command, **kwargs):
+            if "-filter_complex" in command:
+                calls.append("render")
+                self.assertNotIn("zoompan", " ".join(command))
+                self.assertEqual(sum(str(arg).endswith("_00001_.mp4") for arg in command), 0)
+                self.assertEqual(sum(Path(arg).name == "clip.mp4" for arg in command), 2)
+                Path(command[-1]).write_bytes(b"MP4 fixture" * 150)
+            return SimpleNamespace(stdout="frame=96\n")
+
+        def storyboard(job, _):
+            job.update(board=draft._story(self.board(), 2, 4, {"cat": {}}),
+                       cast={"cat": {"name": "Miu", "appearance": "orange cat"}})
+
+        patches = (patch.object(draft.model_hub, "draft_routes", return_value=(8, bindings)),
+              patch.object(draft, "_dispatch"), patch.object(draft, "_write_board", side_effect=storyboard),
+              patch.object(draft, "_measured", return_value=nullcontext()),
+              patch.object(draft, "_release_idle_comfy"),
+              patch.object(draft.flux_runtime, "generate", side_effect=image),
+              patch.object(draft.visual_jobs, "open_image_for_job",
+                           side_effect=lambda _: nullcontext((io.BytesIO(asset), draft._sha(asset)))),
+              patch.object(draft.render, "_ffmpeg", return_value="ffmpeg"),
+              patch.object(draft.render, "_run_process", side_effect=ffmpeg),
+              patch.object(runner.shutil, "which", return_value="fixture"),
+              patch.object(motion, "DB", self.root/"motion.sqlite3"), patch.object(motion, "FILMS", self.root/"films"),
+              patch.object(runner.comfy_service, "RUNTIME_DIR", self.root),
+              patch.object(runner.comfy_service, "_settings", return_value={"port": 8188, "install_root": self.root}),
+              patch.object(runner.comfy_service, "_probe", return_value=None),
+              patch.object(runner.comfy_service, "status", return_value={"managed": True}),
+              patch.object(runner.comfy_service, "ensure_running"),
+              patch.object(runner.comfy_service, "require_idle_queue"),
+              patch.object(runner.comfy_service, "require_other_queue_idle"),
+              patch.object(ltx, "verify_weights"), patch.object(ltx, "check_runtime"),
+              patch.object(ltx, "read_source", return_value=asset),
+              patch.object(ltx, "upload_source", return_value="fixture.png"),
+              patch.object(motion, "health", return_value={"status": "GPU_DETECTED_UNBENCHMARKED"}),
+              patch.object(motion.draft_resources, "require_gpu"),
+              patch.object(motion, "_json_request", side_effect=provider),
+              patch.object(runner.motion_verify, "_probe", return_value={"codec": "h264", "width": 512,
+                  "height": 288, "frames_decoded": 49, "fps": 24, "duration_seconds": 2.042}))
+        with ExitStack() as stack:
+            for fixture in patches:
+                stack.enter_context(fixture)
+            response, _, _ = client.req("POST", route, body)
+            self.assertEqual(response, 200)
+            draft._work(draft._read(self.ident), nullcontext())
+            job = draft._read(self.ident)
+            self.assertEqual(job["status"], "REVIEW", job.get("error"))
+            self.assertTrue(job["video_sha"])
+            self.assertTrue(all(scene.get("motion_sha") for scene in job["board"]["scenes"]))
+            self.assertEqual(calls, ["image", "image", "motion", "motion", "render"])
+
+    def test_motion_failure_does_not_render_or_dispatch_another_shot(self):
+        job = {"id": self.ident, "brief": {**self.brief, "mode": "motion", "seconds": 4},
+               "status": "RUNNING", "motion_revision": 8,
+               "board": draft._story(self.board(), 2, 4, {"cat": {}}), "cast": {}}
+        def fail(*args):
+            args[0]["motion_job"] = "b" * 32
+            args[4]()
+            raise ValueError("Motion dispatch requires reconciliation")
+        with (patch.object(draft.model_hub, "draft_routes", return_value=(8, {"image.generate": {}})),
+              patch.object(draft, "_image"), patch.object(draft, "_release_idle_comfy"),
+              patch.object(draft.draft_motion, "binding", return_value={"provider": "comfyui", "model": "fixture"}),
+              patch.object(draft.draft_motion, "require_resolved_ledger"),
+              patch.object(draft.draft_motion, "prepare"), patch.object(draft, "_dispatch"),
+              patch.object(draft.draft_motion, "run_shot", side_effect=fail) as run,
+              patch.object(draft, "_render") as render):
+            draft._work(job, nullcontext())
+        run.assert_called_once()
+        render.assert_not_called()
+        stored = draft._read(self.ident)
+        self.assertEqual(stored["status"], "FAILED")
+        self.assertEqual(stored["stage"], "MOTION")
+        self.assertEqual(stored["board"]["scenes"][0]["motion_job"], "b" * 32)
+        self.assertIsNone(stored.get("video_sha"))
 
     def test_storyboard_rejects_unknown_cast_and_distributes_exact_duration(self):
         with self.assertRaisesRegex(ValueError, "unknown character"):

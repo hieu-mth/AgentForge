@@ -4,8 +4,9 @@ from agentforge.api.routes._shared import UNHANDLED
 
 def handle(server, path, request, session=None):
     if path == "/api/film/drafts/start":
-        if not server.allow_external_actions or request.keys() != {
-                "id", "idea", "seconds", "ratio", "scene_count"}:
+        required = {"id", "idea", "seconds", "ratio", "scene_count"}
+        if not server.allow_external_actions or request.keys() not in (
+                required, required | {"mode", "motion_approved"}):
             raise PermissionError("Draft production requires external-tools mode and a complete brief")
         from agentforge.features.film_studio import draft_pipeline
         return draft_pipeline.submit(request)

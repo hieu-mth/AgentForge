@@ -396,7 +396,8 @@ try {
   await settings.route('**/api/film/drafts/start',route=>{
     const {id,...brief}=route.request().postDataJSON();
     if(!/^[0-9a-f]{32}$/.test(id)||!['Chú mèo cam khám phá khu rừng','Ý tưởng mới'].includes(brief.idea)||
-        brief.seconds!==12||brief.scene_count!==3||brief.ratio!=='9:16')
+        brief.seconds!==6||brief.scene_count!==3||brief.ratio!=='16:9'||
+        brief.mode!=='motion'||brief.motion_approved!==true)
       throw new Error('Unexpected draft submission');
     draftFixture={id,brief,status:'RUNNING',stage:'PLANNING',worker_active:true,
       activity:{operation:'plan',provider:'ollama',model:'fixture-planner'}};
@@ -404,6 +405,7 @@ try {
   });
   await settings.getByLabel('Nội dung video',{exact:true}).fill('Chú mèo cam khám phá khu rừng');
   await settings.getByRole('button',{name:'Tạo bản nháp',exact:true}).click();
+  await settings.getByRole('button',{name:'Duyệt và tạo phim',exact:true}).click();
   const draftProgress=settings.getByRole('region',{name:'Tiến độ tạo bản nháp'});
   await draftProgress.getByText('Đang lập kế hoạch',{exact:true}).waitFor();
   await draftProgress.getByText('Ollama · fixture-planner',{exact:true}).waitFor();
@@ -438,18 +440,25 @@ try {
   draftListStatus=200;
   await settings.getByLabel('Nội dung video',{exact:true}).fill('Ý tưởng mới');
   await settings.getByRole('button',{name:'Tạo bản nháp',exact:true}).click();
+  await settings.getByRole('button',{name:'Duyệt và tạo phim',exact:true}).click();
   await settings.getByRole('tab',{name:/^Ý tưởng mới/}).waitFor();
-  cancelledDraft={...draftFixture,id:'c'.repeat(32),status:'CANCELLED',worker_active:false,
+  const scene={seconds:2,description:'Miu quay đầu',character_ids:[],audio:'',asset:'fixture-image'};
+  draftFixture={...draftFixture,stage:'MOTION',board:{title:'Ý tưởng mới',scenes:[
+    {...scene,motion_sha:'fixture-clip'},scene,scene]},
+    activity:{operation:'motion',provider:'comfyui',model:'fixture-ltx',scene:2}};
+  await draftProgress.getByText('Đang tạo chuyển động cảnh 2/3',{exact:true}).waitFor();
+  await draftProgress.getByText('1/3 clip đã xác minh',{exact:true}).waitFor();
+  cancelledDraft={...draftFixture,id:'c'.repeat(32),status:'CANCELLED',worker_active:false,board:null,
     brief:{...draftFixture.brief,idea:'Bản nháp đã hủy'}};
   draftFixture={...draftFixture,status:'REVIEW',worker_active:false,
     created_at:'2026-06-20T03:00:00Z',video_sha:'fixture-video'};
   await settings.locator('.studio-drafts-list').getByRole('button',{name:'Làm mới',exact:false}).click();
-  await settings.getByText('Chờ duyệt',{exact:true}).waitFor();
+  await settings.getByText('Phim hoàn chỉnh · chờ duyệt',{exact:true}).waitFor();
   await settings.locator('.draft-row-meta time[datetime="2026-06-20T03:00:00Z"]').waitFor();
   await settings.getByRole('tab',{name:/^Bản nháp đã hủy/}).waitFor({state:'hidden'});
   await settings.route('**/api/film/drafts/*/preview*',route=>route.fulfill({status:404}));
   await settings.getByRole('button',{name:'Xem bản nháp MP4'}).click();
-  const draftPreview=settings.getByRole('dialog',{name:'Xem bản nháp MP4'});
+  const draftPreview=settings.getByRole('dialog',{name:'Ý tưởng mới'});
   await draftPreview.getByRole('button',{name:'Duyệt bản nháp'}).waitFor();
   await draftPreview.getByText('Không phát được MP4').waitFor();
   await settings.keyboard.press('Escape');
@@ -466,12 +475,13 @@ try {
   await settings.getByText('Kịch bản khá dày',{exact:false}).waitFor();
   await settings.route('**/api/film/drafts/start',route=>{
     const {id,...brief}=route.request().postDataJSON();
-    if(brief.idea!==longScript||Object.keys(brief).sort().join()!=='idea,ratio,scene_count,seconds')
+    if(brief.idea!==longScript||Object.keys(brief).sort().join()!=='idea,mode,motion_approved,ratio,scene_count,seconds')
       throw new Error('Studio did not submit the single content field unchanged');
     return route.fulfill({json:{id,brief,status:'QUEUED'}});
   });
   const longSubmit=settings.waitForResponse(r=>r.url().endsWith('/api/film/drafts/start'));
   await settings.getByRole('button',{name:'Tạo bản nháp',exact:true}).click();
+  await settings.getByRole('button',{name:'Duyệt và tạo phim',exact:true}).click();
   await longSubmit;
   await editor.fill('đ'.repeat(20001));
   if(!await settings.getByRole('button',{name:'Tạo bản nháp',exact:true}).isDisabled())

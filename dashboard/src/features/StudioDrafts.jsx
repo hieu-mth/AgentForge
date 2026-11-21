@@ -10,7 +10,7 @@ import './studio-draft-progress.css';
 
 const API='/api/film/drafts';
 const editorKey='agentforge.studio.video-brief.v1';
-const briefDefaults={idea:'',seconds:12,scene_count:3,ratio:'9:16'};
+const briefDefaults={idea:'',seconds:12,scene_count:3,ratio:'9:16',mode:'motion'};
 function savedBrief(){
   try {
     const saved=JSON.parse(localStorage.getItem(editorKey));
@@ -40,7 +40,7 @@ function draftError(failure) {
   return requestError(failure);
 }
 const labels={QUEUED:'Đã tiếp nhận',PLANNING:'Đang lập kế hoạch',STORYBOARD:'Đang viết storyboard',
-  IMAGES:'Đang tạo ảnh từng cảnh',RENDER:'Đang dựng và kiểm tra MP4',REVIEW:'Chờ duyệt',
+  IMAGES:'Đang tạo ảnh từng cảnh',MOTION:'Đang tạo chuyển động',RENDER:'Đang dựng và kiểm tra MP4',REVIEW:'Phim hoàn chỉnh · chờ duyệt',
   FAILED:'Cần xử lý',APPROVED:'Đã duyệt',REJECTED:'Đã từ chối',
   WAITING_RESOURCES:'Chờ tài nguyên',CANCELLED:'Đã hủy'};
 const warnings={RAM_LOW:'RAM khả dụng không đủ',COMMIT_LOW:'Hạn mức bộ nhớ cam kết không đủ',
@@ -49,6 +49,7 @@ const warnings={RAM_LOW:'RAM khả dụng không đủ',COMMIT_LOW:'Hạn mức 
   VRAM_UNAVAILABLE:'Không đo được VRAM khả dụng',
   COMFYUI_QUEUE_BUSY:'ComfyUI còn tác vụ đang chạy hoặc đang chờ.',
   COMFYUI_QUEUE_UNAVAILABLE:'Chưa xác minh được hàng đợi ComfyUI.',
+  MOTION_RECONCILIATION_REQUIRED:'Cần đối soát tác vụ chuyển động trước khi nhận GPU.',
   GPU_RESOURCE_FAILURE:'ComfyUI báo lỗi bộ nhớ. Kiểm tra tài nguyên trước khi tiếp tục từ checkpoint.',
   OLLAMA_RESOURCE_OR_SERVER_ERROR:'Ollama trả lỗi máy chủ. Kiểm tra tài nguyên và log trước khi tiếp tục.',
   COMFYUI_LAUNCHER_REQUIRED:'ComfyUI đang tắt và chưa có launcher. Vào Cài đặt → Môi trường & Tài nguyên → Cấu hình launcher, chọn hồ sơ FLUX và thư mục ComfyUI Portable, rồi tiếp tục từ checkpoint.',
@@ -60,7 +61,7 @@ function usage(total,available,format) {
   return format(total-available)+' / '+format(available);
 }
 
-const stages=[['PLANNING','Lập kế hoạch'],['STORYBOARD','Storyboard'],['IMAGES','Tạo ảnh'],['RENDER','Dựng MP4']];
+const allStages=[['PLANNING','Lập kế hoạch'],['STORYBOARD','Storyboard'],['IMAGES','Tạo ảnh'],['MOTION','Tạo chuyển động'],['RENDER','Dựng MP4']];
 const providers={ollama:'Ollama',comfyui:'ComfyUI'};
 const historyStates=new Set(['APPROVED','REJECTED','CANCELLED']);
 const statusColors={RUNNING:'processing',QUEUED:'blue',REVIEW:'purple',FAILED:'error',
@@ -90,6 +91,7 @@ function DraftLabel({job}){
       </time>}
       {job.brief.seconds&&<span>{job.brief.seconds} giây</span>}
       {job.brief.ratio&&<span>{job.brief.ratio}</span>}
+      <span>{job.brief.mode==='motion'?'Chuyển động LTX':'Ảnh tĩnh pan/zoom'}</span>
       {job.board&&<span>{job.board.scenes.filter(scene=>scene.asset).length}/{job.board.scenes.length} ảnh</span>}
     </div>
   </div>;
@@ -97,12 +99,14 @@ function DraftLabel({job}){
 
 function DraftProgress({job,starting}) {
   const activity=job?.activity;
+  const stages=allStages.filter(([key])=>key!=='MOTION'||job?.brief?.mode==='motion');
   const current=stages.findIndex(([key])=>key===job?.stage);
   const scenes=job?.board?.scenes??[];
   const completed=scenes.filter(scene=>scene.asset).length;
   const title=starting?'Đang gửi yêu cầu':activity?.operation==='cast'?'Đang chọn nhân vật':
     activity?.operation==='script'?'Đang phân tích kịch bản · cảnh '+activity.scene:
     activity?.operation==='image'&&activity.scene? 'Đang tạo ảnh cảnh '+activity.scene+'/'+scenes.length:
+    activity?.operation==='motion'&&activity.scene? 'Đang tạo chuyển động cảnh '+activity.scene+'/'+scenes.length:
     labels[job?.stage]??'Đang chuẩn bị bản nháp';
   return <section className="draft-progress" aria-label="Tiến độ tạo bản nháp">
     <div className="draft-progress-now" role="status">
@@ -114,6 +118,7 @@ function DraftProgress({job,starting}) {
         </div>}
         {activity?.operation==='render'&&<div className="env-muted">FFmpeg · Kiểm tra đầu ra MP4</div>}
         {job?.stage==='IMAGES'&&<div className="env-muted">{completed}/{scenes.length} ảnh đã sẵn sàng</div>}
+        {job?.stage==='MOTION'&&<div className="env-muted">{scenes.filter(scene=>scene.motion_sha).length}/{scenes.length} clip đã xác minh</div>}
       </div>
     </div>
     <ol className="draft-progress-steps">
@@ -129,9 +134,10 @@ export function StudioDrafts({mutate,onCharacters}) {
   const [initialBrief]=useState(savedBrief);
   const [saveFailed,setSaveFailed]=useState(false);
   const values=Form.useWatch([],form)??initialBrief;
+  const moving=(Form.useWatch('mode',form)??initialBrief.mode)==='motion';
   const limit=20000;
   const characterCount=Array.from(values.idea??'').length;
-  const advice=scriptAdvice(values.idea??'',values.seconds,values.scene_count);
+  const advice=scriptAdvice(values.idea??'',moving?2*(values.scene_count??3):values.seconds,values.scene_count);
   const {data,reload,setData,...resource}=useResource(API);
   const {data:capacity,reload:refreshCapacity}=useResource(API+'/resources');
   useScreenRefresh(reload);
@@ -194,9 +200,17 @@ export function StudioDrafts({mutate,onCharacters}) {
   }
 
   function submit(values) {
-    const brief=JSON.stringify(values);
-    if(request.current?.brief!==brief)request.current={brief,id:crypto.randomUUID().replaceAll('-','')};
-    return run('/start',{...values,id:request.current.id},()=>{request.current=null;setFilter('work');});
+    const motion=values.mode==='motion';
+    const payload={...values,...(motion?{seconds:values.scene_count*2,ratio:'16:9'}:{}),motion_approved:motion};
+    function start(){
+      const brief=JSON.stringify(payload);
+      if(request.current?.brief!==brief)request.current={brief,id:crypto.randomUUID().replaceAll('-','')};
+      return run('/start',{...payload,id:request.current.id},()=>{request.current=null;setFilter('work');});
+    }
+    if(!motion)return start();
+    Modal.confirm({title:'Duyệt chạy GPU cho phim động',
+      content:`Tối đa ${values.scene_count} ảnh FLUX và ${values.scene_count} lượt LTX 49 frame, chạy tuần tự. Phim ${payload.seconds} giây, 16:9. LTX cần RAM trống 12 GiB, dư địa commit Windows 20 GiB và VRAM trống 8 GiB trước mỗi lượt. Tác vụ dừng nếu một cảnh lỗi.`,
+      okText:'Duyệt và tạo phim',cancelText:'Quay lại',onOk:start});
   }
 
   return <>
@@ -224,20 +238,24 @@ export function StudioDrafts({mutate,onCharacters}) {
       {saveFailed&&<Alert type="warning" showIcon message="Trình duyệt không lưu được nội dung để khôi phục khi tải lại."/>}
       {advice&&<Alert type="warning" showIcon message={advice}/>}
       <div className="draft-form-options">
-        <Form.Item name="seconds" label="Thời lượng (giây)" rules={[{required:true,type:'integer',min:6,max:60}]}>
+        <Form.Item name="mode" label="Kiểu video" rules={[{required:true}]}>
+          <Select onChange={value=>{if(value==='motion'&&form.getFieldValue('scene_count')>3)form.setFieldValue('scene_count',3);}}
+            options={[{value:'motion',label:'Phim chuyển động LTX'},{value:'still',label:'Ảnh tĩnh pan/zoom'}]}/>
+        </Form.Item>
+        {!moving&&<Form.Item name="seconds" label="Thời lượng (giây)" rules={[{required:true,type:'integer',min:6,max:60}]}>
           <InputNumber min={6} max={60}/>
+        </Form.Item>}
+        <Form.Item name="scene_count" label="Số cảnh" rules={[{required:true,type:'integer',min:2,max:moving?3:6}]}>
+          <InputNumber min={2} max={moving?3:6}/>
         </Form.Item>
-        <Form.Item name="scene_count" label="Số cảnh" rules={[{required:true,type:'integer',min:2,max:6}]}>
-          <InputNumber min={2} max={6}/>
-        </Form.Item>
-        <Form.Item name="ratio" label="Tỷ lệ khung hình">
+        {!moving&&<Form.Item name="ratio" label="Tỷ lệ khung hình">
           <Select options={['9:16','16:9'].map(value=>({value,label:value}))}/>
-        </Form.Item>
+        </Form.Item>}
         <Button className="draft-submit" type="primary" htmlType="submit"
           loading={pending} disabled={waiting>0||characterCount>limit}>Tạo bản nháp</Button>
       </div>
     </Form>
-    <p className="env-muted">Bản nháp dùng ảnh tĩnh pan/zoom và lưu nội dung gốc để đối chiếu khi duyệt cảnh.</p>
+    {moving&&<p className="env-muted">16:9 · Hai giây mỗi cảnh · Dùng ảnh FLUX và tạo chuyển động bằng LTX.</p>}
     {(starting||running)&&<DraftProgress job={active} starting={starting&&!active}/>}
     {!listError&&waiting>0&&<Alert showIcon type="warning" message="Bản nháp đang chờ tài nguyên"
       description={[...new Set(drafts.filter(job=>job.status==='WAITING_RESOURCES').map(job=>warnings[job.error]??job.error).filter(Boolean))].join(' · ')}/>}
@@ -287,8 +305,11 @@ export function StudioDrafts({mutate,onCharacters}) {
           <p className="env-muted">Âm thanh dự kiến: {scene.audio}</p>
           {scene.asset&&<Image width={180} loading="lazy" alt={'Ảnh cảnh '+(index+1)}
             src={API+'/'+job.id+'/scene-'+index+'?v='+scene.asset}/>}
-          <div><Button size="small" disabled={running||pending||job.status==='APPROVED'}
-            onClick={()=>setEditor({id:job.id,index,scene})}>Sửa cảnh / tạo lại ảnh</Button></div>
+          {job.brief.mode==='motion'?<div>
+            {scene.asset&&<Tag>Đã tạo ảnh</Tag>}
+            {scene.motion_sha&&<Tag color="green">Đã xác minh clip chuyển động</Tag>}
+          </div>:<div><Button size="small" disabled={running||pending||job.status==='APPROVED'}
+            onClick={()=>setEditor({id:job.id,index,scene})}>Sửa cảnh / tạo lại ảnh</Button></div>}
         </li>)}</ul>}
       </>,
     }))}/>}
