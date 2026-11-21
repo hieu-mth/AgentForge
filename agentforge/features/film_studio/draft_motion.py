@@ -2,11 +2,13 @@
 import hashlib
 import http.client
 import json
+import re
 import shutil
+import tempfile
 import time
 from contextlib import closing
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 from uuid import UUID
 
 from agentforge.ai import model_hub
@@ -112,6 +114,34 @@ def clip_path(scene):
     return (motion_comfy.FILMS / receipt["film_slug"] / "motion_clips" / job_id / "clip.mp4")
 
 
+def _collect_clip(job_id, name, folder):
+    if not isinstance(name, str) or not re.fullmatch(r"af_motion_" + job_id + r"_[0-9]{5}_\.mp4", name):
+        raise ValueError("Motion output does not match the ledger job")
+    if comfy_service.status()["managed"]:
+        return motion_verify.import_clip(job_id=job_id, filename=name,
+            output_dir=comfy_service.RUNTIME_DIR/"output", confirmed=True,
+            db_path=motion_comfy.DB, film_root=motion_comfy.FILMS)
+    # External ComfyUI may use a different output directory. Fetch only the
+    # exact file identified by this job's history from the fixed local endpoint.
+    query = urlencode({"filename": name, "type": "output", "subfolder": ""})
+    start = time.monotonic()
+    with (tempfile.TemporaryDirectory(prefix="motion-output-", dir=ensure_local_root(folder)) as staging,
+          closing(http.client.HTTPConnection("127.0.0.1", motion_comfy.PORT, timeout=5)) as conn):
+        conn.request("GET", "/view?" + query)
+        response = conn.getresponse()
+        if response.status != 200:
+            raise ValueError("ComfyUI could not provide the motion MP4")
+        remaining = motion_verify.MAX_MP4_BYTES
+        with (Path(staging)/name).open("xb") as stream:
+            while chunk := response.read1(min(65536, remaining + 1)):
+                remaining -= len(chunk)
+                if remaining < 0 or time.monotonic() - start > 60:
+                    raise ValueError("Motion MP4 exceeded its download limit")
+                stream.write(chunk)
+        return motion_verify.import_clip(job_id=job_id, filename=name, output_dir=Path(staging),
+            confirmed=True, db_path=motion_comfy.DB, film_root=motion_comfy.FILMS)
+
+
 def run_shot(scene, index, prepared, profile, save, cancelled):
     slug, plan_sha, workflow, digest = prepared
     if scene.get("motion_sha"):
@@ -126,11 +156,6 @@ def run_shot(scene, index, prepared, profile, save, cancelled):
             save()
             if cancelled():
                 raise ValueError("Draft cancelled before motion dispatch")
-            if not comfy_service.status()["managed"]:
-                raise ValueError("ComfyUI must be managed by AgentForge for verified motion output")
-
-        if comfy_service._probe(motion_comfy.PORT) and not comfy_service.status()["managed"]:
-            raise ValueError("Start ComfyUI through AgentForge to collect verified motion output")
         motion_comfy.submit_shot(film_slug=slug, shot_id=f"sh-{index+1:05d}", plan_sha=plan_sha,
             prompt=f"Animate this shot with natural movement, preserving character identity. {scene['description']}",
             workflow_path=workflow, workflow_sha=digest, seed=42+index, confirmed=True,
@@ -151,8 +176,6 @@ def run_shot(scene, index, prepared, profile, save, cancelled):
             entries = history["outputs"]["13"]["images"]
             if len(entries) != 1 or entries[0]["type"] != "output" or entries[0]["subfolder"] != "":
                 raise ValueError("Motion output metadata is invalid")
-            receipt = motion_verify.import_clip(job_id=job_id, filename=entries[0]["filename"],
-                output_dir=comfy_service.RUNTIME_DIR/"output", confirmed=True,
-                db_path=motion_comfy.DB, film_root=motion_comfy.FILMS)
+            receipt = _collect_clip(job_id, entries[0]["filename"], workflow.parent)
         scene["motion_sha"] = receipt["clip_sha256"]
         save()

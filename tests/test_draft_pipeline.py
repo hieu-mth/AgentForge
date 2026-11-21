@@ -221,6 +221,34 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(stored["board"]["scenes"][0]["motion_job"], "b" * 32)
         self.assertIsNone(stored.get("video_sha"))
 
+    def test_external_comfy_collects_only_the_expected_motion_output(self):
+        runner = draft.draft_motion
+        job = "b" * 32
+        filename = f"af_motion_{job}_00001_.mp4"
+        payload = b"video fixture" * 100
+
+        def inspect(**kwargs):
+            self.assertEqual(kwargs["job_id"], job)
+            path = kwargs["output_dir"] / kwargs["filename"]
+            self.assertEqual(path.read_bytes(), payload)
+            return {"clip_sha256": "fixture"}
+
+        with (patch.object(runner.comfy_service, "status", return_value={"managed": False}),
+              patch.object(runner.http.client, "HTTPConnection") as transport,
+              patch.object(runner.motion_verify, "import_clip", side_effect=inspect) as importer):
+            response = transport.return_value.getresponse.return_value
+            response.status = 200
+            response.read1.side_effect = [payload, b""]
+            with self.assertRaisesRegex(ValueError, "does not match"):
+                runner._collect_clip(job, "../outside.mp4", self.root)
+            transport.assert_not_called()
+            self.assertEqual(runner._collect_clip(job, filename, self.root), {"clip_sha256": "fixture"})
+            transport.assert_called_once_with("127.0.0.1", 8188, timeout=5)
+            transport.return_value.request.assert_called_once_with(
+                "GET", f"/view?filename={filename}&type=output&subfolder=")
+            importer.assert_called_once()
+        self.assertFalse(list(self.root.glob("motion-output-*")))
+
     def test_storyboard_rejects_unknown_cast_and_distributes_exact_duration(self):
         with self.assertRaisesRegex(ValueError, "unknown character"):
             draft._story(self.board(), 2, 7, {})
