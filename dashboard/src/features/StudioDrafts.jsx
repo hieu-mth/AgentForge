@@ -217,8 +217,9 @@ export function StudioDrafts({mutate,onCharacters}) {
   }
 
   function approveStoryboard(job){
+    const motion=job.brief.mode==='motion';
     Modal.confirm({title:'Duyệt storyboard và chạy production',
-      content:`${job.brief.scene_count} cảnh, tối đa ${job.brief.scene_count} lượt FLUX và LTX, chạy tuần tự. Phim ${job.brief.seconds} giây. Tác vụ dừng khi lỗi hoặc thiếu tài nguyên.`,
+      content:`${job.brief.scene_count} cảnh, tối đa ${job.brief.scene_count} lượt FLUX${motion?' và LTX':''}, chạy tuần tự. Phim ${job.brief.seconds} giây. Tác vụ dừng khi lỗi hoặc thiếu tài nguyên.`,
       okText:'Duyệt và tạo phim',cancelText:'Quay lại',onOk:()=>storyboard(job,'approve')});
   }
 
@@ -263,7 +264,7 @@ export function StudioDrafts({mutate,onCharacters}) {
           <Select options={['9:16','16:9'].map(value=>({value,label:value}))}/>
         </Form.Item>}
         <Button className="draft-submit" type="primary" htmlType="submit"
-          loading={pending} disabled={waiting>0||characterCount>limit}>{moving?'Tạo storyboard':'Tạo bản nháp'}</Button>
+          loading={pending} disabled={waiting>0||characterCount>limit}>Tạo storyboard</Button>
       </div>
     </Form>
     {moving&&<p className="env-muted">16:9 · Chia thành {motionShots[selectedSeconds]} cảnh · Tạo ảnh và chuyển động sau khi duyệt storyboard.</p>}
@@ -309,7 +310,9 @@ export function StudioDrafts({mutate,onCharacters}) {
           <Tag>Storyboard v{job.storyboard_version}</Tag>
           {job.status==='STORYBOARD_REVIEW'&&<Button type="primary" disabled={pending||running}
             onClick={()=>approveStoryboard(job)}>Duyệt storyboard</Button>}
-          {job.status==='STORYBOARD_REVIEW'&&job.brief.seconds===15&&job.board.scenes.length<9&&
+          {job.status==='STORYBOARD_REVIEW'&&(job.brief.mode==='motion'?
+            job.brief.seconds===15&&job.board.scenes.length<9:
+            job.board.scenes.length<Math.min(6,Math.floor(job.brief.seconds/2)))&&
             <Button disabled={pending||running} onClick={()=>setEditor({job,adding:true,index:job.board.scenes.length,scene:{}})}>Thêm cảnh</Button>}
         </Space>}
         {job.board&&<ul className="studio-shot-list">{job.board.scenes.map((scene,index)=><li key={scene.shot_id??index}>
@@ -330,7 +333,7 @@ export function StudioDrafts({mutate,onCharacters}) {
           <p className="env-muted">Âm thanh dự kiến: {scene.audio}</p>
           {scene.asset&&<Image width={180} loading="lazy" alt={'Ảnh cảnh '+(index+1)}
             src={API+'/'+job.id+'/scene-'+index+'?v='+scene.asset}/>}
-          {job.brief.mode==='motion'?<div>
+          {job.storyboard_version||job.brief.mode==='motion'?<div>
             {scene.asset&&<Tag>Đã tạo ảnh</Tag>}
             {scene.motion_sha&&<Tag color="green">Đã xác minh clip chuyển động</Tag>}
             {job.storyboard_version&&['STORYBOARD_REVIEW','FAILED','REVIEW','APPROVED','REJECTED'].includes(job.status)&&
@@ -339,7 +342,8 @@ export function StudioDrafts({mutate,onCharacters}) {
                 <Button size="small" disabled={pending||running} onClick={()=>setEditor({job,index,scene,rewrite:true})}>AI viết lại</Button>
                 {index>0&&<Button size="small" disabled={pending||running}
                   onClick={()=>storyboard(job,'move',{index,target:index-1})}>Đưa lên</Button>}
-                {job.brief.seconds===15&&job.board.scenes.length>8&&<Button size="small" danger disabled={pending||running}
+                {(job.brief.mode==='motion'?job.brief.seconds===15&&job.board.scenes.length>8:
+                  job.board.scenes.length>2)&&<Button size="small" danger disabled={pending||running}
                   onClick={()=>storyboard(job,'remove',{index})}>Bỏ cảnh</Button>}
               </Space>}
           </div>:<div><Button size="small" disabled={running||pending||job.status==='APPROVED'}
@@ -378,7 +382,8 @@ export function StudioDrafts({mutate,onCharacters}) {
         <Form.Item name="image_prompt" label="Prompt ảnh" rules={[{required:true,whitespace:true}]}>
           <Input.TextArea maxLength={600}/>
         </Form.Item>
-        {editor.job&&<Form.Item name="motion_prompt" label="Prompt chuyển động" rules={[{required:true,whitespace:true}]}>
+        {editor.job&&<Form.Item name="motion_prompt" label="Prompt chuyển động" rules={[{required:true,whitespace:true}]}
+          hidden={editor.job.brief.mode!=='motion'} initialValue={editor.adding?'Ảnh tĩnh pan/zoom':undefined}>
           <Input.TextArea maxLength={600}/>
         </Form.Item>}
         {editor.job&&<>

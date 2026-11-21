@@ -451,14 +451,25 @@ def _scene_path(job, index):
 
 def _stamp_storyboard(job):
     board = job["board"]
-    layout = draft_timeline.timeline(job["brief"]["seconds"], len(board["scenes"]))
+    layout = _storyboard_layout(job, len(board["scenes"]))
+    moving = job["brief"].get("mode") == "motion"
     for scene, frames in zip(board["scenes"], layout):
         scene.setdefault("shot_id", uuid4().hex)
         scene.setdefault("motion_prompt", scene["description"])
-        scene.update(frames=frames, seconds=frames / draft_timeline.FPS)
+        scene.update(frames=frames, seconds=frames / draft_timeline.FPS if moving else frames // draft_timeline.FPS)
     job["storyboard_sha"] = draft_timeline.digest(job)
     job.update(status="STORYBOARD_REVIEW", stage="STORYBOARD", error=None)
     job.pop("approved_storyboard_sha", None)
+
+
+def _storyboard_layout(job, count):
+    brief = job["brief"]
+    if brief.get("mode") == "motion":
+        return draft_timeline.timeline(brief["seconds"], count)
+    if not 2 <= count <= 6 or count * 2 > brief["seconds"]:
+        raise ValueError("Bản nháp ảnh tĩnh cần 2–6 cảnh và ít nhất 2 giây mỗi cảnh.")
+    length, extra = divmod(brief["seconds"], count)
+    return [(length + (index < extra)) * draft_timeline.FPS for index in range(count)]
 
 
 def _image(job, index, scene, revision, profile):
@@ -475,8 +486,8 @@ def _image(job, index, scene, revision, profile):
     if prior and prior["status"] in {"SUBMITTING", "SUBMITTED", "SUBMIT_UNCERTAIN", "COLLECTING"}:
         raise ValueError("The prior ComfyUI scene job needs reconciliation before retry")
     if not prior or prior["status"] != "ASSET_READY":
-        if job["brief"].get("mode") == "motion" and scene["job_id"]:
-            raise ValueError("Review the existing FLUX job before creating a new motion draft")
+        if ("storyboard_version" in job or job["brief"].get("mode") == "motion") and scene["job_id"]:
+            raise ValueError("Cần kiểm tra tác vụ FLUX cũ trước khi duyệt phiên bản sửa.")
         if scene["attempts"] >= IMG_RETRIES:
             raise ValueError("Scene reached its retry limit")
         previous_job = scene["job_id"]
@@ -541,7 +552,7 @@ def _render(job):
             filters.append(f"[{index}:v]trim=end_frame={frames},setpts=PTS-STARTPTS,setsar=1[v{index}]")
             streams.append(f"[v{index}]")
             continue
-        command += ["-i", str(ensure_local_root(folder / f"scene-{index+1:02d}.png"))]
+        command += ["-i", str(_scene_path(job, index))]
         frames = scene["seconds"] * 24
         filters.append(f"[{index}:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
                        f"crop={width}:{height},setsar=1,zoompan=z='1+0.00025*on':"
@@ -574,7 +585,7 @@ def _render(job):
                        "technical": {"frames_decoded": int(frames[-1]), "fps": 24, "width": width, "height": height},
                        "visual_qa": "UNVERIFIED", "owner_qa": "PENDING",
                        "subtitle_sha": _sha(subtitles) if subtitles else None,
-                       "shots": [{key: scene[key] for key in ("shot_id", "frames", "job_id", "asset",
+                       "shots": [{key: scene.get(key) for key in ("shot_id", "frames", "job_id", "asset",
                                   "motion_job", "motion_sha")} for scene in job["board"]["scenes"]]}
             record = ensure_local_root(target.with_suffix(".receipt.json"))
             staged = ensure_local_root(folder / (uuid4().hex + ".json.tmp"))
@@ -619,7 +630,7 @@ def _work(job, slot):
             if "storyboard_version" in job and (
                     job["approved_storyboard_sha"] != draft_timeline.digest(job)):
                 raise ValueError("Storyboard đã thay đổi. Cần Owner duyệt lại.")
-            if moving and revision != job["motion_revision"]:
+            if (moving or "storyboard_version" in job) and revision != job["motion_revision"]:
                 raise ValueError("Model routing changed after approval; review and create a new motion draft")
             motion_profile = draft_motion.binding(bindings) if moving else None
             if moving:
@@ -783,16 +794,11 @@ def submit(data):
             raise ValueError("Production ID already belongs to another brief")
         return prior
     ops_control.require_active()
-    if mode == "motion":
-        revision, bindings = model_hub.draft_routes()
-    else:
-        model_hub.draft_routes()
-        render._ffmpeg()
+    model_hub.draft_routes()
     created_at = visual_jobs._now()
     job = {"id": ident, "brief": brief, "stage": "QUEUED", "status": "QUEUED",
            "video_sha": None, "created_at": created_at, "updated_at": created_at}
-    if mode == "motion":
-        job.update(motion_revision=revision, storyboard_version=1)
+    job["storyboard_version"] = 1
     with comfy_service.LOCK, _db(True) as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute("SELECT body FROM drafts WHERE id=?", (ident,)).fetchone()
@@ -821,7 +827,10 @@ def _storyboard_action(job, action, data):
             raise ValueError("Storyboard không chờ duyệt.")
         ops_control.require_active()
         revision, bindings = model_hub.draft_routes()
-        draft_motion.binding(bindings)
+        if job["brief"].get("mode") == "motion":
+            draft_motion.binding(bindings)
+        else:
+            render._ffmpeg()
         job.update(approved_storyboard_sha=job["storyboard_sha"], motion_revision=revision, status="QUEUED")
         with comfy_service.LOCK, _db(True) as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -844,14 +853,14 @@ def _storyboard_action(job, action, data):
         "shot_id", "image_key", "job_id", "asset", "motion_job", "motion_sha")} for scene in scenes]
     index = _number(data["index"], 0, len(scenes) if action == "storyboard-add" else len(scenes)-1)
     if action == "storyboard-remove":
-        draft_timeline.timeline(job["brief"]["seconds"], len(scenes)-1)
+        _storyboard_layout(job, len(scenes)-1)
         scenes.pop(index)
     elif action == "storyboard-move":
         target = _number(data["target"], 0, len(scenes)-1)
         scenes.insert(target, scenes.pop(index))
     else:
         if action == "storyboard-add":
-            draft_timeline.timeline(job["brief"]["seconds"], len(scenes)+1)
+            _storyboard_layout(job, len(scenes)+1)
             scene = {"character_ids": [], "audio": "", "attempts": 0, "asset": None, "job_id": None}
             scenes.insert(index, scene)
         else:
@@ -926,8 +935,8 @@ def act(ident, action, data):
             _save(job)
             return job
         if action == "edit":
-            if job["brief"].get("mode") == "motion":
-                raise ValueError("Create and approve a new motion draft to change its storyboard")
+            if job["brief"].get("mode") == "motion" or "storyboard_version" in job:
+                raise ValueError("Chỉnh sửa từ storyboard để lưu phiên bản và duyệt lại.")
             if job["status"] == "APPROVED" or not job.get("board"):
                 raise ValueError("Scene cannot be edited")
             scene = job["board"]["scenes"][_number(data["index"], 0, len(job["board"]["scenes"]) - 1)]

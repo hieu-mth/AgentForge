@@ -236,6 +236,18 @@ class DraftTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 draft.draft_timeline.timeline(seconds, 9)
 
+    def test_new_still_draft_also_waits_for_storyboard_approval(self):
+        def storyboard(job, _):
+            job.update(board=draft._story(self.board(), 2, 6, {"cat": {}}), cast={})
+        with (patch.object(draft.model_hub, "draft_routes", return_value=(4, {"image.generate": {}})),
+              patch.object(draft, "_write_board", side_effect=storyboard),
+              patch.object(draft, "_dispatch"), patch.object(draft, "_image") as image,
+              patch.object(draft.draft_motion, "require_resolved_ledger")):
+            job = draft.submit({"id": self.ident, **self.brief})
+            draft._work(job, nullcontext())
+            self.assertEqual(draft._read(self.ident)["status"], "STORYBOARD_REVIEW")
+            image.assert_not_called()
+
     def test_motion_failure_does_not_render_or_dispatch_another_shot(self):
         job = {"id": self.ident, "brief": {**self.brief, "mode": "motion", "seconds": 4},
                "status": "RUNNING", "motion_revision": 8,
