@@ -53,10 +53,13 @@ def _job(job_id, db_path):
     with closing(conn):
         row = conn.execute("SELECT * FROM motion_jobs WHERE job_id=?", (job_id,)).fetchone()
         has_sources = conn.execute("SELECT 1 FROM sqlite_master WHERE name='motion_sources'").fetchone()
-        source = conn.execute("SELECT model_id FROM motion_sources WHERE job_id=?", (job_id,)).fetchone() if has_sources else None
+        source = conn.execute("SELECT * FROM motion_sources WHERE job_id=?", (job_id,)).fetchone() if has_sources else None
     if row is None:
         raise KeyError("Motion job not found")
-    return {**row, "model_id": source["model_id"] if source else MODEL_ID}
+    source = dict(source) if source else {}
+    model_id = source.get("model_id", MODEL_ID)
+    frames = source.get("frames", 33) if model_id == motion.motion_ltx.MODEL_ID else None
+    return {**row, "model_id": model_id, "ltx_frames": frames}
 
 
 def _output_source(root: Path, name: str, job_id: str, *, ltx=False) -> Path:
@@ -91,8 +94,9 @@ def _run(tool: str, args: list[str], *, seconds: int):
     return result.stdout
 
 
-def _probe(path: Path, *, ltx=False):
-    profile = motion.motion_ltx.PROFILE if ltx else motion.PROFILE
+def _probe(path: Path, *, ltx_frames=None):
+    ltx = ltx_frames is not None
+    profile = motion.motion_ltx.profile(ltx_frames) if ltx else motion.PROFILE
     expected = profile["frames"] / profile["fps"]
     duration_min, duration_max = (expected - 0.15, expected + 0.15) if ltx else (3.8, 4.5)
     raw = _run("ffprobe", [
@@ -175,6 +179,14 @@ def inspect_receipt(job_id, *, film_root=motion.FILMS, db_path=motion.DB, video_
                        ("peak_vram_automatically_measured", "motion_quality_verified",
                         "owner_watched", "video_accepted", "youtube_uploaded"))):
             raise ValueError("Invalid receipt contents")
+        if row["ltx_frames"] is not None:
+            profile = motion.motion_ltx.profile(row["ltx_frames"])
+            technical = value["technical"]
+            if not isinstance(technical, dict) or any(
+                    technical.get(key) != profile[field] for key, field in
+                    (("width", "width"), ("height", "height"), ("fps", "fps"),
+                     ("frames_decoded", "frames"))):
+                raise ValueError("Motion receipt disagrees with its ledger profile")
         clip = folder / "clip.mp4"
         ensure_local_root(clip)
         if not clip.is_file() or clip.stat().st_size != value["bytes"]:
@@ -256,7 +268,7 @@ def import_clip(*, job_id: str, filename: str, output_dir: Path,
                 digest.update(block)
         if length != source.stat().st_size or length < 1024:
             raise MotionVerificationError("MP4 changed during local import")
-        technical = _probe(destination, ltx=ltx)
+        technical = _probe(destination, ltx_frames=row["ltx_frames"])
         elapsed = (datetime.now(timezone.utc)
                    - datetime.fromisoformat(row["created_at"])).total_seconds()
         body = {"format": "agentforge.film.motion.receipt.v1",

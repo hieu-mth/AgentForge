@@ -17,7 +17,7 @@ class ResourceBlocked(ValueError):
     """GPU admission failed or the provider reported resource exhaustion."""
 
 
-def require_gpu(operation, sample=None):
+def require_gpu(operation, sample=None, *, min_commit_mib=0):
     """Conservative admission floors in MiB, not estimates of peak consumption."""
     sample = snapshot() if sample is None else sample
     ram = sample.get("ram_available")
@@ -28,6 +28,8 @@ def require_gpu(operation, sample=None):
     for name, value, floor in zip(("RAM", "COMMIT", "VRAM"), readings, GPU_FLOORS[operation]):
         if name == "COMMIT" and os.name != "nt":
             continue
+        if name == "COMMIT":
+            floor = max(floor, min_commit_mib)
         key = f"AGENTFORGE_{operation.upper()}_MIN_{name}_MIB"
         try:
             floor = max(floor, int(os.environ.get(key, floor)))

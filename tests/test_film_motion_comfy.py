@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
 from threading import Event
-from unittest.mock import patch
+from unittest.mock import call, patch
 from uuid import uuid4
 
 from agentforge.features.film_studio import long_form, motion_comfy as motion
@@ -138,7 +138,7 @@ class MotionAdapterTests(unittest.TestCase):
         from contextlib import ExitStack, closing
         from agentforge.features.film_studio import motion_ltx as ltx
 
-        self.workflow.write_text(json.dumps(ltx.workflow()), encoding="utf-8")
+        self.workflow.write_text(json.dumps(ltx.workflow(49)), encoding="utf-8")
         digest = motion.inspect_workflow(self.workflow)["sha256"]
         with self.assertRaisesRegex(PermissionError, "Gate B"):
             self.submit()
@@ -173,18 +173,21 @@ class MotionAdapterTests(unittest.TestCase):
             result, transport = self.submit(workflow_sha=digest, confirm_ltx_gate_b=True,
                                             image_job="a" * 32, image_sha="b" * 64,
                                             ltx_encoder=self.root / ltx.ENCODER)
+            ltx.check_runtime.assert_called_with(motion.PORT, require_models=True, frames=49)
+            self.assertEqual(motion.draft_resources.require_gpu.call_args_list[-2:],
+                             [call("ltx", min_commit_mib=20480)] * 2)
         transport.assert_called_once()
         graph = transport.call_args.kwargs["body"]["prompt"]
         self.assertEqual(graph["10"]["inputs"]["noise_seed"], 7)
         self.assertEqual(graph["10"]["inputs"]["cfg"], 1)
-        self.assertEqual(graph["6"]["inputs"]["length"], 33)
+        self.assertEqual(graph["6"]["inputs"]["length"], 49)
         self.assertEqual(graph["9"]["inputs"]["sigmas"], ltx.SIGMAS)
         self.assertEqual(graph["13"]["inputs"]["format.codec"], "h264")
         self.assertEqual(result["model_id"], ltx.MODEL_ID)
         with closing(motion._db(self.db)) as conn:
-            row = conn.execute("SELECT model_id,image_sha FROM motion_sources WHERE job_id=?",
+            row = conn.execute("SELECT model_id,image_sha,frames FROM motion_sources WHERE job_id=?",
                                (result["job_id"],)).fetchone()
-        self.assertEqual(tuple(row), (ltx.MODEL_ID, "b" * 64))
+        self.assertEqual(tuple(row), (ltx.MODEL_ID, "b" * 64, 49))
 
     def test_ltx_upload_response_contract(self):
         ltx = motion.motion_ltx
@@ -253,7 +256,8 @@ class MotionAdapterTests(unittest.TestCase):
         self.assertNotEqual(newer["job_id"], old_id)
         with closing(motion._db(self.db)) as conn:
             self.assertEqual(tuple(conn.execute("SELECT * FROM motion_jobs WHERE job_id=?", (old_id,)).fetchone()), old)
-            self.assertEqual(tuple(conn.execute("SELECT * FROM motion_sources WHERE job_id=?", (old_id,)).fetchone()), source)
+            self.assertEqual(tuple(conn.execute("SELECT * FROM motion_sources WHERE job_id=?", (old_id,)).fetchone()),
+                             (*source, 33))
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM motion_jobs").fetchone()[0], 2)
         self.assertEqual(motion.job_status(old_id, db_path=self.db)["status"], "PROVIDER_FAILED")
         with self.assertRaisesRegex(PermissionError, "reconcile"):
@@ -316,11 +320,16 @@ class MotionAdapterTests(unittest.TestCase):
 
     def test_ltx_rejects_path_injection_and_sampling_mutation(self):
         ltx = motion.motion_ltx
+        for frames in ltx.FRAME_PRESETS:
+            self.workflow.write_text(json.dumps(ltx.workflow(frames)), encoding="utf-8")
+            self.assertEqual(motion.inspect_workflow(self.workflow)["profile"], ltx.profile(frames))
         for node, field, value in (("5", "image", "../outside.png"),
+                                   ("6", "length", 73), ("6", "length", 49.0),
+                                   ("6", "width", 640), ("10", "cfg", 2),
                                    ("9", "sigmas", "1.0, 0.0"),
                                    ("13", "filename_prefix", "another/output")):
             with self.subTest(field=field):
-                record = ltx.workflow()
+                record = ltx.workflow(49)
                 record["api"][node]["inputs"][field] = value
                 self.workflow.write_text(json.dumps(record), encoding="utf-8")
                 with self.assertRaisesRegex(motion.MotionError, "pinned pilot workflow"):

@@ -58,7 +58,13 @@ class MotionError(ValueError):
 
 _JOB_COLUMNS = ("job_id, film_slug, shot_id, plan_sha, workflow_sha, prompt_sha, "
                 "seed, provider_id, state, created_at, updated_at")
-_LEDGER_VERSION = 1
+_LEDGER_VERSION = 2
+
+
+def _add_source_frames(conn):
+    conn.execute("ALTER TABLE motion_sources ADD COLUMN frames INTEGER NOT NULL DEFAULT 33 "
+                 "CHECK (frames IN (33, 49))")
+    conn.execute(f"PRAGMA user_version={_LEDGER_VERSION}")
 
 
 def _create_jobs(conn, table):
@@ -80,6 +86,9 @@ def _init_ledger(conn, path):
         version = conn.execute("PRAGMA user_version").fetchone()[0]
         if version == _LEDGER_VERSION:
             return {"migrated": False}
+        if version == 1:
+            _add_source_frames(conn)
+            return {"migrated": True, "version": _LEDGER_VERSION}
         if version != 0:
             raise MotionError("Unsupported Motion ledger version")
         existing = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
@@ -111,7 +120,7 @@ def _init_ledger(conn, path):
                 job_id TEXT PRIMARY KEY, model_id TEXT NOT NULL, image_job TEXT NOT NULL,
                 image_sha TEXT NOT NULL)""")
         conn.execute("CREATE INDEX motion_jobs_shot ON motion_jobs(film_slug, shot_id, plan_sha)")
-        conn.execute("PRAGMA user_version=1")
+        _add_source_frames(conn)
         return ({"migrated": True, "backup": str(backup), "before": before, "after": after}
                 if existing else {"migrated": False})
 
@@ -168,10 +177,12 @@ def inspect_workflow(path: Path):
     except (UnicodeError, ValueError) as exc:
         raise MotionError("Invalid workflow JSON") from exc
     if isinstance(record, dict) and record.get("format") == motion_ltx.FORMAT:
-        if json.dumps(record, sort_keys=True) != json.dumps(motion_ltx.workflow(), sort_keys=True):
-            raise MotionError("LTX graph differs from the pinned pilot workflow")
-        return {"sha256": _sha(raw), "workflow": record, "profile": dict(motion_ltx.PROFILE),
-                "model_id": motion_ltx.MODEL_ID, "validated_structure_only": True, "model_installed": False}
+        encoded = json.dumps(record, sort_keys=True)
+        for frames in motion_ltx.FRAME_PRESETS:
+            if encoded == json.dumps(motion_ltx.workflow(frames), sort_keys=True):
+                return {"sha256": _sha(raw), "workflow": record, "profile": motion_ltx.profile(frames),
+                        "model_id": motion_ltx.MODEL_ID, "validated_structure_only": True, "model_installed": False}
+        raise MotionError("LTX graph differs from the pinned pilot workflow")
     keys = {"format", "positive_node", "seed_node", "size_node", "fps_node",
             "output_node", "api"}
     if not isinstance(record, dict) or set(record) != keys or record["format"] != "agentforge.film.comfy.t2v.v1":
@@ -353,7 +364,9 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
         with closing(_db(db_path, write=True)) as conn:
             _check_attempt(conn, film_slug, shot_id, plan_sha, confirm_new_attempt)
         operation = "ltx" if is_ltx else "motion"
-        draft_resources.require_gpu(operation)
+        min_commit = (motion_ltx.EXTENDED_MIN_COMMIT_MIB
+                      if is_ltx and template["profile"]["frames"] == 49 else 0)
+        draft_resources.require_gpu(operation, min_commit_mib=min_commit)
         if is_ltx:
             comfy_service.require_other_queue_idle(PORT, include_profiles=True)
         else:
@@ -365,7 +378,7 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
             motion_ltx.verify_weights(config["install_root"], ltx_encoder)
             image = motion_ltx.read_source(image_job, image_sha)
             comfy_service.ensure_running(PORT)
-            motion_ltx.check_runtime(PORT, require_models=True)
+            motion_ltx.check_runtime(PORT, require_models=True, frames=template["profile"]["frames"])
         comfy_service.require_idle_queue(PORT)
         environment = health()
         if environment["status"] != "GPU_DETECTED_UNBENCHMARKED":
@@ -391,14 +404,15 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
                 (job_id, film_slug, shot_id, plan_sha, workflow_sha,
                  _sha(prompt.strip().encode("utf-8")), seed, now, now))
             if is_ltx:
-                conn.execute("INSERT INTO motion_sources VALUES (?,?,?,?)",
-                             (job_id, model_id, image_job, image_sha))
+                conn.execute("INSERT INTO motion_sources (job_id, model_id, image_job, image_sha, frames) "
+                             "VALUES (?,?,?,?,?)",
+                             (job_id, model_id, image_job, image_sha, template["profile"]["frames"]))
         if is_ltx:
             try:
                 graph[bindings["image_node"]]["inputs"]["image"] = motion_ltx.upload_source(PORT, job_id, image)
                 comfy_service.require_other_queue_idle(PORT, include_profiles=True)
                 comfy_service.require_idle_queue(PORT)
-                draft_resources.require_gpu(operation)
+                draft_resources.require_gpu(operation, min_commit_mib=min_commit)
             except (OSError, ValueError, RuntimeError, http.client.HTTPException):
                 # No prompt has been attempted. Preserve the receipt without holding the active quota.
                 with closing(_db(db_path, write=True)) as conn, conn:
@@ -515,8 +529,9 @@ def main(argv=None):
     choices.add_parser("health")
     inspect = choices.add_parser("inspect-workflow")
     inspect.add_argument("--workflow", type=Path, required=True)
-    choices.add_parser("ltx-workflow")
-    choices.add_parser("ltx-readiness")
+    for action in ("ltx-workflow", "ltx-readiness"):
+        command = choices.add_parser(action)
+        command.add_argument("--frames", type=int, choices=motion_ltx.FRAME_PRESETS, default=33)
     choices.add_parser("migrate-ledger")
     submit = choices.add_parser("submit")
     for name in ("film-slug", "shot-id", "plan-sha", "workflow-sha"):
@@ -547,11 +562,11 @@ def main(argv=None):
     if args.action == "health":
         result = health()
     elif args.action == "ltx-workflow":
-        result = motion_ltx.workflow()
+        result = motion_ltx.workflow(args.frames)
     elif args.action == "migrate-ledger":
         result = migrate_ledger()
     elif args.action == "ltx-readiness":
-        result = {"nodes": motion_ltx.check_runtime(PORT), "inference_verified": False,
+        result = {"nodes": motion_ltx.check_runtime(PORT, frames=args.frames), "inference_verified": False,
                   "model_weights_verified": False}
     elif args.action == "inspect-workflow":
         info = inspect_workflow(args.workflow)
