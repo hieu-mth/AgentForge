@@ -6,7 +6,8 @@ def handle(server, path, request, session=None):
     if path == "/api/film/drafts/start":
         required = {"id", "idea", "seconds", "ratio", "scene_count"}
         if not server.allow_external_actions or request.keys() not in (
-                required, required | {"mode"}, required | {"mode", "motion_approved"}):
+                required, required | {"mode"}, required | {"mode", "motion_approved"},
+                required | {"mode", "duration_mode"}):
             raise PermissionError("Draft production requires external-tools mode and a complete brief")
         from agentforge.features.film_studio import draft_pipeline
         return draft_pipeline.submit(request)
@@ -19,6 +20,7 @@ def handle(server, path, request, session=None):
             "storyboard-remove": {"sha256", "index"},
             "storyboard-move": {"sha256", "index", "target"},
             "storyboard-rewrite": {"sha256", "index", "feedback"},
+            "storyboard-duration": {"sha256", "seconds"},
         }
         if len(parts) != 6 or parts[5] not in {"approve", "reject", "edit", "resume", "cancel", *storyboard}:
             raise ValueError("Unknown draft action")

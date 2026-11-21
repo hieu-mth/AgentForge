@@ -34,6 +34,47 @@ class DraftTests(unittest.TestCase):
                  "character_ids": ["cat"], "audio": "Im lặng"}
         return {"title": "Mèo", "continuity": "Orange cat, morning", "scenes": [scene, scene]}
 
+    def test_ai_duration_cpu_planning_and_exact_frame_budget(self):
+        for estimate, count in ((4, 2), (17, 9), (30, 15)):
+            with self.subTest(estimate=estimate):
+                proposed = {"estimated_duration_seconds": estimate, "recommended_shot_count": count,
+                            "shots": [{"action": "Miu tìm bạn", "reason": "Mở đầu",
+                                       "suggested_seconds": estimate / count}] * count,
+                            "duration_reasoning": "Dành thời gian cho các hành động chính.",
+                            "production_feasibility": "feasible"}
+                job = {"brief": {"idea": "Miu tìm bạn.", "mode": "motion", "seconds": None,
+                                 "duration_mode": "auto"}}
+                with patch.object(draft, "_activity"), patch.object(draft, "_measured", return_value=nullcontext()), \
+                        patch.object(draft, "_ask", return_value=proposed) as ask:
+                    plan = draft._duration_plan(job, {})
+                    self.assertTrue(ask.call_args.kwargs["cpu_only"])
+                    self.assertEqual(plan["initial_accepted_seconds"], estimate)
+                    frames = draft.draft_timeline.planned_timeline(estimate, True, [estimate / count] * count)
+                    self.assertEqual(sum(frames), estimate * 24)
+                    self.assertTrue(all(24 <= n <= 49 for n in frames))
+                    for changes in ({"estimated_duration_seconds": 31}, {"estimated_duration_seconds": 4.5},
+                                    {"recommended_shot_count": 1}, {"production_feasibility": "over_budget"}):
+                        ask.return_value = {**proposed, **changes}
+                        with self.assertRaises(ValueError):
+                            draft._duration_plan(job, {})
+
+    def test_duration_edit_reallocates_frames_and_invalidates_approval(self):
+        board = self.board()
+        board["scenes"] = [{**scene} for scene in board["scenes"]]
+        job = {"id": self.ident, "brief": {**self.brief, "mode": "still", "duration_mode": "manual"},
+               "board": board, "video_sha": None, "storyboard_version": 1}
+        draft._stamp_storyboard(job)
+        old_sha = job["storyboard_sha"]
+        job["approved_storyboard_sha"] = old_sha
+        draft._save(job)
+        with patch.object(draft.draft_motion, "require_resolved_ledger"):
+            changed = draft.act(self.ident, "storyboard-duration", {"sha256": old_sha, "seconds": 7})
+        self.assertEqual(changed["brief"]["seconds"], 7)
+        self.assertEqual(sum(scene["frames"] for scene in changed["board"]["scenes"]), 168)
+        self.assertNotEqual(changed["storyboard_sha"], old_sha)
+        self.assertNotIn("approved_storyboard_sha", changed)
+        self.assertEqual(draft._read(self.ident)["storyboard_history"][0]["sha256"], old_sha)
+
     def test_script_ranges_keep_exact_text_and_reject_insufficient_capacity(self):
         self.assertFalse(draft._needs_scene_analysis("Một chú mèo đi tìm bạn."))
         text = "Cảnh 1 — Miu nhìn ra cửa sổ 🐱\nMiu: Chào bạn!\n\nCảnh 2 — Miu chạy ra vườn."

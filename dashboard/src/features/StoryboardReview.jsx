@@ -1,9 +1,10 @@
 import {useState} from 'react';
-import {Alert,Button,Image,Modal,Space,Tag} from 'antd';
+import {Alert,Button,Image,InputNumber,Modal,Space,Tag} from 'antd';
 import './storyboard-review.css';
 
-export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewrite,onAdd,onMove,onRemove,onPreview}){
+export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewrite,onAdd,onMove,onRemove,onPreview,onDuration}){
   const [shot,setShot]=useState(null);
+  const [seconds,setSeconds]=useState(null);
   const scenes=job.board.scenes;
   const index=Math.max(0,scenes.findIndex((s,i)=>(s.shot_id??i)===shot));
   const scene=scenes[index];
@@ -18,6 +19,16 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
       </Space>
     </div>}>
     {error&&<Alert type="error" showIcon message={error}/>}
+    {job.duration_plan&&<div className="storyboard-context">
+      <p>AI đề xuất <strong>{job.duration_plan.estimated_duration_seconds} giây</strong> ·
+        {' '+job.duration_plan.recommended_shot_count} cảnh. Timeline hiện tại <strong>{job.brief.seconds} giây</strong>.</p>
+      <p className="env-muted">{job.duration_plan.duration_reasoning}</p>
+      {onDuration&&<Space wrap>
+        <InputNumber aria-label="Thời lượng storyboard" min={job.brief.mode==='motion'?4:6} max={30}
+          precision={0} value={seconds??job.brief.seconds} onChange={setSeconds} suffix="giây"/>
+        <Button disabled={busy||seconds===null||seconds===job.brief.seconds} onClick={()=>onDuration(seconds)}>Cập nhật thời lượng</Button>
+      </Space>}
+    </div>}
     <details className="storyboard-context"><summary>Nội dung video và phiên bản</summary>
       <p className="draft-source-text">{job.brief.idea}</p>
       {job.storyboard_history?.map(entry=><p key={entry.sha256}>Phiên bản {entry.storyboard.version} · {entry.storyboard.scenes.length} cảnh{entry.video_sha?' · Có MP4 đã lưu':''}</p>)}
@@ -33,6 +44,7 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
       </nav>
       {scene&&<article className="storyboard-detail">
         <h3>Cảnh {index+1}</h3><p>{scene.description}</p>
+        {scene.shot_reason&&<p className="env-muted">{scene.shot_reason}</p>}
         {scene.asset&&<Image width={180} loading="lazy" alt={'Ảnh cảnh '+(index+1)}
           src={'/api/film/drafts/'+job.id+'/scene-'+index+'?v='+scene.asset}/>}
         {!!scene.character_ids?.length&&<Space wrap>{scene.character_ids.map(id=><Tag key={id}>{job.cast?.[id]?.name??id}</Tag>)}</Space>}
