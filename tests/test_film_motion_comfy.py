@@ -131,6 +131,52 @@ class MotionAdapterTests(unittest.TestCase):
             self.submit()
         self.assertFalse(self.db.exists())
 
+    def test_ltx_requires_gate_b_and_binds_only_reviewed_inputs(self):
+        from contextlib import ExitStack, closing
+        from agentforge.features.film_studio import motion_ltx as ltx
+
+        self.workflow.write_text(json.dumps(ltx.workflow()), encoding="utf-8")
+        digest = motion.inspect_workflow(self.workflow)["sha256"]
+        with self.assertRaisesRegex(PermissionError, "Gate B"):
+            self.submit()
+        self.assertFalse(self.db.exists())
+        with ExitStack() as mocks:
+            for target, name, value in (
+                (motion.comfy_service, "_settings", {"port": motion.PORT, "install_root": self.root}),
+                (motion.comfy_service, "ensure_running", True),
+                (ltx, "verify_weights", None),
+                (ltx, "read_source", b"fixture image"),
+                (ltx, "upload_source", "af_motion_source_" + "c" * 32 + ".png"),
+                (ltx, "check_runtime", []),
+            ):
+                mocks.enter_context(patch.object(target, name, return_value=value))
+            result, transport = self.submit(workflow_sha=digest, confirm_ltx_gate_b=True,
+                                            image_job="a" * 32, image_sha="b" * 64,
+                                            ltx_encoder=self.root / ltx.ENCODER)
+        transport.assert_called_once()
+        graph = transport.call_args.kwargs["body"]["prompt"]
+        self.assertEqual(graph["10"]["inputs"]["noise_seed"], 7)
+        self.assertEqual(graph["10"]["inputs"]["cfg"], 1)
+        self.assertEqual(graph["6"]["inputs"]["length"], 33)
+        self.assertEqual(graph["9"]["inputs"]["sigmas"], ltx.SIGMAS)
+        self.assertEqual(graph["13"]["inputs"]["format.codec"], "h264")
+        self.assertEqual(result["model_id"], ltx.MODEL_ID)
+        with closing(motion._db(self.db)) as conn:
+            row = conn.execute("SELECT model_id,image_sha FROM motion_sources").fetchone()
+        self.assertEqual(tuple(row), (ltx.MODEL_ID, "b" * 64))
+
+    def test_ltx_rejects_path_injection_and_sampling_mutation(self):
+        ltx = motion.motion_ltx
+        for node, field, value in (("5", "image", "../outside.png"),
+                                   ("9", "sigmas", "1.0, 0.0"),
+                                   ("13", "filename_prefix", "another/output")):
+            with self.subTest(field=field):
+                record = ltx.workflow()
+                record["api"][node]["inputs"][field] = value
+                self.workflow.write_text(json.dumps(record), encoding="utf-8")
+                with self.assertRaisesRegex(motion.MotionError, "pinned pilot workflow"):
+                    motion.inspect_workflow(self.workflow)
+
     def test_uncertain_http_failure_keeps_submitting_checkpoint_and_no_retry(self):
         with patch.object(motion.ops_control, "require_active"), \
              patch.object(motion, "health", return_value={"status": "GPU_DETECTED_UNBENCHMARKED"}), \

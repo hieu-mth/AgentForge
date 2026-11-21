@@ -43,4 +43,24 @@ Studio, FLUX và Motion dùng chung quyền gửi GPU giữa các tiến trình 
 
 Preset Wan 2.2 TI2V 5B FP16 đã bị chặn ở bước gửi Motion sau sự cố cạn commit. Các biên nhận đã có vẫn đọc được. ComfyUI và Ollama báo lỗi bộ nhớ hoặc lỗi server trong Studio sẽ giữ checkpoint để Owner xem xét trước khi chạy lại.
 
+### LTX-Video 2B distilled FP8 I2V pilot
+
+Gate A chỉ đọc schema từ ComfyUI đang chạy và xuất graph cố định để review.
+
+```powershell
+$python = ".\.venv\Scripts\python.exe"
+& $python -m agentforge.features.film_studio.motion_comfy ltx-workflow |
+    Set-Content -Encoding ascii workspace\ltx-i2v-pilot.json
+& $python -m agentforge.features.film_studio.motion_comfy inspect-workflow --workflow workspace\ltx-i2v-pilot.json
+& $python -m agentforge.features.film_studio.motion_comfy ltx-readiness
+```
+
+Sau khi Owner duyệt Gate B, đặt [checkpoint chính thức](https://huggingface.co/Lightricks/LTX-Video/blob/main/ltxv-2b-0.9.8-distilled-fp8.safetensors) vào `ComfyUI/models/checkpoints` của Portable đã đăng ký. Pilot yêu cầu file đúng kích thước và SHA-256, dùng VAE trong checkpoint và [T5 FP8](https://huggingface.co/comfyanonymous/flux_text_encoders/blob/main/t5xxl_fp8_e4m3fn.safetensors) đã index trong ComfyUI. Chuẩn bị một ảnh PNG FLUX đã lưu có job ID và SHA-256, một shot đã lên kế hoạch và prompt local. Mức sàn là 12 GiB RAM khả dụng, 16 GiB commit Windows còn lại, 8 GiB VRAM trống và các queue đã đăng ký phải rỗng.
+
+```powershell
+& $python -m agentforge.features.film_studio.motion_comfy submit --film-slug $film --shot-id $shot --plan-sha $planSha --workflow workspace\ltx-i2v-pilot.json --workflow-sha $workflowSha --prompt-file $promptFile --seed 42 --image-job $imageJob --image-sha $imageSha --ltx-encoder $encoderFile --confirm-gpu-run --confirm-ltx-gate-b
+```
+
+Graph một pass dùng ảnh làm điều kiện đầu, 512×288, 33 frame, 24 fps, CFG 1 và các mốc đầu của [cấu hình distilled](https://github.com/Lightricks/LTX-Video/blob/main/configs/ltxv-2b-0.9.8-distilled-fp8.yaml). Không upscale. Theo dõi RAM khả dụng, Windows commit và VRAM từ trước khi gửi cho tới nạp model, sampling và VAE decode. Dừng lần thử nếu thiếu tài nguyên và giữ log, không gửi lại job. Dùng `status` rồi `collect` với tên file `af_motion_<job_id>_00001_.mp4` thực tế từ ComfyUI. Collect kiểm tra đủ 33 frame và giải mã qua FFmpeg. Owner vẫn cần đối chiếu các frame về chuyển động thực và ngoại hình nhân vật.
+
 Nếu job dừng ở `COMMIT_LOW` ngay sau ảnh đầu, so sánh mốc sau cảnh 1 với mốc trước cảnh 2 trong biên nhận. Khi ComfyUI vẫn giữ nhiều private memory dù hàng đợi rỗng, có thể thử thêm `--cache-none` vào lệnh khởi chạy một phiên ComfyUI kiểm thử. Cờ này chạy lại từng node, có thể làm mỗi cảnh lâu hơn và có thể giảm bộ nhớ giữ lại giữa các cảnh. Giữ nguyên ngưỡng tài nguyên và đo lại cả ba clip trước khi áp dụng cho phiên Owner.

@@ -166,12 +166,19 @@ def require_idle_queue(port, *, allow_offline=False):
     validate_idle_queue(data)
 
 
-def require_other_queue_idle(port):
+def require_other_queue_idle(port, *, include_profiles=False):
     """Observe the fixed Motion endpoint and the registered managed endpoint."""
     settings = _settings()
     ports = {comfyui.DEFAULT_PORT}
     if settings:
         ports.add(settings["port"])
+    if include_profiles:
+        for profile in model_hub.catalog()["profiles"]:
+            if profile["enabled"] and profile["provider"] == "comfyui":
+                parts = urlsplit(profile["base_url"])
+                if parts.hostname not in {"127.0.0.1", "localhost"}:
+                    raise draft_resources.ResourceBlocked("Cannot verify the configured ComfyUI endpoint over IPv4")
+                ports.add(parts.port)
     for other in sorted(ports - {port}):
         require_idle_queue(other, allow_offline=True)
 

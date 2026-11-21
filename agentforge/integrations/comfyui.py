@@ -85,7 +85,10 @@ def validate_image_route(path, *, has_body=False):
         return
     if (path in MODEL_ROUTES or path in {"/system_stats", "/queue"}
             or IMAGE_HISTORY.fullmatch(path)
-            or re.fullmatch(r"/object_info/(?:UnetLoaderGGUF|DualCLIPLoaderGGUF|VAELoader)", path)):
+            or re.fullmatch(r"/object_info/(?:UnetLoaderGGUF|DualCLIPLoaderGGUF|VAELoader|"
+                            r"CheckpointLoaderSimple|CLIPLoader|CLIPTextEncode|LoadImage|"
+                            r"LTXVImgToVideo|LTXVConditioning|KSamplerSelect|ManualSigmas|"
+                            r"SamplerCustom|VAEDecode|CreateVideo|SaveVideo)", path)):
         return
     parsed = urlsplit(path)
     if parsed.path != "/view" or parsed.scheme or parsed.netloc or parsed.fragment:
