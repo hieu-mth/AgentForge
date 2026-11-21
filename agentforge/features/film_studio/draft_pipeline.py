@@ -28,6 +28,7 @@ LOCK = threading.Lock()
 ACTIVE = None
 IMG_RETRIES = 3
 BRIEF_LIMIT = 20_000
+OUTLINE_LIMIT = 700
 SCRIPT_HEADING = re.compile(r"(?im)^[ \t]*(?:cảnh|scene)\s+[0-9]+\b")
 SCRIPT_DIALOGUE = re.compile(r"(?m)^[ \t]*([^\W\d][^:\n]{0,27}):[ \t]*(\S[^\n]*)")
 _QUEUE_STATES = {"QUEUED", "RUNNING", "WAITING_RESOURCES"}
@@ -96,9 +97,9 @@ class DraftStoreUnavailable(RuntimeError):
         super().__init__(message)
 
 
-def _text(value, max_length):
+def _text(value, max_length, *, label="Văn bản bản nháp"):
     if not isinstance(value, str) or not 1 <= len(value.strip()) <= max_length:
-        raise ValueError("Invalid draft text")
+        raise ValueError(f"{label} phải có từ 1 đến {max_length} ký tự.")
     return value.strip()
 
 
@@ -394,9 +395,12 @@ def _write_board(job, bindings):
             output = _ask(bindings["general.text"],
                           "Plan a coherent video and return a Vietnamese outline. Develop a short premise. "
                           "When the input supplies story details, preserve its events, people and dialogue "
-                          "and fill only missing details.",
-                          job["brief"], _object(outline=STRING), comfy)
-        job["plan"] = _text(output["outline"], 700)
+                          "and fill only missing details. "
+                          f"Keep the outline concise, at most {OUTLINE_LIMIT} characters. "
+                          "Use the selected duration and scene count from the brief.",
+                          job["brief"], _object(outline={**STRING, "minLength": 1, "maxLength": OUTLINE_LIMIT}),
+                          comfy)
+        job["plan"] = _text(output.get("outline"), OUTLINE_LIMIT, label="Dàn ý do AI trả về")
         _save(job)
     job["stage"] = "STORYBOARD"
     _save(job)

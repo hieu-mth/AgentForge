@@ -334,6 +334,20 @@ class DraftTests(unittest.TestCase):
         result = draft._story(self.board(), 2, 7, {"cat": {}})
         self.assertEqual([scene["seconds"] for scene in result["scenes"]], [4, 3])
 
+    def test_planning_outline_contract_matches_validation(self):
+        job = {"id": self.ident, "status": "RUNNING", "brief": {**self.brief,
+            "seconds": 15, "scene_count": 8, "mode": "motion"}}
+        bindings = {"general.text": {"provider": "ollama", "model": "fixture"}, "image.generate": {}}
+        with (patch.object(draft, "_measured", return_value=nullcontext()),
+              patch.object(draft, "_ask", return_value={"outline": "ế" * 701}) as planner):
+            with self.assertRaisesRegex(ValueError, "Dàn ý do AI trả về.*700"):
+                draft._write_board(job, bindings)
+        self.assertNotIn("plan", draft._read(self.ident))
+        _, instructions, brief, schema, _ = planner.call_args.args
+        self.assertIn("700 characters", instructions)
+        self.assertEqual(brief["seconds"], 15)
+        self.assertEqual(schema["properties"]["outline"]["maxLength"], 700)
+
     def test_resume_reuses_previous_asset_and_generates_only_failed_scene(self):
         job = {"id": self.ident, "brief": self.brief, "status": "RUNNING", "stage": "IMAGES",
                "board": draft._story(self.board(), 2, 6, {"cat": {}}),
