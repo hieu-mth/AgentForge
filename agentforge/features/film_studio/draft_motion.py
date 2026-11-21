@@ -21,6 +21,10 @@ MAX_SHOTS = 3
 SECONDS_PER_SHOT = 2
 
 
+class NeedsReconciliation(ValueError):
+    """A provider job may still exist and must never be submitted again."""
+
+
 def binding(bindings):
     profile = bindings.get("film.motion", {})
     endpoint = urlsplit(profile.get("base_url", ""))
@@ -39,6 +43,8 @@ def binding(bindings):
 
 def prepare(job, folder):
     slug = "draft-" + job["id"]
+    if "storyboard_version" in job:
+        slug = f"d-{job['id']}-v{job['storyboard_version']}"
     shot_count = job["brief"]["scene_count"]
     plan = long_form.build_plan(title=job["board"]["title"], genre="Studio",
         style="LTX motion draft", chapters=[{"id": "draft", "title": job["board"]["title"],
@@ -72,15 +78,32 @@ def require_resolved_ledger(job):
                 raise draft_resources.ResourceBlocked("MOTION_RECONCILIATION_REQUIRED")
 
 
+def reconcile_cancelled(job):
+    terminal = {"COMFY_COMPLETE_NOT_IMPORTED_OR_VERIFIED", motion_verify.TECHNICAL,
+                "PROVIDER_FAILED", "GPU_RESOURCE_FAILURE"}
+    for scene in job["board"]["scenes"]:
+        if scene.get("motion_job"):
+            try:
+                status = motion_comfy.job_status(scene["motion_job"], db_path=motion_comfy.DB)["status"]
+            except (OSError, RuntimeError, ValueError, http.client.HTTPException):
+                return False
+            if status not in terminal:
+                return False
+    return True
+
+
 def _provider(job_id, cancelled):
     row = motion_verify._job(job_id, motion_comfy.DB)
     if not row["provider_id"]:
-        raise ValueError("Motion dispatch requires reconciliation")
+        raise NeedsReconciliation("Motion dispatch requires reconciliation")
     provider = str(UUID(row["provider_id"]))
     deadline = time.monotonic() + 240
     stop_actions = set()
     while time.monotonic() < deadline:
-        status = motion_comfy.job_status(job_id, db_path=motion_comfy.DB)["status"]
+        try:
+            status = motion_comfy.job_status(job_id, db_path=motion_comfy.DB)["status"]
+        except (OSError, http.client.HTTPException, motion_comfy.MotionError) as exc:
+            raise NeedsReconciliation("Motion provider disconnected; reconcile the existing job") from exc
         if status in {"COMFY_COMPLETE_NOT_IMPORTED_OR_VERIFIED", motion_verify.TECHNICAL}:
             if stop_actions:
                 raise ValueError("Motion finished after an interrupt request; review before continuing")
@@ -101,9 +124,9 @@ def _provider(job_id, cancelled):
                 with closing(http.client.HTTPConnection("127.0.0.1", motion_comfy.PORT, timeout=3)) as conn:
                     conn.request("POST", action, body=json.dumps(body), headers={"Content-Type": "application/json"})
                     if conn.getresponse().status != 200:
-                        raise ValueError("Motion interrupt unconfirmed; reconcile before continuing")
+                        raise NeedsReconciliation("Motion interrupt unconfirmed; reconcile before continuing")
         time.sleep(1)
-    raise ValueError("Motion completion unconfirmed; reconcile the existing job before continuing")
+    raise NeedsReconciliation("Motion completion unconfirmed; reconcile the existing job before continuing")
 
 
 def clip_path(scene):
@@ -156,12 +179,18 @@ def run_shot(scene, index, prepared, profile, save, cancelled):
             save()
             if cancelled():
                 raise ValueError("Draft cancelled before motion dispatch")
-        motion_comfy.submit_shot(film_slug=slug, shot_id=f"sh-{index+1:05d}", plan_sha=plan_sha,
-            prompt=f"Animate this shot with natural movement, preserving character identity. {scene['description']}",
-            workflow_path=workflow, workflow_sha=digest, seed=42+index, confirmed=True,
-            image_job=scene["job_id"], image_sha=scene["asset"],
-            ltx_encoder=Path(profile["motion_encoder"]), confirm_ltx_gate_b=True, on_reserved=reserve,
-            db_path=motion_comfy.DB, film_root=motion_comfy.FILMS)
+        try:
+            motion_comfy.submit_shot(film_slug=slug, shot_id=f"sh-{index+1:05d}", plan_sha=plan_sha,
+                prompt=("Animate this shot with natural movement, preserving character identity. "
+                        + scene.get("motion_prompt", scene["description"]) + " " + scene.get("scene_notes", "")),
+                workflow_path=workflow, workflow_sha=digest, seed=42+index, confirmed=True,
+                image_job=scene["job_id"], image_sha=scene["asset"],
+                ltx_encoder=Path(profile["motion_encoder"]), confirm_ltx_gate_b=True, on_reserved=reserve,
+                db_path=motion_comfy.DB, film_root=motion_comfy.FILMS)
+        except (OSError, ValueError, RuntimeError, http.client.HTTPException) as exc:
+            if scene.get("motion_job") and motion_verify._job(scene["motion_job"], motion_comfy.DB)["state"] == "SUBMITTING":
+                raise NeedsReconciliation("Motion submission requires reconciliation") from exc
+            raise
     job_id = scene["motion_job"]
     with model_hub.local_inference_slot():
         _provider(job_id, cancelled)

@@ -397,15 +397,14 @@ try {
     const {id,...brief}=route.request().postDataJSON();
     if(!/^[0-9a-f]{32}$/.test(id)||!['Chú mèo cam khám phá khu rừng','Ý tưởng mới'].includes(brief.idea)||
         brief.seconds!==6||brief.scene_count!==3||brief.ratio!=='16:9'||
-        brief.mode!=='motion'||brief.motion_approved!==true)
+        brief.mode!=='motion'||'motion_approved' in brief)
       throw new Error('Unexpected draft submission');
     draftFixture={id,brief,status:'RUNNING',stage:'PLANNING',worker_active:true,
       activity:{operation:'plan',provider:'ollama',model:'fixture-planner'}};
     return route.fulfill({json:draftFixture});
   });
   await settings.getByLabel('Nội dung video',{exact:true}).fill('Chú mèo cam khám phá khu rừng');
-  await settings.getByRole('button',{name:'Tạo bản nháp',exact:true}).click();
-  await settings.getByRole('button',{name:'Duyệt và tạo phim',exact:true}).click();
+  await settings.getByRole('button',{name:'Tạo storyboard',exact:true}).click();
   const draftProgress=settings.getByRole('region',{name:'Tiến độ tạo bản nháp'});
   await draftProgress.getByText('Đang lập kế hoạch',{exact:true}).waitFor();
   await draftProgress.getByText('Ollama · fixture-planner',{exact:true}).waitFor();
@@ -439,13 +438,25 @@ try {
   if(draftReads!==failedReads)throw new Error('Draft list retried automatically after an API failure');
   draftListStatus=200;
   await settings.getByLabel('Nội dung video',{exact:true}).fill('Ý tưởng mới');
-  await settings.getByRole('button',{name:'Tạo bản nháp',exact:true}).click();
-  await settings.getByRole('button',{name:'Duyệt và tạo phim',exact:true}).click();
+  await settings.getByRole('button',{name:'Tạo storyboard',exact:true}).click();
   await settings.getByRole('tab',{name:/^Ý tưởng mới/}).waitFor();
   const scene={seconds:2,description:'Miu quay đầu',character_ids:[],audio:'',asset:'fixture-image'};
-  draftFixture={...draftFixture,stage:'MOTION',board:{title:'Ý tưởng mới',scenes:[
-    {...scene,motion_sha:'fixture-clip'},scene,scene]},
-    activity:{operation:'motion',provider:'comfyui',model:'fixture-ltx',scene:2}};
+  draftFixture={...draftFixture,status:'STORYBOARD_REVIEW',stage:'STORYBOARD',worker_active:false,
+    storyboard_version:1,storyboard_sha:'a'.repeat(64),
+    board:{title:'Ý tưởng mới',scenes:[scene,scene,scene]}};
+  await settings.route('**/api/film/drafts/*/storyboard-approve',route=>{
+    const {sha256}=route.request().postDataJSON();
+    if(sha256!==draftFixture.storyboard_sha)throw new Error('Approval did not use exact storyboard SHA');
+    draftFixture={...draftFixture,status:'RUNNING',stage:'MOTION',worker_active:true,
+      board:{title:'Ý tưởng mới',scenes:[{...scene,motion_sha:'fixture-clip'},scene,scene]},
+      activity:{operation:'motion',provider:'comfyui',model:'fixture-ltx',scene:2}};
+    return route.fulfill({json:draftFixture});
+  });
+  await settings.locator('.studio-drafts-list').getByRole('button',{name:'Làm mới',exact:false}).click();
+  await settings.getByText('Storyboard chờ duyệt',{exact:true}).waitFor();
+  await settings.getByRole('tab',{name:/^Ý tưởng mới/}).click();
+  await settings.getByRole('button',{name:'Duyệt storyboard',exact:true}).click();
+  await settings.getByRole('button',{name:'Duyệt và tạo phim',exact:true}).click();
   await draftProgress.getByText('Đang tạo chuyển động cảnh 2/3',{exact:true}).waitFor();
   await draftProgress.getByText('1/3 clip đã xác minh',{exact:true}).waitFor();
   cancelledDraft={...draftFixture,id:'c'.repeat(32),status:'CANCELLED',worker_active:false,board:null,
@@ -475,15 +486,13 @@ try {
   await settings.getByText('Kịch bản khá dày',{exact:false}).waitFor();
   await settings.route('**/api/film/drafts/start',route=>{
     const {id,...brief}=route.request().postDataJSON();
-    if(brief.idea!==longScript||Object.keys(brief).sort().join()!=='idea,mode,motion_approved,ratio,scene_count,seconds')
+    if(brief.idea!==longScript||Object.keys(brief).sort().join()!=='idea,mode,ratio,scene_count,seconds')
       throw new Error('Studio did not submit the single content field unchanged');
     return route.fulfill({json:{id,brief,status:'QUEUED'}});
   });
   const longSubmit=settings.waitForResponse(r=>r.url().endsWith('/api/film/drafts/start'));
-  await settings.getByRole('button',{name:'Tạo bản nháp',exact:true}).click();
-  await settings.getByRole('button',{name:'Duyệt và tạo phim',exact:true}).click();
+  await settings.getByRole('button',{name:'Tạo storyboard',exact:true}).click();
   await longSubmit;
-  await settings.getByRole('button',{name:'Duyệt và tạo phim',exact:true}).waitFor({state:'hidden'});
   await editor.fill('đ'.repeat(20001));
   await settings.locator('button.draft-submit:disabled').waitFor();
   // Fresh checkout starts with zero registered model profiles.
