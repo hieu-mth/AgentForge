@@ -8,44 +8,44 @@ const states={
   UNCONFIGURED:['Chưa cấu hình','default'],
   STOPPED:['Đã dừng','default'],
   STARTING:['Đang khởi động','processing'],
+  STOPPING:['Đang dừng','processing'],
   RUNNING:['Đang chạy','success'],
   ERROR:['Lỗi','error'],
 };
 const gib=bytes=>Number.isFinite(bytes)?(bytes/2**30).toFixed(1)+' GB':'—';
 
 export function ComfyService({mutate}){
-  const {data,error,loading,reload}=useResource(statusPath);
+  const {data,error,loading,reload,setData}=useResource(statusPath);
   const [dialog,setDialog]=useState(false);
   const [pending,setPending]=useState(null);
   const [failure,setFailure]=useState(null);
   const [form]=Form.useForm();
-  const starting=data?.state==='STARTING';
+  const transitioning=['STARTING','STOPPING'].includes(data?.state);
   const managed=data?.managed;
   useEffect(()=>{
-    const transitioning=starting||['start','restart'].includes(pending);
-    if(!transitioning&&!managed)return;
-    const timer=setInterval(()=>{
-      if(!document.hidden)reload();
-    },transitioning?5000:10000);
-    return ()=>clearInterval(timer);
-  },[starting,managed,pending,reload]);
+    if(loading||(!transitioning&&!pending&&!managed))return;
+    const timer=setTimeout(reload,transitioning||pending?2000:10000);
+    return ()=>clearTimeout(timer);
+  },[transitioning,managed,pending,reload,loading]);
 
   async function submit(operation,body){
     setPending(operation);
     setFailure(null);
     try{
-      await mutate(statusPath+(operation==='config'?'/config':'/control'),body,{inlineError:true});
+      const result=await mutate(statusPath+(operation==='config'?'/config':'/control'),body,{inlineError:true});
+      setData({...result,can_manage:data?.can_manage});
       if(operation==='config')setDialog(false);
     }catch(err){
       setFailure(requestError(err));
-    }finally{
       await reload();
+    }finally{
       setPending(null);
     }
   }
 
   const badge=states[data?.state];
-  const blocked=Boolean(pending||starting||data?.busy||error);
+  const blocked=Boolean(pending||transitioning||error);
+  const stopBlocked=blocked||data?.busy;
   return <Card className="env-panel" title="Dịch vụ ComfyUI" extra={
     <Button aria-label="Kiểm tra ComfyUI" onClick={reload} loading={loading&&!pending}>Kiểm tra</Button>
   }>
@@ -65,13 +65,14 @@ export function ComfyService({mutate}){
         message="Đang có tác vụ hoặc chưa xác minh được hàng đợi. Đợi kiểm tra lại trước khi dừng."/>}
       {data&&data.can_manage===false&&<Alert type="info" showIcon message="Phiên AgentForge hiện ở chế độ chỉ đọc công cụ local."/>}
       {data?.error&&<Alert type="error" showIcon message={data.error}/>}
-      {failure&&!dialog&&<Alert type="error" showIcon message={failure}/>}
+      {failure&&!dialog&&<Alert type="error" showIcon message={failure}
+        action={<Button size="small" onClick={reload}>Kiểm tra lại</Button>}/>}
       {data&&<Space wrap>
         <Button type="primary" loading={pending==='start'} disabled={blocked||!data.can_manage||!data.configured||data.managed||data.state==='RUNNING'}
-          onClick={()=>submit('start',{action:'start'})}>Khởi động</Button>
-        <Button loading={pending==='stop'} disabled={blocked||!data.can_manage||!data.managed}
+          onClick={()=>submit('start',{action:'start'})}>{data.state==='ERROR'&&!data.managed?'Thử khởi động lại':'Khởi động'}</Button>
+        <Button loading={pending==='stop'} disabled={stopBlocked||!data.can_manage||!data.managed}
           onClick={()=>submit('stop',{action:'stop'})}>Dừng</Button>
-        <Button loading={pending==='restart'} disabled={blocked||!data.can_manage||!data.managed}
+        <Button loading={pending==='restart'} disabled={stopBlocked||!data.can_manage||!data.managed}
           onClick={()=>submit('restart',{action:'restart'})}>Khởi động lại</Button>
         <Button disabled={blocked||data.managed} onClick={()=>{
           setFailure(null);setDialog(true);

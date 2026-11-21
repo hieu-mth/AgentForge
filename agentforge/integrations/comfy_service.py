@@ -160,11 +160,12 @@ def reset_idle():
 
 def _stop_owned():
     global _CHILD, _PORT, _STATE, _ERROR
-    _CHILD.terminate()
+    _STATE, _ERROR = "STOPPING", None
     try:
+        _CHILD.terminate()
         _CHILD.wait(timeout=8)
-    except subprocess.TimeoutExpired:
-        _STATE, _ERROR = "ERROR", "Managed ComfyUI did not stop within 8 seconds"
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        _STATE, _ERROR = "ERROR", f"Could not stop managed ComfyUI PID {_CHILD.pid}: {exc}"
         raise ValueError(_ERROR) from None
     _CHILD, _PORT, _STATE, _ERROR = None, None, "STOPPED", None
     reset_idle()
@@ -242,11 +243,12 @@ def status():
     child = _CHILD
     managed = _PORT == port and child is not None and child.poll() is None
     state = _STATE
-    data = None if state == "STARTING" and managed else _probe(port)
-    if data:
+    transitioning = state in {"STARTING", "STOPPING"}
+    data = None if transitioning else _probe(port)
+    if transitioning:
+        pass
+    elif data:
         state = "RUNNING"
-    elif state == "STARTING" and managed:
-        state = "STARTING"
     elif managed or _occupied(port) or _CHILD is not None and _PORT == port:
         state = "ERROR"
     else:
@@ -314,6 +316,9 @@ def ensure_running(port):
         _STATE, _ERROR = "STARTING", None
         try:
             with log.open("ab") as stream:
+                stream.write(f"\n[AgentForge] Starting verified Portable launcher on port {port}; cwd={root}\n"
+                             .encode("utf-8"))
+                stream.flush()
                 _CHILD = subprocess.Popen(
                     [str(executable), "-s", str(script), "--windows-standalone-build",
                      "--listen", "127.0.0.1", "--port", str(port), "--cache-none",
@@ -321,8 +326,10 @@ def ensure_running(port):
                     cwd=root, stdin=subprocess.DEVNULL, stdout=stream, stderr=subprocess.STDOUT,
                     shell=False, creationflags=subprocess.CREATE_NO_WINDOW)
             _PORT = port
-        except OSError:
-            _STATE, _ERROR = "ERROR", "Could not start registered ComfyUI executable"
+        except OSError as exc:
+            _STATE, _ERROR = "ERROR", (
+                f"Could not launch registered ComfyUI ({exc.strerror or str(exc)}). "
+                "See data/company/runtime_logs/comfyui.log.")
             _LOG.exception("ComfyUI launch failed")
             raise ValueError(_ERROR) from None
         deadline = time.monotonic() + START_TIMEOUT
@@ -334,8 +341,16 @@ def ensure_running(port):
                 _watch_idle()
                 return True
             time.sleep(1)
-        # Keep ownership so an Owner can inspect or stop the slow startup explicitly.
-        _STATE, _ERROR = "ERROR", "ComfyUI exited or timed out; see data/company/runtime_logs/comfyui.log"
+        code = _CHILD.poll()
+        if code is None:
+            reason = f"ComfyUI PID {_CHILD.pid} timed out after {START_TIMEOUT}s waiting for /system_stats."
+            # An owned child that never bound the port cannot be running a provider job.
+            if not _occupied(port):
+                _stop_owned()
+        else:
+            reason = f"ComfyUI PID {_CHILD.pid} exited before readiness (exit code {code})."
+        _STATE, _ERROR = "ERROR", reason + " See data/company/runtime_logs/comfyui.log."
+        _LOG.error("%s", _ERROR)
         raise ValueError(_ERROR)
 
 
@@ -362,4 +377,7 @@ def control(action):
                 _CHILD, _PORT, _STATE, _ERROR = None, None, "STOPPED", None
         if action in {"start", "restart"}:
             ensure_running(port)
-        return status()
+        result = status()
+        if action in {"start", "restart"} and result["state"] != "RUNNING":
+            raise ValueError(result["error"] or "ComfyUI stopped responding after startup")
+        return result

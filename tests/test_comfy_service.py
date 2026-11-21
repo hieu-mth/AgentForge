@@ -269,6 +269,45 @@ class ComfyServiceTests(unittest.TestCase):
                 service.ensure_running(8192)
         assert not self.children
 
+    def test_spawn_error_is_reported_without_a_managed_process(self):
+        with patch.object(subprocess, "Popen", side_effect=OSError(5, "Access denied")):
+            with self.assertRaisesRegex(ValueError, "Access denied.*runtime_logs"):
+                service.control("start")
+        result = service.status()
+        self.assertEqual(result["state"], "ERROR")
+        self.assertIsNone(result["pid"])
+
+    def test_child_exit_before_readiness_reports_the_exit_code(self):
+        spawn = subprocess.Popen
+
+        def exit_immediately(*args, **kwargs):
+            child = spawn(*args, **kwargs)
+            child.code = 7
+            return child
+
+        with patch.object(subprocess, "Popen", side_effect=exit_immediately):
+            with self.assertRaisesRegex(ValueError, "PID 1.*exit code 7"):
+                service.control("start")
+        self.assertEqual(service.status()["state"], "ERROR")
+        self.assertEqual(service.control("start")["pid"], 2)
+
+    def test_unbound_timeout_releases_owned_child_for_retry(self):
+        with (patch.object(service, "_probe", return_value=None),
+              patch.object(service, "_occupied", return_value=False),
+              patch.object(service, "START_TIMEOUT", 0)):
+            with self.assertRaisesRegex(ValueError, "waiting for /system_stats"):
+                service.control("start")
+        self.assertEqual(self.children[0].code, 0)
+        self.assertEqual(service.status()["state"], "ERROR")
+        self.assertEqual(service.control("start")["pid"], 2)
+
+    def test_stop_status_remains_stopping_until_wait_completes(self):
+        service.control("start")
+        child = self.children[0]
+        with patch.object(child, "wait", side_effect=lambda **kw: self.assertEqual(
+                service.status()["state"], "STOPPING")):
+            self.assertEqual(service.control("stop")["state"], "STOPPED")
+
     def test_start_waits_for_slow_portable_readiness(self):
         with (patch.object(service, "_probe", side_effect=[None, None, None, {"devices": []}]),
               patch.object(service.time, "sleep") as wait):
