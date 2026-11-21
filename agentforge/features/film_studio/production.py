@@ -242,14 +242,15 @@ def draft(film_slug, episode_id, *, shot_count, first_shot=1,
         raise FilmProductionError("No verified motion jobs are available")
     with closing(conn):
         rows = [dict(row) for row in conn.execute(
-            "SELECT job_id, shot_id, state FROM motion_jobs "
-            "WHERE film_slug=? AND plan_sha=?", (slug, plan["plan_sha256"]))]
+            "SELECT job_id, shot_id FROM motion_jobs "
+            "WHERE film_slug=? AND plan_sha=? AND state='COMPLETE_UNVERIFIED'",
+            (slug, plan["plan_sha256"]))]
     by_shot = {x["shot_id"]: x for x in rows}
     chapters = {x["id"]: x for x in plan["chapters"]}
     entries = []
     for shot in planned:
         row = by_shot.get(shot["shot_id"])
-        if row is None or row["state"] != "COMPLETE_UNVERIFIED":
+        if row is None:
             raise FilmProductionError(
                 "Missing completed motion receipt for shot " + shot["shot_id"])
         receipt = motion_verify.inspect_receipt(

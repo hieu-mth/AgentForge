@@ -134,6 +134,11 @@ class FilmProductionTests(unittest.TestCase):
 
     def test_draft_only_from_verified_motion_and_forces_owner_notes(self):
         self.bootstrap(3)
+        with closing(motion_comfy._db(self.db)) as conn, conn:
+            conn.execute("""INSERT INTO motion_jobs
+                SELECT ?, film_slug, shot_id, plan_sha, workflow_sha, prompt_sha,
+                       seed, NULL, 'FAILED', created_at, updated_at
+                FROM motion_jobs WHERE job_id=?""", ("f" * 32, self.spec["shots"][0]["job_id"]))
         edited = production.draft(
             "fox-film", "draft-one", shot_count=3,
             film_root=self.films, db_path=self.db)

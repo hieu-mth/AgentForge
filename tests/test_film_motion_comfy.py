@@ -1,10 +1,13 @@
 """Local motion adapter contracts: trusted JSON, owner approvals, no implicit retries."""
 import copy
 import json
+import sqlite3
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
+from threading import Event
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -212,6 +215,104 @@ class MotionAdapterTests(unittest.TestCase):
                 self.assertEqual(connection.request.call_args.args, ("POST", "/upload/image"))
                 response.read.assert_called_once_with(4097)
                 connection.close.assert_called_once()
+
+    def test_legacy_failed_upload_migrates_and_allows_explicit_new_attempt(self):
+        ltx = motion.motion_ltx
+        old_id = "c" * 32
+        plan_sha = self.plan["plan_sha256"]
+        self.db.parent.mkdir()
+        with closing(sqlite3.connect(self.db)) as conn, conn:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("""CREATE TABLE motion_jobs(
+                job_id TEXT PRIMARY KEY, film_slug TEXT NOT NULL, shot_id TEXT NOT NULL,
+                plan_sha TEXT NOT NULL, workflow_sha TEXT NOT NULL, prompt_sha TEXT NOT NULL,
+                seed INTEGER NOT NULL, provider_id TEXT, state TEXT NOT NULL,
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                UNIQUE(film_slug, shot_id, plan_sha))""")
+            conn.execute("""CREATE TABLE motion_sources(
+                job_id TEXT PRIMARY KEY, model_id TEXT NOT NULL, image_job TEXT NOT NULL,
+                image_sha TEXT NOT NULL)""")
+            old = (old_id, "pilot", "sh-00001", plan_sha, "b"*64, "a"*64,
+                   7, None, "FAILED", "old-created", "old-updated")
+            conn.execute("INSERT INTO motion_jobs VALUES (?,?,?,?,?,?,?,?,?,?,?)", old)
+            source = (old_id, ltx.MODEL_ID, "d"*32, "e"*64)
+            conn.execute("INSERT INTO motion_sources VALUES (?,?,?,?)", source)
+            conn.commit()
+            migration = motion.migrate_ledger(self.db)
+        self.assertTrue(migration["migrated"])
+        self.assertEqual(migration["before"], migration["after"])
+        self.assertEqual(migration["after"], {"motion_jobs": 1, "motion_sources": 1})
+        with closing(sqlite3.connect(migration["backup"])) as backup:
+            self.assertEqual(backup.execute("SELECT * FROM motion_jobs").fetchone(), old)
+            self.assertEqual(backup.execute("SELECT * FROM motion_sources").fetchone(), source)
+        self.assertEqual(motion.migrate_ledger(self.db), {"migrated": False})
+        with self.assertRaisesRegex(PermissionError, "explicitly confirm"):
+            self.submit()
+        newer, request = self.submit(confirm_new_attempt=True)
+        request.assert_called_once()
+        self.assertNotEqual(newer["job_id"], old_id)
+        with closing(motion._db(self.db)) as conn:
+            self.assertEqual(tuple(conn.execute("SELECT * FROM motion_jobs WHERE job_id=?", (old_id,)).fetchone()), old)
+            self.assertEqual(tuple(conn.execute("SELECT * FROM motion_sources WHERE job_id=?", (old_id,)).fetchone()), source)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM motion_jobs").fetchone()[0], 2)
+        self.assertEqual(motion.job_status(old_id, db_path=self.db)["status"], "PROVIDER_FAILED")
+        with self.assertRaisesRegex(PermissionError, "reconcile"):
+            self.submit(confirm_new_attempt=True)
+
+    def test_attempt_admission_fails_closed_and_preserves_completed_shots(self):
+        first, _ = self.submit()
+        for state, provider_id, allowed in (
+            ("SUBMITTING", None, False),
+            ("SUBMITTED", str(uuid4()), False),
+            ("UNKNOWN", None, False),
+            ("FAILED", None, False),
+            ("FAILED_RESOURCE", None, False),
+            ("FAILED", "invalid-id", False),
+            ("COMPLETE_UNVERIFIED", str(uuid4()), False),
+            ("FAILED", str(uuid4()), True),
+            ("FAILED_RESOURCE", str(uuid4()), True),
+        ):
+            with self.subTest(state=state, provider_id=provider_id), closing(motion._db(self.db)) as conn, conn:
+                conn.execute("UPDATE motion_jobs SET state=?, provider_id=? WHERE job_id=?",
+                             (state, provider_id, first["job_id"]))
+                args = ("pilot", "sh-00001", self.plan["plan_sha256"], True)
+                if allowed:
+                    motion._check_attempt(conn, *args)
+                else:
+                    with self.assertRaises(PermissionError):
+                        motion._check_attempt(conn, *args)
+
+    def test_concurrent_attempt_cannot_dispatch_while_first_is_in_flight(self):
+        first, _ = self.submit()
+        with closing(motion._db(self.db)) as conn, conn:
+            conn.execute("UPDATE motion_jobs SET state='FAILED' WHERE job_id=?",
+                         (first["job_id"],))
+        entered, release = Event(), Event()
+
+        def dispatch(*args, **kwargs):
+            entered.set()
+            if not release.wait(5):
+                raise TimeoutError("Test did not release the provider")
+            return {"prompt_id": str(uuid4())}
+
+        with (patch.object(motion.ops_control, "require_active"),
+              patch.object(motion, "health", return_value={"status": "GPU_DETECTED_UNBENCHMARKED"}),
+              patch.object(motion, "_json_request", side_effect=dispatch) as request,
+              ThreadPoolExecutor(max_workers=1) as pool):
+            args = dict(film_slug="pilot", shot_id="sh-00001",
+                        plan_sha=self.plan["plan_sha256"], prompt=self.prompt,
+                        workflow_path=self.workflow, workflow_sha=motion.inspect_workflow(self.workflow)["sha256"],
+                        seed=7, confirmed=True, confirm_new_attempt=True,
+                        film_root=self.films, db_path=self.db)
+            running = pool.submit(motion.submit_shot, **args)
+            try:
+                self.assertTrue(entered.wait(5))
+                with self.assertRaisesRegex(PermissionError, "LOCAL_INFERENCE_BUSY"):
+                    motion.submit_shot(**args)
+            finally:
+                release.set()
+            self.assertEqual(running.result()["status"], "SUBMITTED")
+            request.assert_called_once()
 
     def test_ltx_rejects_path_injection_and_sampling_mutation(self):
         ltx = motion.motion_ltx
