@@ -270,7 +270,7 @@ export function StudioDrafts({mutate,onCharacters}) {
       extra:job.video_sha&&<Button size="small" onKeyDown={event=>event.stopPropagation()}
         onClick={event=>{event.stopPropagation();setPreviewId(job.id);}}>Xem bản nháp MP4</Button>,
       children:<>
-        {job.error&&<Alert showIcon type={job.status==='WAITING_RESOURCES'?'warning':'error'}
+        {job.error&&job.id!==featured?.id&&<Alert showIcon type={job.status==='WAITING_RESOURCES'?'warning':'error'}
           message={warnings[job.error]??job.error}/>}
         {job.id!==featured?.id&&['RUNNING','FAILED','QUEUED','WAITING_RESOURCES','INTERRUPTED','NEEDS_RECONCILIATION'].includes(job.status)&&!job.worker_active&&<Button size="small" disabled={pending||running}
           onClick={()=>run('/'+job.id+'/resume',{})}>Tiếp tục từ checkpoint</Button>}

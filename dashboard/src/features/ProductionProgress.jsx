@@ -48,7 +48,8 @@ export function ProductionProgress({job,starting,labels,warnings,onCancel,onResu
       {status&&<Tag color={p.verified?'success':status==='FAILED'?'error':p.active?'processing':'default'}>{labels[status]??status}</Tag>}
     </header>
     <div className="production-overall" role="status">
-      <strong>{title}</strong><Progress percent={p.percent} status={status==='FAILED'?'exception':p.verified?'success':'normal'}/>
+      <strong>{title}</strong><Progress percent={p.percent} format={value=>value+'%'}
+        status={status==='FAILED'?'exception':p.verified?'success':'normal'}/>
       {job?.stage==='MOTION'&&<small>{p.clips}/{p.total} clip đã xác minh</small>}
       {job?.error&&<p className="production-error"><ExclamationCircleOutlined/> {warnings[job.error]??job.error}</p>}
       {a?.model&&<div className="production-meta">{a.provider==='ollama'?'Ollama':a.provider==='comfyui'?'ComfyUI':a.provider} · {a.model}</div>}

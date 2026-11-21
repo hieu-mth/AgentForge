@@ -453,7 +453,7 @@ try {
     return route.fulfill({json:draftFixture});
   });
   await settings.locator('.studio-drafts-list').getByRole('button',{name:'Làm mới',exact:false}).click();
-  await settings.getByText('Storyboard chờ duyệt',{exact:true}).waitFor();
+  await draftProgress.locator('.production-header').getByText('Storyboard chờ duyệt',{exact:true}).waitFor();
   await settings.getByRole('tab',{name:/^Ý tưởng mới/}).click();
   await settings.getByRole('button',{name:'Duyệt storyboard',exact:true}).click();
   await settings.getByRole('button',{name:'Duyệt và tạo phim',exact:true}).click();
@@ -469,9 +469,10 @@ try {
   cancelledDraft={...draftFixture,id:'c'.repeat(32),status:'CANCELLED',worker_active:false,board:null,
     brief:{...draftFixture.brief,idea:'Bản nháp đã hủy'}};
   draftFixture={...draftFixture,status:'REVIEW',worker_active:false,
-    created_at:'2026-06-20T03:00:00Z',video_sha:'fixture-video'};
+    created_at:'2026-06-20T03:00:00Z',video_sha:'fixture-video',receipt_sha:'fixture-receipt'};
   await settings.locator('.studio-drafts-list').getByRole('button',{name:'Làm mới',exact:false}).click();
   await settings.locator('.production-header').getByText('Phim hoàn chỉnh · chờ duyệt',{exact:true}).waitFor();
+  await draftProgress.getByText('100%',{exact:true}).waitFor();
   await settings.locator('.draft-row-meta time[datetime="2026-06-20T03:00:00Z"]').waitFor();
   await settings.getByRole('tab',{name:/^Bản nháp đã hủy/}).waitFor({state:'hidden'});
   await settings.route('**/api/film/drafts/*/preview*',route=>route.fulfill({status:404}));
