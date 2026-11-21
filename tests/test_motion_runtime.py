@@ -225,13 +225,47 @@ class MotionRuntimeTests(unittest.TestCase):
         stream = {"codec_name":"h264", "width":512, "height":288,
                   "avg_frame_rate":"24/1", "nb_read_frames":"33"}
         metadata = {"streams":[stream], "format":{"duration":"1.375", "format_name":"mov,mp4"}}
-        with patch.object(verify, "_run", return_value=json.dumps(metadata).encode()) as runner:
-            self.assertEqual(verify._probe(path, ltx=True)["frames_decoded"], 33)
-            self.assertEqual([call.args[0] for call in runner.call_args_list], ["ffprobe", "ffmpeg"])
-        stream["nb_read_frames"] = "32"
-        with (patch.object(verify, "_run", return_value=json.dumps(metadata).encode()),
-              self.assertRaises(verify.MotionVerificationError)):
-            verify._probe(path, ltx=True)
+        for frames, other in ((33, 49), (49, 33)):
+            with self.subTest(frames=frames):
+                stream["nb_read_frames"] = str(frames)
+                metadata["format"]["duration"] = str(frames / 24)
+                with patch.object(verify, "_run", return_value=json.dumps(metadata).encode()) as runner:
+                    self.assertEqual(verify._probe(path, ltx_frames=frames)["frames_decoded"], frames)
+                    self.assertEqual([call.args[0] for call in runner.call_args_list], ["ffprobe", "ffmpeg"])
+                    with self.assertRaises(verify.MotionVerificationError):
+                        verify._probe(path, ltx_frames=other)
+
+    def test_ltx_source_profile_migrates_and_import_uses_ledger(self):
+        info, filename = self.completed()
+        path = self.outputs / filename
+        filename = filename.replace(".mp4", "_.mp4")
+        path.rename(self.outputs / filename)
+        job_id = info["job_id"]
+        with closing(motion._db(self.db)) as conn, conn:
+            conn.execute("ALTER TABLE motion_sources DROP COLUMN frames")
+            conn.execute("PRAGMA user_version=1")
+            conn.execute("INSERT INTO motion_sources VALUES (?,?,?,?)",
+                         (job_id, motion.motion_ltx.MODEL_ID, "b"*32, "d"*64))
+        self.assertEqual(verify._job(job_id, self.db)["ltx_frames"], 33)
+        self.assertEqual(motion.migrate_ledger(self.db), {"migrated": True, "version": 2})
+        self.assertEqual(verify._job(job_id, self.db)["ltx_frames"], 33)
+        with closing(motion._db(self.db)) as conn, conn:
+            conn.execute("UPDATE motion_sources SET frames=49 WHERE job_id=?", (job_id,))
+        stream = {"codec_name":"h264", "width":512, "height":288,
+                  "avg_frame_rate":"24/1", "nb_read_frames":"33"}
+        metadata = {"streams":[stream], "format":{"duration":"1.375", "format_name":"mov,mp4"}}
+        args = dict(job_id=job_id, filename=filename, output_dir=self.outputs,
+                    confirmed=True, db_path=self.db, film_root=self.films)
+        with (patch.object(motion.ops_control, "require_active"),
+              patch.object(verify, "_run", side_effect=lambda *a, **k: json.dumps(metadata).encode())):
+            with self.assertRaises(verify.MotionVerificationError):
+                verify.import_clip(**args)
+            stream["nb_read_frames"] = "49"
+            metadata["format"]["duration"] = str(49 / 24)
+            result = verify.import_clip(**args)
+        self.assertEqual(result["technical"]["frames_decoded"], 49)
+        self.assertEqual(verify.inspect_receipt(job_id, film_root=self.films, db_path=self.db)
+                         ["technical"]["frames_decoded"], 49)
 
     def test_health_is_gpu_snapshot_not_measured_peak(self):
         with patch.object(motion, "_json_request", return_value={
