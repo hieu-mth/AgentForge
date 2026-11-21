@@ -12,7 +12,7 @@ import './studio-draft-progress.css';
 
 const API='/api/film/drafts';
 const editorKey='agentforge.studio.video-brief.v1';
-const briefDefaults={idea:'',seconds:12,motionSeconds:6,scene_count:3,ratio:'9:16',mode:'motion'};
+const briefDefaults={idea:'',durationMode:'auto',targetSeconds:12,ratio:'9:16',mode:'motion'};
 const motionShots={4:2,6:3,15:8,30:15};
 const videoModes={motion:'Có chuyển động',still:'Ảnh tĩnh (lia và thu phóng)'};
 const motionMaxShots={4:2,6:3,15:9,30:16};
@@ -27,17 +27,6 @@ function savedBrief(){
   }
 }
 
-function scriptAdvice(text,seconds,count){
-  const headings=[...text.matchAll(/^[ \t]*(?:cảnh|scene)\s+\d+\b/gim)].length;
-  if(headings>count)return 'Kịch bản có '+headings+' cảnh đánh số. Hãy tăng số cảnh hoặc chia kịch bản.';
-  const lines=[...text.matchAll(/^[ \t]*(\p{L}[^:\n]{0,27}):[ \t]*(\S[^\n]*)/gmu)]
-    .filter(match=>!/^(?:cảnh|scene)\s+\d+/i.test(match[1]));
-  const words=lines.reduce((sum,line)=>sum+line[2].trim().split(/\s+/).length,0);
-  if(words>seconds*3)return 'Thời lượng có thể không đủ cho các dòng lời thoại. Hãy tăng thời lượng hoặc chia kịch bản.';
-  if(text.trim().split(/\s+/).length>seconds*6)
-    return 'Kịch bản khá dày so với thời lượng. Cân nhắc tăng thời lượng hoặc chia thành nhiều bản nháp.';
-  return null;
-}
 function draftError(failure) {
   if(failure.code==='draft_storage_unavailable')return failure.message;
   if(failure.code==='draft_not_found')return 'Bản nháp này không còn tồn tại. Bạn có thể tạo bản nháp mới.';
@@ -107,9 +96,7 @@ export function StudioDrafts({mutate,onCharacters}) {
   const moving=(Form.useWatch('mode',form)??initialBrief.mode)==='motion';
   const limit=20000;
   const characterCount=Array.from(values.idea??'').length;
-  const selectedSeconds=values.motionSeconds??6;
-  const advice=scriptAdvice(values.idea??'',moving?selectedSeconds:values.seconds,
-    moving?motionShots[selectedSeconds]:values.scene_count);
+  const manual=(Form.useWatch('durationMode',form)??initialBrief.durationMode)==='manual';
   const {data,reload,setData,...resource}=useResource(API);
   const {data:capacity,reload:refreshCapacity}=useResource(API+'/resources');
   useScreenRefresh(reload);
@@ -137,8 +124,10 @@ export function StudioDrafts({mutate,onCharacters}) {
   const reviewing=drafts.find(job=>job.id===storyboardId&&job.board);
   const canEdit=reviewing?.storyboard_version&&['STORYBOARD_REVIEW','FAILED','REVIEW','APPROVED','REJECTED'].includes(reviewing.status);
   const sceneCount=reviewing?.board.scenes.length;
-  const minScenes=reviewing?.brief.mode==='motion'?motionShots[reviewing.brief.seconds]:2;
-  const maxScenes=reviewing?.brief.mode==='motion'?motionMaxShots[reviewing.brief.seconds]:
+  const minScenes=reviewing?.brief.mode==='motion'?
+    (reviewing.brief.duration_mode?Math.max(2,Math.ceil(reviewing.brief.seconds*24/49)):motionShots[reviewing.brief.seconds]):2;
+  const maxScenes=reviewing?.brief.mode==='motion'?
+    (reviewing.brief.duration_mode?Math.min(16,reviewing.brief.seconds):motionMaxShots[reviewing.brief.seconds]):
     Math.min(6,Math.floor((reviewing?.brief.seconds??0)/2));
   const running=!listError&&Boolean(active);
   const queued=drafts.filter(job=>job.status==='QUEUED').length;
@@ -188,8 +177,9 @@ export function StudioDrafts({mutate,onCharacters}) {
 
   function submit(values) {
     const motion=values.mode==='motion';
-    const payload={idea:values.idea,mode:values.mode,seconds:motion?values.motionSeconds:values.seconds,
-      scene_count:motion?motionShots[values.motionSeconds]:values.scene_count,ratio:motion?'16:9':values.ratio};
+    const payload={idea:values.idea,mode:values.mode,duration_mode:values.durationMode,
+      seconds:values.durationMode==='manual'?values.targetSeconds:null,scene_count:null,
+      ratio:motion?'16:9':values.ratio};
     const brief=JSON.stringify(payload);
     if(request.current?.brief!==brief)request.current={brief,id:crypto.randomUUID().replaceAll('-','')};
     return run('/start',{...payload,id:request.current.id},result=>{
@@ -237,27 +227,30 @@ export function StudioDrafts({mutate,onCharacters}) {
           placeholder="Mô tả ý tưởng hoặc nhập kịch bản bạn muốn AI thực hiện..."/>
       </Form.Item>
       {saveFailed&&<Alert type="warning" showIcon message="Trình duyệt không lưu được nội dung để khôi phục khi tải lại."/>}
-      {advice&&<Alert type="warning" showIcon message={advice}/>}
       <div className="draft-form-options">
         <Form.Item className="draft-video-mode" name="mode" label="Kiểu video" rules={[{required:true}]}>
           <Select options={Object.entries(videoModes).map(([value,label])=>({value,label}))}/>
         </Form.Item>
-        {!moving&&<Form.Item name="seconds" label="Thời lượng" rules={[{required:true,type:'integer',min:6,max:60}]}>
-          <InputNumber min={6} max={60} suffix="giây"/>
-        </Form.Item>}
-        {moving?<Form.Item name="motionSeconds" label="Thời lượng" rules={[{required:true}]}>
-          <Select options={Object.keys(motionShots).map(value=>({value:Number(value),label:value+' giây'}))}/>
-        </Form.Item>:<Form.Item name="scene_count" label="Số cảnh" rules={[{required:true,type:'integer',min:2,max:6}]}>
-          <InputNumber min={2} max={6}/>
-        </Form.Item>}
         {!moving&&<Form.Item name="ratio" label="Tỷ lệ khung hình">
           <Select options={['9:16','16:9'].map(value=>({value,label:value}))}/>
         </Form.Item>}
         <Button className="draft-submit" type="primary" htmlType="submit"
           loading={pending} disabled={waiting>0||characterCount>limit}>Tạo storyboard</Button>
       </div>
+      <details className="draft-resource-details">
+        <summary>Thời lượng · {manual?(values.targetSeconds??'—')+' giây':'AI tự đề xuất'}</summary>
+        <Space wrap align="start">
+          <Form.Item name="durationMode" label="Cách chọn thời lượng" rules={[{required:true}]}>
+            <Select style={{width:180}} options={[{value:'auto',label:'AI tự đề xuất'},{value:'manual',label:'Nhập thủ công'}]}/>
+          </Form.Item>
+          {manual&&<Form.Item name="targetSeconds" label="Thời lượng"
+            rules={[{required:true,type:'integer',min:moving?4:6,max:30}]}>
+            <InputNumber min={moving?4:6} max={30} precision={0} suffix="giây"/>
+          </Form.Item>}
+        </Space>
+      </details>
     </Form>
-    {moving&&<p className="env-muted">16:9 · {selectedSeconds===30?'AI chọn 15–16 cảnh':motionShots[selectedSeconds]+' cảnh'} · Tạo ảnh và chuyển động sau khi duyệt storyboard.</p>}
+    <p className="env-muted">AI đề xuất số cảnh. Studio tạo ảnh{moving?' và chuyển động':''} sau khi bạn duyệt storyboard.</p>
     </Card>
     <Card ref={filmsRef} className="env-panel studio-drafts-list" title="Video của bạn"
       extra={!listError&&<Button icon={<ReloadOutlined/>} onClick={()=>{reload();refreshCapacity();}}
@@ -311,6 +304,7 @@ export function StudioDrafts({mutate,onCharacters}) {
       onMove={canEdit?(index,target)=>storyboard(reviewing,'move',{index,target}):null}
       onRemove={canEdit&&sceneCount>minScenes?index=>storyboard(reviewing,'remove',{index}):null}
       onAdd={canEdit&&sceneCount<maxScenes?()=>setEditor({job:reviewing,adding:true,index:sceneCount,scene:{}}):null}
+      onDuration={canEdit&&reviewing.brief.duration_mode?seconds=>storyboard(reviewing,'duration',{seconds}):null}
       onPreview={(index,sha)=>setScenePreview({id:reviewing.id,index,sha})}/>}
     {scenePreview&&<Modal open title={'Chuyển động cảnh '+(scenePreview.index+1)} footer={null}
       onCancel={()=>setScenePreview(null)}>

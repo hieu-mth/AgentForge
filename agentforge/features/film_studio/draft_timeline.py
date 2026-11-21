@@ -10,7 +10,36 @@ MOTION_PRESETS = {4: (2, 2), 6: (3, 3), 15: (8, 9),
                   30: (math.ceil(30 * FPS / LTX_CLIP_FRAMES), MOTION_PRODUCTION_SHOT_BUDGET)}
 MAX_VERSIONS = 12
 STORY_FIELDS = ("description", "image_prompt", "motion_prompt", "character_ids",
-                "audio", "continuity", "script_range", "shot_id", "frames", "caption", "scene_notes", "duration_weight")
+                "audio", "continuity", "script_range", "shot_id", "frames", "caption", "scene_notes", "duration_weight",
+                "suggested_seconds", "shot_reason")
+
+
+def duration_limits(seconds, moving):
+    minimum = 4 if moving else 6
+    if type(seconds) is not int or not minimum <= seconds <= 30:
+        raise ValueError(f"Thời lượng phải là số nguyên từ {minimum} đến 30 giây. "
+                         "Hãy rút gọn hành động hoặc chia kịch bản thành nhiều video.")
+    if moving:
+        return max(2, math.ceil(seconds * FPS / LTX_CLIP_FRAMES)), min(seconds, MOTION_PRODUCTION_SHOT_BUDGET)
+    return 2, min(6, seconds // 2)
+
+
+def planned_timeline(seconds, moving, weights):
+    minimum, maximum = duration_limits(seconds, moving)
+    count = len(weights)
+    if not minimum <= count <= maximum:
+        raise ValueError(f"{seconds} giây cần {minimum}–{maximum} cảnh. "
+                         "Hãy chỉnh thời lượng hoặc chia/gộp các cảnh trước khi duyệt.")
+    floor = FPS if moving else 2
+    cap = LTX_CLIP_FRAMES if moving else seconds
+    total = seconds * FPS if moving else seconds
+    frames = [floor] * count
+    total_weight = sum(weights)
+    target = [total * weight / total_weight for weight in weights]
+    for _ in range(total - floor * count):
+        index = max((i for i in range(count) if frames[i] < cap), key=lambda i: (target[i]-frames[i], -i))
+        frames[index] += 1
+    return frames if moving else [length * FPS for length in frames]
 
 
 def shot_limits(seconds):

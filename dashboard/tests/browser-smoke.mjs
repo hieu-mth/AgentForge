@@ -364,7 +364,7 @@ try {
     vram_total_mib:12*1024,vram_free_mib:3*1024,
   }}));
   await settings.goto(policyOrigin+'/dashboard/#/media-studio',{waitUntil:'networkidle'});
-  await settings.locator('.draft-resource-details summary').click();
+  await settings.getByText('Tài nguyên',{exact:true}).click();
   await settings.getByText('RAM dùng / khả dụng: 24 GB / 8 GB',{exact:true}).waitFor();
   await settings.getByText('VRAM dùng / khả dụng: 9 GB / 3 GB',{exact:true}).waitFor();
   if(await settings.locator('.studio-projects').count())
@@ -396,10 +396,10 @@ try {
   await settings.route('**/api/film/drafts/start',route=>{
     const {id,...brief}=route.request().postDataJSON();
     if(!/^[0-9a-f]{32}$/.test(id)||!['Chú mèo cam khám phá khu rừng','Ý tưởng mới'].includes(brief.idea)||
-        brief.seconds!==6||brief.scene_count!==3||brief.ratio!=='16:9'||
+        brief.seconds!==null||brief.scene_count!==null||brief.duration_mode!=='auto'||brief.ratio!=='16:9'||
         brief.mode!=='motion'||'motion_approved' in brief)
       throw new Error('Unexpected draft submission');
-    draftFixture={id,brief,status:'RUNNING',stage:'PLANNING',worker_active:true,
+    draftFixture={id,brief:{...brief,seconds:6,scene_count:3},status:'RUNNING',stage:'PLANNING',worker_active:true,
       activity:{operation:'plan',provider:'ollama',model:'fixture-planner'}};
     return route.fulfill({json:draftFixture});
   });
@@ -446,6 +446,7 @@ try {
   const scene={seconds:2,description:'Miu quay đầu',character_ids:[],audio:'',asset:'fixture-image'};
   draftFixture={...draftFixture,status:'STORYBOARD_REVIEW',stage:'STORYBOARD',worker_active:false,
     storyboard_version:1,storyboard_sha:'a'.repeat(64),
+    duration_plan:{estimated_duration_seconds:6,recommended_shot_count:3,duration_reasoning:'Ba hành động chính.'},
     board:{title:'Ý tưởng mới',scenes:[scene,scene,scene]}};
   await settings.route('**/api/film/drafts/*/storyboard-approve',route=>{
     const {sha256}=route.request().postDataJSON();
@@ -459,6 +460,8 @@ try {
   await draftProgress.locator('.production-header').getByText('Storyboard chờ duyệt',{exact:true}).waitFor();
   await settings.getByRole('button',{name:'Xem storyboard',exact:true}).click();
   const storyboardDialog=settings.getByRole('dialog',{name:'Ý tưởng mới'});
+  await storyboardDialog.getByText('Ba hành động chính.',{exact:true}).waitFor();
+  await storyboardDialog.getByRole('button',{name:'Cập nhật thời lượng',exact:true}).waitFor();
   await storyboardDialog.getByRole('button',{name:/Cảnh 02/}).click();
   await storyboardDialog.getByRole('heading',{name:'Cảnh 2',exact:true}).waitFor();
   const reviewViewport=settings.viewportSize();
@@ -509,10 +512,10 @@ try {
   await editor.waitFor();
   if(await editor.inputValue()!==longScript||await editor.count()!==1||await settings.getByRole('radio').count())
     throw new Error('Long Vietnamese script was not restored after refreshing');
-  await settings.getByText('Kịch bản khá dày',{exact:false}).waitFor();
+  await settings.getByText('Thời lượng · AI tự đề xuất',{exact:true}).waitFor();
   await settings.route('**/api/film/drafts/start',route=>{
     const {id,...brief}=route.request().postDataJSON();
-    if(brief.idea!==longScript||Object.keys(brief).sort().join()!=='idea,mode,ratio,scene_count,seconds')
+    if(brief.idea!==longScript||Object.keys(brief).sort().join()!=='duration_mode,idea,mode,ratio,scene_count,seconds')
       throw new Error('Studio did not submit the single content field unchanged');
     return route.fulfill({json:{id,brief,status:'QUEUED'}});
   });

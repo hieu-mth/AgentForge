@@ -233,7 +233,7 @@ def _release_idle_comfy(profile):
     return False
 
 
-def _ask(profile, instructions, data, schema, comfy_profile):
+def _ask(profile, instructions, data, schema, comfy_profile, *, cpu_only=False):
     host, port = runtime._local_endpoint(profile["base_url"])
     if not runtime._installed_local_model(host, port, profile["model"]):
         raise ValueError("Configured Ollama model is unavailable: " + profile["id"])
@@ -242,6 +242,8 @@ def _ask(profile, instructions, data, schema, comfy_profile):
                "options": {"temperature": 0.2, "num_predict": 1600, "num_ctx": 4096},
                "messages": [{"role": "system", "content": instructions},
                             {"role": "user", "content": json.dumps(data, ensure_ascii=False)}]}
+    if cpu_only:
+        payload["options"].update(num_gpu=0, num_predict=2600)
     try:
         message = runtime._http_json(host, port, "/api/chat", timeout=150, max_request_bytes=16384, payload=payload)
     except runtime.LocalProviderHTTPError as exc:
@@ -330,7 +332,7 @@ def _script_ranges(script, count, seconds):
     return list(zip(points, points[1:]))
 
 
-def _script_scene(job, profile, comfy, source, continuity, index):
+def _script_scene(job, profile, comfy, source, continuity, index, *, proposed_shot=None, cast=None):
     _activity(job, "STORYBOARD", "script", profile, scene=index + 1)
     seconds, extra = divmod(job["brief"]["seconds"], job["brief"]["scene_count"])
     if len(source) > 1000:
@@ -359,6 +361,14 @@ def _script_scene(job, profile, comfy, source, continuity, index):
     weighted = job["brief"]["seconds"] == 30 and job["brief"].get("mode") == "motion"
     if weighted:
         fields["duration_weight"] = {"type": "integer", "minimum": 1, "maximum": 3}
+    context = {"source": source, "prior_continuity": continuity, "scene": index + 1,
+               "seconds": seconds + (index < extra)}
+    if proposed_shot:
+        context.update(proposed_action=proposed_shot["action"], shot_reason=proposed_shot["reason"],
+                       seconds=proposed_shot["suggested_seconds"])
+    if cast:
+        fields["character_ids"] = {"type": "array", "items": {**STRING, "enum": list(cast)}, "maxItems": 2}
+        context["cast"] = cast
     with _measured(job, "storyboard", comfy):
         return _ask(profile,
                     "Adapt only this scene from the original script or its ordered excerpt notes. "
@@ -367,10 +377,11 @@ def _script_scene(job, profile, comfy, source, continuity, index):
                     "the preview is silent and the original dialogue is stored separately. "
                     "Use a title up to 100 characters, continuity up to 240, description up to 350, "
                     "image_prompt up to 600 and audio up to 160. "
-                    + ("Set duration_weight to 1 for a quick beat, 2 for normal motion or 3 for sustained action."
-                       if weighted else ""),
-                    {"source": source, "prior_continuity": continuity, "scene": index + 1,
-                     "seconds": seconds + (index < extra)},
+                    + ("Set duration_weight to 1 for a quick beat, 2 for normal motion or 3 for sustained action. "
+                       if weighted else "")
+                    + ("Focus on the proposed action, using the source only as context. " if proposed_shot else "")
+                    + ("Use character_ids only for supplied cast present in this shot." if cast else ""),
+                    context,
                     _object(**fields), comfy)
 
 
@@ -399,7 +410,133 @@ def _write_script_board(job, bindings, *, outline=None):
     _save(job)
 
 
+def _duration_plan(job, profile):
+    brief = job["brief"]
+    moving = brief.get("mode") == "motion"
+    script = brief["idea"]
+    cap = draft_timeline.MOTION_PRODUCTION_SHOT_BUDGET if moving else 6
+    if len(SCRIPT_HEADING.findall(script)) > cap:
+        raise ValueError(f"Kịch bản vượt {cap} cảnh. Hãy gộp các hành động liên quan hoặc chia video.")
+    bounded_text = {**STRING, "minLength": 1, "maxLength": 180}
+    shot = _object(action=bounded_text, suggested_seconds={"type": "number"}, reason=bounded_text)
+    schema = _object(estimated_duration_seconds={"type": "integer"},
+                     recommended_shot_count={"type": "integer"},
+                     shots={"type": "array", "maxItems": cap, "items": shot},
+                     duration_reasoning={**STRING, "minLength": 1, "maxLength": 350},
+                     production_feasibility={"type": "string", "enum": ["feasible", "over_budget"]})
+    _activity(job, "PLANNING", "duration", profile)
+    with _measured(job, "duration"):
+        source = script
+        if len(script) > 1800:
+            source = []
+            for start in range(0, len(script), 1000):
+                if _cancellation(job["id"]):
+                    raise DraftCancelled
+                excerpt = _ask(profile, "Summarize essential actions, transitions and dialogue in order, "
+                               "without adding events. Use at most 120 characters.",
+                               {"excerpt": script[start:start+1000]},
+                               _object(beats={**STRING, "minLength": 1, "maxLength": 120}), None, cpu_only=True)
+                source.append(_text(excerpt["beats"], 120, label="Tóm tắt hành động"))
+        result = _ask(profile,
+                      "Estimate timing from distinct actions and pacing, not word count. Keep important events "
+                      "in order and consider opening, development, climax and ending only when present. "
+                      "Merge related beats; never pad, repeat, or silently remove content. "
+                      "Return the Vietnamese action, timing and reason for each shot. Estimate a whole number "
+                      "of seconds; suggested shot times should add up to that estimate. If essential actions "
+                      "cannot fit, report over_budget with a concrete split or reduction in duration_reasoning. "
+                      "If the owner provided a duration, choose a shot count that also fits it.",
+                      {"source": source, "requested_seconds": brief["seconds"], "max_shots": cap,
+                       "min_shot_seconds": 1 if moving else 2, "max_shot_seconds": 2.04 if moving else 30,
+                       "max_seconds": 30}, schema, None, cpu_only=True)
+    if not isinstance(result, dict):
+        raise ValueError("AI trả kế hoạch thời lượng sai cấu trúc.")
+    reasoning = _text(result.get("duration_reasoning"), 350, label="Lý do đề xuất thời lượng")
+    if result.get("production_feasibility") == "over_budget":
+        raise ValueError("Kịch bản vượt ngân sách sản xuất. " + reasoning)
+    if result.get("production_feasibility") != "feasible":
+        raise ValueError("AI chưa xác định được tính khả thi. Hãy rút gọn hoặc chia kịch bản.")
+    estimate = result.get("estimated_duration_seconds")
+    count = result.get("recommended_shot_count")
+    proposed = result.get("shots")
+    if type(count) is not int or not isinstance(proposed, list) or count != len(proposed) or not 2 <= count <= cap:
+        raise ValueError("Số cảnh AI đề xuất không hợp lệ. Hãy chia hoặc gộp hành động trong kịch bản.")
+    shots = []
+    for item in proposed:
+        seconds = item.get("suggested_seconds") if isinstance(item, dict) else None
+        if (type(seconds) not in {float, int}
+                or not (1 if moving else 2) <= seconds <= (draft_timeline.LTX_CLIP_FRAMES/24 if moving else 30)):
+            raise ValueError("Thời lượng cảnh AI đề xuất vượt giới hạn. Hãy chia hành động thành cảnh ngắn hơn.")
+        shots.append({"action": _text(item.get("action"), 180, label="Hành động của cảnh"),
+                      "reason": _text(item.get("reason"), 180, label="Lý do giữ cảnh"),
+                      "suggested_seconds": seconds})
+    accepted = estimate if brief["duration_mode"] == "auto" else brief["seconds"]
+    weights = [item["suggested_seconds"] for item in shots]
+    draft_timeline.planned_timeline(estimate, moving, weights)
+    if abs(sum(weights)-estimate) > 1:
+        raise ValueError("Tổng thời lượng từng cảnh không khớp đề xuất AI. Hãy thử lại hoặc chia kịch bản.")
+    draft_timeline.planned_timeline(accepted, moving, weights)
+    return {"estimated_duration_seconds": estimate, "recommended_shot_count": count,
+            "shots": shots, "duration_reasoning": reasoning, "production_feasibility": "feasible",
+            "initial_accepted_seconds": accepted}
+
+
+def _write_planned_board(job, bindings):
+    brief = job["brief"]
+    if not job.get("duration_plan"):
+        plan = _duration_plan(job, bindings["general.text"])
+        job["duration_plan"] = plan
+        brief.update(seconds=plan["initial_accepted_seconds"], scene_count=plan["recommended_shot_count"])
+        _save(job)
+    plan = job["duration_plan"]
+    script = brief["idea"]
+    cast = _select_cast(job, bindings, " ".join(shot["action"] for shot in plan["shots"]))
+    ranges = _script_ranges(script, brief["scene_count"], brief["seconds"]) if _needs_scene_analysis(script) else []
+    scenes, notes = [], []
+    title = continuity = ""
+    for index, shot in enumerate(plan["shots"]):
+        source = script[slice(*ranges[index])] if ranges else script
+        data = _script_scene(job, bindings["film.storyboard"], bindings["image.generate"],
+                             source, continuity, index, proposed_shot=shot, cast=cast)
+        scene_title = _text(data.pop("title"), 100)
+        title = title or scene_title
+        continuity = _text(data.pop("continuity"), 240)
+        notes.append(continuity)
+        data.setdefault("character_ids", [])
+        scenes.append(data)
+    board = _story({"title": title, "continuity": continuity, "scenes": scenes},
+                   brief["scene_count"], brief["seconds"], cast)
+    for index, (scene, shot) in enumerate(zip(board["scenes"], plan["shots"])):
+        scene.update(continuity=notes[index], suggested_seconds=shot["suggested_seconds"], shot_reason=shot["reason"])
+        if ranges:
+            scene["script_range"] = list(ranges[index])
+    job.update(board=board, cast=cast)
+    _save(job)
+
+
+def _select_cast(job, bindings, outline):
+    candidates = {row["id"]: {"name": row["name"], "appearance": row["appearance"][:220]}
+                  for row in characters.list_characters()["characters"][:10]}
+    if not candidates:
+        return {}
+    selector = bindings.get("character.select", bindings["film.storyboard"])
+    if selector["provider"] != "ollama":
+        raise ValueError("Assign a local Ollama model to character.select")
+    comfy = bindings["image.generate"]
+    _activity(job, "STORYBOARD", "cast", selector)
+    with _measured(job, "cast", comfy):
+        selection = _ask(selector, "Select up to two relevant registered characters. Return empty if none fit.",
+                         {"outline": outline, "candidates": candidates},
+                         _object(ids={"type": "array", "items": {**STRING, "enum": list(candidates)},
+                                      "maxItems": 2}), comfy)
+    ids = selection["ids"]
+    if not isinstance(ids, list) or len(ids) > 2 or any(not isinstance(x, str) or x not in candidates for x in ids):
+        raise ValueError("Invalid character selection")
+    return {key: candidates[key] for key in ids}
+
+
 def _write_board(job, bindings):
+    if "duration_mode" in job["brief"]:
+        return _write_planned_board(job, bindings)
     if job["brief"]["seconds"] == 30 and job["brief"].get("mode") == "motion":
         brief = job["brief"]
         scripted = _needs_scene_analysis(brief["idea"])
@@ -444,23 +581,7 @@ def _write_board(job, bindings):
         _save(job)
     job["stage"] = "STORYBOARD"
     _save(job)
-    candidates = {row["id"]: {"name": row["name"], "appearance": row["appearance"][:220]}
-                  for row in characters.list_characters()["characters"][:10]}
-    cast = {}
-    if candidates:
-        selector = bindings.get("character.select", bindings["film.storyboard"])
-        if selector["provider"] != "ollama":
-            raise ValueError("Assign a local Ollama model to character.select")
-        _activity(job, "STORYBOARD", "cast", selector)
-        with _measured(job, "cast", comfy):
-            selection = _ask(selector, "Select up to two relevant registered characters. Return empty if none fit.",
-                             {"outline": job["plan"], "candidates": candidates},
-                             _object(ids={"type": "array", "items": {**STRING, "enum": list(candidates)},
-                                          "maxItems": 2}), comfy)
-        ids = selection["ids"]
-        if not isinstance(ids, list) or len(ids) > 2 or any(not isinstance(x, str) or x not in candidates for x in ids):
-            raise ValueError("Invalid character selection")
-        cast = {key: candidates[key] for key in ids}
+    cast = _select_cast(job, bindings, job["plan"])
     count = job["brief"]["scene_count"]
     references = {"type": "array", "items": {**STRING, "enum": list(cast)} if cast else STRING,
                   "maxItems": min(2, len(cast))}
@@ -495,7 +616,8 @@ def _scene_path(job, index):
 
 def _stamp_storyboard(job):
     board = job["board"]
-    layout = _storyboard_layout(job, len(board["scenes"]), [s.get("duration_weight", 2) for s in board["scenes"]])
+    weight_key = "suggested_seconds" if "duration_mode" in job["brief"] else "duration_weight"
+    layout = _storyboard_layout(job, len(board["scenes"]), [s.get(weight_key, 2) for s in board["scenes"]])
     moving = job["brief"].get("mode") == "motion"
     for scene, frames in zip(board["scenes"], layout):
         scene.setdefault("shot_id", uuid4().hex)
@@ -508,6 +630,9 @@ def _stamp_storyboard(job):
 
 def _storyboard_layout(job, count, weights=None):
     brief = job["brief"]
+    if "duration_mode" in brief:
+        return draft_timeline.planned_timeline(brief["seconds"], brief.get("mode") == "motion",
+                                               weights if weights is not None else [2]*count)
     if brief.get("mode") == "motion":
         return draft_timeline.timeline(brief["seconds"], count, weights)
     if not 2 <= count <= 6 or count * 2 > brief["seconds"]:
@@ -815,10 +940,20 @@ def _dispatch():
 
 def submit(data):
     ident = _id(data["id"])
-    seconds = _number(data["seconds"], 4 if data.get("mode") == "motion" else 6, 60)
     motion_mode = data.get("mode") == "motion"
-    count = _number(data["scene_count"], 2, draft_timeline.shot_limits(seconds)[1] if motion_mode else 6)
-    if (not motion_mode and seconds < count * 2) or not isinstance(data["ratio"], str) or data["ratio"] not in SIZES:
+    duration_mode = data.get("duration_mode")
+    if duration_mode is None:
+        seconds = _number(data["seconds"], 4 if motion_mode else 6, 60)
+        count = _number(data["scene_count"], 2, draft_timeline.shot_limits(seconds)[1] if motion_mode else 6)
+        if not motion_mode and seconds < count * 2:
+            raise ValueError("Choose at least two seconds per scene")
+    else:
+        seconds, count = data["seconds"], data["scene_count"]
+        if duration_mode not in ("auto", "manual") or count is not None or (duration_mode == "auto" and seconds is not None):
+            raise ValueError("Thiết lập thời lượng không hợp lệ.")
+        if duration_mode == "manual":
+            draft_timeline.duration_limits(seconds, motion_mode)
+    if not isinstance(data["ratio"], str) or data["ratio"] not in SIZES:
         raise ValueError("Choose a supported ratio and at least two seconds per scene")
     idea = data["idea"]
     if not isinstance(idea, str) or not idea.strip() or len(idea) > BRIEF_LIMIT:
@@ -827,7 +962,7 @@ def submit(data):
         idea.encode("utf-8")
     except UnicodeError:
         raise ValueError("Nội dung có ký tự Unicode không hợp lệ.") from None
-    if _needs_scene_analysis(idea):
+    if duration_mode is None and _needs_scene_analysis(idea):
         if motion_mode and seconds == 30:
             minimum, maximum = draft_timeline.shot_limits(seconds)
             count_for_script = min(maximum, max(minimum, len(SCRIPT_HEADING.findall(idea))))
@@ -840,10 +975,13 @@ def submit(data):
     if mode not in ("still", "motion"):
         raise ValueError("Invalid video mode")
     if mode == "motion":
-        draft_timeline.timeline(seconds, count)
+        if duration_mode is None:
+            draft_timeline.timeline(seconds, count)
         if brief["ratio"] != "16:9":
             raise ValueError("Phim chuyển động hiện hỗ trợ khung hình 16:9.")
         brief["mode"] = mode
+    if duration_mode is not None:
+        brief["duration_mode"] = duration_mode
     try:
         prior = _read(ident)
     except KeyError:
@@ -911,8 +1049,18 @@ def _storyboard_action(job, action, data):
     scenes = job["board"]["scenes"]
     checkpoints = [{key: scene.get(key) for key in (
         "shot_id", "image_key", "job_id", "asset", "motion_job", "motion_sha")} for scene in scenes]
-    index = _number(data["index"], 0, len(scenes) if action == "storyboard-add" else len(scenes)-1)
-    if action == "storyboard-remove":
+    if action != "storyboard-duration":
+        index = _number(data["index"], 0, len(scenes) if action == "storyboard-add" else len(scenes)-1)
+    if action == "storyboard-duration":
+        if "duration_mode" not in job["brief"]:
+            raise ValueError("Video này sử dụng preset thời lượng đã lưu.")
+        seconds = data["seconds"]
+        draft_timeline.planned_timeline(seconds, job["brief"].get("mode") == "motion",
+                                        [scene.get("suggested_seconds", 2) for scene in scenes])
+        if seconds == job["brief"]["seconds"]:
+            return job
+        job["brief"]["seconds"] = seconds
+    elif action == "storyboard-remove":
         _storyboard_layout(job, len(scenes)-1)
         scenes.pop(index)
     elif action == "storyboard-move":
