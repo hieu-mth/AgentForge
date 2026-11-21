@@ -483,9 +483,9 @@ try {
   await settings.getByRole('button',{name:'Tạo bản nháp',exact:true}).click();
   await settings.getByRole('button',{name:'Duyệt và tạo phim',exact:true}).click();
   await longSubmit;
+  await settings.getByRole('button',{name:'Duyệt và tạo phim',exact:true}).waitFor({state:'hidden'});
   await editor.fill('đ'.repeat(20001));
-  if(!await settings.getByRole('button',{name:'Tạo bản nháp',exact:true}).isDisabled())
-    throw new Error('Oversized script could be submitted');
+  await settings.locator('button.draft-submit:disabled').waitFor();
   // Fresh checkout starts with zero registered model profiles.
   await settings.goto(policyOrigin+'/dashboard/#/models',{waitUntil:'networkidle'});
   await settings.getByText('Chưa đăng ký model. Chọn Đăng ký model để bắt đầu.',{exact:true}).waitFor();
