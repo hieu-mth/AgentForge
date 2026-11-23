@@ -5,7 +5,7 @@ import json
 import re
 import tempfile
 import time
-from contextlib import closing
+from contextlib import closing, nullcontext
 from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 from uuid import UUID
@@ -55,10 +55,10 @@ def bind(profile):
     endpoint = urlsplit(profile.get("base_url", ""))
     if (not supports(profile) or endpoint.port != motion_comfy.PORT
             or endpoint.hostname not in {"localhost", "127.0.0.1"}):
-        raise ValueError("Assign an LTX 2B FP8 checkpoint and encoder to film.motion on the Motion endpoint")
+        raise ValueError("Hãy gán checkpoint và encoder LTX 2B FP8 đúng endpoint Motion cho film.motion.")
     config = comfy_service._settings()
     if not config or config["port"] != endpoint.port:
-        raise ValueError("Configure the AgentForge ComfyUI launcher on the Motion endpoint")
+        raise ValueError("Hãy đăng ký ComfyUI Portable cho endpoint Motion trong Môi trường & Tài nguyên.")
     missing = [tool for tool in ("ffmpeg", "ffprobe") if not render.find_media_tool(tool)]
     if missing:
         raise ValueError("Thiếu công cụ xác minh video: " + ", ".join(missing)
@@ -247,7 +247,7 @@ def _collect_clip(job_id, name, folder):
             confirmed=True, db_path=motion_comfy.DB, film_root=motion_comfy.FILMS)
 
 
-def run_shot(scene, index, prepared, profile, save, cancelled):
+def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard=nullcontext):
     slug, plan_sha, workflow, digest = prepared
     if scene.get("motion_sha"):
         clip_path(scene)
@@ -268,7 +268,7 @@ def run_shot(scene, index, prepared, profile, save, cancelled):
                 workflow_path=workflow, workflow_sha=digest, seed=42+index, confirmed=True,
                 image_job=scene["job_id"], image_sha=scene["asset"],
                 ltx_encoder=Path(profile["motion_encoder"]), confirm_ltx_gate_b=True, on_reserved=reserve,
-                db_path=motion_comfy.DB, film_root=motion_comfy.FILMS)
+                db_path=motion_comfy.DB, film_root=motion_comfy.FILMS, dispatch_guard=dispatch_guard)
         except (OSError, ValueError, RuntimeError, http.client.HTTPException) as exc:
             if scene.get("motion_job") and motion_verify._job(scene["motion_job"], motion_comfy.DB)["state"] == "SUBMITTING":
                 raise NeedsReconciliation("Motion submission requires reconciliation") from exc

@@ -637,11 +637,11 @@ def _write_planned_board(job, bindings):
 
 
 def _select_cast(job, bindings, outline):
+    selector = bindings.get("character.select", bindings["film.storyboard"])
     candidates = {row["id"]: {"name": row["name"], "appearance": row["appearance"][:220]}
                   for row in characters.list_characters()["characters"][:10]}
     if not candidates:
         return {}
-    selector = bindings.get("character.select", bindings["film.storyboard"])
     comfy = bindings["image.generate"]
     _activity(job, "STORYBOARD", "cast", selector)
     with _measured(job, "cast", comfy):
@@ -805,10 +805,10 @@ def _image(job, index, scene, revision, profile):
                             scene.get("scene_notes", ""), scene["image_prompt"]))
         request = studio_runtime.ImageRequest(prompt, job["brief"]["ratio"],
                                               f"{job['id']}/episode-01/scene-{index+1:02d}",
-                                              scene["job_id"], revision)
+                                              scene["job_id"], revision, lambda: _dispatch_guard(job))
         try:
             output = studio_runtime.image_adapter(profile).generate(profile, request)
-        except (comfy_service.StartupError, draft_resources.ResourceBlocked):
+        except (comfy_service.StartupError, draft_resources.ResourceBlocked, model_hub.ModelConfigError, DraftCancelled):
             scene["job_id"] = previous_job
             scene["attempts"] -= 1
             raise
@@ -938,6 +938,55 @@ def _resolve_job_motion(job, profile, *, planning=False, revision=None):
     return adapter, identity
 
 
+def _motion_environment():
+    config = comfy_service._settings()
+    if not config:
+        return None
+    identity = {key: config.get(key) for key in ("port", "install_root", "fingerprints")}
+    identity["install_root"] = str(identity["install_root"])
+    return _sha(json.dumps(identity, sort_keys=True).encode())
+
+
+def _check_studio_routing(job, revision, bindings):
+    moving = job["brief"].get("mode") == "motion"
+    identity = studio_runtime.routing_identity(bindings, moving=moving)
+    if "studio_plan" in job:
+        if job["studio_plan"] != identity:
+            changed = sorted(key for key in job["studio_plan"].keys() | identity.keys()
+                             if job["studio_plan"].get(key) != identity.get(key))
+            raise ValueError("Model Studio đã thay đổi (" + ", ".join(changed) +
+                             "). Hãy khôi phục cấu hình đã duyệt hoặc tạo production mới.")
+    elif "motion_revision" in job and job["motion_revision"] != revision:
+        original = model_hub.draft_routes_at(job["motion_revision"], moving=moving)
+        if original is None or studio_runtime.routing_identity(original, moving=moving) != identity:
+            raise ValueError("Không xác minh được model gốc của bản nháp. "
+                             "Hãy khôi phục cấu hình đã duyệt hoặc tạo production mới.")
+        # Legacy motion identity may use its original revision to pin the encoder.
+        revision = job["motion_revision"]
+    if ("approved_motion_environment" in job
+            and job["approved_motion_environment"] != _motion_environment()):
+        raise ValueError("Cấu hình ComfyUI Portable đã thay đổi. Hãy khôi phục cấu hình đã duyệt.")
+    return revision
+
+
+def _studio_bindings(job):
+    revision, bindings = model_hub.draft_routes(moving=job["brief"].get("mode") == "motion")
+    return revision, bindings, _check_studio_routing(job, revision, bindings)
+
+
+def _dispatch_guard(job):
+    moving = job["brief"].get("mode") == "motion"
+
+    def validate(revision, bindings):
+        if _cancellation(job["id"]):
+            raise DraftCancelled
+        identity_revision = _check_studio_routing(job, revision, bindings)
+        if moving:
+            _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
+
+    return model_hub.studio_dispatch(moving=moving, validate=validate)
+
+
 def _work(job, slot):
     global ACTIVE
     image_profile = None
@@ -949,10 +998,10 @@ def _work(job, slot):
         moving = job["brief"].get("mode") == "motion"
         reviewing = "storyboard_version" in job and not job.get("approved_storyboard_sha")
         with model_hub.local_inference_slot():
-            revision, bindings = model_hub.draft_routes()
+            revision, bindings, identity_revision = _studio_bindings(job)
             if reviewing:
                 if moving:
-                    _resolve_job_motion(job, bindings.get("film.motion"), planning=True, revision=revision)
+                    _resolve_job_motion(job, bindings.get("film.motion"), planning=True, revision=identity_revision)
                 studio_runtime.motion_artifacts(job).require_resolved_ledger(job)
                 if bindings["image.generate"].get("base_url"):
                     profile = bindings["image.generate"]
@@ -966,10 +1015,8 @@ def _work(job, slot):
             if "storyboard_version" in job and (
                     job["approved_storyboard_sha"] != draft_timeline.digest(job)):
                 raise ValueError("Storyboard đã thay đổi. Cần Owner duyệt lại.")
-            if (moving or "storyboard_version" in job) and revision != job["motion_revision"]:
-                raise ValueError("Model routing changed after approval; review and create a new draft")
             if moving:
-                motion, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=revision)
+                motion, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
                 motion_profile = motion.bind(bindings["film.motion"])
                 motion.require_resolved_ledger(job)
             image_profile = bindings["image.generate"]
@@ -986,6 +1033,7 @@ def _work(job, slot):
                 if scene["asset"]:
                     _image(job, index, scene, revision, bindings["image.generate"])
                 else:
+                    revision, _, _ = _studio_bindings(job)
                     _activity(job, "IMAGES", "image", image_profile, scene=index + 1)
                     with _measured(job, "image", image_profile):
                         used_image = True
@@ -999,12 +1047,13 @@ def _work(job, slot):
             for index, scene in enumerate(job["board"]["scenes"]):
                 if _cancellation(job["id"]):
                     raise DraftCancelled
-                if model_hub.draft_routes()[0] != job["motion_revision"]:
-                    raise ValueError("Model routing changed after approval; review and create a new draft")
+                _, current_bindings, identity_revision = _studio_bindings(job)
+                _resolve_job_motion(job, current_bindings.get("film.motion"), revision=identity_revision)
                 _activity(job, "MOTION", "motion", motion_profile, scene=index + 1)
                 try:
                     motion.run_shot(scene, index, prepared, motion_profile,
-                                          lambda: _save(job), lambda: _cancellation(job["id"]))
+                                    lambda: _save(job), lambda: _cancellation(job["id"]),
+                                    dispatch_guard=lambda: _dispatch_guard(job))
                 except studio_runtime.NeedsReconciliation:
                     raise
                 except Exception:
@@ -1015,6 +1064,7 @@ def _work(job, slot):
                     raise DraftCancelled
         with model_hub.local_inference_slot():
             ops_control.require_active()
+            _studio_bindings(job)
             _activity(job, "RENDER", "render")
             with _measured(job, "render"):
                 job["video_sha"] = _render(job)
@@ -1157,11 +1207,12 @@ def submit(data):
             raise ValueError("Production ID already belongs to another brief")
         return prior
     ops_control.require_active()
-    model_hub.draft_routes()
+    _, bindings = model_hub.draft_routes(moving=motion_mode)
     created_at = visual_jobs._now()
     job = {"id": ident, "brief": brief, "stage": "QUEUED", "status": "QUEUED",
            "video_sha": None, "created_at": created_at, "updated_at": created_at}
     job["storyboard_version"] = 1
+    job["studio_plan"] = studio_runtime.routing_identity(bindings, moving=motion_mode)
     job["submitted_brief"] = dict(brief)
     with comfy_service.LOCK, _db(True) as conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -1190,11 +1241,13 @@ def _storyboard_action(job, action, data):
         if job["status"] != "STORYBOARD_REVIEW":
             raise ValueError("Storyboard không chờ duyệt.")
         ops_control.require_active()
-        revision, bindings = model_hub.draft_routes()
+        revision, bindings, identity_revision = _studio_bindings(job)
         if job["brief"].get("mode") == "motion":
-            adapter, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=revision)
+            adapter, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
+            environment = _motion_environment()
             adapter.bind(bindings["film.motion"])
             job["approved_motion"] = identity
+            job["approved_motion_environment"] = environment
         else:
             render._ffmpeg()
         job.update(approved_storyboard_sha=job["storyboard_sha"], motion_revision=revision, status="QUEUED")
@@ -1220,8 +1273,8 @@ def _storyboard_action(job, action, data):
     # Capture the identity before clearing approval. Edits keep the original runtime.
     motion_plan = job.get("motion_plan")
     if job["brief"].get("mode") == "motion" and (not motion_plan or "encoder_path_sha" not in motion_plan):
-        revision, bindings = model_hub.draft_routes()
-        _, motion_plan = _resolve_job_motion(job, bindings.get("film.motion"), revision=revision)
+        _, bindings, identity_revision = _studio_bindings(job)
+        _, motion_plan = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
     scenes = job["board"]["scenes"]
     checkpoints = [{key: scene.get(key) for key in (
         "shot_id", "image_key", "job_id", "asset", "motion_job", "motion_sha")} for scene in scenes]
@@ -1252,7 +1305,7 @@ def _storyboard_action(job, action, data):
         else:
             scene = scenes[index]
         if action == "storyboard-rewrite":
-            _, bindings = model_hub.draft_routes()
+            _, bindings, _ = _studio_bindings(job)
             shot = {key: scene[key] for key in draft_timeline.STORY_FIELDS if key in scene}
             if "shot_description" in scene:
                 shot["description"] = shot.pop("shot_description")
@@ -1379,7 +1432,7 @@ def act(ident, action, data):
                             "'WAITING_RESOURCES' LIMIT 1", (ident,)).fetchone():
                 raise ValueError("Resume the draft that is waiting for resources first")
         ops_control.require_active()
-        model_hub.draft_routes()
+        _studio_bindings(job)
         job = _start(job, slot)
         started = True
         return job

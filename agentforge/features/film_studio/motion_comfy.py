@@ -13,7 +13,7 @@ import http.client
 import json
 import re
 import sqlite3
-from contextlib import closing
+from contextlib import closing, nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -330,7 +330,7 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
                 workflow_sha, seed, confirmed=False,
                 image_job=None, image_sha=None, ltx_encoder=None, confirm_ltx_gate_b=False,
                 confirm_new_attempt=False,
-                film_root: Path = FILMS, db_path: Path = DB, on_reserved=None):
+                film_root: Path = FILMS, db_path: Path = DB, on_reserved=None, dispatch_guard=nullcontext):
     """One-shot owner dispatch, checkpointed BEFORE any GPU/HTTP work.
 
     Ambiguous SUBMITTING is never blindly retried. No import, verification,
@@ -390,39 +390,40 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
         job_id = uuid4().hex
         graph[bindings["output_node"]]["inputs"]["filename_prefix"] = "af_motion_" + job_id
         now = _now()
-        with closing(_db(db_path, write=True)) as conn, conn:
-            conn.execute("BEGIN IMMEDIATE")
-            _check_attempt(conn, film_slug, shot_id, plan_sha, confirm_new_attempt)
-            active = conn.execute("SELECT COUNT(*) FROM motion_jobs WHERE state IN "
-                                  "('SUBMITTING','SUBMITTED')").fetchone()[0]
-            if active >= MAX_ACTIVE_JOBS:
-                raise PermissionError("Only one outstanding GPU shot is allowed in pilot")
-            conn.execute("""INSERT INTO motion_jobs
-                (job_id, film_slug, shot_id, plan_sha, workflow_sha, prompt_sha,
-                 seed, provider_id, state, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'SUBMITTING', ?, ?)""",
-                (job_id, film_slug, shot_id, plan_sha, workflow_sha,
-                 _sha(prompt.strip().encode("utf-8")), seed, now, now))
+        with dispatch_guard():
+            with closing(_db(db_path, write=True)) as conn, conn:
+                conn.execute("BEGIN IMMEDIATE")
+                _check_attempt(conn, film_slug, shot_id, plan_sha, confirm_new_attempt)
+                active = conn.execute("SELECT COUNT(*) FROM motion_jobs WHERE state IN "
+                                      "('SUBMITTING','SUBMITTED')").fetchone()[0]
+                if active >= MAX_ACTIVE_JOBS:
+                    raise PermissionError("Only one outstanding GPU shot is allowed in pilot")
+                conn.execute("""INSERT INTO motion_jobs
+                    (job_id, film_slug, shot_id, plan_sha, workflow_sha, prompt_sha,
+                     seed, provider_id, state, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'SUBMITTING', ?, ?)""",
+                    (job_id, film_slug, shot_id, plan_sha, workflow_sha,
+                     _sha(prompt.strip().encode("utf-8")), seed, now, now))
+                if is_ltx:
+                    conn.execute("INSERT INTO motion_sources (job_id, model_id, image_job, image_sha, frames) "
+                                 "VALUES (?,?,?,?,?)",
+                                 (job_id, model_id, image_job, image_sha, template["profile"]["frames"]))
             if is_ltx:
-                conn.execute("INSERT INTO motion_sources (job_id, model_id, image_job, image_sha, frames) "
-                             "VALUES (?,?,?,?,?)",
-                             (job_id, model_id, image_job, image_sha, template["profile"]["frames"]))
-        if is_ltx:
-            try:
-                if on_reserved:
-                    on_reserved(job_id)
-                graph[bindings["image_node"]]["inputs"]["image"] = motion_ltx.upload_source(PORT, job_id, image)
-                comfy_service.require_other_queue_idle(PORT, include_profiles=True)
-                comfy_service.require_idle_queue(PORT)
-                draft_resources.require_gpu(operation, min_commit_mib=min_commit)
-            except (OSError, ValueError, RuntimeError, http.client.HTTPException):
-                # No prompt has been attempted. Preserve the receipt without holding the active quota.
-                with closing(_db(db_path, write=True)) as conn, conn:
-                    conn.execute("UPDATE motion_jobs SET state='FAILED', updated_at=? WHERE job_id=?",
-                                 (_now(), job_id))
-                raise
-        # Network failure leaves SUBMITTING_UNCERTAIN (must reconcile manually).
-        result = _json_request("/prompt", body={"prompt": graph}, timeout=12)
+                try:
+                    if on_reserved:
+                        on_reserved(job_id)
+                    graph[bindings["image_node"]]["inputs"]["image"] = motion_ltx.upload_source(PORT, job_id, image)
+                    comfy_service.require_other_queue_idle(PORT, include_profiles=True)
+                    comfy_service.require_idle_queue(PORT)
+                    draft_resources.require_gpu(operation, min_commit_mib=min_commit)
+                except (OSError, ValueError, RuntimeError, http.client.HTTPException):
+                    # No prompt has been attempted. Preserve the receipt without holding the active quota.
+                    with closing(_db(db_path, write=True)) as conn, conn:
+                        conn.execute("UPDATE motion_jobs SET state='FAILED', updated_at=? WHERE job_id=?",
+                                     (_now(), job_id))
+                    raise
+            # Network failure leaves SUBMITTING_UNCERTAIN (must reconcile manually).
+            result = _json_request("/prompt", body={"prompt": graph}, timeout=12)
         if not isinstance(result, dict) or not isinstance(result.get("prompt_id"), str):
             raise MotionError("Local ComfyUI did not return prompt_id; dispatch uncertain")
         provider_id = str(UUID(result["prompt_id"]))

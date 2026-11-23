@@ -57,4 +57,5 @@ def generate(profile, request):
     width, height = (short, long) if request.ratio == "9:16" else (long, short)
     return flux_runtime.generate(request.prompt, width=width, height=height, automated=True,
                                  scene=request.scene, production_job=request.job_id,
-                                 production_revision=request.revision)
+                                 production_revision=request.revision, production_profile=profile,
+                                 dispatch_guard=request.dispatch_guard)

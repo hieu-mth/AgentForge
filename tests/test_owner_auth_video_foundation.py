@@ -130,7 +130,7 @@ class OwnerAuthVideoFoundationTests(unittest.TestCase):
 
         done = threading.Event()
         with (patch.object(drafts, "DB", self.root / "fresh.sqlite3"),
-              patch.object(drafts.model_hub, "draft_routes"),
+              patch.object(drafts.model_hub, "draft_routes", return_value=(1, {})),
               patch.object(drafts.render, "_ffmpeg"),
               patch.object(drafts, "_work", side_effect=checkpoint),
               patch.object(drafts, "ACTIVE", None)):

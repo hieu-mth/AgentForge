@@ -1,17 +1,25 @@
 """Resolve Studio's supported capabilities from Owner-owned registry profiles."""
 from dataclasses import asdict
 import hashlib
+import json
 import os.path
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, Protocol
 
 from agentforge.features.film_studio import draft_motion, studio_ollama
 from agentforge.features.film_studio.draft_resources import NeedsReconciliation
-from agentforge.features.film_studio.studio_contracts import ImageRequest, MotionOutput
+from agentforge.features.film_studio.studio_contracts import DispatchGuard, ImageRequest, MotionOutput
 from agentforge.features.media import studio_flux
 
 Profile = dict[str, Any]
 PreparedMotion = tuple[str, str, Path, str]
+
+
+def routing_identity(bindings, *, moving):
+    """Fingerprint selected profiles only, without storing their endpoint or configuration twice."""
+    return {capability: hashlib.sha256(json.dumps(profile, sort_keys=True, ensure_ascii=False,
+                                                   separators=(",", ":")).encode()).hexdigest()
+            for capability, profile in bindings.items() if moving or capability != "film.motion"}
 
 
 class TextInference(Protocol):
@@ -39,7 +47,8 @@ class VideoMotion(Protocol):
     def bind(self, profile: Profile) -> Profile: ...
     def prepare(self, job: dict, folder: Path) -> PreparedMotion: ...
     def run_shot(self, scene: dict, index: int, prepared: PreparedMotion, profile: Profile,
-                 save: Callable[[], None], cancelled: Callable[[], bool]) -> None: ...
+                 save: Callable[[], None], cancelled: Callable[[], bool], *,
+                 dispatch_guard: DispatchGuard) -> None: ...
     def require_resolved_ledger(self, job: dict) -> None: ...
     def require_draft_removable(self, ident: str) -> None: ...
     def reconcile_cancelled(self, job: dict) -> bool: ...

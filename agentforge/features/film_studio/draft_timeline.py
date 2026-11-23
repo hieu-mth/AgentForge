@@ -114,6 +114,8 @@ def snapshot(job):
                        for scene in board["scenes"]]}
     if "motion_plan" in job:
         value["motion_plan"] = job["motion_plan"]
+    if "studio_plan" in job:
+        value["studio_plan"] = job["studio_plan"]
     return value
 
 
