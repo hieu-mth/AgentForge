@@ -13,10 +13,15 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
   const index=Math.max(0,scenes.findIndex((s,i)=>(s.shot_id??i)===shot));
   const scene=scenes[index];
   const reviewing=job.status==='STORYBOARD_REVIEW';
+  const authoredScenes=job.duration_plan?.content_scene_count;
+  const countLabel=authoredScenes?`${authoredScenes} cảnh · ${scenes.length} shot`:`${scenes.length} cảnh`;
+  const shotLabel=(item,i)=>item.content_scene?
+    `Cảnh ${item.content_scene} · Shot ${item.content_shot}/${item.content_shot_count}`:
+    'Cảnh '+String(i+1).padStart(2,'0');
   return <Modal open centered width={1080} rootClassName="storyboard-review" title={job.board.title}
     onCancel={onClose} footer={<div className="storyboard-footer">
-      <div><strong>{job.brief.seconds} giây · {scenes.length} cảnh{job.storyboard_version&&' · Phiên bản '+job.storyboard_version}</strong>
-        {reviewing&&<div className="env-muted">Duyệt phiên bản này để tạo ảnh{job.brief.mode==='motion'?' và chuyển động':''} tuần tự cho {scenes.length} cảnh.</div>}
+      <div><strong>{job.brief.seconds} giây · {countLabel}{job.storyboard_version&&' · Phiên bản '+job.storyboard_version}</strong>
+        {reviewing&&<div className="env-muted">Duyệt phiên bản này để tạo ảnh{job.brief.mode==='motion'?' và chuyển động':''} tuần tự cho {scenes.length} {authoredScenes?'shot':'cảnh'}.</div>}
       </div>
       <Space wrap><Button onClick={onClose}>{reviewing?'Xem sau':'Đóng'}</Button>
         {reviewing&&<Button type="primary" disabled={busy} onClick={onApprove}>Duyệt và bắt đầu sản xuất</Button>}
@@ -29,8 +34,8 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
     </div>
     {view==='source'?<section className="storyboard-source" aria-label="Nội dung video và phiên bản">
       {job.duration_plan&&<div className="storyboard-context">
-        <p>AI đề xuất <strong>{job.duration_plan.estimated_duration_seconds} giây</strong> ·
-          {' '+job.duration_plan.recommended_shot_count} cảnh. Timeline hiện tại <strong>{job.brief.seconds} giây</strong>.</p>
+        <p>{authoredScenes?'Thời lượng kịch bản':'AI đề xuất'} <strong>{job.duration_plan.estimated_duration_seconds} giây</strong> ·
+          {' '+countLabel}. Timeline hiện tại <strong>{job.brief.seconds} giây</strong>.</p>
         <p className="env-muted">{job.duration_plan.duration_reasoning}</p>
         {onDuration&&<Space wrap>
           <NumberField aria-label="Thời lượng storyboard" min={job.brief.mode==='motion'?4:6} max={MAX_STUDIO_SECONDS}
@@ -48,13 +53,13 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
       <nav aria-label="Danh sách cảnh" className="storyboard-scenes">
         {scenes.map((item,i)=><button key={item.shot_id??i} type="button" aria-pressed={index===i}
           onClick={()=>setShot(item.shot_id??i)}>
-          <strong>Cảnh {String(i+1).padStart(2,'0')} · {Number(item.seconds.toFixed(2)).toLocaleString('vi-VN')} giây</strong>
+          <strong>{shotLabel(item,i)} · {Number(item.seconds.toFixed(2)).toLocaleString('vi-VN')} giây</strong>
           <span>{item.description}</span>
         </button>)}
         {onAdd&&<Button disabled={busy} onClick={onAdd}>Thêm cảnh</Button>}
       </nav>
       {scene&&<article key={scene.shot_id??index} className="storyboard-detail">
-        <header className="storyboard-scene-title"><h3>Cảnh {index+1}</h3>
+        <header className="storyboard-scene-title"><h3>{scene.content_scene?shotLabel(scene,index):'Cảnh '+(index+1)}</h3>
           <span>{Number(scene.seconds.toFixed(2)).toLocaleString('vi-VN')} giây</span>
         </header>
         <p>{scene.description}</p>

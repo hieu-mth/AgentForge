@@ -131,6 +131,7 @@ export function StudioDrafts({mutate,onCharacters}) {
   const reviewing=drafts.find(job=>job.id===storyboardId&&job.board);
   const sourceDraft=drafts.find(job=>job.id===sourceId);
   const canEdit=reviewing?.storyboard_version&&['STORYBOARD_REVIEW','FAILED','REVIEW'].includes(reviewing.status);
+  const canChangeLayout=canEdit&&!reviewing.duration_plan?.content_scene_count;
   const sceneCount=reviewing?.board.scenes.length;
   const minScenes=reviewing?.brief.mode==='motion'?
     (reviewing.brief.duration_mode?minMotionShots(reviewing.brief.seconds,reviewing.motion_plan?.output??
@@ -345,10 +346,10 @@ export function StudioDrafts({mutate,onCharacters}) {
       onApprove={()=>run('/'+reviewing.id+'/storyboard-approve',{sha256:reviewing.storyboard_sha},()=>setStoryboardId(null))}
       onEdit={canEdit?(index,scene)=>setEditor({job:reviewing,index,scene}):null}
       onRewrite={canEdit?(index,scene)=>setEditor({job:reviewing,index,scene,rewrite:true}):null}
-      onMove={canEdit?(index,target)=>storyboard(reviewing,'move',{index,target}):null}
-      onRemove={canEdit&&sceneCount>minScenes?index=>storyboard(reviewing,'remove',{index}):null}
-      onAdd={canEdit&&sceneCount<maxScenes?()=>setEditor({job:reviewing,adding:true,index:sceneCount,scene:{}}):null}
-      onDuration={canEdit&&reviewing.brief.duration_mode?seconds=>storyboard(reviewing,'duration',{seconds}):null}
+      onMove={canChangeLayout?(index,target)=>storyboard(reviewing,'move',{index,target}):null}
+      onRemove={canChangeLayout&&sceneCount>minScenes?index=>storyboard(reviewing,'remove',{index}):null}
+      onAdd={canChangeLayout&&sceneCount<maxScenes?()=>setEditor({job:reviewing,adding:true,index:sceneCount,scene:{}}):null}
+      onDuration={canChangeLayout&&reviewing.brief.duration_mode?seconds=>storyboard(reviewing,'duration',{seconds}):null}
       onPreview={(index,sha)=>setScenePreview({id:reviewing.id,index,sha})}/>}
     {sourceDraft&&<Modal open centered width={760} rootClassName="script-reader" title="Nội dung video"
       onCancel={()=>setSourceId(null)} footer={<Button onClick={()=>setSourceId(null)}>Đóng</Button>}>

@@ -12,7 +12,8 @@ MOTION_PRESETS = {4: (2, 2), 6: (3, 3), 15: (8, 9),
 MAX_VERSIONS = 12
 STORY_FIELDS = ("description", "image_prompt", "motion_prompt", "character_ids",
                 "audio", "continuity", "script_range", "shot_id", "frames", "caption", "scene_notes", "duration_weight",
-                "suggested_seconds", "shot_reason")
+                "suggested_seconds", "shot_reason", "content_scene", "content_shot", "content_shot_count",
+                "script_shot_frames")
 
 
 def duration_limits(seconds, moving, output=LEGACY_MOTION_OUTPUT):
@@ -42,6 +43,39 @@ def planned_timeline(seconds, moving, weights, output=LEGACY_MOTION_OUTPUT):
         index = max((i for i in range(count) if frames[i] < cap), key=lambda i: (target[i]-frames[i], -i))
         frames[index] += 1
     return frames if moving else [length * STILL_FPS for length in frames]
+
+
+def scene_shots(seconds, scene_seconds, moving, output=LEGACY_MOTION_OUTPUT):
+    """Split ordered content scenes independently, preserving their frame boundaries."""
+    _, ceiling = duration_limits(seconds, moving, output)
+    fps = output.fps if moving else STILL_FPS
+    total = seconds * fps
+    budgets = [None if value is None else round(value * fps) for value in scene_seconds]
+    missing = budgets.count(None)
+    spare = total - sum(value or 0 for value in budgets)
+    minimum = 1 if moving else 2 * fps
+    if (not missing and spare != 0) or (missing and spare < missing * minimum):
+        raise ValueError(f"Tổng thời lượng cảnh nội dung không khớp mục tiêu {seconds} giây. "
+                         "Hãy điều chỉnh tổng thời lượng hoặc mốc thời gian trong kịch bản.")
+    if missing:
+        share, extra = divmod(spare, missing)
+        for index, budget in enumerate(budgets):
+            if budget is None:
+                budgets[index] = share + (extra > 0)
+                extra -= 1
+    if any(budget < minimum for budget in budgets):
+        raise ValueError("Có cảnh nội dung quá ngắn để dựng. Hãy tăng thời lượng của cảnh.")
+    cap = output.max_frames if moving else total
+    result = []
+    for budget in budgets:
+        count = math.ceil(budget / cap)
+        frames, extra = divmod(budget, count)
+        result.append([frames + (index < extra) for index in range(count)])
+    count = sum(map(len, result))
+    if count > ceiling:
+        raise ValueError(f"{seconds} giây cần {count} shot để giữ ranh giới cảnh, nhưng ngân sách là {ceiling} shot. "
+                         "Hãy điều chỉnh thời lượng, hoặc chia thành hai video.")
+    return result
 
 
 def shot_limits(seconds):
