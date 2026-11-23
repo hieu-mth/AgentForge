@@ -1,6 +1,7 @@
 """Resolve Studio's supported capabilities from Owner-owned registry profiles."""
 from dataclasses import asdict
 import hashlib
+import json
 import os.path
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, Protocol
@@ -12,6 +13,13 @@ from agentforge.features.media import studio_flux
 
 Profile = dict[str, Any]
 PreparedMotion = tuple[str, str, Path, str]
+
+
+def routing_identity(bindings, *, moving):
+    """Fingerprint selected profiles only, without storing their endpoint or configuration twice."""
+    return {capability: hashlib.sha256(json.dumps(profile, sort_keys=True, ensure_ascii=False,
+                                                   separators=(",", ":")).encode()).hexdigest()
+            for capability, profile in bindings.items() if moving or capability != "film.motion"}
 
 
 class TextInference(Protocol):

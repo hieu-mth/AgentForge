@@ -126,14 +126,23 @@ def _collect(provider_id, ident, port, config, metadata, *, sink=None):
 
 def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=None,
              automated=False, hub_db=None, db_path=None, profile_id=None, expected_revision=None,
-             production_job=None, production_revision=None):
+             production_job=None, production_revision=None, production_profile=None):
     """Entry point for Studio and trusted Orchestrator callers."""
     ops_control.require_active()
-    revision, profile = (model_hub.image_runtime(automated=automated, db_path=hub_db)
-                         if profile_id is None else model_hub.flux_probe_profile(
-                             profile_id, expected_revision=expected_revision, db_path=hub_db))
-    if production_revision is not None and revision != production_revision:
-        raise ValueError("Image routing changed; resume using the updated configuration")
+    if production_profile is not None:
+        try:
+            revision, bindings = model_hub.draft_routes(db_path=hub_db, moving=False)
+        except PermissionError as exc:
+            raise model_hub.ModelConfigError(str(exc)) from None
+        profile = bindings["image.generate"]
+        if profile != production_profile:
+            raise model_hub.ModelConfigError("Model hoặc workflow tạo ảnh đã đổi. Hãy khôi phục cấu hình đã duyệt.")
+    else:
+        revision, profile = (model_hub.image_runtime(automated=automated, db_path=hub_db)
+                             if profile_id is None else model_hub.flux_probe_profile(
+                                 profile_id, expected_revision=expected_revision, db_path=hub_db))
+        if production_revision is not None and revision != production_revision:
+            raise ValueError("Image routing changed; resume using the updated configuration")
     config = flux_workflow.validate(profile["flux"], profile["model"], profile["base_url"])
     port = urlsplit(profile["base_url"]).port
     if scene is not None and (not isinstance(scene, str) or not re.fullmatch(

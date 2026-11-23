@@ -55,10 +55,10 @@ def bind(profile):
     endpoint = urlsplit(profile.get("base_url", ""))
     if (not supports(profile) or endpoint.port != motion_comfy.PORT
             or endpoint.hostname not in {"localhost", "127.0.0.1"}):
-        raise ValueError("Assign an LTX 2B FP8 checkpoint and encoder to film.motion on the Motion endpoint")
+        raise ValueError("Hãy gán checkpoint và encoder LTX 2B FP8 đúng endpoint Motion cho film.motion.")
     config = comfy_service._settings()
     if not config or config["port"] != endpoint.port:
-        raise ValueError("Configure the AgentForge ComfyUI launcher on the Motion endpoint")
+        raise ValueError("Hãy đăng ký ComfyUI Portable cho endpoint Motion trong Môi trường & Tài nguyên.")
     missing = [tool for tool in ("ffmpeg", "ffprobe") if not render.find_media_tool(tool)]
     if missing:
         raise ValueError("Thiếu công cụ xác minh video: " + ", ".join(missing)

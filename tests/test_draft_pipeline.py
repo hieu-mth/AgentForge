@@ -25,6 +25,7 @@ class DraftTests(unittest.TestCase):
             override = patch.object(draft, name, value)
             override.start()
             self.addCleanup(override.stop)
+        self.enterContext(patch.object(draft.model_hub, "DB_PATH", self.root / "hub.sqlite3"))
         self.ident = "a" * 32
         self.brief = {"idea": "Chú mèo cam", "scene_count": 2, "ratio": "16:9", "seconds": 6}
         self.capacity = {"ram_available": 16 << 30, "commit_used": 8 << 30,
@@ -41,6 +42,65 @@ class DraftTests(unittest.TestCase):
     def motion_profile(self):
         return {"id": "owner_motion", "provider": "comfyui", "model": draft_motion.motion_ltx.CHECKPOINT,
                 "motion_encoder": str(self.root / "encoder.safetensors"), "base_url": "http://127.0.0.1:8188"}
+
+    def registry_change(self, action, **kwargs):
+        return draft.model_hub.change(action, expected_revision=draft.model_hub.catalog()["revision"], **kwargs)
+
+    def seed_registry(self, image, motion):
+        text = {"id": "owner_planner", "provider": "ollama", "enabled": True,
+                "model": "planner:8b", "base_url": "http://127.0.0.1:11434"}
+        writer = {**text, "id": "owner_story", "model": "writer:8b"}
+        for profile in (text, writer, image, motion):
+            self.registry_change("SAVE_MODEL_PROFILE", profile=profile)
+        policy = draft.model_hub.orchestrator_policy.defaults()
+        policy.update(permissions=dict.fromkeys(policy["permissions"], True), tools=["ffmpeg"])
+        return self.registry_change("SAVE_ORCHESTRATOR", policy=policy, route_changes={
+            "general.text": text["id"], "film.storyboard": writer["id"],
+            "image.generate": image["id"], "film.motion": motion["id"]})["revision"]
+
+    def test_legacy_approval_uses_historical_bindings_without_changing_digest(self):
+        original = {**self.motion_profile(), "enabled": True}
+        revision = self.seed_registry(flux_profile(), original)
+        job = {"id": self.ident, "brief": {**self.brief, "mode": "motion", "seconds": 4},
+               "motion_revision": revision, "storyboard_version": 1,
+               "board": draft._story(self.board(), 2, 4, {"cat": {}}), "video_sha": None}
+        draft._stamp_storyboard(job)
+        job["approved_storyboard_sha"] = job["storyboard_sha"]
+        draft._save(job)
+        self.registry_change("SAVE_MODEL_PROFILE", profile={
+            "id": "cloud_config", "provider": "anthropic", "model": "unused", "enabled": True,
+            **draft.model_hub.ADAPTERS["anthropic"]["legacy_defaults"]})
+        saved = draft._read(self.ident)
+        current, _, legacy = draft._studio_bindings(saved)
+        self.assertGreater(current, revision)
+        self.assertEqual(legacy, revision)
+        self.assertEqual(draft.draft_timeline.digest(saved), saved["approved_storyboard_sha"])
+        self.assertNotIn("studio_plan", saved)
+        self.registry_change("SET_MODEL_ROUTE", task_id="general.text", model_ref="cloud_config")
+        with self.assertRaisesRegex(ValueError, "Studio chỉ chạy model local"):
+            draft._studio_bindings(saved)
+        self.registry_change("RESET_MODEL_ROUTE", task_id="general.text")
+        self.registry_change("DELETE_MODEL_PROFILE", profile_id="owner_planner")
+        with self.assertRaisesRegex(ValueError, "chưa phân công"):
+            draft._studio_bindings(saved)
+        self.registry_change("ROLLBACK_MODEL_HUB", target_revision=revision)
+        self.assertEqual(draft._studio_bindings(saved)[2], revision)
+
+    def test_flux_dispatch_checks_approved_profile_again_before_gpu_admission(self):
+        image = flux_profile()
+        old_revision = self.seed_registry(image, {**self.motion_profile(), "enabled": True})
+        replacement = {**image, "id": "different_owner_flux"}
+        self.registry_change("SAVE_MODEL_PROFILE", profile=replacement)
+        with (patch.object(flux_runtime, "WORKSPACE_DIR", self.root),
+              patch.object(draft.model_hub, "image_runtime", side_effect=AssertionError("re-resolved image route")),
+              patch.object(draft.draft_resources, "require_gpu",
+                           side_effect=draft.draft_resources.ResourceBlocked("TEST_GPU_GATE")) as gate):
+            with self.assertRaisesRegex(draft.draft_resources.ResourceBlocked, "TEST_GPU_GATE"):
+                flux_runtime.generate("A cat", production_profile=image, production_revision=old_revision)
+            self.registry_change("SET_MODEL_ROUTE", task_id="image.generate", model_ref=replacement["id"])
+            with self.assertRaisesRegex(draft.model_hub.ModelConfigError, "workflow tạo ảnh đã đổi"):
+                flux_runtime.generate("A cat", production_profile=image, production_revision=old_revision)
+            gate.assert_called_once_with("image")
 
     def test_legacy_motion_edit_pins_original_runtime_and_reapproval_resumes(self):
         profile = self.motion_profile()
@@ -73,7 +133,7 @@ class DraftTests(unittest.TestCase):
             self.assertEqual(saved["status"], "REVIEW", saved.get("error"))
             self.assertEqual(motion.call_count, 2)
             routes.return_value = (9, bindings)
-            with self.assertRaisesRegex(ValueError, "original motion runtime and revision"):
+            with self.assertRaisesRegex(ValueError, "model gốc"):
                 draft.act(self.ident, "storyboard-edit", fields)
             routes.return_value = (8, bindings)
             workflow.write_text(json.dumps(draft_motion.motion_ltx.workflow(33)), encoding="utf-8")
@@ -206,7 +266,7 @@ class DraftTests(unittest.TestCase):
               patch.object(studio_runtime, "motion_adapter") as motion):
             draft._work(job, nullcontext())
         self.assertEqual(draft._read(self.ident)["status"], "FAILED")
-        self.assertIn("Model routing changed", draft._read(self.ident)["error"])
+        self.assertIn("model gốc", draft._read(self.ident)["error"])
         image.assert_not_called()
         motion.assert_not_called()
 
@@ -562,7 +622,7 @@ class DraftTests(unittest.TestCase):
         suffix = "\n\nCảnh 2 — Miu chạy ra vườn.\n"
         source = prefix + "🐱" * (20_000 - len(prefix) - len(suffix)) + suffix
         body = {**self.brief, "id":self.ident, "idea":source}
-        with (patch.object(draft.model_hub, "draft_routes"), patch.object(draft.render, "_ffmpeg"),
+        with (patch.object(draft.model_hub, "draft_routes", return_value=(1, {})), patch.object(draft.render, "_ffmpeg"),
               patch.object(draft, "_dispatch")):
             status, result, _ = client.req("POST", "/api/film/drafts/start", body)
             self.assertEqual(status, 200, result.get("message"))
@@ -610,9 +670,10 @@ class DraftTests(unittest.TestCase):
         body = {**self.brief, "id": self.ident, "seconds": 4, "mode": "motion"}
         route = "/api/film/drafts/start"
         self.assertEqual(client.req("POST", route, {**body, "seconds": 6})[0], 400)
-        profile = {"id": "selected_by_registry", "provider": "comfyui", "model": ltx.CHECKPOINT,
+        profile = {"id": "selected_by_registry", "provider": "comfyui", "model": ltx.CHECKPOINT, "enabled": True,
                    "motion_encoder": str(self.root / ltx.ENCODER), "base_url": "http://127.0.0.1:8188"}
-        bindings = {"film.motion": profile, "image.generate": flux_profile()}
+        image_profile = flux_profile()
+        approved_revision = self.seed_registry(image_profile, profile)
         output = self.root / "output"
         output.mkdir()
         asset = b"FLUX fixture"
@@ -634,6 +695,7 @@ class DraftTests(unittest.TestCase):
             return {path.split("/")[-1]: latest[path.split("/")[-1]]}
 
         def image(*args, **kwargs):
+            self.assertEqual(kwargs["production_profile"], image_profile)
             calls.append("image")
             return {"status": "ASSET_READY"}
 
@@ -646,12 +708,14 @@ class DraftTests(unittest.TestCase):
                 Path(command[-1]).write_bytes(b"MP4 fixture" * 150)
             return SimpleNamespace(stdout="frame=96\n")
 
-        def storyboard(job, _):
+        def storyboard(job, bindings):
+            self.assertEqual(bindings["general.text"]["model"], "planner:8b")
+            self.assertEqual(bindings["film.storyboard"]["model"], "writer:8b")
+            self.assertNotIn("character.select", bindings)
             job.update(board=draft._story(self.board(), 2, 4, {"cat": {}}),
                        cast={"cat": {"name": "Miu", "appearance": "orange cat"}})
 
-        patches = (patch.object(draft.model_hub, "draft_routes", return_value=(8, bindings)),
-              patch.object(draft, "_dispatch"), patch.object(draft, "_write_board", side_effect=storyboard),
+        patches = (patch.object(draft, "_dispatch"), patch.object(draft, "_write_board", side_effect=storyboard),
               patch.object(draft, "_measured", return_value=nullcontext()),
               patch.object(draft, "_release_idle_image"),
               patch.object(flux_runtime, "generate", side_effect=image),
@@ -687,7 +751,49 @@ class DraftTests(unittest.TestCase):
             self.assertEqual(calls, [])
             approval = route.removesuffix("/start") + f"/{self.ident}/storyboard-approve"
             self.assertEqual(client.req("POST", approval, {"sha256": "stale"})[0], 400)
+            _, routes = draft.model_hub.draft_routes()
+            writer = routes["film.storyboard"]
+            self.registry_change("SAVE_MODEL_PROFILE", profile={**writer, "model": "replaced:8b"})
+            status, rejected, _ = client.req("POST", approval, {"sha256": job["storyboard_sha"]})
+            self.assertEqual(status, 400)
+            self.assertIn("film.storyboard", rejected["message"])
+            self.assertNotIn("approved_storyboard_sha", draft._read(self.ident))
+            self.registry_change("ROLLBACK_MODEL_HUB", target_revision=approved_revision)
             self.assertEqual(client.req("POST", approval, {"sha256": job["storyboard_sha"]})[0], 200)
+            pinned = draft._read(self.ident)
+            self.assertEqual(pinned["approved_storyboard_sha"], draft.draft_timeline.digest(pinned))
+            changed_image = json.loads(json.dumps(image_profile))
+            changed_image["flux"]["workflow"]["6"]["inputs"]["text"] = "changed"
+            for changed, capability in (
+                (changed_image, "image.generate"),
+                ({**profile, "motion_encoder": str(self.root / "alternate.safetensors")}, "film.motion"),
+                ({**profile, "enabled": False}, "film.motion"),
+            ):
+                with self.subTest(capability=capability, changed=changed["id"]):
+                    self.registry_change("SAVE_MODEL_PROFILE", profile=changed)
+                    draft._work(draft._read(self.ident), nullcontext())
+                    blocked = draft._read(self.ident)
+                    self.assertEqual(blocked["status"], "FAILED")
+                    self.assertIn(capability, blocked["error"])
+                    self.assertEqual(blocked["approved_storyboard_sha"], pinned["approved_storyboard_sha"])
+                    self.assertEqual(calls, [])
+                    self.registry_change("ROLLBACK_MODEL_HUB", target_revision=approved_revision)
+            self.registry_change("SAVE_MODEL_PROFILE", profile={
+                "id": "unrelated", "provider": "ollama", "model": "unrelated:latest", "enabled": True,
+                "base_url": "http://127.0.0.1:11434"})
+            replacement = {**image_profile, "id": "replacement_flux"}
+            self.registry_change("SAVE_MODEL_PROFILE", profile=replacement)
+            self.registry_change("SET_MODEL_ROUTE", task_id="image.generate", model_ref=replacement["id"])
+            with self.assertRaisesRegex(ValueError, "image.generate"):
+                draft.act(self.ident, "resume", {})
+            self.registry_change("SET_MODEL_ROUTE", task_id="image.generate", model_ref=image_profile["id"])
+            runner.comfy_service.ensure_running.side_effect = runner.comfy_service.StartupError("COMFYUI_UNAVAILABLE")
+            draft._work(draft._read(self.ident), nullcontext())
+            offline = draft._read(self.ident)
+            self.assertEqual(calls, ["image", "image"])
+            self.assertEqual(offline["approved_storyboard_sha"], pinned["approved_storyboard_sha"])
+            self.assertTrue(all(scene["asset"] and not scene.get("motion_job") for scene in offline["board"]["scenes"]))
+            runner.comfy_service.ensure_running.side_effect = None
             draft._work(draft._read(self.ident), nullcontext())
             job = draft._read(self.ident)
             self.assertEqual(job["status"], "REVIEW", job.get("error"))
@@ -938,7 +1044,7 @@ class DraftTests(unittest.TestCase):
         self.assertTrue(all(scene["attempts"] == 0 for scene in job["board"]["scenes"]))
 
     def test_queue_limit_idempotence_and_queued_cancel(self):
-        with (patch.object(draft.model_hub, "draft_routes"), patch.object(draft.render, "_ffmpeg"),
+        with (patch.object(draft.model_hub, "draft_routes", return_value=(1, {})), patch.object(draft.render, "_ffmpeg"),
               patch.object(draft, "_queue_limit", return_value=1), patch.object(draft, "_dispatch")):
             submitted = draft.submit({"id": self.ident, **self.brief})
             self.assertEqual(submitted["status"], "QUEUED")

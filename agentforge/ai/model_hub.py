@@ -503,32 +503,54 @@ def image_runtime(*, automated=False, db_path=None):
     return revision, profile
 
 
-def draft_routes(*, db_path=None):
+def draft_routes(*, db_path=None, moving=None):
     """Resolve local production capabilities from one Owner policy snapshot."""
-    from agentforge.features.film_studio import studio_runtime
-
     revision, state = _read_state(db_path=db_path)
+    return revision, _draft_bindings(state, moving=moving)
+
+
+def draft_routes_at(revision, *, db_path=None, moving=None):
+    """Resolve a legacy approval from Model Hub history without writing SQLite."""
+    path = _database(db_path)
+    if not path.is_file():
+        return None
+    with closing(sqlite3.connect(ensure_local_root(path).resolve().as_uri() + "?mode=ro",
+                                 uri=True, timeout=5)) as conn:
+        if not conn.execute("SELECT 1 FROM sqlite_master WHERE name='hub_history'").fetchone():
+            return None
+        row = conn.execute("SELECT payload FROM hub_history WHERE revision=?", (revision,)).fetchone()
+    if row is None:
+        return None
+    state = json.loads(row[0])
+    _validate_state(state)
+    return _draft_bindings(state, moving=moving)
+
+
+def _draft_bindings(state, *, moving):
     policy = state.get("orchestrator", orchestrator_policy.defaults())
     permissions = policy["permissions"]
     if (policy["mode"] == "MANUAL" or not all(permissions[key] for key in
             ("plan", "assign_local", "call_local", "run_tools")) or "ffmpeg" not in policy["tools"]):
-        raise PermissionError("Enable local planning, assignment, model calls and FFmpeg in AI Orchestrator")
+        raise PermissionError("Hãy bật lập kế hoạch, phân công, gọi model local và FFmpeg trong AI điều phối.")
     profiles = _profiles(state=state)
     bindings = {}
     for capability in ("general.text", "film.storyboard", "character.select", "image.generate", "film.motion"):
+        if capability == "film.motion" and moving is False:
+            continue
         ref = state["routes"].get(capability, policy["mappings"].get(capability))
-        decision = orchestrator_policy.resolve(capability, policy, profiles, ref)
-        profile = profiles.get(decision.get("model_ref"))
-        if profile:
-            bindings[capability] = profile
-    for capability, resolve in (("general.text", studio_runtime.text_adapter),
-                                ("film.storyboard", studio_runtime.text_adapter),
-                                ("image.generate", studio_runtime.image_adapter)):
-        try:
-            resolve(bindings.get(capability))
-        except ValueError as exc:
-            raise ModelConfigError(f"{capability}: {exc}") from None
-    return revision, bindings
+        if ref is None and (capability == "character.select" or (capability == "film.motion" and moving is None)):
+            continue
+        profile = profiles.get(ref)
+        if ref is None:
+            raise ModelConfigError(f"{capability}: chưa phân công model cho Studio.")
+        if not profile or not profile["enabled"]:
+            raise ModelConfigError(f"{capability}: hồ sơ {ref} đã bị xóa hoặc đang tắt.")
+        if profile["provider"] == "anthropic":
+            raise ModelConfigError(f"{capability}: Studio chỉ chạy model local. Hãy chọn hồ sơ local.")
+        if not orchestrator_policy.local_adapter(orchestrator_policy.KINDS[capability], profile):
+            raise ModelConfigError(f"{capability}: hồ sơ {ref} không tương thích với adapter Studio.")
+        bindings[capability] = profile
+    return bindings
 
 
 def _catalog(revision, state):
