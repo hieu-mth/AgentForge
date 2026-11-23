@@ -1,25 +1,22 @@
 ﻿"""Checkpointed local idea-to-draft production."""
 import copy
 import hashlib
-import http.client
 import os
 import json
 import re
 import shutil
 import sqlite3
 import threading
-import time
 from contextlib import closing, contextmanager
 from uuid import uuid4
-from urllib.parse import urlsplit
 
 from agentforge import ops_control
 from agentforge.ai import model_hub
 from agentforge.features.film_studio import characters
-from agentforge.features.film_studio import draft_motion, draft_resources, draft_timeline
-from agentforge.features.media import flux_runtime, flux_workflow, render, visual_jobs
+from agentforge.features.film_studio import draft_resources, draft_timeline, studio_runtime
+from agentforge.features.media import render, visual_jobs
+from agentforge.features.film_studio.draft_resources import ResourceWait
 from agentforge.integrations import comfy_service
-from agentforge.ops import runtime_certification as runtime
 from agentforge.paths import COMPANY_DATA_DIR, WORKSPACE_DIR, ensure_local_root
 
 DB = COMPANY_DATA_DIR / "video_drafts.sqlite3"
@@ -34,10 +31,6 @@ OUTLINE_LIMIT = 700
 SCRIPT_HEADING = re.compile(r"(?im)^[ \t]*(?:cảnh|scene)\s+[0-9]+\b")
 SCRIPT_DIALOGUE = re.compile(r"(?m)^[ \t]*([^\W\d][^:\n]{0,27}):[ \t]*(\S[^\n]*)")
 _QUEUE_STATES = {"QUEUED", "RUNNING", "WAITING_RESOURCES"}
-
-
-class ResourceWait(Exception):
-    pass
 
 
 class DraftCancelled(Exception):
@@ -75,7 +68,7 @@ def _measured(job, operation, comfy_profile=None):
         admission_sample = before
         reason = draft_resources.pressure(admission_sample, operation)
         if reason == "VRAM_LOW" and comfy_profile and comfy_profile.get("base_url"):
-            if _release_idle_comfy(comfy_profile):
+            if _release_idle_image(comfy_profile):
                 admission_sample = point["after_release"] = draft_resources.snapshot()
                 reason = draft_resources.pressure(admission_sample, operation)
         if reason:
@@ -210,60 +203,13 @@ def _worker_slot():
         LOCK.release()
 
 
-def _release_idle_comfy(profile):
-    if not draft_resources.can_release_models(draft_resources.snapshot()):
-        return False
-    port = urlsplit(profile["base_url"]).port
-    try:
-        queue = flux_runtime._json("/queue", port=port)
-        if queue.get("queue_running") != [] or queue.get("queue_pending") != []:
-            return False
-        def reserved():
-            stats = flux_runtime._json("/system_stats", port=port)
-            return sum(device.get("torch_vram_total", 0) for device in stats.get("devices", [])
-                       if device.get("type") == "cuda")
-        initial = reserved()
-        from agentforge.integrations import comfyui
-        comfyui.request_image_bytes("/free", body={"unload_models": True, "free_memory": True}, port=port)
-        for _ in range(8):
-            time.sleep(1)
-            remaining = reserved()
-            if remaining == 0 or remaining < initial:
-                return True
-    except (OSError, ValueError, RuntimeError):
-        return False
-    return False
+def _release_idle_image(profile):
+    return studio_runtime.image_adapter(profile).release_idle_models(profile)
 
 
 def _ask(profile, instructions, data, schema, comfy_profile, *, cpu_only=False, extended_plan=False):
-    host, port = runtime._local_endpoint(profile["base_url"])
-    if not runtime._installed_local_model(host, port, profile["model"]):
-        raise ValueError("Configured Ollama model is unavailable: " + profile["id"])
-    payload = {"model": profile["model"], "stream": False, "think": False,
-               "keep_alive": 0, "format": schema,
-               "options": {"temperature": 0.2, "num_predict": 1600, "num_ctx": 4096},
-               "messages": [{"role": "system", "content": instructions},
-                            {"role": "user", "content": json.dumps(data, ensure_ascii=False)}]}
-    if cpu_only:
-        payload["options"].update(num_gpu=0, num_predict=2600)
-    if extended_plan:
-        payload["options"].update(num_ctx=8192, num_predict=5200)
-    timeout = 300 if cpu_only else 150
-    try:
-        message = runtime._http_json(host, port, "/api/chat", timeout=timeout, max_request_bytes=16384, payload=payload)
-    except TimeoutError:
-        raise ValueError(f"Ollama không phản hồi trong {timeout} giây khi phân tích nội dung. "
-                         "Kiểm tra Ollama hoặc chọn model điều phối nhẹ hơn trước khi tiếp tục.") from None
-    except runtime.LocalProviderHTTPError as exc:
-        # Ollama's transport does not distinguish OOM from other server-side failures.
-        if exc.status == 500:
-            raise ResourceWait("OLLAMA_RESOURCE_OR_SERVER_ERROR") from None
-        raise ValueError(f"Ollama rejected the request (HTTP {exc.status}): {profile['id']}") from None
-    except (OSError, http.client.HTTPException):
-        raise ValueError("Mất kết nối với Ollama khi phân tích nội dung. Kiểm tra dịch vụ Ollama rồi tiếp tục.") from None
-    if message.get("done") is not True or message.get("done_reason") == "length":
-        raise ValueError("Ollama did not complete the structured response")
-    return json.loads(message["message"]["content"])
+    return studio_runtime.text_adapter(profile).infer_structured(
+        profile, instructions, data, schema, cpu_only=cpu_only, extended_plan=extended_plan)
 
 
 def _object(**properties):
@@ -432,7 +378,7 @@ def _duration_plan(job, profile):
     script = brief["idea"]
     cap = draft_timeline.MOTION_PRODUCTION_SHOT_BUDGET if moving else 6
     max_seconds = draft_timeline.MAX_DURATION_SECONDS
-    max_shot_seconds = draft_timeline.LTX_CLIP_FRAMES / draft_timeline.FPS if moving else max_seconds
+    max_shot_seconds = draft_timeline.MOTION_OUTPUT.max_frames / draft_timeline.FPS if moving else max_seconds
     if len(SCRIPT_HEADING.findall(script)) > cap:
         raise ValueError(f"Kịch bản vượt {cap} cảnh. Hãy gộp các hành động liên quan hoặc chia video.")
     bounded_text = {**STRING, "minLength": 1, "maxLength": 180}
@@ -571,8 +517,6 @@ def _select_cast(job, bindings, outline):
     if not candidates:
         return {}
     selector = bindings.get("character.select", bindings["film.storyboard"])
-    if selector["provider"] != "ollama":
-        raise ValueError("Assign a local Ollama model to character.select")
     comfy = bindings["image.generate"]
     _activity(job, "STORYBOARD", "cast", selector)
     with _measured(job, "cast", comfy):
@@ -708,7 +652,7 @@ def _image(job, index, scene, revision, profile):
         raise ValueError("The prior ComfyUI scene job needs reconciliation before retry")
     if not prior or prior["status"] != "ASSET_READY":
         if ("storyboard_version" in job or job["brief"].get("mode") == "motion") and scene["job_id"]:
-            raise ValueError("Cần kiểm tra tác vụ FLUX cũ trước khi duyệt phiên bản sửa.")
+            raise ValueError("Cần kiểm tra tác vụ tạo ảnh cũ trước khi duyệt phiên bản sửa.")
         if scene["attempts"] >= IMG_RETRIES:
             raise ValueError("Scene reached its retry limit")
         previous_job = scene["job_id"]
@@ -719,14 +663,11 @@ def _image(job, index, scene, revision, profile):
         identity = ". ".join(cast[key]["name"] + ": " + cast[key]["appearance"] for key in scene["character_ids"])
         prompt = ". ".join((scene.get("continuity", job["board"]["continuity"]), identity,
                             scene.get("scene_notes", ""), scene["image_prompt"]))
-        cfg = profile["flux"]
-        long = min(768, cfg["max_resolution"] // 16 * 16)
-        short = max(256, (long * 9 // 16) // 16 * 16)
-        width, height = (short, long) if job["brief"]["ratio"] == "9:16" else (long, short)
+        request = studio_runtime.ImageRequest(prompt, job["brief"]["ratio"],
+                                              f"{job['id']}/episode-01/scene-{index+1:02d}",
+                                              scene["job_id"], revision)
         try:
-            output = flux_runtime.generate(prompt, width=width, height=height, automated=True,
-                                           scene=f"{job['id']}/episode-01/scene-{index+1:02d}",
-                                           production_job=scene["job_id"], production_revision=revision)
+            output = studio_runtime.image_adapter(profile).generate(profile, request)
         except (comfy_service.StartupError, draft_resources.ResourceBlocked):
             scene["job_id"] = previous_job
             scene["attempts"] -= 1
@@ -761,27 +702,27 @@ def _render(job):
         ids = [scene.get("motion_job") for scene in job["board"]["scenes"]]
         if None in ids or len(set(ids)) != len(ids):
             raise ValueError("Phim từ 30 giây cần clip riêng cho từng cảnh.")
-    width, height = (512, 288) if moving else SIZES[job["brief"]["ratio"]]
+    width, height = draft_timeline.MOTION_OUTPUT.resolution if moving else SIZES[job["brief"]["ratio"]]
     ffmpeg = render._ffmpeg()
     command = [ffmpeg, "-nostdin", "-n", "-v", "error"]
     filters, streams = [], []
     input_bytes = 0
     for index, scene in enumerate(job["board"]["scenes"]):
         if moving:
-            clip = draft_motion.clip_path(scene)
+            clip = studio_runtime.motion_artifacts().clip_path(scene)
             input_bytes += clip.stat().st_size
             if input_bytes > MAX_MOTION_INPUTS:
                 raise ValueError("Motion clips exceed the production assembly budget")
             command += ["-threads", "1", "-i", str(clip)]
-            frames = scene.get("frames", int(scene["seconds"] * 24))
+            frames = scene.get("frames", int(scene["seconds"] * draft_timeline.FPS))
             filters.append(f"[{index}:v]trim=end_frame={frames},setpts=PTS-STARTPTS,setsar=1[v{index}]")
             streams.append(f"[v{index}]")
             continue
         command += ["-i", str(_scene_path(job, index))]
-        frames = scene["seconds"] * 24
+        frames = scene["seconds"] * draft_timeline.FPS
         filters.append(f"[{index}:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
                        f"crop={width}:{height},setsar=1,zoompan=z='1+0.00025*on':"
-                       f"x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d={frames}:s={width}x{height}:fps=24,"
+                       f"x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d={frames}:s={width}x{height}:fps={draft_timeline.FPS},"
                        f"fade=t=in:st=0:d=0.2,fade=t=out:st={scene['seconds']-0.2}:d=0.2[v{index}]")
         streams.append(f"[v{index}]")
     filters.append("".join(streams) + f"concat=n={len(streams)}:v=1:a=0[out]")
@@ -800,7 +741,7 @@ def _render(job):
                                             "-map", "0:v:0", "-progress", "pipe:1", "-f", "null", "-"],
                                            cwd=folder, timeout=60)
         frames = re.findall(r"(?m)^frame=(\d+)", verification.stdout)
-        if not frames or int(frames[-1]) != job["brief"]["seconds"] * 24:
+        if not frames or int(frames[-1]) != job["brief"]["seconds"] * draft_timeline.FPS:
             raise ValueError("MP4 duration verification failed")
         with temporary.open("rb") as stream:
             digest = hashlib.file_digest(stream, "sha256").hexdigest()
@@ -809,7 +750,7 @@ def _render(job):
             subtitles = draft_timeline.captions(job["board"]["scenes"])
             receipt = {"production_id": job["id"], "version": job["storyboard_version"],
                        "storyboard_sha": job["approved_storyboard_sha"], "video_sha": digest,
-                       "technical": {"frames_decoded": int(frames[-1]), "fps": 24, "width": width, "height": height},
+                       "technical": {"frames_decoded": int(frames[-1]), "fps": draft_timeline.FPS, "width": width, "height": height},
                        "visual_qa": "UNVERIFIED", "owner_qa": "PENDING",
                        "subtitle_sha": _sha(subtitles) if subtitles else None,
                        "shots": [{key: scene.get(key) for key in ("shot_id", "frames", "job_id", "asset",
@@ -832,7 +773,7 @@ def _render(job):
 def _work(job, slot):
     global ACTIVE
     image_profile = None
-    used_flux = False
+    used_image = False
     try:
         if _cancellation(job["id"]):
             raise DraftCancelled
@@ -842,12 +783,10 @@ def _work(job, slot):
         with model_hub.local_inference_slot():
             revision, bindings = model_hub.draft_routes()
             if reviewing:
-                draft_motion.require_resolved_ledger(job)
-                image_runtime = bindings["image.generate"].get("base_url")
-                if image_runtime:
-                    port = urlsplit(image_runtime).port
-                    comfy_service.require_other_queue_idle(port, include_profiles=True)
-                    comfy_service.require_idle_queue(port, allow_offline=True)
+                studio_runtime.motion_artifacts().require_resolved_ledger(job)
+                if bindings["image.generate"].get("base_url"):
+                    profile = bindings["image.generate"]
+                    studio_runtime.image_adapter(profile).preflight(profile, include_profiles=True)
                 if not job.get("board"):
                     _write_board(job, bindings)
                 if _cancellation(job["id"]):
@@ -858,17 +797,16 @@ def _work(job, slot):
                     job["approved_storyboard_sha"] != draft_timeline.digest(job)):
                 raise ValueError("Storyboard đã thay đổi. Cần Owner duyệt lại.")
             if (moving or "storyboard_version" in job) and revision != job["motion_revision"]:
-                raise ValueError("Model routing changed after approval; review and create a new motion draft")
-            motion_profile = draft_motion.binding(bindings) if moving else None
+                raise ValueError("Model routing changed after approval; review and create a new draft")
+            motion = studio_runtime.motion_adapter(bindings.get("film.motion")) if moving else None
+            motion_profile = motion.bind(bindings["film.motion"]) if moving else None
             if moving:
-                draft_motion.require_resolved_ledger(job)
+                motion.require_resolved_ledger(job)
             image_profile = bindings["image.generate"]
             board = job.get("board")
             needs_gpu = not board or any(not scene["asset"] for scene in board["scenes"])
             if needs_gpu and image_profile.get("base_url"):
-                port = urlsplit(image_profile["base_url"]).port
-                comfy_service.require_other_queue_idle(port)
-                comfy_service.require_idle_queue(port, allow_offline=True)
+                studio_runtime.image_adapter(image_profile).preflight(image_profile)
             folder = _folder(job["id"])
             folder.mkdir(parents=True, exist_ok=True)
             if not job.get("board"):
@@ -880,22 +818,22 @@ def _work(job, slot):
                 else:
                     _activity(job, "IMAGES", "image", image_profile, scene=index + 1)
                     with _measured(job, "image", image_profile):
-                        used_flux = True
+                        used_image = True
                         _image(job, index, scene, revision, bindings["image.generate"])
-            if moving and used_flux:
-                _release_idle_comfy(image_profile)
+            if moving and used_image:
+                _release_idle_image(image_profile)
         if moving:
-            prepared = draft_motion.prepare(job, folder)
+            prepared = motion.prepare(job, folder)
             for index, scene in enumerate(job["board"]["scenes"]):
                 if _cancellation(job["id"]):
                     raise DraftCancelled
                 if model_hub.draft_routes()[0] != job["motion_revision"]:
-                    raise ValueError("Model routing changed after approval; review and create a new motion draft")
+                    raise ValueError("Model routing changed after approval; review and create a new draft")
                 _activity(job, "MOTION", "motion", motion_profile, scene=index + 1)
                 try:
-                    draft_motion.run_shot(scene, index, prepared, motion_profile,
+                    motion.run_shot(scene, index, prepared, motion_profile,
                                           lambda: _save(job), lambda: _cancellation(job["id"]))
-                except draft_motion.NeedsReconciliation:
+                except studio_runtime.NeedsReconciliation:
                     raise
                 except Exception:
                     if _cancellation(job["id"]):
@@ -913,7 +851,7 @@ def _work(job, slot):
         job.update(status="WAITING_RESOURCES", error=str(exc))
     except DraftCancelled:
         job.update(status="CANCELLED", error=None, video_sha=None)
-    except draft_motion.NeedsReconciliation as exc:
+    except studio_runtime.NeedsReconciliation as exc:
         job.update(status="NEEDS_RECONCILIATION", error=str(exc))
     except (ValueError, PermissionError) as exc:
         if str(exc) == "LOCAL_INFERENCE_BUSY":
@@ -924,10 +862,10 @@ def _work(job, slot):
         job.update(status="FAILED", error="Local runtime failed at " + job["stage"] + "; check Ollama, ComfyUI or FFmpeg before resuming.")
     finally:
         try:
-            if used_flux and job.get("status") != "WAITING_RESOURCES" and image_profile.get("base_url"):
+            if used_image and job.get("status") != "WAITING_RESOURCES" and image_profile.get("base_url"):
                 try:
                     with model_hub.local_inference_slot():
-                        _release_idle_comfy(image_profile)
+                        _release_idle_image(image_profile)
                 except OSError:
                     pass
             activity = job.pop("activity", {})
@@ -1082,7 +1020,7 @@ def _storyboard_action(job, action, data):
         ops_control.require_active()
         revision, bindings = model_hub.draft_routes()
         if job["brief"].get("mode") == "motion":
-            draft_motion.binding(bindings)
+            studio_runtime.motion_adapter(bindings.get("film.motion")).bind(bindings["film.motion"])
         else:
             render._ffmpeg()
         job.update(approved_storyboard_sha=job["storyboard_sha"], motion_revision=revision, status="QUEUED")
@@ -1098,7 +1036,7 @@ def _storyboard_action(job, action, data):
         return job
     if job["status"] not in {"STORYBOARD_REVIEW", "REVIEW", "FAILED"}:
         raise ValueError("Storyboard chưa thể chỉnh ở trạng thái này.")
-    draft_motion.require_resolved_ledger({})  # A possible dispatch must be reconciled before edit.
+    studio_runtime.motion_artifacts().require_resolved_ledger({})  # A possible dispatch must be reconciled before edit.
     if job["storyboard_version"] >= draft_timeline.MAX_VERSIONS:
         raise ValueError("Đã đạt giới hạn phiên bản. Tạo phim mới để tiếp tục.")
     original = draft_timeline.snapshot(job)
@@ -1173,7 +1111,7 @@ def _delete_draft(ident):
         has_video = job.get("video_sha") or any(entry.get("video_sha") for entry in job.get("storyboard_history", []))
         if job["status"] not in {"CANCELLED", "FAILED", "STORYBOARD_REVIEW"} or has_video:
             raise ValueError("Chỉ có thể xóa bản nháp chưa hoàn thành và đã dừng.")
-        draft_motion.require_draft_removable(ident)
+        studio_runtime.motion_artifacts().require_draft_removable(ident)
         root = ensure_local_root(WORKSPACE_DIR / "drafts")
         folder = ensure_local_root(root / ident).resolve()
         if folder.parent != root.resolve():
@@ -1236,7 +1174,7 @@ def act(ident, action, data):
         if action != "resume" or job["status"] not in {"RUNNING", "FAILED", "WAITING_RESOURCES", "NEEDS_RECONCILIATION"}:
             raise ValueError("Draft cannot be resumed")
         if job["status"] == "NEEDS_RECONCILIATION" and _cancellation(ident):
-            if draft_motion.reconcile_cancelled(job):
+            if studio_runtime.motion_artifacts().reconcile_cancelled(job):
                 job.update(status="CANCELLED", error=None, video_sha=None)
                 _save(job)
             return job

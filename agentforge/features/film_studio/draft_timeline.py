@@ -2,13 +2,14 @@
 import hashlib
 import json
 import math
+from agentforge.features.film_studio.studio_runtime import motion_output
 
-FPS = 24
-LTX_CLIP_FRAMES = 49
+MOTION_OUTPUT = motion_output()
+FPS = MOTION_OUTPUT.fps
 MAX_DURATION_SECONDS = 60
 MOTION_PRODUCTION_SHOT_BUDGET = 32
 MOTION_PRESETS = {4: (2, 2), 6: (3, 3), 15: (8, 9),
-                  30: (math.ceil(30 * FPS / LTX_CLIP_FRAMES), 16)}
+                  30: (math.ceil(30 * FPS / MOTION_OUTPUT.max_frames), 16)}
 MAX_VERSIONS = 12
 STORY_FIELDS = ("description", "image_prompt", "motion_prompt", "character_ids",
                 "audio", "continuity", "script_range", "shot_id", "frames", "caption", "scene_notes", "duration_weight",
@@ -22,7 +23,7 @@ def duration_limits(seconds, moving):
                          "Hãy rút gọn hành động hoặc chia kịch bản thành nhiều video.")
     if moving:
         budget = max(16, math.ceil(seconds * MOTION_PRODUCTION_SHOT_BUDGET / MAX_DURATION_SECONDS))
-        return max(2, math.ceil(seconds * FPS / LTX_CLIP_FRAMES)), min(seconds, budget)
+        return max(2, math.ceil(seconds * FPS / MOTION_OUTPUT.max_frames)), min(seconds, budget)
     return 2, min(6, seconds // 2)
 
 
@@ -33,7 +34,7 @@ def planned_timeline(seconds, moving, weights):
         raise ValueError(f"{seconds} giây cần {minimum}–{maximum} cảnh. "
                          "Hãy chỉnh thời lượng hoặc chia/gộp các cảnh trước khi duyệt.")
     floor = FPS if moving else 2
-    cap = LTX_CLIP_FRAMES if moving else seconds
+    cap = MOTION_OUTPUT.max_frames if moving else seconds
     total = seconds * FPS if moving else seconds
     frames = [floor] * count
     total_weight = sum(weights)
@@ -61,7 +62,7 @@ def timeline(seconds, count, weights=None):
         floor = 40
         frames = [floor] * count
         for _ in range(total - floor * count):
-            index = min((i for i in range(count) if frames[i] < LTX_CLIP_FRAMES),
+            index = min((i for i in range(count) if frames[i] < MOTION_OUTPUT.max_frames),
                         key=lambda i: ((frames[i] - floor + 1) / weights[i], i))
             frames[index] += 1
         return frames

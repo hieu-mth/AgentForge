@@ -11,22 +11,22 @@ from urllib.parse import urlencode, urlsplit
 from uuid import UUID
 
 from agentforge.ai import model_hub
-from agentforge.features.film_studio import draft_resources, draft_timeline, long_form, motion_comfy, motion_ltx, motion_verify
+from agentforge.features.film_studio import draft_resources, long_form, motion_comfy, motion_ltx, motion_verify
+from agentforge.features.film_studio.draft_resources import NeedsReconciliation
+from agentforge.features.film_studio.studio_contracts import MotionOutput
 from agentforge.features.media import render
 from agentforge.integrations import comfy_service
 from agentforge.paths import ensure_local_root
 
-FRAMES = draft_timeline.LTX_CLIP_FRAMES
-MAX_SHOTS = 3
-SECONDS_PER_SHOT = 2
+FRAMES = 49  # Studio's approved preset, independent of experimental pilot presets.
 
 
-class NeedsReconciliation(ValueError):
-    """A provider job may still exist and must never be submitted again."""
+def output_profile():
+    profile = motion_ltx.profile(FRAMES)
+    return MotionOutput(profile["fps"], profile["frames"], (profile["width"], profile["height"]))
 
 
-def binding(bindings):
-    profile = bindings.get("film.motion", {})
+def bind(profile):
     endpoint = urlsplit(profile.get("base_url", ""))
     if (profile.get("provider") != "comfyui" or profile.get("model") not in (motion_ltx.CHECKPOINT, motion_ltx.MODEL_ID)
             or not profile.get("motion_encoder") or endpoint.port != motion_comfy.PORT
@@ -40,6 +40,16 @@ def binding(bindings):
         raise ValueError("Thiếu công cụ xác minh video: " + ", ".join(missing)
                          + ". AgentForge tìm trong data/company/runtime_tools/ffmpeg hoặc PATH của backend.")
     return profile
+
+
+def verify_clip(scene, stream):
+    receipt = motion_verify.inspect_receipt(scene["motion_job"], film_root=motion_comfy.FILMS,
+                                           db_path=motion_comfy.DB, video_stream=stream)
+    if receipt["clip_sha256"] != scene["motion_sha"]:
+        raise ValueError("Motion clip hash mismatch")
+
+
+MAX_CLIP_BYTES = motion_verify.MAX_MP4_BYTES
 
 
 def prepare(job, folder):
