@@ -54,7 +54,17 @@ test('current video shell has no retired UI styles',()=>{
   for(const obsolete of ['workspace-owner','goal-owner','prompt-composer','visual-picker','overview-chart'])
     assert.equal(css.includes('.'+obsolete),false,obsolete);
 });
-import { productionProgress } from '../src/features/studioProgress.js';
+import { productionElapsed,productionProgress } from '../src/features/studioProgress.js';
+
+test('elapsed time excludes gaps between attempts and old review timestamps',()=>{
+  const job={started_at:'2026-11-21T19:17:59Z',updated_at:'2026-11-23T07:35:22Z',
+    resources:[{before:{checked_at:'2026-11-23T07:30:29Z'},after:{checked_at:'2026-11-23T07:35:22Z'}}]};
+  assert.equal(productionElapsed(job,false),'Bước gần nhất · 4 phút 53 giây');
+  job.attempt_started_at='2026-11-23T07:30:29Z';
+  assert.equal(productionElapsed(job,true,Date.parse('2026-11-23T07:30:35Z')),'6 giây');
+  job.attempt_finished_at='2026-11-23T07:35:22Z';
+  assert.equal(productionElapsed(job,false),'4 phút 53 giây');
+});
 
 test('production progress reflects persisted checkpoints and verified output',()=>{
   assert.equal(productionProgress().percent,0);

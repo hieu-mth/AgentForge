@@ -1,20 +1,16 @@
 import {useEffect,useState} from 'react';
-import {Button,Progress,Space,Tag,theme} from 'antd';
+import {Progress,Tag,theme} from 'antd';
 import {CheckCircleOutlined,ClockCircleOutlined,ExclamationCircleOutlined,FileTextOutlined,
   PictureOutlined,PlayCircleOutlined,ScissorOutlined,SafetyCertificateOutlined,ThunderboltOutlined} from '@ant-design/icons';
-import {productionProgress} from './studioProgress.js';
+import {productionElapsed,productionProgress} from './studioProgress.js';
 import './production-progress.css';
+import {draftTitle} from './scriptPresentation.js';
 
 const icons={PLANNING:FileTextOutlined,STORYBOARD:FileTextOutlined,IMAGES:PictureOutlined,
   MOTION:ThunderboltOutlined,RENDER:ScissorOutlined,VERIFY:SafetyCertificateOutlined};
 const states={done:'Hoàn thành',active:'Đang xử lý',waiting:'Đang chờ',pending:'Chưa bắt đầu',error:'Lỗi'};
 
-function elapsed(start,end){
-  const seconds=Math.max(0,Math.floor((end-Date.parse(start))/1000));
-  return Number.isFinite(seconds)?Math.floor(seconds/60)+' phút '+seconds%60+' giây':null;
-}
-
-export function ProductionProgress({job,starting,labels,warnings,onCancel,onResume,busy}){
+export function ProductionProgress({job,starting,labels,warnings}){
   const {token}=theme.useToken();
   const p=productionProgress(job);
   const [now,setNow]=useState(()=>Date.now());
@@ -31,8 +27,7 @@ export function ProductionProgress({job,starting,labels,warnings,onCancel,onResu
     a?.operation==='image'&&a.scene?'Đang tạo ảnh cảnh '+a.scene+'/'+p.total:
     a?.operation==='motion'&&a.scene?'Đang tạo chuyển động cảnh '+a.scene+'/'+p.total:
     p.active?(labels[job?.stage]??labels[status]):(labels[status]??'Đang chuẩn bị bản nháp');
-  const spent=job&&elapsed(job.started_at??job.created_at,p.active?now:Date.parse(job.updated_at));
-  const canResume=['QUEUED','WAITING_RESOURCES','INTERRUPTED','NEEDS_RECONCILIATION','FAILED'].includes(status);
+  const spent=productionElapsed(job,p.active,now);
   return <section className="production-progress" aria-label="Tiến độ tạo bản nháp" style={{
     '--prod-bg':token.colorBgContainer,'--prod-fill':token.colorFillAlter,'--prod-line':token.colorBorderSecondary,
     '--prod-text':token.colorText,'--prod-muted':token.colorTextSecondary,'--prod-primary':token.colorPrimary,
@@ -40,10 +35,10 @@ export function ProductionProgress({job,starting,labels,warnings,onCancel,onResu
   }}>
     <header className="production-header">
       <div className="production-title"><span className="production-mark"><PlayCircleOutlined/></span><div>
-        <h3>{job?.board?.title??job?.brief?.idea??'Đang chuẩn bị bản nháp'}</h3>
+        <h3>{draftTitle(job)}</h3>
         <div className="production-meta">{job?.brief?.seconds&&<span>{job.brief.seconds} giây</span>}
           {p.total>0&&<span>{p.moving?p.clips:p.images}/{p.total} cảnh hoàn thành</span>}
-          {spent&&<span><ClockCircleOutlined/> {spent}</span>}</div>
+          {spent&&<span className="production-elapsed"><ClockCircleOutlined aria-hidden="true"/>{spent}</span>}</div>
       </div></div>
       {status&&<Tag color={p.verified?'success':status==='FAILED'?'error':p.active?'processing':'default'}>{labels[status]??status}</Tag>}
     </header>
@@ -74,9 +69,5 @@ export function ProductionProgress({job,starting,labels,warnings,onCancel,onResu
         </li>;
       })}</ul>
     </details>}
-    <Space wrap>{onCancel&&['QUEUED','RUNNING','WAITING_RESOURCES'].includes(status)&&
-      <Button size="small" disabled={busy} onClick={onCancel}>Hủy tác vụ</Button>}
-      {onResume&&canResume&&<Button size="small" disabled={busy} onClick={onResume}>Tiếp tục từ checkpoint</Button>}
-    </Space>
   </section>;
 }

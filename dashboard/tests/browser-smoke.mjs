@@ -259,7 +259,8 @@ try {
   await env.getByText('32 GB',{exact:false}).first().waitFor();
   await env.getByText('931,5 GB',{exact:false}).waitFor();
   await env.getByRole('button',{name:'Quy ước đơn vị dung lượng'}).focus();
-  await page2.getByRole('tooltip').getByText('Ổ đĩa, RAM và VRAM dùng hệ 1.024',{exact:false}).waitFor();
+  await page2.locator('.af-tooltip').getByRole('tooltip')
+    .getByText('Ổ đĩa, RAM và VRAM dùng hệ 1.024',{exact:false}).waitFor();
   if(/\b(?:MiB|GiB)\b/.test(await env.innerText()))
     throw new Error('Technical capacity units leaked into the Environment UI');
   await env.getByText('Gián đoạn',{exact:true}).waitFor();
@@ -373,6 +374,7 @@ try {
   await settings.getByText('Chưa có bản nháp',{exact:true}).waitFor();
   let draftFixture=null;
   let cancelledDraft=null;
+  let archivedDrafts=[];
   let draftListStatus=404;
   let draftReads=0;
   let holdDraftRead;
@@ -383,7 +385,7 @@ try {
     if(draftListStatus===503)return route.fulfill({status:503,json:{
       error:'draft_storage_unavailable',message:'Fixture SQLite unavailable',
     }});
-    return route.fulfill({json:{drafts:[draftFixture,cancelledDraft].filter(Boolean)}});
+    return route.fulfill({json:{drafts:[draftFixture,cancelledDraft,...archivedDrafts].filter(Boolean)}});
   });
   await settings.reload();
   await settings.getByText(/Backend đang chạy chưa hỗ trợ bản nháp/).waitFor();
@@ -393,9 +395,10 @@ try {
   await settings.getByRole('button',{name:'Thử lại bản nháp',exact:true}).click();
   await settings.getByText('Fixture SQLite unavailable',{exact:true}).waitFor();
   draftListStatus=200;
+  const formattedBrief='**Tên phim: Chú mèo cam khám phá khu rừng** Phong cách: Hoạt hình. **Nhân vật:** Miu. **Kịch bản:** Miu thức dậy.\nMiu đi tìm bạn.';
   await settings.route('**/api/film/drafts/start',route=>{
     const {id,...brief}=route.request().postDataJSON();
-    if(!/^[0-9a-f]{32}$/.test(id)||!['Chú mèo cam khám phá khu rừng','Ý tưởng mới'].includes(brief.idea)||
+    if(!/^[0-9a-f]{32}$/.test(id)||![formattedBrief,'Ý tưởng mới'].includes(brief.idea)||
         brief.seconds!==null||brief.scene_count!==null||brief.duration_mode!=='auto'||brief.ratio!=='16:9'||
         brief.mode!=='motion'||'motion_approved' in brief)
       throw new Error('Unexpected draft submission');
@@ -403,10 +406,22 @@ try {
       activity:{operation:'plan',provider:'ollama',model:'fixture-planner'}};
     return route.fulfill({json:draftFixture});
   });
-  await settings.getByLabel('Nội dung video',{exact:true}).fill('Chú mèo cam khám phá khu rừng');
+  await settings.getByLabel('Nội dung video',{exact:true}).fill(formattedBrief);
   await settings.getByRole('button',{name:'Tạo storyboard',exact:true}).click();
   const draftProgress=settings.getByRole('region',{name:'Tiến độ tạo bản nháp'});
   await draftProgress.getByText('Đang lập kế hoạch',{exact:true}).waitFor();
+  await settings.getByRole('button',{name:'Hủy tác vụ',exact:true}).waitFor();
+  if(await settings.getByRole('button',{name:/^(Tác vụ đang chạy|Xóa bản nháp)$/}).count())
+    throw new Error('Running draft shows a pause or delete control');
+  await draftProgress.getByRole('heading',{name:'Chú mèo cam khám phá khu rừng',exact:true}).waitFor();
+  await settings.getByRole('button',{name:'Xem nội dung video',exact:true}).click();
+  const scriptReader=settings.getByRole('dialog',{name:'Nội dung video',exact:true});
+  await scriptReader.getByRole('heading',{name:'Nhân vật:',exact:true}).waitFor();
+  const scriptParagraph=scriptReader.locator('section p').filter({hasText:'Miu thức dậy.'});
+  if(await scriptParagraph.textContent()!=='Miu thức dậy.\nMiu đi tìm bạn.')
+    throw new Error('Script lost the original line break');
+  await scriptReader.locator('.ant-modal-footer').getByRole('button',{name:'Đóng',exact:true}).click();
+  await scriptReader.waitFor({state:'hidden'});
   const briefEditor=settings.getByLabel('Nội dung video',{exact:true});
   if(await briefEditor.inputValue()!=='')throw new Error('Submitted storyboard left text in the composer');
   await draftProgress.getByText('Ollama · fixture-planner',{exact:true}).waitFor();
@@ -425,14 +440,29 @@ try {
   await briefEditor.waitFor();
   if(await briefEditor.inputValue()!=='')throw new Error('Submitted storyboard text was restored after refresh');
   await settings.getByRole('tab',{name:/^Chú mèo cam khám phá khu rừng/}).waitFor();
+  const draftActionPosition=name=>settings.getByRole('button',{name,exact:true}).evaluate(button=>{
+    const item=button.closest('.ant-collapse-item').getBoundingClientRect();
+    const rect=button.getBoundingClientRect();
+    return [item.right-rect.right,rect.top-item.top,rect.width,rect.height];
+  });
+  const cancelPosition=await draftActionPosition('Hủy tác vụ');
   draftFixture={...draftFixture,status:'FAILED',worker_active:false,error:'Fixture runtime unavailable'};
   await settings.getByText('Fixture runtime unavailable',{exact:true}).waitFor();
+  const deletePosition=await draftActionPosition('Xóa bản nháp');
+  if(cancelPosition.some((value,index)=>Math.abs(value-deletePosition[index])>1))
+    throw new Error(`Draft controls do not align: cancel ${cancelPosition}; delete ${deletePosition}`);
   await settings.route('**/api/film/drafts/*/resume',route=>{
     draftFixture=null;
     draftListStatus=503;
     return route.fulfill({status:404,json:{error:'draft_not_found'}});
   });
-  await settings.getByRole('button',{name:'Tiếp tục từ checkpoint'}).click();
+  const failedDraftRow=settings.getByRole('tab',{name:/^Chú mèo cam khám phá khu rừng/});
+  await failedDraftRow.click();
+  await draftProgress.waitFor({state:'hidden'});
+  const resumeButton=failedDraftRow.getByRole('button',{name:'Tiếp tục từ checkpoint'});
+  await resumeButton.hover();
+  await settings.locator('.af-tooltip').getByRole('tooltip').getByText('Tiếp tục từ checkpoint',{exact:true}).waitFor();
+  await resumeButton.click();
   await settings.getByText(/Bản nháp này không còn tồn tại/).waitFor();
   await settings.getByText('Fixture SQLite unavailable',{exact:true}).waitFor();
   await settings.getByRole('tab',{name:/^Chú mèo cam khám phá khu rừng/}).waitFor({state:'hidden'});
@@ -446,6 +476,7 @@ try {
   const scene={seconds:2,description:'Miu quay đầu',character_ids:[],audio:'',asset:'fixture-image'};
   draftFixture={...draftFixture,status:'STORYBOARD_REVIEW',stage:'STORYBOARD',worker_active:false,
     storyboard_version:1,storyboard_sha:'a'.repeat(64),
+    brief:{...draftFixture.brief,idea:'Miu tìm đường về nhà.\n'.repeat(450)},
     duration_plan:{estimated_duration_seconds:6,recommended_shot_count:3,duration_reasoning:'Ba hành động chính.'},
     board:{title:'Ý tưởng mới',scenes:[scene,scene,scene]}};
   await settings.route('**/api/film/drafts/*/storyboard-approve',route=>{
@@ -460,8 +491,29 @@ try {
   await draftProgress.locator('.production-header').getByText('Storyboard chờ duyệt',{exact:true}).waitFor();
   await settings.getByRole('button',{name:'Xem storyboard',exact:true}).click();
   const storyboardDialog=settings.getByRole('dialog',{name:'Ý tưởng mới'});
+  await storyboardDialog.getByText('Nội dung & phiên bản',{exact:true}).click({trial:true});
+  const storyboardHeight=()=>storyboardDialog.locator('.ant-modal-container').evaluate(panel=>panel.offsetHeight);
+  const sceneHeight=await storyboardHeight();
+  await storyboardDialog.getByText('Nội dung & phiên bản',{exact:true}).click();
   await storyboardDialog.getByText('Ba hành động chính.',{exact:true}).waitFor();
+  const sourceHeight=await storyboardHeight();
+  const [sourceContent,sourceViewport]=await storyboardDialog.getByRole('region',{name:'Nội dung video và phiên bản'})
+    .evaluate(panel=>[panel.scrollHeight,panel.clientHeight]);
+  if(sceneHeight!==sourceHeight||sourceContent<=sourceViewport)
+    throw new Error(`Storyboard heights: scenes ${sceneHeight}, source ${sourceHeight}, scroll ${sourceContent}/${sourceViewport}`);
   await storyboardDialog.getByRole('button',{name:'Cập nhật thời lượng',exact:true}).waitFor();
+  const durationField=storyboardDialog.getByRole('spinbutton',{name:'Thời lượng storyboard'});
+  if(await durationField.getAttribute('aria-valuemax')!=='60')
+    throw new Error('Storyboard duration does not expose the 60-second limit');
+  await durationField.locator('..').locator('.ant-input-number-actions').waitFor();
+  await durationField.hover();
+  if(!await durationField.evaluate(input=>{
+    const field=input.closest('.dashboard-number-field');
+    const suffix=field.querySelector('.ant-input-number-suffix').getBoundingClientRect();
+    const actions=field.querySelector('.ant-input-number-actions').getBoundingClientRect();
+    return input.getBoundingClientRect().right<=suffix.left&&suffix.right<=actions.left&&actions.width>20;
+  }))throw new Error('Storyboard number, unit and controls overlap on hover');
+  await storyboardDialog.getByText('Các cảnh',{exact:true}).click();
   await storyboardDialog.getByRole('button',{name:/Cảnh 02/}).click();
   await storyboardDialog.getByRole('heading',{name:'Cảnh 2',exact:true}).waitFor();
   const reviewViewport=settings.viewportSize();
@@ -503,8 +555,48 @@ try {
   await draftPreview.getByText('Không phát được MP4').waitFor();
   await settings.keyboard.press('Escape');
   await draftPreview.waitFor({state:'hidden'});
+  archivedDrafts=[
+    {...draftFixture,id:'d'.repeat(32),status:'REJECTED',storyboard_version:undefined,
+      brief:{...draftFixture.brief,mode:'still'},board:{...draftFixture.board,title:'Bản ảnh tĩnh đã từ chối'}},
+    {...draftFixture,id:'e'.repeat(32),status:'APPROVED',
+      board:{...draftFixture.board,title:'Storyboard đã duyệt'}},
+  ];
+  await settings.locator('.studio-drafts-list').getByRole('button',{name:'Làm mới',exact:false}).click();
   await settings.getByRole('tab',{name:'Đã kết thúc',exact:true}).click();
-  await settings.getByRole('tab',{name:/^Bản nháp đã hủy/}).waitFor();
+  const rejectedRow=settings.getByRole('tab',{name:/^Bản ảnh tĩnh đã từ chối/});
+  await rejectedRow.waitFor();
+  if(await rejectedRow.getAttribute('aria-expanded')!=='true')await rejectedRow.locator('.draft-row-label').click();
+  await draftProgress.getByRole('heading',{name:'Bản ảnh tĩnh đã từ chối',exact:true}).waitFor();
+  if(await settings.getByRole('button',{name:/^Sửa cảnh \d/}).count())
+    throw new Error('Rejected legacy video shows scene edit controls');
+  await settings.getByRole('tab',{name:/^Storyboard đã duyệt/}).getByRole('button',{name:'Xem storyboard'}).click();
+  const archivedStoryboard=settings.getByRole('dialog',{name:'Storyboard đã duyệt'});
+  await archivedStoryboard.getByRole('heading',{name:'Cảnh 1',exact:true}).waitFor();
+  if(await archivedStoryboard.getByRole('button',{name:/^(Sửa cảnh|AI viết lại|Thêm cảnh|Bỏ cảnh)$/}).count())
+    throw new Error('Approved storyboard shows editing controls');
+  await settings.keyboard.press('Escape');
+  await archivedStoryboard.waitFor({state:'hidden'});
+  const cancelledTab=settings.getByRole('tab',{name:/^Bản nháp đã hủy/});
+  await cancelledTab.waitFor();
+  await settings.route('**/api/film/drafts/*/delete',route=>{
+    if(!route.request().url().endsWith('/'+cancelledDraft.id+'/delete'))
+      throw new Error('Incorrect draft selected for deletion');
+    const {id}=cancelledDraft;
+    cancelledDraft=null;
+    return route.fulfill({json:{id,deleted:true}});
+  });
+  const deleteButton=settings.getByRole('button',{name:'Xóa bản nháp',exact:true});
+  if(await deleteButton.getAttribute('title'))throw new Error('Draft delete still uses a native tooltip');
+  await deleteButton.focus();
+  await settings.locator('.af-tooltip').getByRole('tooltip').getByText('Xóa bản nháp',{exact:true}).waitFor();
+  await deleteButton.click();
+  const deleteDialog=settings.getByRole('dialog',{name:'Xóa bản nháp?'});
+  await deleteDialog.getByRole('button',{name:'Giữ lại',exact:true}).click();
+  await deleteDialog.waitFor({state:'hidden'});
+  await cancelledTab.waitFor();
+  await settings.getByRole('button',{name:'Xóa bản nháp',exact:true}).click();
+  await deleteDialog.getByRole('button',{name:'Xóa bản nháp',exact:true}).click();
+  await cancelledTab.waitFor({state:'hidden'});
   const editor=settings.getByLabel('Nội dung video',{exact:true});
   const longScript='Cảnh 1 — Miu ngắm mưa.\n\n'+'Miu đi chậm về phía cửa sổ. 🐱\n\n'.repeat(520);
   await editor.fill(longScript);
@@ -609,7 +701,7 @@ try {
   await openOptions.filter({hasText:/^ComfyUI$/}).evaluate(option=>option.click());
   await registerDialog.getByLabel('Mã checkpoint',{exact:true}).waitFor();
   await registerDialog.getByRole('combobox',{name:'Runtime'}).click();
-  await openOptions.filter({hasText:/^Ollama$/}).click();
+  await openOptions.filter({hasText:/^Ollama$/}).evaluate(option=>option.click());
   await registerDialog.getByLabel('Tên model',{exact:true}).fill('synthetic-local:8b');
   await registerDialog.getByLabel('Mã hồ sơ',{exact:true}).fill('local_primary');
   const localEndpoint=registerDialog.getByLabel('Địa chỉ runtime local',{exact:true});
@@ -634,6 +726,10 @@ try {
   await decompose.check();
   const dailyLimit=settings.getByRole('spinbutton',{name:'Lượt gọi API trả phí mỗi ngày'});
   if(await dailyLimit.inputValue()!=='10')throw new Error('Default paid API limit is incorrect');
+  if(!await dailyLimit.evaluate(input=>Boolean(input.closest('.dashboard-number-field')
+    ?.querySelector('.ant-input-number-suffix'))))throw new Error('Settings does not use the shared number field');
+  await dailyLimit.press('ArrowUp');
+  if(await dailyLimit.inputValue()!=='11')throw new Error('Number field lost keyboard stepping');
   await dailyLimit.fill('37');
   const toolsToggle=settings.getByRole('switch',{name:'Chạy công cụ local'});
   const toolsSelect=settings.getByRole('combobox',{name:'Công cụ local được phép'});

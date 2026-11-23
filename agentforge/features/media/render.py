@@ -7,21 +7,33 @@ import os
 import re
 import shutil
 import subprocess
+from pathlib import Path
 
-from agentforge.paths import REPOSITORY_ROOT, ensure_local_root
+from agentforge.paths import COMPANY_DATA_DIR, REPOSITORY_ROOT, ensure_local_root
 
 VOICE_RE = re.compile(r"[A-Za-z0-9_.-]{1,100}\Z")
 
 
+def find_media_tool(tool):
+    if tool not in {"ffmpeg", "ffprobe"}:
+        raise ValueError("Unsupported media tool")
+    name = tool + ".exe" if os.name == "nt" else tool
+    local = ensure_local_root(COMPANY_DATA_DIR / "runtime_tools" / "ffmpeg" / name)
+    if local.is_file():
+        return str(local)
+    installed = shutil.which(tool)
+    return str(Path(installed).absolute()) if installed else None
+
+
 def _ffmpeg():
+    installed = find_media_tool("ffmpeg")
+    if installed:
+        return installed
     try:
         import imageio_ffmpeg
         return imageio_ffmpeg.get_ffmpeg_exe()
     except (ImportError, RuntimeError, OSError):
-        binary = shutil.which("ffmpeg")
-        if binary is None:
-            raise RuntimeError("FFmpeg missing: install the explicit [media] extra")
-        return binary
+        raise RuntimeError("FFmpeg missing: install the explicit [media] extra") from None
 
 
 def _run_process(args, *, cwd, timeout=180, input_text=None):

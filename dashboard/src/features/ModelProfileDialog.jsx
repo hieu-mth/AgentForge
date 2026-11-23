@@ -1,5 +1,6 @@
 import {Fragment,useState} from 'react';
-import {Alert,Button,Form,Input,InputNumber,Modal,Radio,Select,Space,Switch} from 'antd';
+import {Alert,Button,Form,Input,Modal,Radio,Select,Space,Switch} from 'antd';
+import {NumberField} from '../components/NumberField.jsx';
 import {ApiOutlined,CloudOutlined,DesktopOutlined} from '@ant-design/icons';
 import {SectionTitle} from '../components/settings.jsx';
 import {profilePayload} from '../model_hub_ui.js';
@@ -145,7 +146,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
               ['max_steps','Số bước tối đa',1,20],
               ['timeout_seconds','Thời gian chờ (giây)',5,600],
             ].map(([key,label,min,max])=><Form.Item key={key} name={['flux_settings',key]} label={label}
-              rules={[{required:true,type:'integer',min,max}]}><InputNumber min={min} max={max}/></Form.Item>)}
+              rules={[{required:true,type:'integer',min,max}]}><NumberField min={min} max={max}/></Form.Item>)}
             <Form.Item name={['flux_settings','output_dir']} label="Thư mục con trong workspace"
               rules={[{required:true}]}><Input spellCheck={false}/></Form.Item>
           </div>

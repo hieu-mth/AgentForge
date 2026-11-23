@@ -1,5 +1,6 @@
 ﻿import {useRef,useState} from 'react';
-import {Alert,Button,Form,Image,Input,InputNumber,Modal,Space,Typography} from 'antd';
+import {Alert,Button,Form,Image,Input,Modal,Space,Typography} from 'antd';
+import {NumberField} from '../components/NumberField.jsx';
 import {requestError} from '../api.js';
 
 export const fluxStatus={
@@ -59,13 +60,13 @@ export function FluxProbeDialog({profile,revision,mutate,onCancel}) {
         {['width','height'].map((key,index)=><Form.Item key={key} name={key}
           label={index?'Cao (px)':'Rộng (px)'} rules={[{required:true,type:'integer',min:256,max:max_resolution},
             {validator:(_,v)=>v==null||v%16===0?Promise.resolve():Promise.reject(new Error('Dùng bội số của 16.'))}]}>
-          <InputNumber min={256} max={max_resolution} step={16}/>
+          <NumberField min={256} max={max_resolution} step={16}/>
         </Form.Item>)}
         <Form.Item name="steps" label="Số bước" rules={[{required:true,type:'integer',min:1,max:max_steps}]}>
-          <InputNumber min={1} max={max_steps}/>
+          <NumberField min={1} max={max_steps}/>
         </Form.Item>
         <Form.Item name="seed" label="Seed" rules={[{type:'integer',min:0,max:Number.MAX_SAFE_INTEGER}]}>
-          <InputNumber min={0} max={Number.MAX_SAFE_INTEGER} placeholder="Ngẫu nhiên"/>
+          <NumberField min={0} max={Number.MAX_SAFE_INTEGER} placeholder="Ngẫu nhiên"/>
         </Form.Item>
       </Space>
       <Button type="primary" htmlType="submit" aria-label="Tạo ảnh" loading={pending}>Tạo ảnh</Button>

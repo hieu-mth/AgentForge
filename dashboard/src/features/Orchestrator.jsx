@@ -1,5 +1,6 @@
 import {useEffect,useState} from 'react';
-import {App as AntApp,Button,Card,Checkbox,Form,Grid,InputNumber,Radio,Select,Space,Switch,Table,Typography} from 'antd';
+import {App as AntApp,Button,Card,Checkbox,Form,Grid,Radio,Select,Space,Switch,Table,Typography} from 'antd';
+import {NumberField} from '../components/NumberField.jsx';
 import {ApartmentOutlined,ControlOutlined,RollbackOutlined,SafetyCertificateOutlined,SaveOutlined,TeamOutlined} from '@ant-design/icons';
 import {SectionTitle,SettingsHeading,SettingsStatus} from '../components/settings.jsx';
 import {useResource,ResourceStatus} from '../use_resource.jsx';
@@ -42,7 +43,7 @@ function LimitField({name,label,min,max,unit,note}){
   return <Form.Item name={name} label={label} extra={note}
     rules={[{required:true,type:'integer',min,max,message:
       max===Number.MAX_SAFE_INTEGER?'Nhập số nguyên không âm.':`Nhập số nguyên từ ${min} đến ${max}.`}]}>
-    <InputNumber aria-label={label} min={min} max={max} precision={0} addonAfter={unit}/>
+    <NumberField aria-label={label} min={min} max={max} precision={0} suffix={unit}/>
   </Form.Item>;
 }
 
@@ -259,7 +260,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
             {!exclusive&&<div className="orchestrator-gpu-count">
               <Form.Item name="gpu_concurrency"
                 rules={[{required:true,type:'integer',min:1,max:8,message:'Nhập số nguyên từ 1 đến 8.'}]}>
-                <InputNumber aria-label="Tác vụ GPU đồng thời" min={1} max={8} precision={0}/>
+                <NumberField aria-label="Tác vụ GPU đồng thời" min={1} max={8} precision={0}/>
               </Form.Item>
               <span aria-hidden="true">tác vụ</span>
             </div>}

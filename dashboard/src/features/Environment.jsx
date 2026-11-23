@@ -1,5 +1,6 @@
+import {AppTooltip} from '../components/AppTooltip.jsx';
 import {ComfyService} from './ComfyService.jsx';
-import {Alert, Button, Card, Empty, Grid, Table, Tooltip, Typography} from 'antd';
+import {Alert, Button, Card, Empty, Grid, Table, Typography} from 'antd';
 import {AppstoreOutlined, CloudServerOutlined, CodeOutlined, DatabaseOutlined,
   DesktopOutlined, HddOutlined, InfoCircleOutlined, ReloadOutlined,
   SafetyCertificateOutlined, ThunderboltOutlined} from '@ant-design/icons';
@@ -170,10 +171,10 @@ export function Environment({onNavigate,mutate}){
           sub={'Tổng '+formatMemory(memory.total_bytes)+
             (memoryUsage!==null?' · Đã dùng '+memoryUsage+'%':'')}
           progress={memoryUsage}/>
-        <Stat icon={<HddOutlined/>} label={<>Ổ đĩa workspace <Tooltip
-          title="Ổ đĩa, RAM và VRAM dùng hệ 1.024 như Windows. Dung lượng model dùng hệ 1.000."
-          trigger={['hover','focus']}><button className="env-unit-help" type="button"
-            aria-label="Quy ước đơn vị dung lượng"><InfoCircleOutlined/></button></Tooltip></>}
+        <Stat icon={<HddOutlined/>} label={<>Ổ đĩa workspace <AppTooltip
+          title="Ổ đĩa, RAM và VRAM dùng hệ 1.024 như Windows. Dung lượng model dùng hệ 1.000.">
+          <button className="env-unit-help" type="button"
+            aria-label="Quy ước đơn vị dung lượng"><InfoCircleOutlined/></button></AppTooltip></>}
           value={formatMemory(disk.free_bytes)}
           sub={'Tổng '+formatMemory(disk.total_bytes)+
             (diskUsage!==null?' · Đã dùng '+diskUsage+'%':'')}

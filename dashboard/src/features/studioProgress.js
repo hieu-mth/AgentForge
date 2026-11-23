@@ -7,6 +7,17 @@ export const productionStages = [
 const verifiedStatuses=new Set(['REVIEW','APPROVED','REJECTED']);
 const blockedStatuses=new Set(['WAITING_RESOURCES','STORYBOARD_REVIEW','INTERRUPTED','NEEDS_RECONCILIATION','QUEUED','CANCELLED']);
 
+export function productionElapsed(job,active,now) {
+  const sample=job?.resources?.findLast(point=>point.before?.checked_at&&point.after?.checked_at);
+  const start=job?.attempt_started_at??(active?job?.started_at:sample?.before.checked_at);
+  const end=active?now:Date.parse(job?.attempt_finished_at??sample?.after.checked_at);
+  const seconds=Math.floor((end-Date.parse(start))/1000);
+  if(!Number.isFinite(seconds)||seconds<0)return null;
+  const hours=Math.floor(seconds/3600),minutes=Math.floor(seconds/60)%60;
+  const label=[hours&&hours+' giờ',minutes&&minutes+' phút',seconds%60+' giây'].filter(Boolean).join(' ');
+  return !active&&!job.attempt_finished_at?'Bước gần nhất · '+label:label;
+}
+
 export function productionProgress(job) {
   const scenes=job?.board?.scenes??[];
   const moving=job?.brief?.mode==='motion';

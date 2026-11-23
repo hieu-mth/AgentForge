@@ -11,6 +11,8 @@
 .production-mark {display:grid; place-items:center; flex:0 0 42px; height:42px; border-radius:12px;
   color:var(--prod-primary); background:var(--prod-tint); font-size:20px}
 .production-meta,.production-progress small {color:var(--prod-muted);font-size:12px}
+.production-elapsed {display:inline-flex;align-items:center;gap:4px;line-height:1.3}
+.production-elapsed .anticon {flex:none}
 .production-overall {padding:12px 14px;border-radius:12px;background:var(--prod-fill);overflow-wrap:anywhere}
 .production-overall .ant-progress-bg {transition:width .35s ease}
 .production-error {margin:6px 0;color:var(--prod-error)}

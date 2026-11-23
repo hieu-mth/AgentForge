@@ -1,6 +1,8 @@
+import {AppTooltip} from '../components/AppTooltip.jsx';
 ﻿import {useEffect,useRef,useState} from 'react';
-import {Alert,Button,Card,Collapse,Empty,Form,Input,InputNumber,Modal,Select,Space,Tabs,Tag} from 'antd';
-import {ReloadOutlined} from '@ant-design/icons';
+import {Alert,App as AntApp,Button,Card,Collapse,Empty,Form,Input,Modal,Select,Space,Tabs,Tag} from 'antd';
+import {NumberField} from '../components/NumberField.jsx';
+import {CaretRightFilled,CloseOutlined,DeleteOutlined,FileTextOutlined,ReloadOutlined} from '@ant-design/icons';
 import {useResource,ResourceStatus} from '../use_resource.jsx';
 import {useScreenRefresh} from '../refresh_scope.jsx';
 import {requestError} from '../api.js';
@@ -8,6 +10,9 @@ import {formatMemory,formatVram} from '../environment_format.js';
 import {StudioPreview} from './StudioPreview.jsx';
 import {StoryboardReview} from './StoryboardReview.jsx';
 import {ProductionProgress} from './ProductionProgress.jsx';
+import {ScriptContent} from './ScriptContent.jsx';
+import {draftTitle} from './scriptPresentation.js';
+import {MAX_STUDIO_SECONDS,maxMotionShots} from './studioDuration.js';
 import './studio-draft-progress.css';
 
 const API='/api/film/drafts';
@@ -66,14 +71,14 @@ const draftTimestamp=job=>Number.isFinite(Date.parse(job.updated_at))?job.update
 const draftTime=job=>Date.parse(draftTimestamp(job))||0;
 
 function DraftLabel({job}){
-  const title=job.board?.title||job.brief.idea;
+  const title=draftTitle(job);
   const stamp=draftTimestamp(job);
   const date=stamp&&new Date(stamp);
   const status=job.status==='RUNNING'&&!job.worker_active?'Đã gián đoạn':
     labels[job.status==='RUNNING'?job.stage:job.status]??job.status;
   return <div className="draft-row-label">
     <div className="draft-row-heading">
-      <strong title={title}>{title}</strong>
+      <AppTooltip title={title}><strong>{title}</strong></AppTooltip>
       <Tag color={job.status==='RUNNING'&&!job.worker_active?'warning':statusColors[job.status]}>{status}</Tag>
     </div>
     <div className="draft-row-meta env-muted">
@@ -89,6 +94,7 @@ function DraftLabel({job}){
 }
 
 export function StudioDrafts({mutate,onCharacters}) {
+  const {modal}=AntApp.useApp();
   const [form]=Form.useForm();
   const [initialBrief]=useState(savedBrief);
   const [saveFailed,setSaveFailed]=useState(false);
@@ -113,6 +119,7 @@ export function StudioDrafts({mutate,onCharacters}) {
   const [previewId,setPreviewId]=useState(null);
   const [selectedId,setSelectedId]=useState(null);
   const [storyboardId,setStoryboardId]=useState(null);
+  const [sourceId,setSourceId]=useState(null);
   const drafts=Array.isArray(data?.drafts)?data.drafts.filter(job=>!missing.includes(job.id)):[];
   const visibleDrafts=drafts.filter(job=>historyStates.has(job.status)===(filter==='history'))
     .sort((a,b)=>draftTime(b)-draftTime(a));
@@ -122,12 +129,13 @@ export function StudioDrafts({mutate,onCharacters}) {
   const active=drafts.find(job=>job.status==='RUNNING'&&job.worker_active);
   const featured=selectedId===null?visibleDrafts[0]:visibleDrafts.find(job=>job.id===selectedId);
   const reviewing=drafts.find(job=>job.id===storyboardId&&job.board);
-  const canEdit=reviewing?.storyboard_version&&['STORYBOARD_REVIEW','FAILED','REVIEW','APPROVED','REJECTED'].includes(reviewing.status);
+  const sourceDraft=drafts.find(job=>job.id===sourceId);
+  const canEdit=reviewing?.storyboard_version&&['STORYBOARD_REVIEW','FAILED','REVIEW'].includes(reviewing.status);
   const sceneCount=reviewing?.board.scenes.length;
   const minScenes=reviewing?.brief.mode==='motion'?
     (reviewing.brief.duration_mode?Math.max(2,Math.ceil(reviewing.brief.seconds*24/49)):motionShots[reviewing.brief.seconds]):2;
   const maxScenes=reviewing?.brief.mode==='motion'?
-    (reviewing.brief.duration_mode?Math.min(16,reviewing.brief.seconds):motionMaxShots[reviewing.brief.seconds]):
+    (reviewing.brief.duration_mode?maxMotionShots(reviewing.brief.seconds):motionMaxShots[reviewing.brief.seconds]):
     Math.min(6,Math.floor((reviewing?.brief.seconds??0)/2));
   const running=!listError&&Boolean(active);
   const queued=drafts.filter(job=>job.status==='QUEUED').length;
@@ -152,8 +160,9 @@ export function StudioDrafts({mutate,onCharacters}) {
     try {
       const result=await mutate(API+path,body,{inlineError:true});
       if(result?.id) {
-        setData({drafts:[{...result,worker_active:result.worker_active??result.status==='RUNNING'},
-          ...drafts.filter(job=>job.id!==result.id)]});
+        const remaining=drafts.filter(job=>job.id!==result.id);
+        setData({drafts:result.deleted?remaining:[
+          {...result,worker_active:result.worker_active??result.status==='RUNNING'},...remaining]});
       }
       done?.(result);
       await reload();
@@ -173,6 +182,30 @@ export function StudioDrafts({mutate,onCharacters}) {
       setPending(false);
       setStarting(false);
     }
+  }
+
+  function draftAction(job) {
+    const canDelete=['CANCELLED','FAILED','STORYBOARD_REVIEW'].includes(job.status)&&
+      !job.video_sha&&!job.storyboard_history?.some(entry=>entry.video_sha);
+    const canCancel=['QUEUED','RUNNING','WAITING_RESOURCES'].includes(job.status)||
+      (job.status==='INTERRUPTED'&&job.stage!=='MOTION');
+    if(!canCancel&&!canDelete)return null;
+    const label=canDelete?'Xóa bản nháp':'Hủy tác vụ';
+    return <AppTooltip title={label}><Button size="small" type="text" danger disabled={pending}
+      className="draft-icon-action draft-danger-action"
+      aria-label={label} icon={canDelete?<DeleteOutlined/>:<CloseOutlined/>}
+      onKeyDown={event=>event.stopPropagation()} onClick={event=>{
+        event.stopPropagation();
+        modal.confirm({
+          title:label+'?',
+          content:canDelete?'Bản nháp và các tệp riêng của nó sẽ bị xóa vĩnh viễn.':
+            'Yêu cầu dừng tác vụ. Khi đã hủy, bạn có thể xóa bản nháp.',
+          okText:label,cancelText:'Giữ lại',okButtonProps:{danger:true},
+          onOk:()=>run('/'+job.id+(canDelete?'/delete':'/cancel'),{},result=>{
+            if(result?.deleted&&featured?.id===job.id)setSelectedId(null);
+          }),
+        });
+      }}/></AppTooltip>;
   }
 
   function submit(values) {
@@ -244,8 +277,8 @@ export function StudioDrafts({mutate,onCharacters}) {
             <Select style={{width:180}} options={[{value:'auto',label:'AI tự đề xuất'},{value:'manual',label:'Nhập thủ công'}]}/>
           </Form.Item>
           {manual&&<Form.Item name="targetSeconds" label="Thời lượng"
-            rules={[{required:true,type:'integer',min:moving?4:6,max:30}]}>
-            <InputNumber min={moving?4:6} max={30} precision={0} suffix="giây"/>
+            rules={[{required:true,type:'integer',min:moving?4:6,max:MAX_STUDIO_SECONDS}]}>
+            <NumberField min={moving?4:6} max={MAX_STUDIO_SECONDS} precision={0} suffix="giây"/>
           </Form.Item>}
         </Space>
       </details>
@@ -276,22 +309,32 @@ export function StudioDrafts({mutate,onCharacters}) {
       activeKey={featured?.id??[]} onChange={key=>setSelectedId((Array.isArray(key)?key[0]:key)??'')}
       items={visibleDrafts.map(job=>({key:job.id,
         label:<DraftLabel job={job}/>,
-        extra:<Space wrap>
+        extra:<Space className="draft-row-actions" size={4} wrap>
+          {['QUEUED','WAITING_RESOURCES','INTERRUPTED','NEEDS_RECONCILIATION','FAILED'].includes(job.status)&&
+            <AppTooltip title="Tiếp tục từ checkpoint"><Button size="small" type="text" className="draft-icon-action"
+              disabled={pending||running} icon={<CaretRightFilled/>}
+              aria-label="Tiếp tục từ checkpoint"
+              onKeyDown={event=>event.stopPropagation()}
+              onClick={event=>{
+                event.stopPropagation();
+                setSelectedId(job.id);
+                run('/'+job.id+'/resume',{});
+              }}/></AppTooltip>}
           {job.board&&<Button size="small" type={job.status==='STORYBOARD_REVIEW'?'primary':'default'}
             onKeyDown={event=>event.stopPropagation()}
             onClick={event=>{event.stopPropagation();setSelectedId(job.id);setError(null);setStoryboardId(job.id);}}>Xem storyboard</Button>}
           {job.video_sha&&<Button size="small" onKeyDown={event=>event.stopPropagation()}
             onClick={event=>{event.stopPropagation();setSelectedId(job.id);setPreviewId(job.id);}}>Xem video</Button>}
+          {draftAction(job)}
         </Space>,
         children:<>
-          <ProductionProgress job={job} labels={labels} warnings={warnings} busy={pending}
-            onCancel={()=>run('/'+job.id+'/cancel',{})}
-            onResume={!running?()=>run('/'+job.id+'/resume',{}):null}/>
-          {!job.board&&<details><summary>Nội dung video</summary>
-            <p className="draft-source-text">{job.brief.idea}</p>
-          </details>}
-          {!job.storyboard_version&&job.brief.mode!=='motion'&&job.board?.scenes.map((scene,index)=>
-            <Button key={index} disabled={running||pending||job.status==='APPROVED'}
+          <ProductionProgress job={job} labels={labels} warnings={warnings}/>
+          {!job.board&&<Button type="default" aria-label="Xem nội dung video" icon={<FileTextOutlined/>}
+            onClick={()=>setSourceId(job.id)}>
+            Xem nội dung video
+          </Button>}
+          {!historyStates.has(job.status)&&!job.storyboard_version&&job.brief.mode!=='motion'&&job.board?.scenes.map((scene,index)=>
+            <Button key={index} disabled={running||pending}
               onClick={()=>setEditor({id:job.id,index,scene})}>Sửa cảnh {index+1}</Button>)}
         </>,
       }))}/>}
@@ -306,6 +349,10 @@ export function StudioDrafts({mutate,onCharacters}) {
       onAdd={canEdit&&sceneCount<maxScenes?()=>setEditor({job:reviewing,adding:true,index:sceneCount,scene:{}}):null}
       onDuration={canEdit&&reviewing.brief.duration_mode?seconds=>storyboard(reviewing,'duration',{seconds}):null}
       onPreview={(index,sha)=>setScenePreview({id:reviewing.id,index,sha})}/>}
+    {sourceDraft&&<Modal open centered width={760} rootClassName="script-reader" title="Nội dung video"
+      onCancel={()=>setSourceId(null)} footer={<Button onClick={()=>setSourceId(null)}>Đóng</Button>}>
+      <ScriptContent text={sourceDraft.brief.idea}/>
+    </Modal>}
     {scenePreview&&<Modal open title={'Chuyển động cảnh '+(scenePreview.index+1)} footer={null}
       onCancel={()=>setScenePreview(null)}>
       <StudioPreview key={scenePreview.sha} initiallyOpen label="Xem clip chuyển động" filename="motion.mp4"

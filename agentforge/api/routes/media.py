@@ -22,7 +22,7 @@ def handle(server, path, request, session=None):
             "storyboard-rewrite": {"sha256", "index", "feedback"},
             "storyboard-duration": {"sha256", "seconds"},
         }
-        if len(parts) != 6 or parts[5] not in {"approve", "reject", "edit", "resume", "cancel", *storyboard}:
+        if len(parts) != 6 or parts[5] not in {"approve", "reject", "edit", "resume", "cancel", "delete", *storyboard}:
             raise ValueError("Unknown draft action")
         from agentforge.features.film_studio import draft_pipeline
         identifier, action = parts[4:]

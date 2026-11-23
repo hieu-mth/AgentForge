@@ -52,6 +52,8 @@ export function buildTheme(mode) {
         headerSplitColor: 'transparent', cellPaddingBlock: 14},
       Tabs: {horizontalItemPadding: '12px 4px', itemColor: dark ? '#9aa0c4' : '#6a7192'},
       Button: {fontWeight: 500, primaryShadow: '0 6px 16px rgba(91,94,244,.28)'},
+      Tooltip: {colorBgSpotlight: dark ? '#303753' : '#252c44',
+        colorTextLightSolid: '#f7f8ff', borderRadius: 8},
       Drawer: {colorBgElevated: dark ? '#11142a' : '#ffffff'},
     },
   };

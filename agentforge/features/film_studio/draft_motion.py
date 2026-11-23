@@ -3,7 +3,6 @@ import hashlib
 import http.client
 import json
 import re
-import shutil
 import tempfile
 import time
 from contextlib import closing
@@ -13,6 +12,7 @@ from uuid import UUID
 
 from agentforge.ai import model_hub
 from agentforge.features.film_studio import draft_resources, draft_timeline, long_form, motion_comfy, motion_ltx, motion_verify
+from agentforge.features.media import render
 from agentforge.integrations import comfy_service
 from agentforge.paths import ensure_local_root
 
@@ -35,9 +35,10 @@ def binding(bindings):
     config = comfy_service._settings()
     if not config or config["port"] != endpoint.port:
         raise ValueError("Configure the AgentForge ComfyUI launcher on the Motion endpoint")
-    for tool in ("ffmpeg", "ffprobe"):
-        if not shutil.which(tool):
-            raise ValueError("Motion verification requires FFmpeg and ffprobe on AgentForge's PATH")
+    missing = [tool for tool in ("ffmpeg", "ffprobe") if not render.find_media_tool(tool)]
+    if missing:
+        raise ValueError("Thiếu công cụ xác minh video: " + ", ".join(missing)
+                         + ". AgentForge tìm trong data/company/runtime_tools/ffmpeg hoặc PATH của backend.")
     return profile
 
 
@@ -76,6 +77,18 @@ def require_resolved_ledger(job):
             if any(row[0] not in owned for row in conn.execute(
                     "SELECT job_id FROM motion_jobs WHERE state IN ('SUBMITTING','SUBMITTED')")):
                 raise draft_resources.ResourceBlocked("MOTION_RECONCILIATION_REQUIRED")
+
+
+def require_draft_removable(ident):
+    conn = motion_comfy._db(motion_comfy.DB)
+    if conn is not None:
+        with closing(conn):
+            if conn.execute(
+                "SELECT 1 FROM motion_jobs WHERE state IN ('SUBMITTING','SUBMITTED') "
+                "AND (film_slug=? OR film_slug GLOB ?) LIMIT 1",
+                (f"draft-{ident}", f"d-{ident}-v[0-9]*"),
+            ).fetchone():
+                raise ValueError("Cần đối soát tác vụ chuyển động trước khi xóa bản nháp.")
 
 
 def reconcile_cancelled(job):

@@ -75,7 +75,7 @@ def _http_json(host, port, route, *, payload=None, timeout=3, max_bytes=MAX_TAGS
         raise ValueError("Unapproved local route")
     if (type(port) is not int or not 1 <= port <= 65535
             or type(max_bytes) is not int or not 1 <= max_bytes <= MAX_TAGS_BYTES
-            or type(timeout) not in (int, float) or not 0 < timeout <= 150):
+            or type(timeout) not in (int, float) or not 0 < timeout <= (300 if route == "/api/chat" else 150)):
         raise ValueError("Invalid HTTP budget")
     body = None if payload is None else json.dumps(
         payload, ensure_ascii=True, allow_nan=False).encode("utf-8")

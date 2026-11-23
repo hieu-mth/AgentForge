@@ -5,9 +5,10 @@ import math
 
 FPS = 24
 LTX_CLIP_FRAMES = 49
-MOTION_PRODUCTION_SHOT_BUDGET = 16
+MAX_DURATION_SECONDS = 60
+MOTION_PRODUCTION_SHOT_BUDGET = 32
 MOTION_PRESETS = {4: (2, 2), 6: (3, 3), 15: (8, 9),
-                  30: (math.ceil(30 * FPS / LTX_CLIP_FRAMES), MOTION_PRODUCTION_SHOT_BUDGET)}
+                  30: (math.ceil(30 * FPS / LTX_CLIP_FRAMES), 16)}
 MAX_VERSIONS = 12
 STORY_FIELDS = ("description", "image_prompt", "motion_prompt", "character_ids",
                 "audio", "continuity", "script_range", "shot_id", "frames", "caption", "scene_notes", "duration_weight",
@@ -16,11 +17,12 @@ STORY_FIELDS = ("description", "image_prompt", "motion_prompt", "character_ids",
 
 def duration_limits(seconds, moving):
     minimum = 4 if moving else 6
-    if type(seconds) is not int or not minimum <= seconds <= 30:
-        raise ValueError(f"Thời lượng phải là số nguyên từ {minimum} đến 30 giây. "
+    if type(seconds) is not int or not minimum <= seconds <= MAX_DURATION_SECONDS:
+        raise ValueError(f"Thời lượng phải là số nguyên từ {minimum} đến {MAX_DURATION_SECONDS} giây. "
                          "Hãy rút gọn hành động hoặc chia kịch bản thành nhiều video.")
     if moving:
-        return max(2, math.ceil(seconds * FPS / LTX_CLIP_FRAMES)), min(seconds, MOTION_PRODUCTION_SHOT_BUDGET)
+        budget = max(16, math.ceil(seconds * MOTION_PRODUCTION_SHOT_BUDGET / MAX_DURATION_SECONDS))
+        return max(2, math.ceil(seconds * FPS / LTX_CLIP_FRAMES)), min(seconds, budget)
     return 2, min(6, seconds // 2)
 
 

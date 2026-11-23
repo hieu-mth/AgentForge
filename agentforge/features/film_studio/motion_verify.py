@@ -13,13 +13,13 @@ import json
 import math
 import os
 import re
-import shutil
 import subprocess
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
 from agentforge.features.film_studio import motion_comfy as motion
+from agentforge.features.media import render
 from agentforge.paths import ensure_local_root
 
 MAX_MP4_BYTES = 160 * 1024 * 1024
@@ -79,7 +79,7 @@ def _output_source(root: Path, name: str, job_id: str, *, ltx=False) -> Path:
 
 
 def _run(tool: str, args: list[str], *, seconds: int):
-    executable = shutil.which(tool)
+    executable = render.find_media_tool(tool)
     if not executable:
         raise MotionVerificationError("FFmpeg and ffprobe must be installed and trusted")
     try:

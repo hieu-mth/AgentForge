@@ -1,22 +1,43 @@
-.storyboard-review .ant-modal-container { display:flex; flex-direction:column; max-height:calc(100dvh - 100px); }
-.storyboard-review .ant-modal-body { min-height:0; overflow:auto; }
-.storyboard-layout { display:grid; grid-template-columns:minmax(180px, 32%) minmax(0, 1fr); gap:20px; }
-.storyboard-scenes { display:grid; align-content:start; gap:6px; max-height:51vh; overflow:auto; }
+.storyboard-review .ant-modal { max-width:calc(100vw - 40px); padding-bottom:0; }
+.storyboard-review .ant-modal-container {
+  display:flex; flex-direction:column; box-sizing:border-box;
+  height:min(760px, calc(100dvh - 48px));
+}
+.storyboard-review .ant-modal-header { flex:none; padding-inline-end:28px; overflow-wrap:anywhere; }
+.storyboard-review .ant-modal-title { font-size:18px; }
+.storyboard-review .ant-modal-body { flex:1; min-height:0; display:flex; flex-direction:column; gap:12px; overflow:hidden; }
+.storyboard-review .ant-modal-body > .ant-alert { flex:none; max-height:20%; overflow:auto; }
+.storyboard-review .ant-modal-footer { flex:none; margin-top:14px; padding-top:12px; border-top:1px solid var(--line); }
+.storyboard-toolbar { flex:none; }
+.storyboard-layout { flex:1; min-height:0; display:grid; grid-template-columns:minmax(180px, 29%) minmax(0, 1fr); gap:16px; }
+.storyboard-scenes,.storyboard-detail,.storyboard-source {
+  min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable;
+}
+.storyboard-scenes { display:grid; align-content:start; gap:6px; padding-inline-end:6px; }
 .storyboard-scenes button:not(.ant-btn) { display:grid; gap:3px; text-align:left; color:inherit; background:var(--surface);
   border:1px solid var(--line); border-radius:8px; padding:8px 10px; min-width:0; cursor:pointer; }
-.storyboard-scenes button[aria-pressed=true] { border-color:var(--primary); }
-.storyboard-scenes span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.storyboard-detail { min-width:0; overflow-wrap:anywhere; }
-.storyboard-detail h3 { margin-top:0; }
-.storyboard-detail summary { cursor:pointer; margin-bottom:6px; }
-.storyboard-context { margin-bottom:14px; }
-.storyboard-context summary { cursor:pointer; }
+.storyboard-scenes button[aria-pressed=true] {
+  border-color:var(--primary); background:color-mix(in srgb,var(--primary) 12%,var(--surface));
+}
+.storyboard-scenes span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); }
+.storyboard-detail,.storyboard-source { min-width:0; overflow-wrap:anywhere; padding:14px 16px;
+  background:var(--surface); border:1px solid var(--line); border-radius:12px; }
+.storyboard-source { flex:1; }
+.storyboard-scene-title { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.storyboard-scene-title h3,.storyboard-source h3 { margin:0; }
+.storyboard-scene-title span { color:var(--muted); }
+.storyboard-detail details { border-top:1px solid var(--line); padding-block:8px; }
+.storyboard-detail summary { cursor:pointer; }
+.storyboard-image { margin-bottom:12px; }
+.storyboard-image .ant-image-img { max-height:min(240px,32dvh); width:auto; max-width:100%; object-fit:contain; border-radius:8px; }
+.storyboard-context { padding:10px 12px; margin-bottom:16px; border:1px solid var(--line); border-radius:8px; }
+.storyboard-context p:first-child { margin-top:0; }
 .storyboard-actions { margin-top:12px; }
 .storyboard-footer { display:flex; justify-content:space-between; align-items:center; gap:12px; text-align:left; flex-wrap:wrap; }
 @media (max-width:600px) {
   .storyboard-review .ant-modal { top:0; margin:0; max-width:100%; width:100%!important; padding-bottom:0; }
-  .storyboard-review .ant-modal-container { min-height:100dvh; max-height:100dvh; }
-  .storyboard-review .ant-modal-body { flex:1; }
-  .storyboard-layout { grid-template-columns:minmax(0,1fr); gap:14px; }
-  .storyboard-scenes { max-height:24vh; }
+  .storyboard-review .ant-modal-container { height:100dvh; padding:16px; border-radius:0; }
+  .storyboard-layout { grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0, min(18dvh, 120px)) minmax(0,1fr); gap:10px; }
+  .storyboard-detail,.storyboard-source { padding:12px; }
+  .storyboard-footer { gap:8px; }
 }

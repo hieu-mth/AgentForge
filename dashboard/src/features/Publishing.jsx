@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, App as AntApp, Button, Card, Checkbox, Descriptions, Form,
-  Input, InputNumber, Select, Space, Table, Tag, Typography } from 'antd';
+  Input, Select, Space, Table, Tag, Typography } from 'antd';
+import {NumberField} from '../components/NumberField.jsx';
 import { api } from '../api.js';
 import {useScreenRefresh} from '../refresh_scope.jsx';
 import {useReadSequence} from '../use_resource.jsx';
@@ -232,7 +233,7 @@ export function Publishing({mutate,data}) {
             {['views','likes','comments','watch_minutes'].map(k=>
               <Form.Item key={k} name={k} label={k} initialValue={0}
                 rules={[{required:true,type:'number',min:0}]}>
-                <InputNumber min={0} precision={0} style={{width:'100%'}}/>
+                <NumberField min={0} precision={0} style={{width:'100%'}}/>
               </Form.Item>)}
             <Button htmlType="submit" disabled={!release.youtube_video_id}>
               Ghi metrics owner-reported

@@ -1,6 +1,7 @@
 """Draft schema, checkpoint lifecycle, and real local MP4 quality gate."""
 import tempfile
 import io
+import sqlite3
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -34,29 +35,141 @@ class DraftTests(unittest.TestCase):
                  "character_ids": ["cat"], "audio": "Im lặng"}
         return {"title": "Mèo", "continuity": "Orange cat, morning", "scenes": [scene, scene]}
 
+    def test_media_tools_resolve_from_agentforge_directory_without_path(self):
+        tools = self.root / "runtime_tools" / "ffmpeg"
+        tools.mkdir(parents=True)
+        suffix = ".exe" if draft.render.os.name == "nt" else ""
+        ffmpeg = tools / ("ffmpeg" + suffix)
+        ffmpeg.touch()
+        with (patch.object(draft.render, "COMPANY_DATA_DIR", self.root),
+              patch.object(draft.render.shutil, "which", return_value=None)):
+            self.assertEqual(draft.render._ffmpeg(), str(ffmpeg))
+            self.assertIsNone(draft.render.find_media_tool("ffprobe"))
+            ffprobe = tools / ("ffprobe" + suffix)
+            ffprobe.touch()
+            self.assertEqual(draft.render.find_media_tool("ffprobe"), str(ffprobe))
+            with self.assertRaises(ValueError):
+                draft.render.find_media_tool("python")
+
+    def test_finished_drafts_are_read_only_for_scene_edits(self):
+        for status in ("APPROVED", "REJECTED", "CANCELLED"):
+            with self.subTest(status=status):
+                job = {"id": self.ident, "brief": self.brief, "board": self.board(), "status": status}
+                draft._save(job)
+                with self.assertRaisesRegex(ValueError, "Scene cannot be edited"):
+                    draft.act(self.ident, "edit", {})
+                job["storyboard_version"] = 1
+                job["storyboard_sha"] = draft.draft_timeline.digest(job)
+                draft._save(job)
+                with self.assertRaisesRegex(ValueError, "Storyboard chưa thể chỉnh"):
+                    draft.act(self.ident, "storyboard-edit", {"sha256": job["storyboard_sha"]})
+                self.assertEqual(draft._read(self.ident)["status"], status)
+
+    def test_delete_cleans_only_inactive_unfinished_draft(self):
+        job = {"id": self.ident, "brief": self.brief, "status": "RUNNING"}
+        folder = draft._folder(self.ident)
+        folder.mkdir(parents=True)
+        (folder / "scene.png").write_bytes(b"draft")
+        other = folder.parent.with_name("b" * 32)
+        other.mkdir()
+        motion = draft.draft_motion.motion_comfy
+        ledger = self.root / "motion.sqlite3"
+        with patch.object(motion, "DB", ledger):
+            draft._save(job)
+            with self.assertRaises(ValueError):
+                draft.act(self.ident, "delete", {})
+            with patch.object(draft, "_dispatch"):
+                draft.act(self.ident, "cancel", {})
+            self.assertTrue(draft._cancellation(self.ident))
+            conn = sqlite3.connect(ledger)
+            try:
+                with conn:
+                    conn.execute("CREATE TABLE motion_jobs (film_slug TEXT, state TEXT)")
+                    conn.execute("INSERT INTO motion_jobs VALUES (?, 'SUBMITTED')", (f"d-{self.ident}-v2",))
+                with self.assertRaises(ValueError):
+                    draft.act(self.ident, "delete", {})
+                self.assertTrue(folder.is_dir())
+                with conn:
+                    conn.execute("UPDATE motion_jobs SET state='FAILED'")
+                job = draft._read(self.ident)
+                job["storyboard_history"] = [{"video_sha": "previous render"}]
+                draft._save(job)
+                with self.assertRaises(ValueError):
+                    draft.act(self.ident, "delete", {})
+                job.pop("storyboard_history")
+                draft._save(job)
+                self.assertEqual(draft.act(self.ident, "delete", {}), {"id": self.ident, "deleted": True})
+                self.assertFalse(folder.parent.exists())
+                self.assertTrue(other.is_dir())
+                self.assertEqual(conn.execute("SELECT COUNT(*) FROM motion_jobs").fetchone()[0], 1)
+                self.assertFalse(draft._cancellation(self.ident))
+                with self.assertRaises(draft.DraftNotFound):
+                    draft._read(self.ident)
+            finally:
+                conn.close()
+
     def test_ai_duration_cpu_planning_and_exact_frame_budget(self):
-        for estimate, count in ((4, 2), (17, 9), (30, 15)):
+        for estimate, count in ((4, 2), (17, 9), (30, 15), (60, 30)):
             with self.subTest(estimate=estimate):
-                proposed = {"estimated_duration_seconds": estimate, "recommended_shot_count": count,
+                proposed = {"estimated_duration_seconds": estimate, "recommended_shot_count": 1,
                             "shots": [{"action": "Miu tìm bạn", "reason": "Mở đầu",
                                        "suggested_seconds": estimate / count}] * count,
                             "duration_reasoning": "Dành thời gian cho các hành động chính.",
                             "production_feasibility": "feasible"}
-                job = {"brief": {"idea": "Miu tìm bạn.", "mode": "motion", "seconds": None,
+                job = {"id": self.ident, "brief": {"idea": "Miu tìm bạn.", "mode": "motion", "seconds": None,
                                  "duration_mode": "auto"}}
                 with patch.object(draft, "_activity"), patch.object(draft, "_measured", return_value=nullcontext()), \
                         patch.object(draft, "_ask", return_value=proposed) as ask:
                     plan = draft._duration_plan(job, {})
                     self.assertTrue(ask.call_args.kwargs["cpu_only"])
                     self.assertEqual(plan["initial_accepted_seconds"], estimate)
+                    self.assertEqual(plan["recommended_shot_count"], count)
+                    self.assertNotIn("recommended_shot_count", ask.call_args.args[3]["properties"])
                     frames = draft.draft_timeline.planned_timeline(estimate, True, [estimate / count] * count)
                     self.assertEqual(sum(frames), estimate * 24)
                     self.assertTrue(all(24 <= n <= 49 for n in frames))
-                    for changes in ({"estimated_duration_seconds": 31}, {"estimated_duration_seconds": 4.5},
-                                    {"recommended_shot_count": 1}, {"production_feasibility": "over_budget"}):
+                    for changes in ({"estimated_duration_seconds": 61}, {"estimated_duration_seconds": 4.5},
+                                    {"shots": []}, {"production_feasibility": "over_budget"}):
                         ask.return_value = {**proposed, **changes}
                         with self.assertRaises(ValueError):
                             draft._duration_plan(job, {})
+                    ask.return_value = {**proposed, "shots": proposed["shots"][:1]}
+                    with self.assertRaisesRegex(ValueError, f"AI trả 1 cảnh. Video {estimate} giây cần"):
+                        draft._duration_plan(job, {})
+
+    def test_duration_replans_five_story_beats_into_nine_shots_without_gpu(self):
+        job = {"id": self.ident, "brief": {"idea": "Miu đuổi theo bướm rồi quay về nhà.",
+               "mode": "motion", "seconds": None, "duration_mode": "auto"}}
+        shot = {"action": "Miu nhìn con bướm", "reason": "Theo dõi chuyển động", "suggested_seconds": 1.75}
+        plan = {"estimated_duration_seconds": 18, "duration_reasoning": "Giữ đủ nhịp cho hành động.",
+                "production_feasibility": "feasible"}
+        with (patch.object(draft, "_activity"), patch.object(draft, "_measured", return_value=nullcontext()),
+              patch.object(draft, "_ask", side_effect=[{**plan, "shots": [shot]*5},
+                                                       {**plan, "shots": [shot]*9}]) as ask):
+            result = draft._duration_plan(job, {})
+        self.assertEqual(result["recommended_shot_count"], 9)
+        self.assertEqual(result["initial_accepted_seconds"], 18)
+        frames = draft.draft_timeline.planned_timeline(18, True, [s["suggested_seconds"] for s in result["shots"]])
+        self.assertEqual(frames, [48]*9)
+        self.assertEqual(ask.call_count, 2)
+        self.assertTrue(all(call.kwargs["cpu_only"] for call in ask.call_args_list))
+        self.assertEqual(ask.call_args_list[0].args[2]["allowed_shot_counts"][18], (9, 16))
+        rules = ask.call_args.args[3]["properties"]
+        self.assertEqual(rules["estimated_duration_seconds"]["enum"], [18])
+        self.assertEqual(rules["shots"]["minItems"], 9)
+
+    def test_sixty_second_budget_keeps_legacy_layout_and_rejects_excess(self):
+        timeline = draft.draft_timeline
+        self.assertEqual(timeline.shot_limits(30), (15, 16))
+        self.assertEqual(timeline.duration_limits(60, True), (30, 32))
+        for count in range(30, 33):
+            frames = timeline.planned_timeline(60, True, [2]*count)
+            self.assertEqual(sum(frames), 1440)
+            self.assertLessEqual(max(frames), 49)
+        for count in (29, 33):
+            with self.assertRaises(ValueError):
+                timeline.planned_timeline(60, True, [2]*count)
+        self.assertEqual(sum(timeline.planned_timeline(60, False, [2]*6)), 1440)
 
     def test_duration_edit_reallocates_frames_and_invalidates_approval(self):
         board = self.board()
@@ -218,7 +331,7 @@ class DraftTests(unittest.TestCase):
                            side_effect=lambda _: nullcontext((io.BytesIO(asset), draft._sha(asset)))),
               patch.object(draft.render, "_ffmpeg", return_value="ffmpeg"),
               patch.object(draft.render, "_run_process", side_effect=ffmpeg),
-              patch.object(runner.shutil, "which", return_value="fixture"),
+              patch.object(runner.render, "find_media_tool", return_value="fixture"),
               patch.object(motion, "DB", self.root/"motion.sqlite3"), patch.object(motion, "FILMS", self.root/"films"),
               patch.object(runner.comfy_service, "RUNTIME_DIR", self.root),
               patch.object(runner.comfy_service, "_settings", return_value={"port": 8188, "install_root": self.root}),
@@ -539,6 +652,15 @@ class DraftTests(unittest.TestCase):
               patch.object(draft.flux_runtime, "_json") as request):
             self.assertFalse(draft._release_idle_comfy({"base_url": "http://127.0.0.1:8188"}))
             request.assert_not_called()
+
+    def test_ollama_duration_timeout_reports_provider_without_retry(self):
+        profile = {"id": "fixture", "model": "fixture", "base_url": "http://127.0.0.1:11434"}
+        with (patch.object(draft.runtime, "_installed_local_model", return_value=True),
+              patch.object(draft.runtime, "_http_json", side_effect=TimeoutError) as request,
+              self.assertRaisesRegex(ValueError, "Ollama không phản hồi trong 300 giây")):
+            draft._ask(profile, "Plan", {}, {}, None, cpu_only=True)
+        request.assert_called_once()
+        self.assertEqual(request.call_args.kwargs["timeout"], 300)
 
     def test_ollama_500_does_not_retry(self):
         profile = {"id": "fixture", "model": "fixture", "base_url": "http://127.0.0.1:11434"}

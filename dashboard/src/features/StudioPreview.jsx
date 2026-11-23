@@ -1,5 +1,6 @@
+import {AppTooltip} from '../components/AppTooltip.jsx';
 import {useState} from 'react';
-import {Alert,Button,Space,Tooltip} from 'antd';
+import {Alert,Button,Space} from 'antd';
 import {DownloadOutlined} from '@ant-design/icons';
 
 export function StudioPreview({url,filename,label,reviewActions,initiallyOpen=false}){
@@ -12,10 +13,10 @@ export function StudioPreview({url,filename,label,reviewActions,initiallyOpen=fa
         </Button>}
         {reviewActions}
       </Space>
-      <Tooltip title="Tải MP4">
+      <AppTooltip title="Tải MP4">
         <Button size="small" aria-label="Tải MP4" icon={<DownloadOutlined aria-hidden="true"/>}
           href={url} download={filename}/>
-      </Tooltip>
+      </AppTooltip>
     </div>
     {preview==='open'&&<video className="studio-preview" controls playsInline preload="metadata"
       aria-label={label} src={url} onError={()=>setPreview('error')}/>}

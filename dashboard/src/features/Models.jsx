@@ -1,6 +1,7 @@
+import {AppTooltip} from '../components/AppTooltip.jsx';
 import { useState } from 'react';
 import { App as AntApp, Alert, Button, Card, Empty, Grid,
-  Space, Table, Tooltip, Typography } from 'antd';
+  Space, Table, Typography } from 'antd';
 import {AppstoreOutlined,DeleteOutlined,DesktopOutlined,HistoryOutlined,PlusOutlined,ReloadOutlined} from '@ant-design/icons';
 import {SectionTitle,SettingsHeading,SettingsStatus,Stat} from '../components/settings.jsx';
 import {useResource, ResourceStatus} from '../use_resource.jsx';
@@ -90,13 +91,13 @@ export function ModelHub({mutate}) {
     {row.flux&&<Button size="small" disabled={!row.enabled}
       onClick={()=>setFluxProbe({profile:row,revision:hub.revision})}>Chạy thử</Button>}
     {byAdapter[row.provider]?.local_probe&&<>
-      <Tooltip title="Đọc danh sách model từ Ollama local">
+      <AppTooltip title="Đọc danh sách model từ Ollama local">
         <Button size="small" onClick={()=>update('/api/model-hub/check',{
           ack:'CHECK_LOCAL_MODEL',profile_id:row.id,
         },'Kiểm tra Ollama local?','Chỉ đọc danh sách model từ localhost trong 3 giây; không inference, không tải model.')}>
           Kiểm tra
         </Button>
-      </Tooltip>
+      </AppTooltip>
       <Button size="small" disabled={!row.enabled} onClick={()=>update('/api/model-hub/probe',{
         ack:'RUN_LOCAL_MODEL_PROBE',profile_id:row.id,expected_revision:hub.revision,
       },'Chạy thử model Ollama?',

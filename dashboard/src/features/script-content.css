@@ -1,0 +1,15 @@
+.script-reader .ant-modal { padding-bottom:0; }
+.script-reader .ant-modal-container { display:flex; flex-direction:column; max-height:calc(100dvh - 40px); }
+.script-reader .ant-modal-header,.script-reader .ant-modal-footer { flex:none; }
+.script-reader .ant-modal-body {
+  min-height:0; overflow:auto; overscroll-behavior:contain;
+  padding:14px 16px; border:1px solid var(--line); border-radius:10px; background:var(--surface);
+}
+.script-content {
+  max-width:74ch; display:grid; gap:14px; line-height:1.65; overflow-wrap:anywhere;
+}
+.script-content h4 { margin:0 0 3px; color:var(--text); font-size:14px; }
+.script-content p,.script-content ul { margin:0; white-space:pre-wrap; }
+.script-content ul { padding-inline-start:22px; }
+.script-reader .script-content { max-width:none; }
+.script-reader .script-content section + section { padding-top:12px; border-top:1px solid var(--line); }

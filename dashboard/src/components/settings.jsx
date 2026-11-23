@@ -1,4 +1,5 @@
 import {Progress,Typography} from 'antd';
+import {AppTooltip} from './AppTooltip.jsx';
 
 const {Title,Paragraph}=Typography;
 
@@ -25,7 +26,7 @@ export function Stat({icon,label,value,sub,progress}){
   return <div className="env-stat">
     <div className="env-stat-top"><span className="env-stat-icon" aria-hidden="true">{icon}</span>
       <span className="env-stat-label">{label}</span></div>
-    <div className="env-stat-value" title={value}>{value}</div>
+    <div className="env-stat-value">{value}</div>
     <div className="env-stat-sub">{sub}</div>
     {progress!==null&&progress!==undefined&&
       <Progress percent={progress} showInfo={false} size="small" strokeColor="#7776ee"
@@ -34,7 +35,9 @@ export function Stat({icon,label,value,sub,progress}){
 }
 
 export function SettingsStatus({tone='info',children,title}){
-  return <span className={'env-status tone-'+tone} title={title}>
+  const detail=title&&title!==children?title:null;
+  return <AppTooltip title={detail}><span className={'env-status tone-'+tone}
+    tabIndex={detail?0:undefined}>
     <span className="env-status-dot" aria-hidden="true"/>{children}
-  </span>;
+  </span></AppTooltip>;
 }

@@ -1,9 +1,11 @@
 ﻿"""Checkpointed local idea-to-draft production."""
 import copy
 import hashlib
+import http.client
 import os
 import json
 import re
+import shutil
 import sqlite3
 import threading
 import time
@@ -233,7 +235,7 @@ def _release_idle_comfy(profile):
     return False
 
 
-def _ask(profile, instructions, data, schema, comfy_profile, *, cpu_only=False):
+def _ask(profile, instructions, data, schema, comfy_profile, *, cpu_only=False, extended_plan=False):
     host, port = runtime._local_endpoint(profile["base_url"])
     if not runtime._installed_local_model(host, port, profile["model"]):
         raise ValueError("Configured Ollama model is unavailable: " + profile["id"])
@@ -244,13 +246,21 @@ def _ask(profile, instructions, data, schema, comfy_profile, *, cpu_only=False):
                             {"role": "user", "content": json.dumps(data, ensure_ascii=False)}]}
     if cpu_only:
         payload["options"].update(num_gpu=0, num_predict=2600)
+    if extended_plan:
+        payload["options"].update(num_ctx=8192, num_predict=5200)
+    timeout = 300 if cpu_only else 150
     try:
-        message = runtime._http_json(host, port, "/api/chat", timeout=150, max_request_bytes=16384, payload=payload)
+        message = runtime._http_json(host, port, "/api/chat", timeout=timeout, max_request_bytes=16384, payload=payload)
+    except TimeoutError:
+        raise ValueError(f"Ollama không phản hồi trong {timeout} giây khi phân tích nội dung. "
+                         "Kiểm tra Ollama hoặc chọn model điều phối nhẹ hơn trước khi tiếp tục.") from None
     except runtime.LocalProviderHTTPError as exc:
         # Ollama's transport does not distinguish OOM from other server-side failures.
         if exc.status == 500:
             raise ResourceWait("OLLAMA_RESOURCE_OR_SERVER_ERROR") from None
         raise ValueError(f"Ollama rejected the request (HTTP {exc.status}): {profile['id']}") from None
+    except (OSError, http.client.HTTPException):
+        raise ValueError("Mất kết nối với Ollama khi phân tích nội dung. Kiểm tra dịch vụ Ollama rồi tiếp tục.") from None
     if message.get("done") is not True or message.get("done_reason") == "length":
         raise ValueError("Ollama did not complete the structured response")
     return json.loads(message["message"]["content"])
@@ -365,7 +375,7 @@ def _script_scene(job, profile, comfy, source, continuity, index, *, proposed_sh
                "seconds": seconds + (index < extra)}
     if proposed_shot:
         context.update(proposed_action=proposed_shot["action"], shot_reason=proposed_shot["reason"],
-                       seconds=proposed_shot["suggested_seconds"])
+                       seconds=proposed_shot["timeline_seconds"])
     if cast:
         fields["character_ids"] = {"type": "array", "items": {**STRING, "enum": list(cast)}, "maxItems": 2}
         context["cast"] = cast
@@ -410,17 +420,24 @@ def _write_script_board(job, bindings, *, outline=None):
     _save(job)
 
 
+class ShotBudgetMismatch(ValueError):
+    def __init__(self, count, seconds, minimum, maximum):
+        self.seconds, self.minimum, self.maximum = seconds, minimum, maximum
+        super().__init__(f"AI trả {count} cảnh. Video {seconds} giây cần {minimum}–{maximum} cảnh.")
+
+
 def _duration_plan(job, profile):
     brief = job["brief"]
     moving = brief.get("mode") == "motion"
     script = brief["idea"]
     cap = draft_timeline.MOTION_PRODUCTION_SHOT_BUDGET if moving else 6
+    max_seconds = draft_timeline.MAX_DURATION_SECONDS
+    max_shot_seconds = draft_timeline.LTX_CLIP_FRAMES / draft_timeline.FPS if moving else max_seconds
     if len(SCRIPT_HEADING.findall(script)) > cap:
         raise ValueError(f"Kịch bản vượt {cap} cảnh. Hãy gộp các hành động liên quan hoặc chia video.")
     bounded_text = {**STRING, "minLength": 1, "maxLength": 180}
     shot = _object(action=bounded_text, suggested_seconds={"type": "number"}, reason=bounded_text)
     schema = _object(estimated_duration_seconds={"type": "integer"},
-                     recommended_shot_count={"type": "integer"},
                      shots={"type": "array", "maxItems": cap, "items": shot},
                      duration_reasoning={**STRING, "minLength": 1, "maxLength": 350},
                      production_feasibility={"type": "string", "enum": ["feasible", "over_budget"]})
@@ -437,17 +454,47 @@ def _duration_plan(job, profile):
                                {"excerpt": script[start:start+1000]},
                                _object(beats={**STRING, "minLength": 1, "maxLength": 120}), None, cpu_only=True)
                 source.append(_text(excerpt["beats"], 120, label="Tóm tắt hành động"))
+        limits = {seconds: draft_timeline.duration_limits(seconds, moving)
+                  for seconds in range(4 if moving else 6, max_seconds + 1)}
         result = _ask(profile,
                       "Estimate timing from distinct actions and pacing, not word count. Keep important events "
                       "in order and consider opening, development, climax and ending only when present. "
                       "Merge related beats; never pad, repeat, or silently remove content. "
                       "Return the Vietnamese action, timing and reason for each shot. Estimate a whole number "
-                      "of seconds; suggested shot times should add up to that estimate. If essential actions "
+                      "of seconds. Suggest relative shot timings within the per-shot limits. If essential actions "
                       "cannot fit, report over_budget with a concrete split or reduction in duration_reasoning. "
-                      "If the owner provided a duration, choose a shot count that also fits it.",
-                      {"source": source, "requested_seconds": brief["seconds"], "max_shots": cap,
-                       "min_shot_seconds": 1 if moving else 2, "max_shot_seconds": 2.04 if moving else 30,
-                       "max_seconds": 30}, schema, None, cpu_only=True)
+                      "The allowed_shot_counts table contains [minimum, maximum] for EACH duration. "
+                      "Choose a permitted count for the estimate AND the owner's duration if provided. "
+                      "A story beat can use multiple camera shots covering distinct moments of the same "
+                      "action. Keep each action and reason brief.",
+                      {"source": source, "requested_seconds": brief["seconds"], "allowed_shot_counts": limits,
+                       "min_shot_seconds": 1 if moving else 2, "max_shot_seconds": max_shot_seconds,
+                       "max_seconds": max_seconds}, schema, None, cpu_only=True, extended_plan=moving)
+        try:
+            return _validate_duration_plan(brief, result, moving, max_shot_seconds)
+        except ShotBudgetMismatch as mismatch:
+            if _cancellation(job["id"]):
+                raise DraftCancelled
+            target = brief["seconds"] if brief["duration_mode"] == "manual" else mismatch.seconds
+            minimum, maximum = limits[target]
+            retry_schema = _object(**{**schema["properties"],
+                "estimated_duration_seconds": {"type": "integer", "enum": [target]},
+                "shots": {"type": "array", "minItems": minimum, "maxItems": maximum, "items": shot}})
+            repaired = _ask(profile,
+                            "Replan the source at the exact requested duration and within the given shot count. "
+                            "Break longer story beats into sequential camera shots of distinct moments. "
+                            "Preserve the characters and events. Never add filler or repeat actions. "
+                            "If this cannot be done, report over_budget and explain why in Vietnamese.",
+                            {"source": source, "seconds": target, "min_shots": minimum, "max_shots": maximum,
+                             "min_shot_seconds": 1 if moving else 2, "max_shot_seconds": max_shot_seconds},
+                            retry_schema, None, cpu_only=True, extended_plan=moving)
+            try:
+                return _validate_duration_plan(brief, repaired, moving, max_shot_seconds, required_estimate=target)
+            except ShotBudgetMismatch as exc:
+                raise ValueError(f"{exc} AI vẫn chưa lập được timeline sau khi điều chỉnh.") from None
+
+
+def _validate_duration_plan(brief, result, moving, max_shot_seconds, *, required_estimate=None):
     if not isinstance(result, dict):
         raise ValueError("AI trả kế hoạch thời lượng sai cấu trúc.")
     reasoning = _text(result.get("duration_reasoning"), 350, label="Lý do đề xuất thời lượng")
@@ -456,24 +503,27 @@ def _duration_plan(job, profile):
     if result.get("production_feasibility") != "feasible":
         raise ValueError("AI chưa xác định được tính khả thi. Hãy rút gọn hoặc chia kịch bản.")
     estimate = result.get("estimated_duration_seconds")
-    count = result.get("recommended_shot_count")
+    if required_estimate is not None and estimate != required_estimate:
+        raise ValueError(f"AI chưa giữ đúng thời lượng {required_estimate} giây khi lập lại storyboard.")
     proposed = result.get("shots")
-    if type(count) is not int or not isinstance(proposed, list) or count != len(proposed) or not 2 <= count <= cap:
-        raise ValueError("Số cảnh AI đề xuất không hợp lệ. Hãy chia hoặc gộp hành động trong kịch bản.")
+    if not isinstance(proposed, list) or not proposed:
+        raise ValueError("AI chưa trả về danh sách cảnh. Hãy tiếp tục từ checkpoint để lập lại storyboard.")
+    count = len(proposed)
+    accepted = estimate if brief["duration_mode"] == "auto" else brief["seconds"]
+    for seconds in (estimate,) if estimate == accepted else (estimate, accepted):
+        minimum, maximum = draft_timeline.duration_limits(seconds, moving)
+        if not minimum <= count <= maximum:
+            raise ShotBudgetMismatch(count, seconds, minimum, maximum)
     shots = []
     for item in proposed:
         seconds = item.get("suggested_seconds") if isinstance(item, dict) else None
         if (type(seconds) not in {float, int}
-                or not (1 if moving else 2) <= seconds <= (draft_timeline.LTX_CLIP_FRAMES/24 if moving else 30)):
+                or not (1 if moving else 2) <= seconds <= max_shot_seconds):
             raise ValueError("Thời lượng cảnh AI đề xuất vượt giới hạn. Hãy chia hành động thành cảnh ngắn hơn.")
         shots.append({"action": _text(item.get("action"), 180, label="Hành động của cảnh"),
                       "reason": _text(item.get("reason"), 180, label="Lý do giữ cảnh"),
                       "suggested_seconds": seconds})
-    accepted = estimate if brief["duration_mode"] == "auto" else brief["seconds"]
     weights = [item["suggested_seconds"] for item in shots]
-    draft_timeline.planned_timeline(estimate, moving, weights)
-    if abs(sum(weights)-estimate) > 1:
-        raise ValueError("Tổng thời lượng từng cảnh không khớp đề xuất AI. Hãy thử lại hoặc chia kịch bản.")
     draft_timeline.planned_timeline(accepted, moving, weights)
     return {"estimated_duration_seconds": estimate, "recommended_shot_count": count,
             "shots": shots, "duration_reasoning": reasoning, "production_feasibility": "feasible",
@@ -488,6 +538,7 @@ def _write_planned_board(job, bindings):
         brief.update(seconds=plan["initial_accepted_seconds"], scene_count=plan["recommended_shot_count"])
         _save(job)
     plan = job["duration_plan"]
+    layout = _storyboard_layout(job, brief["scene_count"], [shot["suggested_seconds"] for shot in plan["shots"]])
     script = brief["idea"]
     cast = _select_cast(job, bindings, " ".join(shot["action"] for shot in plan["shots"]))
     ranges = _script_ranges(script, brief["scene_count"], brief["seconds"]) if _needs_scene_analysis(script) else []
@@ -496,7 +547,8 @@ def _write_planned_board(job, bindings):
     for index, shot in enumerate(plan["shots"]):
         source = script[slice(*ranges[index])] if ranges else script
         data = _script_scene(job, bindings["film.storyboard"], bindings["image.generate"],
-                             source, continuity, index, proposed_shot=shot, cast=cast)
+                             source, continuity, index, cast=cast,
+                             proposed_shot={**shot, "timeline_seconds": layout[index] / draft_timeline.FPS})
         scene_title = _text(data.pop("title"), 100)
         title = title or scene_title
         continuity = _text(data.pop("continuity"), 240)
@@ -705,10 +757,10 @@ def _image(job, index, scene, revision, profile):
 def _render(job):
     folder = _folder(job["id"])
     moving = job["brief"].get("mode") == "motion"
-    if moving and job["brief"]["seconds"] == 30:
+    if moving and job["brief"]["seconds"] >= 30:
         ids = [scene.get("motion_job") for scene in job["board"]["scenes"]]
         if None in ids or len(set(ids)) != len(ids):
-            raise ValueError("Phim 30 giây cần clip riêng cho từng cảnh.")
+            raise ValueError("Phim từ 30 giây cần clip riêng cho từng cảnh.")
     width, height = (512, 288) if moving else SIZES[job["brief"]["ratio"]]
     ffmpeg = render._ffmpeg()
     command = [ffmpeg, "-nostdin", "-n", "-v", "error"]
@@ -720,7 +772,7 @@ def _render(job):
             input_bytes += clip.stat().st_size
             if input_bytes > MAX_MOTION_INPUTS:
                 raise ValueError("Motion clips exceed the production assembly budget")
-            command += ["-i", str(clip)]
+            command += ["-threads", "1", "-i", str(clip)]
             frames = scene.get("frames", int(scene["seconds"] * 24))
             filters.append(f"[{index}:v]trim=end_frame={frames},setpts=PTS-STARTPTS,setsar=1[v{index}]")
             streams.append(f"[v{index}]")
@@ -884,6 +936,8 @@ def _work(job, slot):
             with comfy_service.LOCK:
                 if job["status"] != "NEEDS_RECONCILIATION" and _cancellation(job["id"]):
                     job.update(status="CANCELLED", error=None, video_sha=None)
+                if job.get("attempt_started_at"):
+                    job["attempt_finished_at"] = visual_jobs._now()
                 _save(job)
         finally:
             ACTIVE = None
@@ -899,7 +953,9 @@ def _start(job, slot):
             raise DraftCancelled
         comfy_service.reset_idle()
         job.update(status="RUNNING", error=None)
-        job.setdefault("started_at", visual_jobs._now())
+        job["attempt_started_at"] = visual_jobs._now()
+        job.setdefault("started_at", job["attempt_started_at"])
+        job.pop("attempt_finished_at", None)
         job.pop("failed_scene", None)
         job.pop("activity", None)
         _save(job)
@@ -1040,7 +1096,7 @@ def _storyboard_action(job, action, data):
             conn.execute("UPDATE drafts SET body=? WHERE id=?", (json.dumps(job, ensure_ascii=False), job["id"]))
             comfy_service.reset_idle()
         return job
-    if job["status"] not in {"STORYBOARD_REVIEW", "REVIEW", "FAILED", "APPROVED", "REJECTED"}:
+    if job["status"] not in {"STORYBOARD_REVIEW", "REVIEW", "FAILED"}:
         raise ValueError("Storyboard chưa thể chỉnh ở trạng thái này.")
     draft_motion.require_resolved_ledger({})  # A possible dispatch must be reconciled before edit.
     if job["storyboard_version"] >= draft_timeline.MAX_VERSIONS:
@@ -1110,7 +1166,31 @@ def _storyboard_action(job, action, data):
     return job
 
 
+def _delete_draft(ident):
+    # Share the worker slot with start, resume and storyboard edits.
+    with _worker_slot(), comfy_service.LOCK:
+        job = _read(ident)
+        has_video = job.get("video_sha") or any(entry.get("video_sha") for entry in job.get("storyboard_history", []))
+        if job["status"] not in {"CANCELLED", "FAILED", "STORYBOARD_REVIEW"} or has_video:
+            raise ValueError("Chỉ có thể xóa bản nháp chưa hoàn thành và đã dừng.")
+        draft_motion.require_draft_removable(ident)
+        root = ensure_local_root(WORKSPACE_DIR / "drafts")
+        folder = ensure_local_root(root / ident).resolve()
+        if folder.parent != root.resolve():
+            raise PermissionError("Draft storage path refused")
+        with _db(True) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if folder.exists():
+                shutil.rmtree(folder)
+            conn.execute("DELETE FROM drafts WHERE id=?", (ident,))
+            if conn.execute("SELECT 1 FROM sqlite_master WHERE name='draft_cancellations'").fetchone():
+                conn.execute("DELETE FROM draft_cancellations WHERE id=?", (ident,))
+    return {"id": ident, "deleted": True}
+
+
 def act(ident, action, data):
+    if action == "delete":
+        return _delete_draft(ident)
     if action == "cancel":
         with comfy_service.LOCK:
             job = _read(ident)
@@ -1145,7 +1225,7 @@ def act(ident, action, data):
         if action == "edit":
             if job["brief"].get("mode") == "motion" or "storyboard_version" in job:
                 raise ValueError("Chỉnh sửa từ storyboard để lưu phiên bản và duyệt lại.")
-            if job["status"] == "APPROVED" or not job.get("board"):
+            if job["status"] in {"APPROVED", "REJECTED", "CANCELLED"} or not job.get("board"):
                 raise ValueError("Scene cannot be edited")
             scene = job["board"]["scenes"][_number(data["index"], 0, len(job["board"]["scenes"]) - 1)]
             scene.update(description=_text(data["description"], 350), image_prompt=_text(data["image_prompt"], 600),

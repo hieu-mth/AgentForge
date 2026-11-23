@@ -1,5 +1,6 @@
 ﻿import {useRef,useState} from 'react';
-import {Alert,Button,Card,Form,Image,Input,InputNumber,Space,Tag,Typography} from 'antd';
+import {Alert,Button,Card,Form,Image,Input,Space,Tag,Typography} from 'antd';
+import {NumberField} from '../components/NumberField.jsx';
 import {useResource,ResourceStatus} from '../use_resource.jsx';
 import {requestError} from '../api.js';
 
@@ -65,13 +66,13 @@ export function StudioImages({mutate,scene,initialPrompt=''}) {
         <Input.TextArea rows={3} maxLength={2000} showCount/>
       </Form.Item>
       <Space wrap align="start">
-        <Form.Item name="width" label="Rộng (px)"><InputNumber min={256} max={settings.max_resolution}
+        <Form.Item name="width" label="Rộng (px)"><NumberField min={256} max={settings.max_resolution}
           step={16} placeholder={String(latent?.width??'')}/></Form.Item>
-        <Form.Item name="height" label="Cao (px)"><InputNumber min={256} max={settings.max_resolution}
+        <Form.Item name="height" label="Cao (px)"><NumberField min={256} max={settings.max_resolution}
           step={16} placeholder={String(latent?.height??'')}/></Form.Item>
-        <Form.Item name="steps" label="Số bước"><InputNumber min={1} max={settings.max_steps}
+        <Form.Item name="steps" label="Số bước"><NumberField min={1} max={settings.max_steps}
           placeholder={String(sampler?.steps??'')}/></Form.Item>
-        <Form.Item name="seed" label="Seed"><InputNumber min={0} max={Number.MAX_SAFE_INTEGER}
+        <Form.Item name="seed" label="Seed"><NumberField min={0} max={Number.MAX_SAFE_INTEGER}
           placeholder="Ngẫu nhiên"/></Form.Item>
       </Space>
       <div><Button htmlType="submit" type="primary" loading={pending}>Tạo ảnh local</Button></div>
