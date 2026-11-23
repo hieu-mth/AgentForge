@@ -30,6 +30,12 @@ def weights_identity():
     return {motion_ltx.CHECKPOINT: motion_ltx.CHECKPOINT_SHA, motion_ltx.ENCODER: motion_ltx.ENCODER_SHA}
 
 
+def check_legacy_workflow(folder):
+    workflow = ensure_local_root(folder / "motion-workflow.json")
+    if workflow.exists() and motion_comfy.inspect_workflow(workflow)["sha256"] != workflow_sha():
+        raise ValueError("Stored motion workflow differs from the original runtime; create a new production.")
+
+
 def _workflow_bytes():
     return (json.dumps(motion_ltx.workflow(FRAMES), indent=2) + "\n").encode()
 

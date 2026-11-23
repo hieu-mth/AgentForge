@@ -778,17 +778,30 @@ def _render(job):
         temporary.unlink(missing_ok=True)
 
 
-def _resolve_job_motion(job, profile, *, planning=False):
+def _resolve_job_motion(job, profile, *, planning=False, revision=None):
     adapter = studio_runtime.motion_adapter(profile)
     identity = studio_runtime.motion_identity(adapter, profile)
-    stored = job.get("approved_motion") or job.get("motion_plan")
+    approved = job.get("approved_motion")
+    plan = job.get("motion_plan")
+    stored = approved or plan
     if stored is not None:
-        if identity != stored or job.get("motion_plan", identity) != identity:
-            raise ValueError("Motion adapter, model or workflow changed; create a new storyboard.")
+        for binding in (plan, approved):
+            if binding is None:
+                continue
+            # Older approvals relied on the registry revision for the encoder path.
+            current = identity if "encoder_path_sha" in binding else {
+                key: value for key, value in identity.items() if key != "encoder_path_sha"}
+            if binding != current or ("encoder_path_sha" not in binding and
+                    job.get("motion_revision", revision) != revision):
+                raise ValueError("Motion adapter, model, encoder or workflow changed; create a new production.")
     elif planning and not job.get("board"):
         job["motion_plan"] = identity
-    elif adapter is not studio_runtime.motion_artifacts() or adapter.output_profile() != studio_runtime.LEGACY_MOTION_OUTPUT:
-        raise ValueError("This stored draft requires its original motion runtime.")
+    elif (adapter is not studio_runtime.motion_artifacts()
+          or adapter.output_profile() != studio_runtime.LEGACY_MOTION_OUTPUT
+          or job.get("motion_revision", revision) != revision):
+        raise ValueError("This stored draft requires its original motion runtime and revision; create a new production.")
+    else:
+        adapter.check_legacy_workflow(_folder(job["id"]))
     return adapter, identity
 
 
@@ -806,7 +819,7 @@ def _work(job, slot):
             revision, bindings = model_hub.draft_routes()
             if reviewing:
                 if moving:
-                    _resolve_job_motion(job, bindings.get("film.motion"), planning=True)
+                    _resolve_job_motion(job, bindings.get("film.motion"), planning=True, revision=revision)
                 studio_runtime.motion_artifacts(job).require_resolved_ledger(job)
                 if bindings["image.generate"].get("base_url"):
                     profile = bindings["image.generate"]
@@ -823,7 +836,7 @@ def _work(job, slot):
             if (moving or "storyboard_version" in job) and revision != job["motion_revision"]:
                 raise ValueError("Model routing changed after approval; review and create a new draft")
             if moving:
-                motion, identity = _resolve_job_motion(job, bindings.get("film.motion"))
+                motion, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=revision)
                 motion_profile = motion.bind(bindings["film.motion"])
                 motion.require_resolved_ledger(job)
             image_profile = bindings["image.generate"]
@@ -1046,7 +1059,7 @@ def _storyboard_action(job, action, data):
         ops_control.require_active()
         revision, bindings = model_hub.draft_routes()
         if job["brief"].get("mode") == "motion":
-            adapter, identity = _resolve_job_motion(job, bindings.get("film.motion"))
+            adapter, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=revision)
             adapter.bind(bindings["film.motion"])
             job["approved_motion"] = identity
         else:
@@ -1068,6 +1081,11 @@ def _storyboard_action(job, action, data):
     if job["storyboard_version"] >= draft_timeline.MAX_VERSIONS:
         raise ValueError("Đã đạt giới hạn phiên bản. Tạo phim mới để tiếp tục.")
     original = draft_timeline.snapshot(job)
+    # Capture the identity before clearing approval. Edits keep the original runtime.
+    motion_plan = job.get("motion_plan")
+    if job["brief"].get("mode") == "motion" and (not motion_plan or "encoder_path_sha" not in motion_plan):
+        revision, bindings = model_hub.draft_routes()
+        _, motion_plan = _resolve_job_motion(job, bindings.get("film.motion"), revision=revision)
     scenes = job["board"]["scenes"]
     checkpoints = [{key: scene.get(key) for key in (
         "shot_id", "image_key", "job_id", "asset", "motion_job", "motion_sha")} for scene in scenes]
@@ -1126,6 +1144,8 @@ def _storyboard_action(job, action, data):
     job["storyboard_version"] += 1
     job["brief"]["scene_count"] = len(scenes)
     job["video_sha"] = None
+    if motion_plan:
+        job["motion_plan"] = motion_plan
     job.pop("approved_motion", None)
     job.pop("receipt_sha", None)
     job.pop("subtitle_sha", None)

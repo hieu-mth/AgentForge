@@ -1,5 +1,7 @@
 """Resolve Studio's supported capabilities from Owner-owned registry profiles."""
 from dataclasses import asdict
+import hashlib
+import os.path
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, Protocol
 
@@ -30,6 +32,7 @@ class VideoMotion(Protocol):
 
     def supports(self, profile: Profile) -> bool: ...
     def workflow_sha(self) -> str: ...
+    def check_legacy_workflow(self, folder: Path) -> None: ...
     def weights_identity(self) -> dict[str, str]: ...
     def output_profile(self) -> MotionOutput: ...
     def bind(self, profile: Profile) -> Profile: ...
@@ -69,9 +72,12 @@ def motion_adapter(profile: Profile | None) -> VideoMotion:
 def motion_identity(adapter: VideoMotion, profile: Profile) -> dict:
     output = asdict(adapter.output_profile())
     output["resolution"] = list(output["resolution"])
+    encoder = profile.get("motion_encoder")
+    encoder_path_sha = (hashlib.sha256(os.path.normcase(os.path.normpath(encoder)).encode()).hexdigest()
+                        if encoder else None)
     return {"adapter": adapter.ADAPTER_ID, "model": profile["model"], "profile": profile.get("id"),
             "endpoint": profile.get("base_url"),
-            "endpoint": profile.get("base_url"),
+            "encoder_path_sha": encoder_path_sha,
             "workflow_sha": adapter.workflow_sha(), "weights": adapter.weights_identity(), "output": output}
 
 

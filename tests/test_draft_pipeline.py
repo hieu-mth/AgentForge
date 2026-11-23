@@ -42,6 +42,71 @@ class DraftTests(unittest.TestCase):
         return {"id": "owner_motion", "provider": "comfyui", "model": draft_motion.motion_ltx.CHECKPOINT,
                 "motion_encoder": str(self.root / "encoder.safetensors"), "base_url": "http://127.0.0.1:8188"}
 
+    def test_legacy_motion_edit_pins_original_runtime_and_reapproval_resumes(self):
+        profile = self.motion_profile()
+        bindings = {"film.motion": profile, "image.generate": {}}
+        job = {"id": self.ident, "brief": {**self.brief, "mode": "motion", "seconds": 4},
+               "board": draft._story(self.board(), 2, 4, {"cat": {}}),
+               "storyboard_version": 1, "status": "FAILED",
+               "motion_revision": 8, "video_sha": None}
+        draft._stamp_storyboard(job)
+        job.update(status="FAILED", approved_storyboard_sha=job["storyboard_sha"])
+        draft._save(job)
+        old_sha = job["storyboard_sha"]
+        folder = draft._folder(self.ident)
+        folder.mkdir(parents=True)
+        workflow = folder / "motion-workflow.json"
+        workflow.write_bytes(draft_motion._workflow_bytes())
+        fields = {"sha256": old_sha, "index": 0, "description": "Cat moves",
+                  "image_prompt": "Cat by the window", "motion_prompt": "Cat pauses"}
+        with (patch.object(draft.model_hub, "draft_routes", return_value=(8, bindings)) as routes,
+              patch.object(draft_motion, "require_resolved_ledger"),
+              patch.object(draft_motion, "bind", return_value=profile),
+              patch.object(draft_motion, "prepare",
+                           return_value=(None, None, None, draft_motion.workflow_sha())),
+              patch.object(draft_motion, "run_shot") as motion,
+              patch.object(draft, "_image"), patch.object(draft, "_release_idle_image"),
+              patch.object(draft, "_dispatch"), patch.object(draft, "_render", return_value="sha")):
+            self.assertNotIn("motion_plan", draft._read(self.ident))
+            draft._work(draft._read(self.ident), nullcontext())
+            saved = draft._read(self.ident)
+            self.assertEqual(saved["status"], "REVIEW", saved.get("error"))
+            self.assertEqual(motion.call_count, 2)
+            routes.return_value = (9, bindings)
+            with self.assertRaisesRegex(ValueError, "original motion runtime and revision"):
+                draft.act(self.ident, "storyboard-edit", fields)
+            routes.return_value = (8, bindings)
+            workflow.write_text(json.dumps(draft_motion.motion_ltx.workflow(33)), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Stored motion workflow differs"):
+                draft.act(self.ident, "storyboard-edit", fields)
+            workflow.write_bytes(draft_motion._workflow_bytes())
+            edited = draft.act(self.ident, "storyboard-edit", fields)
+            self.assertEqual(edited["storyboard_history"][0]["sha256"], old_sha)
+            self.assertNotIn("approved_motion", edited)
+            self.assertEqual(edited["storyboard_sha"], draft.draft_timeline.digest(edited))
+            sha = {"sha256": edited["storyboard_sha"]}
+            for changed in ({**profile, "motion_encoder": str(self.root / "other.safetensors")},
+                            {**profile, "model": draft_motion.motion_ltx.MODEL_ID}):
+                routes.return_value = (8, {**bindings, "film.motion": changed})
+                with self.assertRaisesRegex(ValueError, "new production"):
+                    draft.act(self.ident, "storyboard-approve", sha)
+            routes.return_value = (8, bindings)
+            with patch.object(draft_motion, "workflow_sha", return_value="f" * 64):
+                with self.assertRaisesRegex(ValueError, "workflow changed"):
+                    draft.act(self.ident, "storyboard-approve", sha)
+            approved = draft.act(self.ident, "storyboard-approve", sha)
+            self.assertEqual(approved["approved_motion"], approved["motion_plan"])
+            self.assertEqual(draft.draft_timeline.digest(approved), sha["sha256"])
+            routes.return_value = (8, {**bindings, "film.motion": {
+                **profile, "motion_encoder": str(self.root / "other.safetensors")}})
+            draft._work(draft._read(self.ident), nullcontext())
+            self.assertIn("encoder or workflow changed", draft._read(self.ident)["error"])
+            self.assertEqual(motion.call_count, 2)
+            routes.return_value = (8, bindings)
+            draft._work(draft._read(self.ident), nullcontext())
+            self.assertEqual(draft._read(self.ident)["status"], "REVIEW")
+            self.assertEqual(motion.call_count, 4)
+
     def test_alternate_motion_contract_survives_approval_resume_and_render(self):
         class AlternateMotion:
             ADAPTER_ID = "fixture.video.v1"
