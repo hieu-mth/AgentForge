@@ -31,7 +31,9 @@ Git cleanup **không xóa hay migrate** `data/`, `workspace/`, `.env`, model wei
 
 `GET /api/model-hub` trả `capability_contracts` cho từng profile, gồm adapter tương thích, mã lý do và giới hạn đầu ra. Để kiểm tra runtime, phiên Owner gửi `POST /api/model-hub/readiness` với CSRF và payload gồm `ack: "CHECK_CAPABILITY_READINESS"`, `profile_id`, `capability` và `expected_revision` lấy từ catalog.
 
-`READY` xác nhận metadata local tại thời điểm kiểm tra. Với Ollama, preflight kiểm tra tag đã cài. Với FLUX, preflight kiểm tra node, input và tên weights trong ComfyUI. Với LTX, preflight kiểm tra launcher đã đăng ký, công cụ media, tên và kích thước weights, cùng preset node/API. SHA weights và tài nguyên khả dụng vẫn do runtime kiểm tra khi thực thi.
+`route_configurable` phản ánh chính sách gán route, còn `local_runtime_compatible` phản ánh adapter local. Hồ sơ Anthropic dùng cho cấu hình route văn bản vẫn được giữ và trả `NOT_CHECKED` khi preflight.
+
+Preflight trả `METADATA_COMPATIBLE`, `UNAVAILABLE`, `UNSUPPORTED`, `MISSING_DEPENDENCY` hoặc `NOT_CHECKED`, cùng mã `reason` cụ thể. `runtime_available` cho biết runtime có trả được metadata cần thiết, còn `endpoint_metadata_compatible` cho biết metadata đó phù hợp với model/workflow. Giá trị `null` là chưa xác định. Kết quả luôn có `inference_verified: false` và `endpoint_ownership: "NOT_CHECKED"`. ComfyUI mở bên ngoài có thể trả metadata tương thích. LTX vẫn cần cấu hình thư mục Portable, công cụ media và weights local theo chính sách dispatch hiện hành. SHA weights và tài nguyên khả dụng vẫn do runtime kiểm tra khi thực thi.
 
 ### Kiểm thử bộ nhớ Studio với ba bản nháp
 

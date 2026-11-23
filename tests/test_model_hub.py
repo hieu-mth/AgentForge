@@ -3,8 +3,10 @@ from pathlib import Path
 import json
 import sqlite3
 from contextlib import closing
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import tempfile
 import sys
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -16,6 +18,28 @@ from tests.test_flux_runtime import profile as flux_profile
 
 
 class ModelHubTests(unittest.TestCase):
+    def test_ollama_metadata_preflight_rejects_redirects(self):
+        paths = []
+
+        class Redirect(BaseHTTPRequestHandler):
+            def do_GET(self):
+                paths.append(self.path)
+                self.send_response(302)
+                self.send_header("Location", "/unexpected")
+                self.end_headers()
+
+        with ThreadingHTTPServer(("127.0.0.1", 0), Redirect) as server:
+            worker = threading.Thread(target=server.serve_forever, daemon=True)
+            worker.start()
+            try:
+                result = model_hub._check_ollama({"id": "local", "model": "sample:latest",
+                    "base_url": f"http://127.0.0.1:{server.server_port}"})
+            finally:
+                server.shutdown()
+                worker.join()
+        self.assertEqual(result["status"], "HTTP_ERROR")
+        self.assertEqual(paths, ["/api/tags"])
+
     def test_legacy_comfy_routes_read_but_unsupported_binding_is_rejected(self):
         with tempfile.TemporaryDirectory() as folder:
             db = Path(folder) / "hub.sqlite3"
@@ -38,7 +62,7 @@ class ModelHubTests(unittest.TestCase):
                                                        expected_revision=1, db_path=db)
             probe.assert_not_called()
             self.assertTrue(result["configuration_valid"])
-            self.assertFalse(result["runtime_ready"])
+            self.assertIsNone(result["runtime_available"])
             self.assertEqual(result["reason"], "MOTION_PROFILE_INCOMPATIBLE")
             self.assertEqual(db.read_bytes(), before)
 
@@ -60,8 +84,9 @@ class ModelHubTests(unittest.TestCase):
 
             with patch.object(flux_runtime, "readiness", return_value="WORKFLOW_NODE_UNAVAILABLE") as probe:
                 image = check(flux, "image.generate")
-                self.assertTrue(image["compatible"])
-                self.assertFalse(image["runtime_ready"])
+                self.assertTrue(image["local_runtime_compatible"])
+                self.assertTrue(image["runtime_available"])
+                self.assertFalse(image["endpoint_metadata_compatible"])
                 self.assertEqual(image["readiness"], "MISSING_DEPENDENCY")
                 self.assertEqual(image["reason"], "WORKFLOW_NODE_UNAVAILABLE")
                 self.assertEqual(image["output_limits"]["max_resolution"], 1024)
@@ -70,34 +95,58 @@ class ModelHubTests(unittest.TestCase):
                 self.assertNotEqual(image["workflow_sha256"],
                                     model_hub.capability_contract("image.generate", updated)["workflow_sha256"])
                 probe.assert_called_once_with(flux["flux"], 12345, inspect_all_nodes=True)
-                self.assertEqual(check(flux, "film.motion")["status"], "INCOMPATIBLE")
+                self.assertEqual(check(flux, "film.motion")["status"], "UNSUPPORTED")
                 with self.assertRaisesRegex(ValueError, "REVISION_CONFLICT"):
                     model_hub.capability_readiness(flux["id"], "image.generate", expected_revision=2, db_path=db)
                 self.assertEqual(probe.call_count, 1)
 
             with (patch.object(draft_motion.comfy_service, "_settings", return_value={
-                      "port": draft_motion.motion_comfy.PORT, "install_root": folder}),
+                      "port": draft_motion.motion_comfy.PORT, "install_root": folder}) as settings,
+                  patch.object(draft_motion.comfy_service, "ensure_running", side_effect=AssertionError("start")),
                   patch.object(draft_motion.render, "find_media_tool", return_value="tool"),
                   patch.object(motion_ltx, "verify_weights") as weights,
                   patch.object(motion_ltx, "check_runtime") as nodes,
                   patch.object(draft_motion.comfyui, "request_json",
                                return_value={"devices": [{"type": "cuda"}]}) as request):
                 result = check(motion, "film.motion")
-                self.assertTrue(result["runtime_ready"])
+                self.assertEqual(result["status"], "METADATA_COMPATIBLE")
+                self.assertTrue(result["runtime_available"])
+                self.assertTrue(result["endpoint_metadata_compatible"])
+                self.assertFalse(result["inference_verified"])
+                self.assertEqual(result["endpoint_ownership"], "NOT_CHECKED")
                 self.assertEqual(result["workflow_sha256"], draft_motion.workflow_sha())
                 self.assertEqual(result["output_limits"],
                                  {"format": "mp4", "fps": 24, "max_frames": 49, "resolution": [512, 288]})
                 weights.assert_called_once_with(folder, motion["motion_encoder"], metadata_only=True)
                 nodes.assert_called_once_with(draft_motion.motion_comfy.PORT, require_models=True, frames=49)
                 self.assertEqual(request.call_args.args, ("/system_stats",))
-                self.assertEqual(check(motion, "image.generate")["status"], "INCOMPATIBLE")
+                self.assertEqual(check(motion, "image.generate")["status"], "UNSUPPORTED")
+                settings.return_value = None
+                external = check(motion, "film.motion")
+                self.assertEqual(external["status"], "MISSING_DEPENDENCY")
+                self.assertEqual(external["reason"], "MOTION_LAUNCHER_REQUIRED")
+                self.assertTrue(external["endpoint_metadata_compatible"])
+                before_calls = request.call_count
+                self.assertEqual(draft_motion.registry_readiness({
+                    **motion, "base_url": "http://127.0.0.1:8192"}), "MOTION_ENDPOINT_MISMATCH")
+                self.assertEqual(draft_motion.registry_readiness({
+                    **motion, "base_url": f"http://[::1]:{draft_motion.motion_comfy.PORT}"}),
+                    "MOTION_ENDPOINT_MISMATCH")
+                self.assertEqual(request.call_count, before_calls)
                 request.side_effect = ConnectionRefusedError()
-                self.assertEqual(check(motion, "film.motion")["reason"], "COMFYUI_UNAVAILABLE")
+                offline = check(motion, "film.motion")
+                self.assertEqual(offline["status"], "UNAVAILABLE")
+                self.assertEqual(offline["reason"], "COMFYUI_UNAVAILABLE")
+                self.assertFalse(offline["runtime_available"])
+                self.assertIsNone(offline["endpoint_metadata_compatible"])
                 request.side_effect = None
+                request.return_value = {"unrelated": []}
+                self.assertEqual(check(motion, "film.motion")["reason"], "INVALID_RESPONSE")
+                request.return_value = {"devices": [{"type": "cuda"}]}
                 nodes.side_effect = ValueError("missing sampler")
                 self.assertEqual(check(motion, "film.motion")["reason"], "MOTION_WORKFLOW_UNAVAILABLE")
             with patch.object(model_hub, "_check_ollama", return_value={"status": "LOCAL_MODEL_FOUND"}):
-                self.assertTrue(check(ollama, "film.storyboard")["runtime_ready"])
+                self.assertEqual(check(ollama, "film.storyboard")["status"], "METADATA_COMPATIBLE")
             self.assertEqual(db.read_bytes(), before)
 
     def test_disabled_and_cloud_preflight_do_not_probe_providers(self):
@@ -114,9 +163,14 @@ class ModelHubTests(unittest.TestCase):
             with patch.object(model_hub, "_check_ollama", side_effect=AssertionError("unexpected probe")):
                 disabled, cloud = [model_hub.capability_readiness(
                     profile["id"], "general.text", expected_revision=2, db_path=db) for profile in profiles]
-            self.assertEqual(disabled["status"], "DISABLED")
+            self.assertEqual((disabled["status"], disabled["reason"]), ("NOT_CHECKED", "DISABLED"))
+            self.assertEqual(cloud["status"], "NOT_CHECKED")
             self.assertEqual(cloud["reason"], "CLOUD_PREFLIGHT_UNSUPPORTED")
-            self.assertTrue(all(not result["inference_invoked"] and not result["runtime_ready"]
+            self.assertTrue(cloud["route_configurable"])
+            self.assertFalse(cloud["local_runtime_compatible"])
+            self.assertEqual(cloud["route_configurable"],
+                             model_hub.orchestrator_policy.compatible("text", profiles[1]))
+            self.assertTrue(all(not result["inference_invoked"] and result["runtime_available"] is None
                                 for result in (disabled, cloud)))
 
     def test_capability_catalog_is_video_first_without_model_defaults(self):

@@ -412,12 +412,14 @@ def capability_contract(capability, profile):
     reason = None
     if kind not in {"text", "image", "video", "vision"}:
         reason = "UNSUPPORTED_CAPABILITY"
-    elif profile["provider"] == "anthropic":
+    elif kind == "text" and profile["provider"] == "anthropic":
         reason = "CLOUD_PREFLIGHT_UNSUPPORTED"
     elif not adapter:
         reason = {"image": "FLUX_WORKFLOW_REQUIRED", "video": "MOTION_PROFILE_INCOMPATIBLE",
                   "text": "LOCAL_TEXT_ADAPTER_REQUIRED", "vision": "VISION_ADAPTER_UNAVAILABLE"}[kind]
-    return {"capability": capability, "compatible": adapter is not None, "adapter": adapter_id,
+    return {"capability": capability,
+            "route_configurable": orchestrator_policy.compatible(kind, profile),
+            "local_runtime_compatible": adapter is not None, "adapter": adapter_id,
             "reason": reason, "output_limits": output, "workflow_sha256": workflow_sha,
             "configuration_status": "CONFIGURED", "readiness": "NOT_CHECKED"}
 
@@ -435,27 +437,39 @@ def capability_readiness(profile_id, capability, *, expected_revision, db_path=N
     contract = capability_contract(capability, profile)
     kind = orchestrator_policy.KINDS.get(capability)
     if not profile["enabled"]:
-        status = "DISABLED"
-    elif not contract["compatible"]:
-        status = "INCOMPATIBLE"
+        observation = "DISABLED"
+    elif not contract["local_runtime_compatible"]:
+        observation = contract["reason"]
     elif kind == "text":
-        status = _check_ollama(profile)["status"]
-        if status == "LOCAL_MODEL_FOUND":
-            status = "READY"
+        observation = _check_ollama(profile)["status"]
     elif kind == "image":
         from agentforge.features.media.flux_runtime import readiness
-        status = readiness(profile["flux"], urlsplit(profile["base_url"]).port, inspect_all_nodes=True)
+        observation = readiness(profile["flux"], urlsplit(profile["base_url"]).port, inspect_all_nodes=True)
     else:
-        status = orchestrator_policy.local_adapter(kind, profile).registry_readiness(profile)
-    reason = contract["reason"] if status == "INCOMPATIBLE" else status if status != "READY" else None
-    readiness = {"READY": "READY", "DISABLED": "NOT_CHECKED",
-                 "INCOMPATIBLE": "UNSUPPORTED"}.get(status, "MISSING_DEPENDENCY")
+        observation = orchestrator_policy.local_adapter(kind, profile).registry_readiness(profile)
+    status, available, metadata_compatible = _preflight_result(observation, contract)
     return {**contract, "profile_id": profile_id, "revision": revision, "configuration_valid": True,
-            "enabled": profile["enabled"], "status": status, "readiness": readiness,
-            "runtime_ready": status == "READY",
-            "reason": reason,
-            "scope": "METADATA_ONLY", "inference_invoked": False,
+            "enabled": profile["enabled"], "status": status, "readiness": status,
+            "runtime_available": available, "endpoint_metadata_compatible": metadata_compatible,
+            "reason": None if status == "METADATA_COMPATIBLE" else observation,
+            "scope": "METADATA_ONLY", "inference_invoked": False, "inference_verified": False,
+            "endpoint_ownership": "NOT_CHECKED",
             "checked_at": datetime.now(timezone.utc).isoformat()}
+
+
+def _preflight_result(observation, contract):
+    if observation in {"DISABLED", "CLOUD_PREFLIGHT_UNSUPPORTED"}:
+        return "NOT_CHECKED", None, None
+    if not contract["local_runtime_compatible"] or observation == "MOTION_ENDPOINT_MISMATCH":
+        return "UNSUPPORTED", None, None
+    if observation in {"READY", "LOCAL_MODEL_FOUND"}:
+        return "METADATA_COMPATIBLE", True, True
+    if observation in {"MOTION_LAUNCHER_REQUIRED", "MEDIA_TOOLS_UNAVAILABLE", "MOTION_WEIGHTS_UNAVAILABLE"}:
+        return "MISSING_DEPENDENCY", True, True
+    if observation in {"GPU_UNAVAILABLE", "MODEL_NOT_INSTALLED", "MODEL_UNAVAILABLE",
+                       "WORKFLOW_NODE_UNAVAILABLE", "MOTION_WORKFLOW_UNAVAILABLE"}:
+        return "MISSING_DEPENDENCY", True, False
+    return "UNAVAILABLE", False, None
 
 
 def image_runtime(*, automated=False, db_path=None):
