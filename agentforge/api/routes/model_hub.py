@@ -46,6 +46,12 @@ def handle(server, path, request, session=None):
             "RESET_MODEL_ROUTE",
             expected_revision=request["expected_revision"],
             task_id=request["task_id"])
+    if path == "/api/model-hub/readiness":
+        if (set(request) != {"ack", "profile_id", "capability", "expected_revision"}
+                or request["ack"] != "CHECK_CAPABILITY_READINESS"):
+            raise PermissionError("Explicit read-only capability preflight required")
+        return model_hub.capability_readiness(request["profile_id"], request["capability"],
+                                              expected_revision=request["expected_revision"])
     if path == "/api/model-hub/check":
         if (set(request) != {"ack", "profile_id"} or
                 request["ack"] != "CHECK_LOCAL_MODEL"):

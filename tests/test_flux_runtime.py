@@ -35,6 +35,27 @@ def profile():
 
 
 class FluxRuntimeTests(unittest.TestCase):
+    def test_registry_readiness_checks_non_loader_nodes_and_installed_weights(self):
+        config = profile()["flux"]
+        graph = config["workflow"]
+        definitions = {node["class_type"]: {"input": {"required": {
+            key: [[value]] for key, value in node["inputs"].items()
+        }}} for node in graph.values()}
+
+        def metadata(path, *, port, timeout=5):
+            self.assertEqual(port, 12345)
+            if path == "/system_stats":
+                return {"devices": [{"type": "cuda"}]}
+            kind = path.removeprefix("/object_info/")
+            return {kind: definitions[kind]} if kind in definitions else {}
+
+        with patch.object(flux_runtime, "_json", side_effect=metadata):
+            self.assertEqual(flux_runtime.readiness(config, 12345, inspect_all_nodes=True), "READY")
+            definitions["UnetLoaderGGUF"]["input"]["required"]["unet_name"] = [[]]
+            self.assertEqual(flux_runtime.readiness(config, 12345, inspect_all_nodes=True), "MODEL_UNAVAILABLE")
+            definitions.pop("KSampler")
+            self.assertEqual(flux_runtime.readiness(config, 12345, inspect_all_nodes=True), "WORKFLOW_NODE_UNAVAILABLE")
+
     def setUp(self):
         self.enterContext(patch.object(flux_runtime.draft_resources, "require_gpu"))
         self.enterContext(patch.object(flux_runtime.comfy_service, "_settings", return_value=None))

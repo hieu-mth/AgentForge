@@ -74,19 +74,26 @@ def read_source(job_id, expected_sha):
     return data
 
 
-def _verify_weights(path, name, size, sha):
+def _weight_file(path, name, size):
     path = ensure_local_root(Path(path))
     if path.name != name or not path.is_file() or path.stat().st_size != size:
         raise ValueError("Missing or invalid LTX weights: " + name)
-    with path.open("rb") as stream:
-        if hashlib.file_digest(stream, "sha256").hexdigest() != sha:
-            raise ValueError("LTX weights SHA-256 mismatch: " + name)
+    return path
 
 
-def verify_weights(installation, encoder_path):
-    _verify_weights(Path(installation) / "ComfyUI" / "models" / "checkpoints" / CHECKPOINT,
-                    CHECKPOINT, 4_461_695_684, CHECKPOINT_SHA)
-    _verify_weights(encoder_path, ENCODER, 4_893_934_904, ENCODER_SHA)
+def verify_weights(installation, encoder_path, *, metadata_only=False):
+    files = (
+        (Path(installation) / "ComfyUI" / "models" / "checkpoints" / CHECKPOINT,
+         CHECKPOINT, 4_461_695_684, CHECKPOINT_SHA),
+        (encoder_path, ENCODER, 4_893_934_904, ENCODER_SHA),
+    )
+    for path, name, size, sha in files:
+        path = _weight_file(path, name, size)
+        if metadata_only:
+            continue
+        with path.open("rb") as stream:
+            if hashlib.file_digest(stream, "sha256").hexdigest() != sha:
+                raise ValueError("LTX weights SHA-256 mismatch: " + name)
 
 
 def check_runtime(port, *, require_models=False, frames=33):

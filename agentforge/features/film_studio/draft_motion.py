@@ -15,7 +15,7 @@ from agentforge.features.film_studio import draft_resources, long_form, motion_c
 from agentforge.features.film_studio.draft_resources import NeedsReconciliation
 from agentforge.features.film_studio.studio_contracts import MotionOutput
 from agentforge.features.media import render
-from agentforge.integrations import comfy_service
+from agentforge.integrations import comfy_service, comfyui
 from agentforge.paths import ensure_local_root
 
 FRAMES = 49  # Studio's approved preset, independent of experimental pilot presets.
@@ -64,6 +64,41 @@ def bind(profile):
         raise ValueError("Thiếu công cụ xác minh video: " + ", ".join(missing)
                          + ". AgentForge tìm trong data/company/runtime_tools/ffmpeg hoặc PATH của backend.")
     return profile
+
+
+def registry_readiness(profile):
+    """Inspect the installed Studio preset without starting ComfyUI or a job."""
+    endpoint = urlsplit(profile["base_url"])
+    port = endpoint.port
+    if port != motion_comfy.PORT or endpoint.hostname not in {"localhost", "127.0.0.1"}:
+        return "MOTION_ENDPOINT_MISMATCH"
+    try:
+        stats = comfyui.request_json("/system_stats", port=port, timeout=3)
+        devices = stats.get("devices") if isinstance(stats, dict) else None
+        if not isinstance(devices, list):
+            return "INVALID_RESPONSE"
+        if not any(isinstance(device, dict) and device.get("type") == "cuda" for device in devices):
+            return "GPU_UNAVAILABLE"
+    except (OSError, http.client.HTTPException, comfyui.ComfyUITransportError, comfyui.ComfyHTTPError) as exc:
+        return comfyui.failure_status(exc)
+    try:
+        motion_ltx.check_runtime(port, require_models=True, frames=FRAMES)
+    except (OSError, http.client.HTTPException, comfyui.ComfyUITransportError, comfyui.ComfyHTTPError) as exc:
+        return comfyui.failure_status(exc)
+    except (ValueError, KeyError, TypeError, IndexError, AttributeError, RuntimeError):
+        return "MOTION_WORKFLOW_UNAVAILABLE"
+    # Endpoint metadata does not establish process ownership. Keep the same
+    # on-disk requirements as dispatch, including for externally started ComfyUI.
+    config = comfy_service._settings()
+    if not config or config["port"] != port:
+        return "MOTION_LAUNCHER_REQUIRED"
+    if not all(render.find_media_tool(tool) for tool in ("ffmpeg", "ffprobe")):
+        return "MEDIA_TOOLS_UNAVAILABLE"
+    try:
+        motion_ltx.verify_weights(config["install_root"], profile["motion_encoder"], metadata_only=True)
+    except (OSError, ValueError):
+        return "MOTION_WEIGHTS_UNAVAILABLE"
+    return "READY"
 
 
 def verify_clip(scene, stream):
