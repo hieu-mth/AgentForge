@@ -29,6 +29,8 @@ Git cleanup **không xóa hay migrate** `data/`, `workspace/`, `.env`, model wei
 
 ### Model Hub capability readiness
 
+Trong **Cài đặt → Model AI**, Owner có thể xem lại và xác thực cấu hình trước khi lưu, phân công hồ sơ theo năng lực và kiểm tra metadata theo yêu cầu. API `POST /api/model-hub/profile/preview` nhận `ack: "PREVIEW_MODEL_PROFILE"`, `expected_revision` và `profile` để xác thực hồ sơ nháp. API key chỉ gửi ở thao tác lưu hồ sơ.
+
 `GET /api/model-hub` trả `capability_contracts` cho từng profile, gồm adapter tương thích, mã lý do và giới hạn đầu ra. Để kiểm tra runtime, phiên Owner gửi `POST /api/model-hub/readiness` với CSRF và payload gồm `ack: "CHECK_CAPABILITY_READINESS"`, `profile_id`, `capability` và `expected_revision` lấy từ catalog.
 
 `route_configurable` phản ánh chính sách gán route, còn `local_runtime_compatible` phản ánh adapter local. Hồ sơ Anthropic dùng cho cấu hình route văn bản vẫn được giữ và trả `NOT_CHECKED` khi preflight.

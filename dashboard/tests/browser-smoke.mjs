@@ -751,6 +751,13 @@ try {
   await registerDialog.getByRole('button',{name:'Xem lại cấu hình'}).click();
   await registerDialog.getByText('Dùng địa chỉ HTTP loopback với cổng từ 1 đến 65535.').waitFor();
   await localEndpoint.fill('http://127.0.0.1:11434');
+  await settings.route('**/api/model-hub/profile/preview',route=>route.fulfill({
+    status:400,json:{message:'MODEL_HUB_REVISION_CONFLICT'},
+  }),{times:1});
+  await registerDialog.getByRole('button',{name:'Xem lại cấu hình'}).click();
+  await registerDialog.getByRole('button',{name:'Tải lại cấu hình',exact:true}).click();
+  if(await registerDialog.getByLabel('Tên model',{exact:true}).inputValue()!=='synthetic-local:8b')
+    throw new Error('Reloading a stale revision discarded pending model edits');
   await registerDialog.getByRole('button',{name:'Xem lại cấu hình'}).click();
   await registerDialog.getByText('synthetic-local:8b',{exact:true}).waitFor();
   const beforeSave=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
@@ -760,6 +767,39 @@ try {
   const registered=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
   if(registered.revision!==1||registered.profiles[0]?.provider!=='ollama')
     throw new Error('Owner SQLite profile registration failed');
+  const registeredRow=settings.locator('tr[data-row-key="local_primary"]');
+  await registeredRow.getByText('Chưa kiểm tra',{exact:true}).waitFor();
+  let checks=0;
+  let unblockCheck;
+  const checkGate=new Promise(resolve=>{unblockCheck=resolve;});
+  await settings.route('**/api/model-hub/readiness',async route=>{
+    const body=route.request().postDataJSON();
+    if(body.expected_revision!==1||body.capability!=='general.text'||body.profile_id!=='local_primary')
+      throw new Error('Readiness did not use the current model and revision');
+    checks++;
+    if(checks===1){
+      await checkGate;
+      return route.fulfill({status:503,json:{error:'fixture'}});
+    }
+    const [status,reason]=[
+      ['UNAVAILABLE','UNAVAILABLE'],['MISSING_DEPENDENCY','MODEL_NOT_INSTALLED'],
+      ['METADATA_COMPATIBLE',null],
+    ][checks-2];
+    return route.fulfill({json:{revision:1,status,reason,checked_at:'2026-01-01T08:00:00Z'}});
+  });
+  await registeredRow.getByRole('button',{name:'Kiểm tra',exact:true}).click();
+  await registeredRow.getByText('Đang kiểm tra…',{exact:true}).waitFor();
+  unblockCheck();
+  await registeredRow.getByRole('button',{name:'Thử lại',exact:true}).click();
+  await registeredRow.getByText('Runtime không khả dụng',{exact:true}).waitFor();
+  await registeredRow.getByRole('button',{name:'Kiểm tra',exact:true}).click();
+  await registeredRow.getByText('Thiếu điều kiện',{exact:true}).waitFor();
+  await registeredRow.getByRole('button',{name:'Kiểm tra',exact:true}).click();
+  await registeredRow.getByText('Metadata tương thích',{exact:true}).waitFor();
+  await registeredRow.locator('time').waitFor();
+  if(checks!==4||await registeredRow.getByText('Đã chạy thử thành công').count())
+    throw new Error('Metadata was presented as inference or retried automatically');
+  await settings.unroute('**/api/model-hub/readiness');
   console.log('Model adapter selection, validation and real SQLite registration: PASS');
   await settings.goto(policyOrigin+'/dashboard/#/orchestrator');
   await settings.getByRole('heading',{name:'AI điều phối tác vụ',exact:true}).waitFor();

@@ -168,7 +168,7 @@ def _cloud_url(value):
     return value.rstrip("/")
 
 
-def validate_profile(value, *, profile_id=None):
+def validate_profile(value, *, profile_id=None, preview=False):
     """Return canonical allowlisted profile; secrets are never accepted."""
     if not isinstance(value, dict):
         raise ModelConfigError("Model profile must be an object")
@@ -207,6 +207,8 @@ def validate_profile(value, *, profile_id=None):
                     or any(ord(char) < 32 for char in encoder)):
                 raise ModelConfigError("Motion encoder must be a local absolute file path")
             common["motion_encoder"] = encoder
+    elif preview and fields == {"base_url"}:
+        common["base_url"] = _cloud_url(value["base_url"])
     elif fields == {"base_url", "api_key_protected"} and profile_id is not None:
         key = value["api_key_protected"]
         try:
@@ -422,6 +424,19 @@ def capability_contract(capability, profile):
             "local_runtime_compatible": adapter is not None, "adapter": adapter_id,
             "reason": reason, "output_limits": output, "workflow_sha256": workflow_sha,
             "configuration_status": "CONFIGURED", "readiness": "NOT_CHECKED"}
+
+
+def preview_profile(profile, *, expected_revision, db_path=None):
+    """Validate a draft configuration and derive its contracts without saving or probing."""
+    revision, _ = _read_state(db_path=db_path)
+    if type(expected_revision) is not int or revision != expected_revision:
+        raise ModelConfigError("MODEL_HUB_REVISION_CONFLICT")
+    if not isinstance(profile, dict) or "api_key_protected" in profile:
+        raise ModelConfigError("Unknown or sensitive model profile fields")
+    canonical = validate_profile(profile, preview=True)
+    return {"revision": revision, "capability_contracts": [
+        capability_contract(key, canonical) for key, kind in orchestrator_policy.KINDS.items()
+        if kind != "tool"]}
 
 
 def capability_readiness(profile_id, capability, *, expected_revision, db_path=None):

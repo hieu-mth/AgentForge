@@ -14,6 +14,11 @@ def handle(server, path, request, session=None):
         if action == "RESET_ORCHESTRATOR" and set(request) == {"ack", "expected_revision"}:
             return model_hub.change(action, expected_revision=request["expected_revision"])
         raise PermissionError("Cần xác nhận lưu hoặc đặt lại chính sách điều phối")
+    if path == "/api/model-hub/profile/preview":
+        if (set(request) != {"ack", "expected_revision", "profile"}
+                or request["ack"] != "PREVIEW_MODEL_PROFILE"):
+            raise PermissionError("Explicit model profile preview required")
+        return model_hub.preview_profile(request["profile"], expected_revision=request["expected_revision"])
     if path == "/api/model-hub/profile":
         if (set(request) - {"api_key"} != {"ack", "expected_revision", "profile"} or
                 request["ack"] != "SAVE_MODEL_PROFILE"):

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { profilePayload } from '../src/model_hub_ui.js';
+import { configurableProfiles, outputSummary, profileCapability, profilePayload, readinessLabels } from '../src/model_hub_ui.js';
 import { groupFor, hashFor, parseSection } from '../src/navigation.js';
 
 test('profile form never sends unrelated fields or token values',()=>{
@@ -48,4 +48,19 @@ test('LTX encoder is sent only for a compatible ComfyUI adapter',()=>{
   assert.ok(!('motion_encoder' in profilePayload(values,adapter)));
   assert.equal(profilePayload(values,{...adapter,motion_encoder_supported:true}).motion_encoder,
     'C:/models/t5.safetensors');
+});
+
+test('routing follows revision catalog contracts and preserves cloud configuration-only routes',()=>{
+  const cloud={id:'cloud',capability_contracts:[
+    {capability:'general.text',route_configurable:true,local_runtime_compatible:false},
+    {capability:'film.motion',route_configurable:false},
+  ]};
+  const disabled={id:'disabled',capability_contracts:[
+    {capability:'general.text',route_configurable:false,local_runtime_compatible:true},
+  ]};
+  assert.deepEqual(configurableProfiles([disabled,cloud],'general.text'),[cloud]);
+  assert.deepEqual(configurableProfiles([disabled,cloud],'film.motion'),[]);
+  assert.equal(profileCapability(cloud).capability,'general.text');
+  assert.equal(outputSummary({resolution:[512,288],fps:24,max_frames:49}),'512 × 288 px · 24 FPS · tối đa 49 frame/clip');
+  assert.equal(readinessLabels.METADATA_COMPATIBLE,'Metadata tương thích');
 });
