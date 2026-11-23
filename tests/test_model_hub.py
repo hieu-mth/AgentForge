@@ -277,6 +277,62 @@ class ModelHubTests(unittest.TestCase):
 
 
 class ModelHubReadinessHttpTests(OwnerHttpFixture):
+    def test_workflow_preview_crud_routes_and_rollback(self):
+        db = self.root / "hub.sqlite3"
+        profile = flux_profile()
+        preview_path = "/api/model-hub/profile/preview"
+        save_path = "/api/model-hub/profile"
+
+        def post(path, ack, revision, **fields):
+            return self.req("POST", path, {
+                "ack": ack, "expected_revision": revision, **fields})[:2]
+
+        with patch.object(model_hub, "DB_PATH", db):
+            payload = {"ack": "PREVIEW_MODEL_PROFILE", "expected_revision": 0, "profile": profile}
+            self.assertEqual(self.req("POST", preview_path, payload)[0], 401)
+            self.login()
+            self.assertEqual(self.req("POST", preview_path, payload, csrf=False)[0], 403)
+            self.assertEqual(self.req("POST", preview_path, {**payload, "api_key": "fixture-secret"})[0], 400)
+            malformed = flux_profile()
+            malformed["flux"]["workflow"]["38"]["inputs"]["unet_name"] = "other.gguf"
+            self.assertEqual(post(preview_path, "PREVIEW_MODEL_PROFILE", 0, profile=malformed)[0], 400)
+            cloud = {"id": "preview_cloud", "provider": "anthropic", "enabled": True,
+                     "model": "fixture", "base_url": "https://api.example.com"}
+            status, cloud_preview = post(preview_path, "PREVIEW_MODEL_PROFILE", 0, profile=cloud)
+            self.assertEqual(status, 200)
+            self.assertTrue(cloud_preview["capability_contracts"][0]["route_configurable"])
+            self.assertEqual(post(save_path, "SAVE_MODEL_PROFILE", 0, profile=cloud)[0], 400)
+            status, valid = post(preview_path, "PREVIEW_MODEL_PROFILE", 0, profile=profile)
+            self.assertEqual(status, 200)
+            self.assertEqual(valid["revision"], 0)
+            initial = next(c for c in valid["capability_contracts"] if c["capability"] == "image.generate")
+            self.assertTrue(initial["local_runtime_compatible"])
+            self.assertEqual(model_hub.catalog()["revision"], 0)
+            self.assertEqual(post(save_path, "SAVE_MODEL_PROFILE", 0, profile=profile, intent="edit")[0], 400)
+            self.assertEqual(post(save_path, "SAVE_MODEL_PROFILE", 0, profile=profile, intent="create")[0], 200)
+            status, collision = post(save_path, "SAVE_MODEL_PROFILE", 1, profile=profile, intent="create")
+            self.assertEqual(status, 400)
+            self.assertEqual(collision["message"], "MODEL_HUB_PROFILE_ALREADY_EXISTS")
+            self.assertEqual(post(preview_path, "PREVIEW_MODEL_PROFILE", 0, profile=profile)[0], 400)
+            self.assertEqual(post("/api/model-hub/route", "SET_MODEL_ROUTE", 1,
+                                  task_id="film.motion", model_ref=profile["id"])[0], 400)
+            self.assertEqual(post("/api/model-hub/route", "SET_MODEL_ROUTE", 1,
+                                  task_id="image.generate", model_ref=profile["id"])[0], 200)
+            profile["flux"]["workflow"]["6"]["inputs"]["text"] = "updated"
+            status, edited = post(save_path, "SAVE_MODEL_PROFILE", 2, profile={**profile, "enabled": False})
+            self.assertEqual(status, 200)
+            new = next(c for c in edited["profiles"][0]["capability_contracts"] if c["capability"] == "image.generate")
+            self.assertNotEqual(initial["workflow_sha256"], new["workflow_sha256"])
+            self.assertFalse(new["route_configurable"])
+            status, restored = post("/api/model-hub/rollback", "ROLLBACK_MODEL_HUB", 3, target_revision=2)
+            self.assertEqual(status, 200)
+            self.assertTrue(restored["profiles"][0]["enabled"])
+            self.assertEqual(post("/api/model-hub/reset", "RESET_MODEL_ROUTE", 4, task_id="image.generate")[0], 200)
+            status, deleted = post("/api/model-hub/profile/delete", "DELETE_MODEL_PROFILE", 5,
+                                   profile_id=profile["id"])
+            self.assertEqual(status, 200)
+            self.assertEqual(deleted["profiles"], [])
+
     def test_readiness_requires_owner_and_exact_metadata_request(self):
         path = "/api/model-hub/readiness"
         body = {"ack": "CHECK_CAPABILITY_READINESS", "profile_id": "owner_text",

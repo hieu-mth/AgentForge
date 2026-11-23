@@ -168,7 +168,7 @@ def _cloud_url(value):
     return value.rstrip("/")
 
 
-def validate_profile(value, *, profile_id=None):
+def validate_profile(value, *, profile_id=None, preview=False):
     """Return canonical allowlisted profile; secrets are never accepted."""
     if not isinstance(value, dict):
         raise ModelConfigError("Model profile must be an object")
@@ -207,6 +207,8 @@ def validate_profile(value, *, profile_id=None):
                     or any(ord(char) < 32 for char in encoder)):
                 raise ModelConfigError("Motion encoder must be a local absolute file path")
             common["motion_encoder"] = encoder
+    elif preview and fields == {"base_url"}:
+        common["base_url"] = _cloud_url(value["base_url"])
     elif fields == {"base_url", "api_key_protected"} and profile_id is not None:
         key = value["api_key_protected"]
         try:
@@ -422,6 +424,19 @@ def capability_contract(capability, profile):
             "local_runtime_compatible": adapter is not None, "adapter": adapter_id,
             "reason": reason, "output_limits": output, "workflow_sha256": workflow_sha,
             "configuration_status": "CONFIGURED", "readiness": "NOT_CHECKED"}
+
+
+def preview_profile(profile, *, expected_revision, db_path=None):
+    """Validate a draft configuration and derive its contracts without saving or probing."""
+    revision, _ = _read_state(db_path=db_path)
+    if type(expected_revision) is not int or revision != expected_revision:
+        raise ModelConfigError("MODEL_HUB_REVISION_CONFLICT")
+    if not isinstance(profile, dict) or "api_key_protected" in profile:
+        raise ModelConfigError("Unknown or sensitive model profile fields")
+    canonical = validate_profile(profile, preview=True)
+    return {"revision": revision, "capability_contracts": [
+        capability_contract(key, canonical) for key, kind in orchestrator_policy.KINDS.items()
+        if kind != "tool"]}
 
 
 def capability_readiness(profile_id, capability, *, expected_revision, db_path=None):
@@ -704,7 +719,7 @@ def _save_orchestrator(updated, policy, route_changes):
 
 def change(action, *, expected_revision, db_path=None, profile=None, profile_id=None,
            task_id=None, model_ref=None, target_revision=None, policy=None, route_changes=None,
-           api_key=None):
+           api_key=None, intent=None):
     """CAS-guarded Owner mutation; snapshot history supports explicit rollback."""
     if type(expected_revision) is not int or expected_revision < 0:
         raise ValueError("Expected non-negative revision")
@@ -724,6 +739,15 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
             raise ValueError("MODEL_HUB_REVISION_CONFLICT")
         updated = copy.deepcopy(current)
         if action == "SAVE_MODEL_PROFILE":
+            if intent is not None:
+                if intent not in ("create", "edit") or not isinstance(profile, dict):
+                    raise ModelConfigError("Invalid profile save intent")
+                ident = _required_text(profile.get("id"), ID_RE, "model ID")
+                exists = ident in updated["profiles"]
+                if intent == "create" and exists:
+                    raise ModelConfigError("MODEL_HUB_PROFILE_ALREADY_EXISTS")
+                if intent == "edit" and not exists:
+                    raise ModelConfigError("MODEL_HUB_PROFILE_REMOVED")
             p = _save_profile(profile, api_key, updated["profiles"])
             # Explicit Owner upsert only; no Git-bundled model can reappear.
             if p["id"] not in updated["profiles"] and len(updated["profiles"]) >= MAX_PROFILE_COUNT:

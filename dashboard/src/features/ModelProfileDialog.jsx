@@ -1,9 +1,9 @@
-import {Fragment,useState} from 'react';
+import {Fragment,useRef,useState} from 'react';
 import {Alert,Button,Form,Input,Modal,Radio,Select,Space,Switch} from 'antd';
 import {NumberField} from '../components/NumberField.jsx';
 import {ApiOutlined,CloudOutlined,DesktopOutlined} from '@ant-design/icons';
 import {SectionTitle} from '../components/settings.jsx';
-import {profilePayload} from '../model_hub_ui.js';
+import {outputSummary,profilePayload,readinessReason} from '../model_hub_ui.js';
 import {requestError} from '../api.js';
 
 const connectionOptions=[
@@ -18,8 +18,13 @@ const fieldLabels={
 const localUrl=/^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):([0-9]{1,5})\/?$/;
 const envName=/^[A-Z_][A-Z0-9_]*$/;
 
-export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,onSave}){
+const comparisonFields=['id','provider','model','enabled','base_url','base_url_env','api_key_env','motion_encoder','flux'];
+const comparisonData=profile=>Object.fromEntries(comparisonFields.filter(key=>key in profile)
+  .map(key=>[key,profile[key]]));
+
+export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,onSave,onPreview,onReload,onUseRevision,labels}){
   const [form]=Form.useForm();
+  const limitsPanel=useRef(null);
   const initialAdapter=adapters.find(item=>item.id===profile?.provider)??adapters[0];
   const initial={connection:initialAdapter.connection,provider:initialAdapter.id,
     enabled:true,...initialAdapter.defaults,...profile,
@@ -35,9 +40,19 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
   const directCloud=connection==='cloud'&&!useEnv;
   const fields=useEnv&&adapter.legacy_defaults?adapter.legacy_defaults:adapter.defaults;
   const [review,setReview]=useState(null);
+  const [contracts,setContracts]=useState([]);
   const [saving,setSaving]=useState(false);
   const [saveError,setSaveError]=useState(null);
+  const [conflict,setConflict]=useState(false);
+  const [comparison,setComparison]=useState(null);
   const editing=Boolean(profile);
+  const captureError=error=>{
+    const stale=['MODEL_HUB_REVISION_CONFLICT','MODEL_HUB_PROFILE_ALREADY_EXISTS',
+      'MODEL_HUB_PROFILE_REMOVED'].includes(error.message);
+    setConflict(stale);
+    setComparison(null);
+    setSaveError(stale?null:requestError(error));
+  };
 
   function changeAdapter(changed){
     if(!changed.connection&&!changed.provider)return;
@@ -49,16 +64,51 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
     form.setFieldsValue({provider:next.id,...next.defaults});
   }
 
-  async function save(){
+  async function save(checkAfterSave=false){
     setSaving(true);
     setSaveError(null);
     try{
-      await onSave(review,revision,directCloud?form.getFieldValue('api_key'):undefined);
+      await onSave(review,revision,directCloud?form.getFieldValue('api_key'):undefined,checkAfterSave);
     }catch(error){
-      setSaveError(requestError(error));
+      captureError(error);
     }finally{setSaving(false);}
   }
 
+  async function preview(values){
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const candidate=profilePayload(values,{...adapter,defaults:fields});
+      const result=await onPreview(candidate,revision);
+      setContracts(result.capability_contracts);
+      setReview(candidate);
+    }catch(error){
+      captureError(error);
+    }finally{setSaving(false);}
+  }
+
+  async function reloadRevision(){
+    setSaving(true);
+    try{
+      const draft=review??profilePayload(form.getFieldsValue(),{...adapter,defaults:fields});
+      const current=await onReload(draft.id);
+      setComparison({...current,draft});
+      setSaveError(null);
+      setConflict(false);
+    }catch(error){setSaveError(requestError(error));}
+    finally{setSaving(false);}
+  }
+
+  function useLatestRevision(){
+    onUseRevision(comparison.revision);
+    setReview(null);
+    setContracts([]);
+    setComparison(null);
+    setConflict(false);
+    setSaveError(null);
+  }
+
+  const supported=contracts.filter(item=>item.local_runtime_compatible||item.route_configurable);
   return <Modal open width={620} className="model-profile-dialog"
     title={<SectionTitle icon={<ApiOutlined/>}
       title={editing?'Chỉnh sửa hồ sơ model':'Đăng ký model mới'}
@@ -69,13 +119,19 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
       <Button disabled={saving} onClick={review?()=>{setReview(null);setSaveError(null);}:onCancel}>
         {review?'Quay lại':'Hủy'}
       </Button>
-      <Button type="primary" loading={saving} onClick={review?save:()=>form.submit()}>
+      {review&&connection==='local'&&review.enabled&&supported.some(item=>item.local_runtime_compatible)&&
+        <Button disabled={saving||conflict} onClick={()=>save(true)}>Lưu và kiểm tra</Button>}
+      <Button type="primary" loading={saving} disabled={conflict} onClick={review?()=>save():()=>form.submit()}>
         {review?'Xác nhận lưu':'Xem lại cấu hình'}
       </Button>
     </Space>}>
-    <Form hidden={Boolean(review)} form={form} layout="vertical" initialValues={initial}
+    <Form hidden={Boolean(review)} form={form} layout="vertical" initialValues={initial} disabled={saving||conflict}
       requiredMark={false} onValuesChange={changeAdapter}
-      onFinish={values=>setReview(profilePayload(values,{...adapter,defaults:fields}))}>
+      onFinishFailed={({errorFields})=>{
+        if(limitsPanel.current&&errorFields.some(({name})=>name[0]==='flux_settings'&&name[1]!=='workflow'))
+          limitsPanel.current.open=true;
+      }}
+      onFinish={preview}>
       <div className="model-dialog-grid">
         <Form.Item name="connection" label="Loại kết nối">
           <Radio.Group optionType="button" buttonStyle="solid" disabled={editing}
@@ -140,6 +196,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
               return Promise.reject(new Error('Dán workflow FLUX ở định dạng ComfyUI API JSON.'));
             }},
            ]}><Input.TextArea rows={6} spellCheck={false}/></Form.Item>
+          <details ref={limitsPanel} className="model-workflow-details"><summary>Giới hạn và thư mục đầu ra</summary>
           <div className="model-dialog-grid">
             {[
               ['max_resolution','Cạnh ảnh tối đa (px)',256,1536],
@@ -149,7 +206,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
               rules={[{required:true,type:'integer',min,max}]}><NumberField min={min} max={max}/></Form.Item>)}
             <Form.Item name={['flux_settings','output_dir']} label="Thư mục con trong workspace"
               rules={[{required:true}]}><Input spellCheck={false}/></Form.Item>
-          </div>
+          </div></details>
         </>}
       </>}
       <div className="model-dialog-divider"/>
@@ -179,8 +236,36 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
           <dt>Giới hạn</dt><dd>{review.flux.max_resolution} px · {review.flux.max_steps} bước · {review.flux.timeout_seconds} giây</dd>
           <dt>Đầu ra</dt><dd>workspace/{review.flux.output_dir}</dd></>}
       </dl>
+      {supported.length?<ul className="model-contract-list">{supported.map(item=><li key={item.capability}>
+        <strong>{labels[item.capability]??item.capability}</strong>
+        {item.capability==='film.motion'&&review.motion_encoder&&<div>Preset LTX cố định</div>}
+        <div>{outputSummary(item.output_limits)??readinessReason(item.reason)}</div>
+        {item.workflow_sha256&&<details className="model-workflow-details"><summary>Workflow SHA-256</summary>
+          <code>{item.workflow_sha256}</code></details>}
+      </li>)}</ul>:<Alert showIcon type="warning" message="Chưa có capability tương thích"
+        description={review.provider==='comfyui'
+          ?readinessReason(contracts.find(item=>item.capability===(review.motion_encoder?'film.motion':'image.generate'))?.reason)
+          :undefined}/>}
       <p className="model-dialog-help">Hồ sơ được lưu vào SQLite trên máy này. Lượt lưu chỉ cập nhật cấu hình.</p>
-      {saveError&&<Alert showIcon type="error" message="Chưa lưu được hồ sơ" description={saveError}/>}
     </>}
+    {(saveError||conflict)&&<Alert className="model-dialog-error" showIcon type="error"
+      message={review?'Chưa lưu được hồ sơ':'Chưa kiểm tra được cấu hình'}
+      description={saveError??'Cấu hình đã thay đổi ở phiên khác. Tải lại để đối chiếu. Nội dung bạn đã nhập vẫn được giữ.'}
+      action={conflict&&<Button size="small" loading={saving} onClick={reloadRevision}>Tải lại cấu hình</Button>}/>}
+    {comparison&&<section className="model-conflict" aria-label="Đối chiếu hồ sơ model">
+      <div className="model-conflict-grid">
+        <div><strong>Bản nháp của bạn</strong><pre>{JSON.stringify(comparisonData(comparison.draft),null,2)}</pre></div>
+        <div><strong>Bản trên máy chủ · Phiên bản {comparison.revision}</strong>
+          {comparison.profile
+            ?<pre>{JSON.stringify(comparisonData(comparison.profile),null,2)}</pre>
+            :<p>Phiên bản này chưa có hồ sơ mang mã {comparison.draft.id}.</p>}</div>
+      </div>
+      {editing&&!comparison.profile
+        ?<Alert type="warning" message="Hồ sơ đã bị xóa. Hãy đăng ký hồ sơ mới nếu muốn sử dụng lại cấu hình này."/>
+        :<Button onClick={useLatestRevision} disabled={saving}>
+          {!editing&&comparison.profile?'Đổi mã hồ sơ':'Dùng phiên bản này để tiếp tục'}
+        </Button>}
+      {!editing&&comparison.profile&&<p>Mã hồ sơ đã được sử dụng. Hãy nhập mã khác trước khi lưu.</p>}
+    </section>}
   </Modal>;
 }

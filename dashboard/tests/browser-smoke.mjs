@@ -751,15 +751,56 @@ try {
   await registerDialog.getByRole('button',{name:'Xem lại cấu hình'}).click();
   await registerDialog.getByText('Dùng địa chỉ HTTP loopback với cổng từ 1 đến 65535.').waitFor();
   await localEndpoint.fill('http://127.0.0.1:11434');
+  await settings.route('**/api/model-hub/profile/preview',route=>route.fulfill({
+    status:400,json:{message:'MODEL_HUB_REVISION_CONFLICT'},
+  }),{times:1});
+  await registerDialog.getByRole('button',{name:'Xem lại cấu hình'}).click();
+  await registerDialog.getByRole('button',{name:'Tải lại cấu hình',exact:true}).click();
+  await registerDialog.getByText('Phiên bản này chưa có hồ sơ mang mã local_primary.').waitFor();
+  await registerDialog.getByRole('button',{name:'Dùng phiên bản này để tiếp tục'}).click();
+  if(await registerDialog.getByLabel('Tên model',{exact:true}).inputValue()!=='synthetic-local:8b')
+    throw new Error('Reloading a stale revision discarded pending model edits');
   await registerDialog.getByRole('button',{name:'Xem lại cấu hình'}).click();
   await registerDialog.getByText('synthetic-local:8b',{exact:true}).waitFor();
   const beforeSave=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
   if(beforeSave.profiles.length)throw new Error('Registration saved before Owner confirmation');
-  await registerDialog.getByRole('button',{name:'Xác nhận lưu'}).click();
+  const registeredRow=settings.locator('tr[data-row-key="local_primary"]');
+  let checks=0;
+  let unblockCheck;
+  const checkGate=new Promise(resolve=>{unblockCheck=resolve;});
+  await settings.route('**/api/model-hub/readiness',async route=>{
+    const body=route.request().postDataJSON();
+    if(body.expected_revision!==1||body.capability!=='general.text'||body.profile_id!=='local_primary')
+      throw new Error('Readiness did not use the current model and revision');
+    checks++;
+    if(checks===1){
+      const registered=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
+      if(registered.revision!==1||registered.profiles[0]?.provider!=='ollama')
+        throw new Error('Readiness started before Owner profile was committed to SQLite');
+      await checkGate;
+      return route.fulfill({status:503,json:{error:'fixture'}});
+    }
+    const [status,reason]=[
+      ['UNAVAILABLE','UNAVAILABLE'],['MISSING_DEPENDENCY','MODEL_NOT_INSTALLED'],
+      ['METADATA_COMPATIBLE',null],
+    ][checks-2];
+    return route.fulfill({json:{revision:1,profile_id:body.profile_id,capability:body.capability,
+      status,reason,checked_at:'2026-01-01T08:00:00Z'}});
+  });
+  await registerDialog.getByRole('button',{name:'Lưu và kiểm tra',exact:true}).click();
   await registerDialog.waitFor({state:'hidden'});
-  const registered=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
-  if(registered.revision!==1||registered.profiles[0]?.provider!=='ollama')
-    throw new Error('Owner SQLite profile registration failed');
+  await registeredRow.getByText('Đang kiểm tra…',{exact:true}).waitFor();
+  unblockCheck();
+  await registeredRow.getByRole('button',{name:'Thử lại',exact:true}).click();
+  await registeredRow.getByText('Runtime không khả dụng',{exact:true}).waitFor();
+  await registeredRow.getByRole('button',{name:'Kiểm tra',exact:true}).click();
+  await registeredRow.getByText('Thiếu điều kiện',{exact:true}).waitFor();
+  await registeredRow.getByRole('button',{name:'Kiểm tra',exact:true}).click();
+  await registeredRow.getByText('Metadata tương thích',{exact:true}).waitFor();
+  await registeredRow.locator('time').waitFor();
+  if(checks!==4||await registeredRow.getByText('Đã chạy thử thành công').count())
+    throw new Error('Metadata was presented as inference or retried automatically');
+  await settings.unroute('**/api/model-hub/readiness');
   console.log('Model adapter selection, validation and real SQLite registration: PASS');
   await settings.goto(policyOrigin+'/dashboard/#/orchestrator');
   await settings.getByRole('heading',{name:'AI điều phối tác vụ',exact:true}).waitFor();
@@ -868,6 +909,88 @@ try {
     await settings.getByText('Chưa xác minh kết nối',{exact:true}).waitFor();
     await settings.getByText('Đã lưu hồ sơ model',{exact:true}).waitFor();
   }
+  const concurrent=await browser.newContext();
+  const login2=await concurrent.request.post(policyOrigin+'/api/login',{
+    headers:{Origin:policyOrigin},data:{code:ownerCode},
+  });
+  if(!login2.ok())throw new Error('Second Owner session could not log in');
+  const concurrentHeaders={Origin:policyOrigin,'X-CSRF-Token':(await login2.json()).csrf};
+  const readModels=async()=>(await settings.request.get(policyOrigin+'/api/model-hub')).json();
+  const localProfile=(id,model)=>({id,model,provider:'ollama',enabled:true,base_url:'http://127.0.0.1:11434'});
+  const concurrentSave=async(profile,intent)=>{
+    const {revision}=await readModels();
+    const r=await concurrent.request.post(policyOrigin+'/api/model-hub/profile',{
+      headers:concurrentHeaders,data:{ack:'SAVE_MODEL_PROFILE',expected_revision:revision,profile,intent},
+    });
+    if(!r.ok())throw new Error('Concurrent fixture mutation failed: '+r.status());
+    return (await r.json()).revision;
+  };
+  await concurrentSave(localProfile('conflict_model','initial:8b'),'create');
+  await settings.getByRole('button',{name:'Làm mới',exact:true}).click();
+  const conflictRow=settings.locator('tr[data-row-key="conflict_model"]');
+  await conflictRow.getByRole('button',{name:'Sửa',exact:true}).click();
+  await registerDialog.getByLabel('Tên model',{exact:true}).fill('owner-draft:8b');
+  await registerDialog.getByRole('button',{name:'Xem lại cấu hình'}).click();
+  await registerDialog.getByText('owner-draft:8b',{exact:true}).waitFor();
+  await concurrentSave(localProfile('conflict_model','server-edit:8b'),'edit');
+  await registerDialog.getByRole('button',{name:'Xác nhận lưu'}).click();
+  await registerDialog.getByRole('button',{name:'Tải lại cấu hình'}).click();
+  const comparison=registerDialog.getByRole('region',{name:'Đối chiếu hồ sơ model'});
+  await comparison.getByText(/owner-draft:8b/).waitFor();
+  await comparison.getByText(/server-edit:8b/).waitFor();
+  if((await readModels()).profiles.find(p=>p.id==='conflict_model').model!=='server-edit:8b')
+    throw new Error('Reloading an edit conflict overwrote the server profile');
+  await registerDialog.getByRole('button',{name:'Dùng phiên bản này để tiếp tục'}).click();
+  if(await registerDialog.getByLabel('Tên model',{exact:true}).inputValue()!=='owner-draft:8b')
+    throw new Error('Comparing a conflict discarded the Owner draft');
+  await registerDialog.getByRole('button',{name:'Xem lại cấu hình'}).click();
+  await registerDialog.getByRole('button',{name:'Xác nhận lưu'}).click();
+  await registerDialog.waitFor({state:'hidden'});
+
+  await settings.getByRole('button',{name:'Đăng ký model'}).click();
+  await registerDialog.getByLabel('Tên model',{exact:true}).fill('pending:8b');
+  await registerDialog.getByLabel('Mã hồ sơ',{exact:true}).fill('shared_model');
+  await registerDialog.getByRole('button',{name:'Xem lại cấu hình'}).click();
+  await registerDialog.getByText('pending:8b',{exact:true}).waitFor();
+  await concurrentSave(localProfile('shared_model','claimed:8b'),'create');
+  await registerDialog.getByRole('button',{name:'Xác nhận lưu'}).click();
+  await registerDialog.getByRole('button',{name:'Tải lại cấu hình'}).click();
+  await comparison.getByText(/claimed:8b/).waitFor();
+  await registerDialog.getByRole('button',{name:'Đổi mã hồ sơ'}).click();
+  await registerDialog.getByRole('button',{name:'Xem lại cấu hình'}).click();
+  await registerDialog.getByText('Mã hồ sơ đã tồn tại. Hãy chọn mã khác.').waitFor();
+  await registerDialog.getByLabel('Mã hồ sơ',{exact:true}).fill('renamed_model');
+  await registerDialog.getByRole('button',{name:'Xem lại cấu hình'}).click();
+  await registerDialog.getByRole('button',{name:'Xác nhận lưu'}).click();
+  await registerDialog.waitFor({state:'hidden'});
+  const afterRename=await readModels();
+  if(afterRename.profiles.find(p=>p.id==='shared_model').model!=='claimed:8b'||
+     afterRename.profiles.find(p=>p.id==='renamed_model').model!=='pending:8b')
+    throw new Error('Creating with an occupied ID overwrote the other Owner session');
+
+  let finishReadiness;
+  const staleReadinessGate=new Promise(resolve=>{finishReadiness=resolve;});
+  await settings.route('**/api/model-hub/readiness',async route=>{
+    const {profile_id,capability,expected_revision:revision}=route.request().postDataJSON();
+    await staleReadinessGate;
+    return route.fulfill({json:{profile_id,capability,revision,status:'METADATA_COMPATIBLE',
+      checked_at:'2026-01-01T08:00:00Z'}});
+  });
+  await conflictRow.getByRole('button',{name:'Kiểm tra',exact:true}).click();
+  await conflictRow.getByText('Đang kiểm tra…',{exact:true}).waitFor();
+  const newRevision=await concurrentSave(localProfile('conflict_model','new-revision:8b'),'edit');
+  await settings.getByRole('button',{name:'Làm mới',exact:true}).click();
+  await conflictRow.getByText('new-revision:8b',{exact:true}).waitFor();
+  const staleResponse=settings.waitForResponse(response=>response.url().endsWith('/api/model-hub/readiness'));
+  finishReadiness();
+  await (await staleResponse).finished();
+  await settings.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  await conflictRow.getByText('Chưa kiểm tra',{exact:true}).waitFor();
+  if(newRevision<=afterRename.revision||await conflictRow.getByText('Metadata tương thích',{exact:true}).count())
+    throw new Error('An old readiness response leaked into the new revision');
+  await settings.unroute('**/api/model-hub/readiness');
+  await concurrent.close();
+  console.log('Model Hub concurrent Owner edits, create ID collision and stale readiness isolation: PASS');
   if(settingsErrors.length)throw new Error('Orchestrator runtime errors: '+settingsErrors.join(' | '));
   console.log('Orchestrator authenticated API, SQLite persistence, reset and responsive Edge: PASS');
 
