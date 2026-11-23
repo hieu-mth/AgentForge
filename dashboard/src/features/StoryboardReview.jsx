@@ -75,6 +75,7 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
           <span>{Number(scene.seconds.toFixed(2)).toLocaleString('vi-VN')} giây</span>
         </header>
         {!activeGroup?.original&&<p>{scene.description}</p>}
+        {scene.shot_description&&<p>{scene.shot_description}</p>}
         {scene.shot_reason&&!authoredScenes&&<p className="env-muted">{scene.shot_reason}</p>}
         {scene.asset&&<div className="storyboard-image"><Image loading="lazy" alt={'Ảnh cảnh '+(index+1)}
           src={'/api/film/drafts/'+job.id+'/scene-'+index+'?v='+scene.asset}/></div>}

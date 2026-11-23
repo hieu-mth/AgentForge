@@ -13,7 +13,7 @@ MAX_VERSIONS = 12
 STORY_FIELDS = ("description", "image_prompt", "motion_prompt", "character_ids",
                 "audio", "continuity", "script_range", "shot_id", "frames", "caption", "scene_notes", "duration_weight",
                 "suggested_seconds", "shot_reason", "content_scene", "content_shot", "content_shot_count",
-                "script_shot_frames")
+                "script_shot_frames", "shot_description")
 
 
 def duration_limits(seconds, moving, output=LEGACY_MOTION_OUTPUT):

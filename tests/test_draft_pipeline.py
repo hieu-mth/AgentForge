@@ -313,7 +313,7 @@ class DraftTests(unittest.TestCase):
                         draft._duration_plan(job, {})
 
     def test_authored_six_second_script_preserves_two_scenes_across_four_shots(self):
-        content = "Cảnh 1 (0–3 giây): Miu mở mắt.\nCảnh 2 (3–6 giây): Lan nhặt chiếc hộp."
+        content = "Cảnh 1 (0–3 giây): Miu mở mắt. Miu nhìn cửa.\nCảnh 2 (3–6 giây): Lan nhặt chiếc hộp."
         brief = {**self.brief, "idea": "Video 6 giây\n" + content, "mode": "motion",
                  "seconds": None, "scene_count": None, "duration_mode": "auto"}
         job = {"id": self.ident, "brief": brief, "storyboard_version": 1, "video_sha": None}
@@ -321,7 +321,8 @@ class DraftTests(unittest.TestCase):
         response = {"title": "Kịch bản", "continuity": "Miu and Lan", "description": "Invented action",
                     "image_prompt": "Cat and box", "motion_prompt": "Camera moves", "audio": "Quiet"}
         with (patch.object(draft, "_ask") as planner, patch.object(draft, "_select_cast", return_value={}),
-              patch.object(draft, "_script_scene", side_effect=lambda *a, **k: dict(response)) as storyboard):
+              patch.object(draft, "_script_scene", side_effect=lambda *a, **k: {
+                  **response, "description": f"Khoảnh khắc {a[5]}", "motion_prompt": f"Differing moment {a[5]}"}) as storyboard):
             draft._write_planned_board(job, bindings)
             planner.assert_not_called()
         draft._stamp_storyboard(job)
@@ -334,6 +335,13 @@ class DraftTests(unittest.TestCase):
                          [originals[0]]*2 + [originals[1]]*2)
         draft._save(job)
         reloaded = draft._read(self.ident)
+        self.assertEqual((reloaded["brief"]["duration_mode"], reloaded["brief"]["seconds"],
+                          reloaded["brief"]["duration_source"]), ("auto", 6, "script"))
+        beats = [call.kwargs["proposed_shot"]["beat"] for call in storyboard.call_args_list]
+        self.assertEqual([b["assigned_text"] for b in beats[:2]], ["Miu mở mắt.", "Miu nhìn cửa."])
+        self.assertEqual([(b["start_frame_in_scene"], b["end_frame_exclusive"]) for b in beats],
+                         [(0, 36), (36, 72), (0, 36), (36, 72)])
+        self.assertEqual(beats[1]["previous_shot"]["description"], scenes[0]["shot_description"])
         self.assertEqual(draft.draft_timeline.digest(reloaded), job["storyboard_sha"])
         with self.assertRaisesRegex(ValueError, "giữ thứ tự"):
             draft.act(self.ident, "storyboard-move", {"sha256": job["storyboard_sha"], "index": 0, "target": 2})
@@ -360,16 +368,54 @@ class DraftTests(unittest.TestCase):
                "seconds": None, "duration_mode": "auto"}}
         shots = [{"action": action, "reason": "Giữ mạch truyện", "suggested_seconds": 3}
                  for action in ("Miu mở cửa", "Miu nhìn quanh", "Miu thấy Lan")]
-        proposal = {"estimated_duration_seconds": 6, "shots": shots, "duration_reasoning": "Ba nhịp",
+        proposal = {"estimated_duration_seconds": 18, "shots": shots, "duration_reasoning": "Ba nhịp",
                     "production_feasibility": "feasible"}
         with (patch.object(draft, "_activity"), patch.object(draft, "_measured", return_value=nullcontext()),
               patch.object(draft, "_ask", return_value=proposal) as ask):
             plan = draft._duration_plan(job, {})
         ask.assert_called_once()
         self.assertEqual(ask.call_args.args[2]["requested_seconds"], 6)
+        self.assertEqual((plan["initial_accepted_seconds"], plan["duration_source"]), (6, "script"))
         self.assertEqual([shot["action"] for shot in plan["shots"]], [shot["action"] for shot in shots])
         self.assertEqual(draft.draft_timeline.planned_timeline(
             6, True, [shot["suggested_seconds"] for shot in plan["shots"]]), [48, 48, 48])
+
+        job["status"] = "RUNNING"
+        response = {"title": "Miu", "continuity": "Cat", "description": "Miu nhìn quanh",
+                    "image_prompt": "A cat in a garden", "audio": "Quiet"}
+        with (patch.object(draft, "_duration_plan", return_value=plan),
+              patch.object(draft, "_select_cast", return_value={}),
+              patch.object(draft, "_script_scene", side_effect=lambda *a, **k: dict(response))):
+            draft._write_planned_board(job, {"general.text": {}, "film.storyboard": {}, "image.generate": {}})
+        saved = draft._read(self.ident)
+        self.assertEqual((saved["brief"]["duration_mode"], saved["brief"]["seconds"],
+                          saved["brief"]["duration_source"]), ("auto", 6, "script"))
+        self.assertEqual(saved["duration_plan"]["estimated_duration_seconds"], 18)
+
+    def test_duration_conflicts_follow_owner_preference(self):
+        brief = {"mode": "motion", "duration_mode": "auto", "seconds": None}
+        with self.assertRaisesRegex(ValueError, "nhiều thời lượng"):
+            draft._duration_plan({"brief": {**brief, "idea": "Video 6 giây. Thời lượng: 8 giây."}}, {})
+        idea = "Video 8 giây\nCảnh 1 (3 giây): Miu mở mắt.\nCảnh 2 (3 giây): Lan nhìn Miu."
+        with self.assertRaisesRegex(ValueError, "không khớp mục tiêu 8 giây"):
+            draft._duration_plan({"brief": {**brief, "idea": idea}}, {})
+        manual = {**brief, "idea": idea, "duration_mode": "manual", "seconds": 6}
+        self.assertEqual(draft._duration_plan({"brief": manual}, {})["duration_source"], "manual")
+        with self.assertRaisesRegex(ValueError, "không khớp mục tiêu 7 giây"):
+            draft._duration_plan({"brief": {**manual, "seconds": 7}}, {})
+
+    def test_authored_planner_refuses_duplicate_shot_content(self):
+        job = {"id": self.ident, "status": "RUNNING", "brief": {"idea": "Video 6 giây\nCảnh 1 (6 giây): Miu nhảy qua cửa.",
+               "mode": "motion", "seconds": None, "duration_mode": "auto"}}
+        bindings = {"general.text": {}, "film.storyboard": {}, "image.generate": {}}
+        output = {"title": "Miu", "continuity": "Miu at the door", "description": "Miu nhảy",
+                  "motion_prompt": "Miu jumps", "image_prompt": "Cat", "audio": "Quiet"}
+        with (patch.object(draft, "_select_cast", return_value={}),
+              patch.object(draft, "_script_scene", side_effect=lambda *a, **k: dict(output)) as write):
+            with self.assertRaisesRegex(ValueError, "AI lặp mô tả hoặc chuyển động ở cảnh 1, shot 2"):
+                draft._write_planned_board(job, bindings)
+        self.assertEqual(write.call_count, 2)
+        self.assertNotIn("board", draft._read(self.ident))
 
     def test_duration_replans_five_story_beats_into_nine_shots_without_gpu(self):
         job = {"id": self.ident, "brief": {"idea": "Miu đuổi theo bướm rồi quay về nhà.",
