@@ -17,6 +17,14 @@ class ResourceBlocked(ValueError):
     """GPU admission failed or the provider reported resource exhaustion."""
 
 
+class ResourceWait(Exception):
+    """An existing Studio worker must wait for runtime resources."""
+
+
+class NeedsReconciliation(ValueError):
+    """A possibly dispatched job must be reconciled before any new submission."""
+
+
 def require_gpu(operation, sample=None, *, min_commit_mib=0):
     """Conservative admission floors in MiB, not estimates of peak consumption."""
     sample = snapshot() if sample is None else sample

@@ -12,7 +12,7 @@ import {StoryboardReview} from './StoryboardReview.jsx';
 import {ProductionProgress} from './ProductionProgress.jsx';
 import {ScriptContent} from './ScriptContent.jsx';
 import {draftTitle} from './scriptPresentation.js';
-import {MAX_STUDIO_SECONDS,maxMotionShots} from './studioDuration.js';
+import {MAX_STUDIO_SECONDS,maxMotionShots,minMotionShots} from './studioDuration.js';
 import './studio-draft-progress.css';
 
 const API='/api/film/drafts';
@@ -133,7 +133,8 @@ export function StudioDrafts({mutate,onCharacters}) {
   const canEdit=reviewing?.storyboard_version&&['STORYBOARD_REVIEW','FAILED','REVIEW'].includes(reviewing.status);
   const sceneCount=reviewing?.board.scenes.length;
   const minScenes=reviewing?.brief.mode==='motion'?
-    (reviewing.brief.duration_mode?Math.max(2,Math.ceil(reviewing.brief.seconds*24/49)):motionShots[reviewing.brief.seconds]):2;
+    (reviewing.brief.duration_mode?minMotionShots(reviewing.brief.seconds,reviewing.motion_plan?.output??
+      reviewing.approved_motion?.output):motionShots[reviewing.brief.seconds]):2;
   const maxScenes=reviewing?.brief.mode==='motion'?
     (reviewing.brief.duration_mode?maxMotionShots(reviewing.brief.seconds):motionMaxShots[reviewing.brief.seconds]):
     Math.min(6,Math.floor((reviewing?.brief.seconds??0)/2));

@@ -11,25 +11,49 @@ from urllib.parse import urlencode, urlsplit
 from uuid import UUID
 
 from agentforge.ai import model_hub
-from agentforge.features.film_studio import draft_resources, draft_timeline, long_form, motion_comfy, motion_ltx, motion_verify
+from agentforge.features.film_studio import draft_resources, long_form, motion_comfy, motion_ltx, motion_verify
+from agentforge.features.film_studio.draft_resources import NeedsReconciliation
+from agentforge.features.film_studio.studio_contracts import MotionOutput
 from agentforge.features.media import render
 from agentforge.integrations import comfy_service
 from agentforge.paths import ensure_local_root
 
-FRAMES = draft_timeline.LTX_CLIP_FRAMES
-MAX_SHOTS = 3
-SECONDS_PER_SHOT = 2
+FRAMES = 49  # Studio's approved preset, independent of experimental pilot presets.
+ADAPTER_ID = motion_ltx.FORMAT
 
 
-class NeedsReconciliation(ValueError):
-    """A provider job may still exist and must never be submitted again."""
+def workflow_sha():
+    return hashlib.sha256(_workflow_bytes()).hexdigest()
 
 
-def binding(bindings):
-    profile = bindings.get("film.motion", {})
+def weights_identity():
+    return {motion_ltx.CHECKPOINT: motion_ltx.CHECKPOINT_SHA, motion_ltx.ENCODER: motion_ltx.ENCODER_SHA}
+
+
+def check_legacy_workflow(folder):
+    workflow = ensure_local_root(folder / "motion-workflow.json")
+    if workflow.exists() and motion_comfy.inspect_workflow(workflow)["sha256"] != workflow_sha():
+        raise ValueError("Stored motion workflow differs from the original runtime; create a new production.")
+
+
+def _workflow_bytes():
+    return (json.dumps(motion_ltx.workflow(FRAMES), indent=2) + "\n").encode()
+
+
+def output_profile():
+    profile = motion_ltx.profile(FRAMES)
+    return MotionOutput(profile["fps"], profile["frames"], (profile["width"], profile["height"]))
+
+
+def supports(profile):
+    return (profile.get("provider") == "comfyui"
+            and profile.get("model") in (motion_ltx.CHECKPOINT, motion_ltx.MODEL_ID)
+            and bool(profile.get("motion_encoder")) and "flux" not in profile)
+
+
+def bind(profile):
     endpoint = urlsplit(profile.get("base_url", ""))
-    if (profile.get("provider") != "comfyui" or profile.get("model") not in (motion_ltx.CHECKPOINT, motion_ltx.MODEL_ID)
-            or not profile.get("motion_encoder") or endpoint.port != motion_comfy.PORT
+    if (not supports(profile) or endpoint.port != motion_comfy.PORT
             or endpoint.hostname not in {"localhost", "127.0.0.1"}):
         raise ValueError("Assign an LTX 2B FP8 checkpoint and encoder to film.motion on the Motion endpoint")
     config = comfy_service._settings()
@@ -40,6 +64,16 @@ def binding(bindings):
         raise ValueError("Thiếu công cụ xác minh video: " + ", ".join(missing)
                          + ". AgentForge tìm trong data/company/runtime_tools/ffmpeg hoặc PATH của backend.")
     return profile
+
+
+def verify_clip(scene, stream):
+    receipt = motion_verify.inspect_receipt(scene["motion_job"], film_root=motion_comfy.FILMS,
+                                           db_path=motion_comfy.DB, video_stream=stream)
+    if receipt["clip_sha256"] != scene["motion_sha"]:
+        raise ValueError("Motion clip hash mismatch")
+
+
+MAX_CLIP_BYTES = motion_verify.MAX_MP4_BYTES
 
 
 def prepare(job, folder):
@@ -57,7 +91,7 @@ def prepare(job, folder):
         if long_form.load_plan(motion_comfy.FILMS, slug) != plan:
             raise ValueError("Motion plan changed; create a new draft") from None
     workflow = ensure_local_root(folder / "motion-workflow.json")
-    payload = (json.dumps(motion_ltx.workflow(FRAMES), indent=2) + "\n").encode()
+    payload = _workflow_bytes()
     try:
         with workflow.open("xb") as stream:
             stream.write(payload)

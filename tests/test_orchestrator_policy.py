@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from agentforge.ai import model_hub, orchestrator_policy as policy
+from tests.test_flux_runtime import profile as flux_profile
 
 
 class OrchestratorTests(unittest.TestCase):
@@ -55,7 +56,7 @@ class OrchestratorTests(unittest.TestCase):
             "base_url": "http://127.0.0.1:8188", "motion_encoder": str(file)})
         profiles = {"custom_motion_id": motion,
                     "planner": {"provider": "ollama", "enabled": True},
-                    "painter": {"provider": "comfyui", "enabled": True, "flux": {}}}
+                    "painter": flux_profile()}
         settings = {**policy.defaults(), "permissions": dict.fromkeys(policy.defaults()["permissions"], True),
                     "tools": ["ffmpeg"], "mappings": {"film.motion": "custom_motion_id"}}
         state = {"routes": {"general.text": "planner", "film.storyboard": "planner",

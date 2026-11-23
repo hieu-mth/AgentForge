@@ -402,6 +402,8 @@ def image_runtime(*, automated=False, db_path=None):
 
 def draft_routes(*, db_path=None):
     """Resolve local production capabilities from one Owner policy snapshot."""
+    from agentforge.features.film_studio import studio_runtime
+
     revision, state = _read_state(db_path=db_path)
     policy = state.get("orchestrator", orchestrator_policy.defaults())
     permissions = policy["permissions"]
@@ -416,11 +418,13 @@ def draft_routes(*, db_path=None):
         profile = profiles.get(decision.get("model_ref"))
         if profile:
             bindings[capability] = profile
-    for capability in ("general.text", "film.storyboard"):
-        if bindings.get(capability, {}).get("provider") != "ollama":
-            raise ModelConfigError("Assign an enabled local Ollama model to " + capability)
-    if "flux" not in bindings.get("image.generate", {}):
-        raise ModelConfigError("Assign an enabled FLUX profile to image.generate")
+    for capability, resolve in (("general.text", studio_runtime.text_adapter),
+                                ("film.storyboard", studio_runtime.text_adapter),
+                                ("image.generate", studio_runtime.image_adapter)):
+        try:
+            resolve(bindings.get(capability))
+        except ValueError as exc:
+            raise ModelConfigError(f"{capability}: {exc}") from None
     return revision, bindings
 
 
