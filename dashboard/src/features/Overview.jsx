@@ -5,6 +5,7 @@ import {SectionTitle,SettingsHeading,SettingsStatus,Stat} from '../components/se
 import {useResource,ResourceStatus} from '../use_resource.jsx';
 import {useScreenRefresh} from '../refresh_scope.jsx';
 import {StudioPreview} from './StudioPreview.jsx';
+import {draftTitle} from './scriptPresentation.js';
 
 const prepared='PREPARED_NOT_RENDERED';
 const needsReview='RENDER_RECEIPT_PRESENT_UNINSPECTED';
@@ -62,7 +63,7 @@ export function Overview({onNavigate}){
       <Table className="overview-table env-table" size="middle" rowKey="id" dataSource={videos}
         pagination={{pageSize:6,hideOnSinglePage:true}} columns={[
           {title:'Video',render:(_,row)=><span className="env-break">
-            {row.board?.title||row.brief?.idea?.slice(0,100)||'Bản nháp'}
+            {draftTitle(row)}
           </span>},
           {title:'Trạng thái',dataIndex:'status',render:status=><SettingsStatus
             tone={status==='APPROVED'?'good':status==='REVIEW'?'warn':'neutral'}>
@@ -80,7 +81,7 @@ export function Overview({onNavigate}){
           size="middle" rowKey="project_id" dataSource={episodes}
           pagination={{pageSize:6,hideOnSinglePage:true}}/>
       </Card>}
-    {preview&&<Modal open title={preview.board?.title||'Xem MP4'} footer={null}
+    {preview&&<Modal open title={draftTitle(preview)} footer={null}
       onCancel={()=>setPreview(null)}>
       <StudioPreview url={'/api/film/drafts/'+preview.id+'/preview?v='+preview.video_sha}
         filename="draft.mp4" label="Xem MP4" initiallyOpen/>

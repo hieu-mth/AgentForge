@@ -14,6 +14,28 @@
   min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable;
 }
 .storyboard-scenes { display:grid; align-content:start; gap:6px; padding-inline-end:6px; }
+.storyboard-scene-group {display:grid;gap:6px;min-width:0}
+.storyboard-scene-group > div:not(.storyboard-shot-strip) {display:grid}
+.storyboard-scene-group h4 {margin:6px 0 2px;font-size:13px;overflow-wrap:anywhere}
+.storyboard-authored-group {padding:9px 0 12px;border-bottom:1px solid var(--line)}
+.storyboard-authored-group header {display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.storyboard-authored-group h4 {margin:0}
+.storyboard-authored-group header span {font-size:11px;flex:none}
+.storyboard-shot-strip {display:flex;flex-wrap:wrap;gap:6px}
+.storyboard-scenes .storyboard-authored-group button {
+  flex:0 0 auto;min-width:58px;padding:5px 8px;text-align:center;
+  background:transparent;border-color:var(--line)
+}
+.storyboard-authored-group .storyboard-shot-meta {display:grid;gap:0}
+.storyboard-scenes .storyboard-authored-group button[aria-pressed=true] {
+  border-color:color-mix(in srgb,var(--primary) 45%,var(--line));
+  background:color-mix(in srgb,var(--primary) 12%,var(--surface));
+}
+.storyboard-shot-meta {display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.storyboard-shot-meta span {font-size:12px;font-variant-numeric:tabular-nums}
+.storyboard-original-scene {
+  margin:0 0 12px;padding:10px 12px;border-inline-start:2px solid var(--line);color:var(--muted)
+}
 .storyboard-scenes button:not(.ant-btn) { display:grid; gap:3px; text-align:left; color:inherit; background:var(--surface);
   border:1px solid var(--line); border-radius:8px; padding:8px 10px; min-width:0; cursor:pointer; }
 .storyboard-scenes button[aria-pressed=true] {
@@ -28,7 +50,7 @@
 .storyboard-scene-title span { color:var(--muted); }
 .storyboard-detail details { border-top:1px solid var(--line); padding-block:8px; }
 .storyboard-detail summary { cursor:pointer; }
-.storyboard-image { margin-bottom:12px; }
+.storyboard-image { margin:12px 0; }
 .storyboard-image .ant-image-img { max-height:min(240px,32dvh); width:auto; max-width:100%; object-fit:contain; border-radius:8px; }
 .storyboard-context { padding:10px 12px; margin-bottom:16px; border:1px solid var(--line); border-radius:8px; }
 .storyboard-context p:first-child { margin-top:0; }

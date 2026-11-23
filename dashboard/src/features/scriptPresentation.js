@@ -8,10 +8,14 @@ export function scriptBlocks(text=''){
 }
 
 export function draftTitle(job){
-  if(job?.board?.title)return job.board.title;
   const idea=job?.brief?.idea?.trim();
+  const authored=Boolean(job?.duration_plan?.content_scene_count);
+  const explicit=idea?.match(/^(?:#{1,6}\s+)?(?:\*\*)?(?:Tên phim|Tên video)\s*:\s*(?:\*\*)?([^\n*]+)/imu);
+  if(job?.board?.title){
+    if(!authored)return job.board.title;
+    return explicit?.[1].trim()||job.board.title.replace(/\s+[·—–-]\s*(?:Cảnh|Scene)\s+\d+\b.*$/iu,'').trim();
+  }
   if(!idea)return 'Đang chuẩn bị bản nháp';
-  const explicit=idea.match(/^(?:#{1,6}\s+)?(?:\*\*)?(?:Tên phim|Tên video)\s*:\s*(?:\*\*)?([^\n*]+)/iu);
   const first=explicit?.[1]??scriptBlocks(idea)[0]?.split('\n')[0]??'';
   const plain=first.replace(/^#{1,6}\s+/,'').replace(/\*\*/g,'').trim();
   const characters=Array.from(plain);

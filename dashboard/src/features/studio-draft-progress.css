@@ -50,15 +50,25 @@
 .draft-list .ant-collapse-header > .ant-collapse-title { flex:1 1 0; min-width:0; }
 .studio-drafts-list { scroll-margin-top: 84px; }
 .draft-list .ant-collapse-extra { flex:none; align-self:flex-start; margin-block-start:4px; margin-inline-start:12px; }
-.draft-row-actions { justify-content:flex-end; }
+.draft-row-actions {display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:4px}
 .draft-list .draft-icon-action.ant-btn {
-  display:inline-grid; place-items:center; width:32px; height:32px; padding:0;
+  display:inline-grid; position:relative; place-items:center; width:32px; height:32px; padding:0;
   background:transparent; border-color:transparent; box-shadow:none; color:var(--muted);
 }
-.draft-list .draft-icon-action .anticon {
-  font-size:20px;
+.draft-list .draft-icon-action .ant-btn-icon {
+  position:absolute;inset:0;display:grid;place-items:center;line-height:0;margin:0;
 }
-.draft-list .draft-danger-action .anticon { font-size:16px; }
+.draft-list .draft-icon-action .anticon {
+  display:grid;place-items:center;font-size:18px;line-height:1;vertical-align:0;
+}
+.draft-list .draft-icon-action .anticon svg {
+  display:block;position:absolute;inset:50% auto auto 50%;width:1em;height:1em;
+  transform:translate(-50%,-50%);
+}
+.draft-list .draft-preview-action .anticon {font-size:17px}
+.draft-list .draft-video-action .anticon {font-size:18px}
+/* The Ant Design trash glyph leaves more space inside its viewBox. */
+.draft-list .draft-delete-action .anticon {font-size:18px}
 .draft-list .draft-icon-action.ant-btn:not(:disabled):is(:hover,:active,:focus-visible) {
   background:transparent; color:var(--primary);
 }
