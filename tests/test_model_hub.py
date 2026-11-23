@@ -308,7 +308,11 @@ class ModelHubReadinessHttpTests(OwnerHttpFixture):
             initial = next(c for c in valid["capability_contracts"] if c["capability"] == "image.generate")
             self.assertTrue(initial["local_runtime_compatible"])
             self.assertEqual(model_hub.catalog()["revision"], 0)
-            self.assertEqual(post(save_path, "SAVE_MODEL_PROFILE", 0, profile=profile)[0], 200)
+            self.assertEqual(post(save_path, "SAVE_MODEL_PROFILE", 0, profile=profile, intent="edit")[0], 400)
+            self.assertEqual(post(save_path, "SAVE_MODEL_PROFILE", 0, profile=profile, intent="create")[0], 200)
+            status, collision = post(save_path, "SAVE_MODEL_PROFILE", 1, profile=profile, intent="create")
+            self.assertEqual(status, 400)
+            self.assertEqual(collision["message"], "MODEL_HUB_PROFILE_ALREADY_EXISTS")
             self.assertEqual(post(preview_path, "PREVIEW_MODEL_PROFILE", 0, profile=profile)[0], 400)
             self.assertEqual(post("/api/model-hub/route", "SET_MODEL_ROUTE", 1,
                                   task_id="film.motion", model_ref=profile["id"])[0], 400)

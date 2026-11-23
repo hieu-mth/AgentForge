@@ -20,13 +20,13 @@ def handle(server, path, request, session=None):
             raise PermissionError("Explicit model profile preview required")
         return model_hub.preview_profile(request["profile"], expected_revision=request["expected_revision"])
     if path == "/api/model-hub/profile":
-        if (set(request) - {"api_key"} != {"ack", "expected_revision", "profile"} or
+        if (set(request) - {"api_key", "intent"} != {"ack", "expected_revision", "profile"} or
                 request["ack"] != "SAVE_MODEL_PROFILE"):
             raise PermissionError("Explicit model profile confirmation required")
         return model_hub.change(
             "SAVE_MODEL_PROFILE",
             expected_revision=request["expected_revision"],
-            profile=request["profile"], api_key=request.get("api_key"))
+            profile=request["profile"], api_key=request.get("api_key"), intent=request.get("intent"))
     if path == "/api/model-hub/profile/delete":
         if (set(request) != {"ack", "expected_revision", "profile_id"} or
                 request["ack"] != "DELETE_MODEL_PROFILE"):

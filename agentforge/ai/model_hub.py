@@ -719,7 +719,7 @@ def _save_orchestrator(updated, policy, route_changes):
 
 def change(action, *, expected_revision, db_path=None, profile=None, profile_id=None,
            task_id=None, model_ref=None, target_revision=None, policy=None, route_changes=None,
-           api_key=None):
+           api_key=None, intent=None):
     """CAS-guarded Owner mutation; snapshot history supports explicit rollback."""
     if type(expected_revision) is not int or expected_revision < 0:
         raise ValueError("Expected non-negative revision")
@@ -739,6 +739,15 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
             raise ValueError("MODEL_HUB_REVISION_CONFLICT")
         updated = copy.deepcopy(current)
         if action == "SAVE_MODEL_PROFILE":
+            if intent is not None:
+                if intent not in ("create", "edit") or not isinstance(profile, dict):
+                    raise ModelConfigError("Invalid profile save intent")
+                ident = _required_text(profile.get("id"), ID_RE, "model ID")
+                exists = ident in updated["profiles"]
+                if intent == "create" and exists:
+                    raise ModelConfigError("MODEL_HUB_PROFILE_ALREADY_EXISTS")
+                if intent == "edit" and not exists:
+                    raise ModelConfigError("MODEL_HUB_PROFILE_REMOVED")
             p = _save_profile(profile, api_key, updated["profiles"])
             # Explicit Owner upsert only; no Git-bundled model can reappear.
             if p["id"] not in updated["profiles"] and len(updated["profiles"]) >= MAX_PROFILE_COUNT:

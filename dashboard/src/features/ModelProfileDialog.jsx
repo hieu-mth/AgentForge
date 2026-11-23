@@ -18,7 +18,11 @@ const fieldLabels={
 const localUrl=/^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):([0-9]{1,5})\/?$/;
 const envName=/^[A-Z_][A-Z0-9_]*$/;
 
-export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,onSave,onPreview,onReload,labels}){
+const comparisonFields=['id','provider','model','enabled','base_url','base_url_env','api_key_env','motion_encoder','flux'];
+const comparisonData=profile=>Object.fromEntries(comparisonFields.filter(key=>key in profile)
+  .map(key=>[key,profile[key]]));
+
+export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,onSave,onPreview,onReload,onUseRevision,labels}){
   const [form]=Form.useForm();
   const limitsPanel=useRef(null);
   const initialAdapter=adapters.find(item=>item.id===profile?.provider)??adapters[0];
@@ -40,10 +44,13 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
   const [saving,setSaving]=useState(false);
   const [saveError,setSaveError]=useState(null);
   const [conflict,setConflict]=useState(false);
+  const [comparison,setComparison]=useState(null);
   const editing=Boolean(profile);
   const captureError=error=>{
-    const stale=error.message==='MODEL_HUB_REVISION_CONFLICT';
+    const stale=['MODEL_HUB_REVISION_CONFLICT','MODEL_HUB_PROFILE_ALREADY_EXISTS',
+      'MODEL_HUB_PROFILE_REMOVED'].includes(error.message);
     setConflict(stale);
+    setComparison(null);
     setSaveError(stale?null:requestError(error));
   };
 
@@ -83,13 +90,22 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
   async function reloadRevision(){
     setSaving(true);
     try{
-      await onReload((review?.id??form.getFieldValue('id')).trim());
-      setReview(null);
-      setContracts([]);
+      const draft=review??profilePayload(form.getFieldsValue(),{...adapter,defaults:fields});
+      const current=await onReload(draft.id);
+      setComparison({...current,draft});
       setSaveError(null);
       setConflict(false);
     }catch(error){setSaveError(requestError(error));}
     finally{setSaving(false);}
+  }
+
+  function useLatestRevision(){
+    onUseRevision(comparison.revision);
+    setReview(null);
+    setContracts([]);
+    setComparison(null);
+    setConflict(false);
+    setSaveError(null);
   }
 
   const supported=contracts.filter(item=>item.local_runtime_compatible||item.route_configurable);
@@ -109,7 +125,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         {review?'Xác nhận lưu':'Xem lại cấu hình'}
       </Button>
     </Space>}>
-    <Form hidden={Boolean(review)} form={form} layout="vertical" initialValues={initial} disabled={saving}
+    <Form hidden={Boolean(review)} form={form} layout="vertical" initialValues={initial} disabled={saving||conflict}
       requiredMark={false} onValuesChange={changeAdapter}
       onFinishFailed={({errorFields})=>{
         if(limitsPanel.current&&errorFields.some(({name})=>name[0]==='flux_settings'&&name[1]!=='workflow'))
@@ -236,5 +252,20 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
       message={review?'Chưa lưu được hồ sơ':'Chưa kiểm tra được cấu hình'}
       description={saveError??'Cấu hình đã thay đổi ở phiên khác. Tải lại để đối chiếu. Nội dung bạn đã nhập vẫn được giữ.'}
       action={conflict&&<Button size="small" loading={saving} onClick={reloadRevision}>Tải lại cấu hình</Button>}/>}
+    {comparison&&<section className="model-conflict" aria-label="Đối chiếu hồ sơ model">
+      <div className="model-conflict-grid">
+        <div><strong>Bản nháp của bạn</strong><pre>{JSON.stringify(comparisonData(comparison.draft),null,2)}</pre></div>
+        <div><strong>Bản trên máy chủ · Phiên bản {comparison.revision}</strong>
+          {comparison.profile
+            ?<pre>{JSON.stringify(comparisonData(comparison.profile),null,2)}</pre>
+            :<p>Phiên bản này chưa có hồ sơ mang mã {comparison.draft.id}.</p>}</div>
+      </div>
+      {editing&&!comparison.profile
+        ?<Alert type="warning" message="Hồ sơ đã bị xóa. Hãy đăng ký hồ sơ mới nếu muốn sử dụng lại cấu hình này."/>
+        :<Button onClick={useLatestRevision} disabled={saving}>
+          {!editing&&comparison.profile?'Đổi mã hồ sơ':'Dùng phiên bản này để tiếp tục'}
+        </Button>}
+      {!editing&&comparison.profile&&<p>Mã hồ sơ đã được sử dụng. Hãy nhập mã khác trước khi lưu.</p>}
+    </section>}
   </Modal>;
 }

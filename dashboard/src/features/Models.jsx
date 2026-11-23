@@ -71,10 +71,7 @@ export function ModelHub({mutate}) {
   const reloadEditor=async(candidateId)=>{
     const current=await reload();
     if(!current)throw new Error('Chưa tải được cấu hình hiện tại. Hãy thử lại.');
-    const saved=current.profiles.find(item=>item.id===candidateId)??null;
-    if(JSON.stringify(saved)!==JSON.stringify(editor.profile))
-      throw new Error('Hồ sơ này đã thay đổi. Nội dung nhập vẫn còn để bạn đối chiếu trước khi mở lại hồ sơ.');
-    setEditor(old=>({...old,revision:current.revision}));
+    return {profile:current.profiles.find(item=>item.id===candidateId)??null,revision:current.revision};
   };
   const checkProfile=async(row,revision=hub.revision)=>{
     const capability=profileCapability(row)?.capability;
@@ -85,6 +82,8 @@ export function ModelHub({mutate}) {
       const result=await mutate('/api/model-hub/readiness',{
         ack:'CHECK_CAPABILITY_READINESS',profile_id:row.id,capability,expected_revision:revision,
       },{inlineError:true});
+      if(result?.revision!==revision||result.profile_id!==row.id||result.capability!==capability)
+        throw new Error('Kết quả kiểm tra không khớp hồ sơ và phiên bản đã yêu cầu.');
       setChecked(old=>({...old,[key]:result}));
     }catch(error){
       setChecked(old=>({...old,[key]:{error:requestError(error)}}));
@@ -92,7 +91,7 @@ export function ModelHub({mutate}) {
   };
   const saveProfile=async(profile,revision,apiKey,checkAfterSave)=>{
     const result=await mutate('/api/model-hub/profile',{
-      ack:'SAVE_MODEL_PROFILE',expected_revision:revision,profile,
+      ack:'SAVE_MODEL_PROFILE',expected_revision:revision,profile,intent:editor.profile?'edit':'create',
       ...(apiKey?{api_key:apiKey}:{}),
     },{inlineError:true});
     setHub(result);setChecked({});setProbes({});setEditor(null);
@@ -167,7 +166,7 @@ export function ModelHub({mutate}) {
     <SettingsHeading title="Model AI" eyebrow="HỒ SƠ MODEL"
       description="Chỉ hiển thị model Owner đã đăng ký trong SQLite; không có model mặc định hoặc tự tải."
       actions={<>
-        <Button icon={<ReloadOutlined/>} onClick={reload} loading={loading}>Làm mới</Button>
+        <Button aria-label="Làm mới" icon={<ReloadOutlined/>} onClick={reload} loading={loading}>Làm mới</Button>
         <Button type="primary" icon={<PlusOutlined/>} disabled={!adapters.length} onClick={()=>editProfile(null)}>
           Đăng ký model
         </Button>
@@ -230,6 +229,7 @@ export function ModelHub({mutate}) {
     {editor&&<ModelProfileDialog adapters={adapters} profile={editor.profile}
       profiles={profiles} revision={editor.revision} labels={labels} onCancel={()=>setEditor(null)} onSave={saveProfile}
       onReload={reloadEditor}
+      onUseRevision={revision=>setEditor(old=>({...old,revision}))}
       onPreview={(profile,revision)=>mutate('/api/model-hub/profile/preview',{
         ack:'PREVIEW_MODEL_PROFILE',expected_revision:revision,profile,
       },{inlineError:true})}/>}
