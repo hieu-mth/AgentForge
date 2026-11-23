@@ -330,7 +330,9 @@ class DraftTests(unittest.TestCase):
         self.assertEqual([scene["frames"] for scene in scenes], [36]*4)
         self.assertEqual([scene["content_scene"] for scene in scenes], [1, 1, 2, 2])
         originals = content.splitlines()
-        self.assertEqual([scene["description"] for scene in scenes], [originals[0]]*2 + [originals[1]]*2)
+        self.assertEqual([brief["idea"][slice(*scene["script_range"])].strip() for scene in scenes],
+                         [originals[0]]*2 + [originals[1]]*2)
+        self.assertEqual([scene["description"] for scene in scenes], [scene["shot_description"] for scene in scenes])
         self.assertEqual([call.args[3].strip() for call in storyboard.call_args_list],
                          [originals[0]]*2 + [originals[1]]*2)
         draft._save(job)
@@ -346,18 +348,65 @@ class DraftTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "giữ thứ tự"):
             draft.act(self.ident, "storyboard-move", {"sha256": job["storyboard_sha"], "index": 0, "target": 2})
         profile = self.motion_profile()
+        # Simulate a previously saved board whose description still carries the source excerpt.
+        scenes[0]["description"] = originals[0]
+        scenes[0].update(asset="image-sha", job_id="image-job", image_key="image-key", attempts=1,
+                         motion_job="motion-job", motion_sha="motion-sha")
+        scenes[1].update(asset="second-image", job_id="second-job", image_key="second-key", attempts=1,
+                         motion_job="second-motion", motion_sha="second-sha")
+        draft._stamp_storyboard(job)
+        old_sha = job["storyboard_sha"]
+        scene_ranges = [scene["script_range"] for scene in scenes]
+        draft._save(job)
         with (patch.object(draft.model_hub, "draft_routes", return_value=(8, {**bindings, "film.motion": profile})),
+              patch.object(draft.model_hub, "local_inference_slot", return_value=nullcontext()),
+              patch.object(draft, "_measured", return_value=nullcontext()),
+              patch.object(draft, "_ask", return_value={"description": "Miu blinks",
+                           "image_prompt": scenes[0]["image_prompt"], "motion_prompt": "Miu blinks slowly"}) as rewrite,
               patch.object(draft_motion, "bind", return_value=profile),
               patch.object(draft_motion, "require_resolved_ledger"),
               patch.object(draft_motion, "prepare", return_value=(None, None, None, draft_motion.workflow_sha())),
               patch.object(draft_motion, "run_shot") as motion, patch.object(draft, "_image"),
               patch.object(draft, "_release_idle_image"), patch.object(draft, "_dispatch"),
               patch.object(draft, "_render", return_value="fixture-sha"), patch.object(draft, "_duration_plan") as planner):
-            draft.act(self.ident, "storyboard-approve", {"sha256": job["storyboard_sha"]})
+            rewritten = draft.act(self.ident, "storyboard-rewrite", {
+                "sha256": old_sha, "index": 0, "feedback": "Show the blink"})
+            context = rewrite.call_args.args[2]["scene"]
+            self.assertEqual(context["description"], scenes[0]["shot_description"])
+            self.assertEqual(context["original_script_excerpt"].strip(), originals[0])
+            edited = draft.act(self.ident, "storyboard-edit", {
+                "sha256": rewritten["storyboard_sha"], "index": 1, "description": "Miu turns toward the door",
+                "image_prompt": "Cat looking at a door", "motion_prompt": "Cat turns its head"})
+            with self.assertRaisesRegex(ValueError, "Storyboard"):
+                draft.act(self.ident, "storyboard-approve", {"sha256": old_sha})
+            draft.act(self.ident, "storyboard-approve", {"sha256": edited["storyboard_sha"]})
+            saved = draft._read(self.ident)
+            self.assertEqual(saved["approved_storyboard_sha"], draft.draft_timeline.digest(saved))
+            revised = saved["board"]["scenes"]
+            self.assertEqual(saved["brief"]["idea"], brief["idea"])
+            self.assertEqual([scene["script_range"] for scene in revised], scene_ranges)
+            for scene, description, image, motion_prompt in zip(
+                    revised, ("Miu blinks", "Miu turns toward the door"),
+                    (scenes[0]["image_prompt"], "Cat looking at a door"),
+                    ("Miu blinks slowly", "Cat turns its head")):
+                self.assertEqual((scene["shot_description"], scene["description"], scene["image_prompt"],
+                                  scene["motion_prompt"]), (description, description, image, motion_prompt))
+                self.assertNotIn("motion_job", scene)
+                self.assertNotIn("motion_sha", scene)
+            self.assertEqual(revised[0]["asset"], "image-sha")
+            self.assertEqual(revised[0]["image_key"], "image-key")
+            self.assertEqual(saved["storyboard_history"][0]["sha256"], old_sha)
+            self.assertEqual(saved["storyboard_history"][0]["checkpoints"][0]["motion_sha"], "motion-sha")
+            self.assertIsNone(revised[1]["asset"])
+            self.assertIsNone(revised[1]["job_id"])
+            self.assertEqual(revised[1]["attempts"], 0)
+            self.assertNotEqual(revised[1]["image_key"], "second-key")
             draft._work(draft._read(self.ident), nullcontext())
             planner.assert_not_called()
         self.assertEqual(draft._read(self.ident)["status"], "REVIEW")
         self.assertEqual([call.args[0]["content_scene"] for call in motion.call_args_list], [1, 1, 2, 2])
+        self.assertEqual([call.args[0]["motion_prompt"] for call in motion.call_args_list[:2]],
+                         ["Miu blinks slowly", "Cat turns its head"])
 
         alternate = {"output": {"fps": 12, "max_frames": 36, "resolution": [320, 192]}}
         plan = draft._duration_plan({"brief": {**brief, "seconds": None}, "motion_plan": alternate}, {})

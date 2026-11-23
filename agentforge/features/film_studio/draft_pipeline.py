@@ -610,6 +610,7 @@ def _write_planned_board(job, bindings):
         data.setdefault("character_ids", [])
         if authored:
             description = _text(data["description"], 350)
+            data["description"] = description
             motion_prompt = _text(data.pop("motion_prompt"), 600)
             description_key, prompt_key = (" ".join(value.casefold().split()) for value in (description, motion_prompt))
             if description_key in seen_descriptions or prompt_key in seen_prompts:
@@ -620,9 +621,6 @@ def _write_planned_board(job, bindings):
             shot_descriptions.append(description)
             motion_prompts.append(motion_prompt)
             previous = {"description": description[:180], "motion_prompt": motion_prompt[:240]}
-            original = source.strip()
-            if len(original) <= 350:
-                data["description"] = original
         scenes.append(data)
     board = _story({"title": title, "continuity": continuity, "scenes": scenes},
                    brief["scene_count"], brief["seconds"], cast)
@@ -1255,15 +1253,24 @@ def _storyboard_action(job, action, data):
             scene = scenes[index]
         if action == "storyboard-rewrite":
             _, bindings = model_hub.draft_routes()
+            shot = {key: scene[key] for key in draft_timeline.STORY_FIELDS if key in scene}
+            if "shot_description" in scene:
+                shot["description"] = shot.pop("shot_description")
+            if scene.get("content_scene") and scene.get("script_range"):
+                start, end = scene["script_range"]
+                shot["original_script_excerpt"] = job["brief"]["idea"][start:min(end, start + 1000)]
             with model_hub.local_inference_slot(), _measured(job, "storyboard", bindings["image.generate"]):
-                data = _ask(bindings["film.storyboard"], "Rewrite only this shot. Preserve the cast. "
+                data = _ask(bindings["film.storyboard"], "Rewrite only this shot. Preserve the cast and its role "
+                            "in the original scene when a script excerpt is provided. "
                             "Return description, English image_prompt and motion_prompt.",
-                            {"scene": {key: scene[key] for key in draft_timeline.STORY_FIELDS if key in scene},
+                            {"scene": shot,
                              "feedback": _text(data["feedback"], 350), "continuity": original["continuity"]},
                             _object(description=STRING, image_prompt=STRING, motion_prompt=STRING),
                             bindings["image.generate"])
         prompts = {key: _text(data[key], limit) for key, limit in
                    (("description", 350), ("image_prompt", 600), ("motion_prompt", 600))}
+        if "shot_description" in scene or scene.get("content_scene"):
+            prompts["shot_description"] = prompts["description"]
         for key, limit in (("caption", 220), ("scene_notes", 240)):
             if key in data:
                 prompts[key] = _text(data[key], limit).replace("\n", " ") if data[key] != "" else ""

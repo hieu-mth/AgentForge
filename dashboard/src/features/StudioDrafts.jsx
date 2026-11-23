@@ -397,7 +397,7 @@ export function StudioDrafts({mutate,onCharacters}) {
     {editor&&<Modal open title={(editor.rewrite?'AI viết lại cảnh ':editor.adding?'Thêm cảnh ':'Sửa cảnh ')+(editor.index+1)} footer={null}
       onCancel={()=>setEditor(null)}>
       {error&&<Alert showIcon type="error" message={error}/>}
-      <Form layout="vertical" initialValues={editor.scene} onFinish={values=>editor.job?
+      <Form layout="vertical" initialValues={{...editor.scene,description:editor.scene.shot_description??editor.scene.description}} onFinish={values=>editor.job?
         run('/'+editor.job.id+'/storyboard-'+(editor.rewrite?'rewrite':editor.adding?'add':'edit'),
           {...values,index:editor.index,sha256:editor.job.storyboard_sha},()=>setEditor(null)):
         run('/'+editor.id+'/edit',{...values,index:editor.index},()=>setEditor(null))}>
