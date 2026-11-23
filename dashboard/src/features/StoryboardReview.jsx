@@ -2,6 +2,8 @@ import {useState} from 'react';
 import {Alert,Button,Image,Modal,Segmented,Space,Tag} from 'antd';
 import {NumberField} from '../components/NumberField.jsx';
 import {ScriptContent} from './ScriptContent.jsx';
+import {draftTitle} from './scriptPresentation.js';
+import {groupDraftScenes} from './studioScenes.js';
 import {MAX_STUDIO_SECONDS} from './studioDuration.js';
 import './storyboard-review.css';
 
@@ -14,11 +16,10 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
   const scene=scenes[index];
   const reviewing=job.status==='STORYBOARD_REVIEW';
   const authoredScenes=job.duration_plan?.content_scene_count;
+  const groups=groupDraftScenes(job);
+  const activeGroup=groups.find(group=>group.shots.some(shot=>shot.index===index));
   const countLabel=authoredScenes?`${authoredScenes} cảnh · ${scenes.length} shot`:`${scenes.length} cảnh`;
-  const shotLabel=(item,i)=>item.content_scene?
-    `Cảnh ${item.content_scene} · Shot ${item.content_shot}/${item.content_shot_count}`:
-    'Cảnh '+String(i+1).padStart(2,'0');
-  return <Modal open centered width={1080} rootClassName="storyboard-review" title={job.board.title}
+  return <Modal open centered width={1080} rootClassName="storyboard-review" title={draftTitle(job)}
     onCancel={onClose} footer={<div className="storyboard-footer">
       <div><strong>{job.brief.seconds} giây · {countLabel}{job.storyboard_version&&' · Phiên bản '+job.storyboard_version}</strong>
         {reviewing&&<div className="env-muted">Duyệt phiên bản này để tạo ảnh{job.brief.mode==='motion'?' và chuyển động':''} tuần tự cho {scenes.length} {authoredScenes?'shot':'cảnh'}.</div>}
@@ -51,25 +52,37 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
       </>}
     </section>:<div className="storyboard-layout">
       <nav aria-label="Danh sách cảnh" className="storyboard-scenes">
-        {scenes.map((item,i)=><button key={item.shot_id??i} type="button" aria-pressed={index===i}
-          onClick={()=>setShot(item.shot_id??i)}>
-          <strong>{shotLabel(item,i)} · {Number(item.seconds.toFixed(2)).toLocaleString('vi-VN')} giây</strong>
-          <span>{item.description}</span>
-        </button>)}
+        {groups.map(group=><div className={authoredScenes?'storyboard-scene-group storyboard-authored-group':'storyboard-scene-group'} key={group.key}>
+          {authoredScenes&&<header><h4>{group.title??group.label}</h4>
+            {group.title&&<span>{group.label}</span>}</header>}
+          <div className={authoredScenes?'storyboard-shot-strip':undefined}>
+          {group.shots.map(({scene:item,index:i})=><button key={item.shot_id??i} type="button" aria-pressed={index===i}
+            aria-label={authoredScenes?`${group.label} · Shot ${item.content_shot}/${item.content_shot_count}`:undefined}
+            onClick={()=>setShot(item.shot_id??i)}>
+            <div className="storyboard-shot-meta">
+              <strong>{authoredScenes?`Shot ${item.content_shot}`:group.label}</strong>
+              <span>{Number(item.seconds.toFixed(2)).toLocaleString('vi-VN')} giây</span>
+            </div>
+            {!authoredScenes&&<span>{item.description}</span>}
+          </button>)}
+          </div>
+        </div>)}
         {onAdd&&<Button disabled={busy} onClick={onAdd}>Thêm cảnh</Button>}
       </nav>
       {scene&&<article key={scene.shot_id??index} className="storyboard-detail">
-        <header className="storyboard-scene-title"><h3>{scene.content_scene?shotLabel(scene,index):'Cảnh '+(index+1)}</h3>
+        <header className="storyboard-scene-title"><h3>{scene.content_scene?
+          `${activeGroup.label} · Shot ${scene.content_shot}/${scene.content_shot_count}`:'Cảnh '+(index+1)}</h3>
           <span>{Number(scene.seconds.toFixed(2)).toLocaleString('vi-VN')} giây</span>
         </header>
-        <p>{scene.description}</p>
-        {scene.shot_reason&&<p className="env-muted">{scene.shot_reason}</p>}
+        {!activeGroup?.original&&<p>{scene.description}</p>}
+        {scene.shot_reason&&!authoredScenes&&<p className="env-muted">{scene.shot_reason}</p>}
         {scene.asset&&<div className="storyboard-image"><Image loading="lazy" alt={'Ảnh cảnh '+(index+1)}
           src={'/api/film/drafts/'+job.id+'/scene-'+index+'?v='+scene.asset}/></div>}
+        {activeGroup?.original&&<div className="storyboard-original-scene"><ScriptContent text={activeGroup.original}/></div>}
         {!!scene.character_ids?.length&&<Space wrap>{scene.character_ids.map(id=><Tag key={id}>{job.cast?.[id]?.name??id}</Tag>)}</Space>}
         {(scene.scene_notes||scene.continuity||job.board.continuity)&&<p>{scene.scene_notes||scene.continuity||job.board.continuity}</p>}
         {scene.caption&&<p><strong>Phụ đề</strong><br/>{scene.caption}</p>}
-        {scene.script_range&&<details><summary>Kịch bản gốc</summary>
+        {scene.script_range&&!activeGroup?.original&&<details><summary>Kịch bản gốc</summary>
           <ScriptContent text={Array.from(job.brief.idea).slice(...scene.script_range).join('')}/>
         </details>}
         <details><summary>Chi tiết AI</summary>

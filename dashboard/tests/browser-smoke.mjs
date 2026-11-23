@@ -489,6 +489,26 @@ try {
   });
   await settings.locator('.studio-drafts-list').getByRole('button',{name:'Làm mới',exact:false}).click();
   await draftProgress.locator('.production-header').getByText('Storyboard chờ duyệt',{exact:true}).waitFor();
+  async function checkDraftIconsAligned(row, labels){
+    const bounds=await Promise.all(labels.map(name=>row.getByRole('button',{name,exact:true}).evaluate(button=>{
+      const svg=button.querySelector('svg');
+      const paths=[...svg.querySelectorAll('path')];
+      const glyph=paths[0].getBoundingClientRect();
+      const viewport=svg.getBoundingClientRect();
+      const intact=paths.every(path=>{
+        const rect=path.getBoundingClientRect();
+        return rect.width>0&&rect.height>0&&rect.left>=viewport.left-.1&&rect.right<=viewport.right+.1&&
+          rect.top>=viewport.top-.1&&rect.bottom<=viewport.bottom+.1&&getComputedStyle(path).fill!=='none';
+      });
+      const box=button.getBoundingClientRect();
+      return {middle:glyph.top+glyph.height/2,height:glyph.height,intact,buttonTop:box.top,
+        iconTop:button.querySelector('.ant-btn-icon').getBoundingClientRect().top};
+    })));
+    if(bounds.some(glyph=>!glyph.intact)||Math.abs(bounds[0].middle-bounds[1].middle)>0.75||
+      Math.abs(bounds[0].height-bounds[1].height)>1.1)
+      throw new Error(`Draft icons differ in alignment or visible height: ${JSON.stringify(bounds)}`);
+  }
+  await checkDraftIconsAligned(settings.getByRole('tab',{name:/^Ý tưởng mới/}),['Xem storyboard','Xóa bản nháp']);
   await settings.getByRole('button',{name:'Xem storyboard',exact:true}).click();
   const storyboardDialog=settings.getByRole('dialog',{name:'Ý tưởng mới'});
   await storyboardDialog.getByText('Nội dung & phiên bản',{exact:true}).click({trial:true});
@@ -555,11 +575,19 @@ try {
   await draftPreview.getByText('Không phát được MP4').waitFor();
   await settings.keyboard.press('Escape');
   await draftPreview.waitFor({state:'hidden'});
+  const authoredParts=['**Cảnh 1 — Phát hiện bướm (0–3 giây)**\nMiu nhìn con bướm.\n',
+    '**Cảnh 2 — Theo dấu bướm (3–6 giây)**\nMiu bước qua vườn.'];
+  const authoredShots=authoredParts.flatMap((part,i)=>[1,2].map(shot=>({...scene,seconds:1.5,
+    content_scene:i+1,content_shot:shot,content_shot_count:2,motion_sha:'verified',
+    script_range:i?[authoredParts[0].length,authoredParts.join('').length]:[0,part.length]})));
   archivedDrafts=[
     {...draftFixture,id:'d'.repeat(32),status:'REJECTED',storyboard_version:undefined,
       brief:{...draftFixture.brief,mode:'still'},board:{...draftFixture.board,title:'Bản ảnh tĩnh đã từ chối'}},
     {...draftFixture,id:'e'.repeat(32),status:'APPROVED',
       board:{...draftFixture.board,title:'Storyboard đã duyệt'}},
+    {...draftFixture,id:'f'.repeat(32),status:'APPROVED',duration_plan:{content_scene_count:2},
+      brief:{...draftFixture.brief,idea:authoredParts.join(''),scene_count:4},
+      board:{...draftFixture.board,title:'Mèo và bướm - Cảnh 1: Phát hiện bướm',scenes:authoredShots}},
   ];
   await settings.locator('.studio-drafts-list').getByRole('button',{name:'Làm mới',exact:false}).click();
   await settings.getByRole('tab',{name:'Đã kết thúc',exact:true}).click();
@@ -576,6 +604,20 @@ try {
     throw new Error('Approved storyboard shows editing controls');
   await settings.keyboard.press('Escape');
   await archivedStoryboard.waitFor({state:'hidden'});
+  const authoredRow=settings.getByRole('tab',{name:/^Mèo và bướm/});
+  await checkDraftIconsAligned(authoredRow,['Xem storyboard','Xem video']);
+  if(await authoredRow.getAttribute('aria-expanded')!=='true')await authoredRow.locator('.draft-row-label').click();
+  await draftProgress.getByText('2/2 cảnh hoàn thành · 4/4 shot đã xác minh',{exact:true}).waitFor();
+  await draftProgress.getByRole('heading',{name:'Cảnh 01 · Phát hiện bướm',exact:true}).waitFor();
+  await authoredRow.getByRole('button',{name:'Xem storyboard'}).click();
+  const authoredStoryboard=settings.getByRole('dialog',{name:'Mèo và bướm',exact:true});
+  await authoredStoryboard.getByRole('heading',{name:'Theo dấu bướm',exact:true}).waitFor();
+  await authoredStoryboard.getByRole('button',{name:'Cảnh 02 · Shot 2/2',exact:true}).waitFor();
+  const sourceText=authoredStoryboard.locator('.storyboard-original-scene');
+  if((await sourceText.innerText()).includes('**')||await sourceText.getByText('Miu nhìn con bướm.',{exact:true}).count()!==1)
+    throw new Error('Original authored scene was duplicated or shown without formatting');
+  await settings.keyboard.press('Escape');
+  await authoredStoryboard.waitFor({state:'hidden'});
   const cancelledTab=settings.getByRole('tab',{name:/^Bản nháp đã hủy/});
   await cancelledTab.waitFor();
   await settings.route('**/api/film/drafts/*/delete',route=>{

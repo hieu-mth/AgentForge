@@ -2,7 +2,7 @@ import {AppTooltip} from '../components/AppTooltip.jsx';
 ﻿import {useEffect,useRef,useState} from 'react';
 import {Alert,App as AntApp,Button,Card,Collapse,Empty,Form,Input,Modal,Select,Space,Tabs,Tag} from 'antd';
 import {NumberField} from '../components/NumberField.jsx';
-import {CaretRightFilled,CloseOutlined,DeleteOutlined,FileTextOutlined,ReloadOutlined} from '@ant-design/icons';
+import {CaretRightFilled,CloseOutlined,DeleteOutlined,FileTextOutlined,PlayCircleOutlined,ReloadOutlined} from '@ant-design/icons';
 import {useResource,ResourceStatus} from '../use_resource.jsx';
 import {useScreenRefresh} from '../refresh_scope.jsx';
 import {requestError} from '../api.js';
@@ -63,7 +63,7 @@ function usage(total,available,format) {
 }
 
 const historyStates=new Set(['APPROVED','REJECTED','CANCELLED']);
-const statusColors={RUNNING:'processing',QUEUED:'blue',REVIEW:'purple',FAILED:'error',
+const statusColors={RUNNING:'processing',QUEUED:'blue',STORYBOARD_REVIEW:'orange',REVIEW:'orange',FAILED:'error',
   WAITING_RESOURCES:'warning',APPROVED:'success'};
 const draftDate=new Intl.DateTimeFormat('vi-VN',{dateStyle:'short',timeStyle:'short'});
 
@@ -88,6 +88,7 @@ function DraftLabel({job}){
       {job.brief.seconds&&<span>{job.brief.seconds} giây</span>}
       {job.brief.ratio&&<span>{job.brief.ratio}</span>}
       <span>{videoModes[job.brief.mode==='motion'?'motion':'still']}</span>
+      {job.duration_plan?.content_scene_count&&<span>{job.duration_plan.content_scene_count} cảnh · {job.brief.scene_count} shot</span>}
       {job.board&&<span>{job.board.scenes.filter(scene=>scene.asset).length}/{job.board.scenes.length} ảnh</span>}
     </div>
   </div>;
@@ -194,7 +195,7 @@ export function StudioDrafts({mutate,onCharacters}) {
     if(!canCancel&&!canDelete)return null;
     const label=canDelete?'Xóa bản nháp':'Hủy tác vụ';
     return <AppTooltip title={label}><Button size="small" type="text" danger disabled={pending}
-      className="draft-icon-action draft-danger-action"
+      className={canDelete?'draft-icon-action draft-danger-action draft-delete-action':'draft-icon-action draft-danger-action'}
       aria-label={label} icon={canDelete?<DeleteOutlined/>:<CloseOutlined/>}
       onKeyDown={event=>event.stopPropagation()} onClick={event=>{
         event.stopPropagation();
@@ -208,6 +209,29 @@ export function StudioDrafts({mutate,onCharacters}) {
           }),
         });
       }}/></AppTooltip>;
+  }
+
+  function draftViews(job) {
+    const views=[
+      {key:'storyboard',available:job.board,label:'Xem storyboard',icon:<FileTextOutlined/>,open:()=>{
+        setError(null);
+        setStoryboardId(job.id);
+      }},
+      {key:'video',available:job.video_sha,label:'Xem video',icon:<PlayCircleOutlined/>,open:()=>setPreviewId(job.id)},
+    ].filter(view=>view.available);
+    return <>
+      {views.map(view=><AppTooltip key={view.key} title={view.label}>
+        <Button size="small" type="text" icon={view.icon} aria-label={view.label}
+          className={view.key==='video'?'draft-icon-action draft-preview-action draft-video-action':
+            'draft-icon-action draft-preview-action'}
+          onKeyDown={event=>event.stopPropagation()} onClick={event=>{
+            event.stopPropagation();
+            setSelectedId(job.id);
+            view.open();
+          }}/>
+      </AppTooltip>)}
+      {draftAction(job)}
+    </>;
   }
 
   function submit(values) {
@@ -311,7 +335,7 @@ export function StudioDrafts({mutate,onCharacters}) {
       activeKey={featured?.id??[]} onChange={key=>setSelectedId((Array.isArray(key)?key[0]:key)??'')}
       items={visibleDrafts.map(job=>({key:job.id,
         label:<DraftLabel job={job}/>,
-        extra:<Space className="draft-row-actions" size={4} wrap>
+        extra:<div className="draft-row-actions">
           {['QUEUED','WAITING_RESOURCES','INTERRUPTED','NEEDS_RECONCILIATION','FAILED'].includes(job.status)&&
             <AppTooltip title="Tiếp tục từ checkpoint"><Button size="small" type="text" className="draft-icon-action"
               disabled={pending||running} icon={<CaretRightFilled/>}
@@ -322,13 +346,8 @@ export function StudioDrafts({mutate,onCharacters}) {
                 setSelectedId(job.id);
                 run('/'+job.id+'/resume',{});
               }}/></AppTooltip>}
-          {job.board&&<Button size="small" type={job.status==='STORYBOARD_REVIEW'?'primary':'default'}
-            onKeyDown={event=>event.stopPropagation()}
-            onClick={event=>{event.stopPropagation();setSelectedId(job.id);setError(null);setStoryboardId(job.id);}}>Xem storyboard</Button>}
-          {job.video_sha&&<Button size="small" onKeyDown={event=>event.stopPropagation()}
-            onClick={event=>{event.stopPropagation();setSelectedId(job.id);setPreviewId(job.id);}}>Xem video</Button>}
-          {draftAction(job)}
-        </Space>,
+          {draftViews(job)}
+        </div>,
         children:<>
           <ProductionProgress job={job} labels={labels} warnings={warnings}/>
           {!job.board&&<Button type="default" aria-label="Xem nội dung video" icon={<FileTextOutlined/>}
@@ -360,7 +379,7 @@ export function StudioDrafts({mutate,onCharacters}) {
       <StudioPreview key={scenePreview.sha} initiallyOpen label="Xem clip chuyển động" filename="motion.mp4"
         url={API+'/'+scenePreview.id+'/motion-'+scenePreview.index+'?v='+scenePreview.sha}/>
     </Modal>}
-    {preview&&<Modal open title={preview.board?.title||'Xem bản nháp MP4'} footer={null}
+    {preview&&<Modal open title={draftTitle(preview)} footer={null}
       onCancel={()=>setPreviewId(null)}>
       <StudioPreview key={preview.video_sha} url={API+'/'+preview.id+'/preview?v='+preview.video_sha}
         filename="draft.mp4" label="Xem bản nháp MP4" initiallyOpen reviewActions={preview.status==='REVIEW'?<>

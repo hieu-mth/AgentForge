@@ -28,6 +28,31 @@
 .production-steps [data-state='error'],.production-scenes [data-error='true'] {border-color:var(--prod-error)}
 .production-scenes summary {cursor:pointer;font-weight:600;margin-bottom:8px}
 .production-scenes ul {max-height:250px; overflow:auto}
+.production-scene-groups {display:grid;max-height:320px;overflow:auto}
+.production-scene-row {border-bottom:1px solid var(--prod-line)}
+.production-scene-row:first-child {border-top:1px solid var(--prod-line)}
+.production-scenes .production-group-heading {display:grid;grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;gap:9px;list-style:none;margin:0;padding:9px 8px;border-radius:6px}
+.production-group-heading::-webkit-details-marker {display:none}
+.production-group-heading:hover {background:var(--prod-fill)}
+.production-group-heading > .anticon {font-size:10px;color:var(--prod-muted)}
+.production-scene-row[open] > .production-group-heading > .anticon {transform:rotate(90deg)}
+.production-scene-groups h4 {margin:0;font-size:13px;overflow-wrap:anywhere}
+.production-scene-groups ul {display:flex;flex-wrap:wrap;gap:4px;max-height:none;overflow:visible;padding:0 8px 7px 27px}
+.production-scenes .production-scene-groups li {padding:0;background:transparent;border-color:transparent;border-radius:6px}
+.production-shot-chip {display:inline-flex;align-items:center;gap:6px;justify-content:space-between;
+  min-width:62px;padding:4px 7px;font-size:12px;color:var(--prod-muted);border-radius:6px}
+.production-shot-chip:hover,.production-shot-chip:focus-visible {color:var(--prod-text);background:var(--prod-fill);border-radius:6px}
+.production-group-count {display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;
+  color:var(--prod-muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.production-group-count[data-state=done] .anticon {color:var(--prod-success)}
+.production-group-count[data-state=error] {color:var(--prod-error)}
+.production-group-count[data-state=active] {color:var(--prod-primary)}
+.production-shot-chip .anticon-check-circle {color:var(--prod-success)}
+.production-shot-chip .anticon-exclamation-circle {color:var(--prod-error)}
+.production-shot-dot {width:6px;height:6px;border-radius:50%;background:var(--prod-muted)}
+.production-scene-groups [data-active=true] .production-shot-chip {color:var(--prod-primary)}
+.production-scene-groups [data-active=true] .production-shot-dot {background:var(--prod-primary)}
 @media (prefers-reduced-motion: reduce) {
   .production-progress *, .production-progress *::before {animation:none!important;transition:none!important}
 }

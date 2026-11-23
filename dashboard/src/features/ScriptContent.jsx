@@ -10,7 +10,7 @@ export function ScriptContent({text}){
   return <div className="script-content">
     {scriptBlocks(text).map((block,index)=>{
       const markdownHeading=block.match(/^#{1,6}\s+([^\n]+)(?:\n([\s\S]*))?$/);
-      const labeled=block.match(/^\*\*([^*\n]+:[^*\n]*|Cảnh\s+\d+)\*\*\s*([\s\S]*)$/iu);
+      const labeled=block.match(/^\*\*([^*\n]+:[^*\n]*|(?:Cảnh|Scene)\s+\d+\b[^*\n]*)\*\*\s*([\s\S]*)$/iu);
       const plainLabel=block.match(/^((?:phong cách|nhân vật|bối cảnh|kịch bản|nội dung):)[ \t]*([\s\S]*)$/iu);
       if(markdownHeading||labeled||plainLabel){
         const [,heading,body]=markdownHeading??labeled??plainLabel;
