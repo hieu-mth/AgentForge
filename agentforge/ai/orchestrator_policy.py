@@ -14,7 +14,6 @@ CAPABILITIES = (
     ("ops.monitor", "Giám sát hệ thống", "tool", "Python rules"),
 )
 KINDS = {key: kind for key, _, kind, _ in CAPABILITIES}
-TEXT_PROVIDERS = {"ollama", "anthropic"}
 APPROVALS = ("cloud", "download_or_data_change", "publishing_or_privacy")
 TOOLS = ("local_tts", "ffmpeg", "system_rules")
 
@@ -47,11 +46,23 @@ def defaults():
 
 
 def compatible(kind, profile):
-    if not profile or profile.get("enabled") is not True:
-        return False
-    provider = profile.get("provider")
-    return ((kind == "text" and provider in TEXT_PROVIDERS) or
-            (kind in {"image", "video"} and provider == "comfyui"))
+    return bool(profile and profile.get("enabled") is True and (
+        local_adapter(kind, profile) or
+        (kind == "text" and profile.get("provider") == "anthropic")))
+
+
+def local_adapter(kind, profile):
+    """Resolve against the same adapter predicates used by the runtime."""
+    from agentforge.features.film_studio import studio_runtime
+
+    resolve = {"text": studio_runtime.text_adapter, "image": studio_runtime.image_adapter,
+               "video": studio_runtime.motion_adapter}.get(kind)
+    if resolve is None:
+        return None
+    try:
+        return resolve(profile)
+    except ValueError:
+        return None
 
 
 def validate(policy, *, id_pattern, extra_routes):

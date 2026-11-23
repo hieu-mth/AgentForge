@@ -384,6 +384,70 @@ def catalog(*, db_path=None):
     return _catalog(revision, state)
 
 
+def capability_contract(capability, profile):
+    """Describe adapter compatibility independently of runtime observations."""
+    kind = orchestrator_policy.KINDS.get(capability)
+    adapter = orchestrator_policy.local_adapter(kind, profile)
+    output = None
+    adapter_id = None
+    if adapter and kind == "text":
+        adapter_id = "ollama"
+        output = {"format": "structured_json"}
+    elif adapter and kind == "image":
+        adapter_id = "comfyui_flux_gguf"
+        output = {"format": "png", "batch": 1, "min_resolution": 256,
+                  "max_resolution": profile["flux"]["max_resolution"], "dimension_multiple": 16,
+                  "min_steps": 1, "max_steps": profile["flux"]["max_steps"]}
+    elif adapter and kind == "video":
+        adapter_id = adapter.ADAPTER_ID
+        spec = adapter.output_profile()
+        output = {"format": "mp4", "fps": spec.fps, "max_frames": spec.max_frames,
+                  "resolution": list(spec.resolution)}
+    reason = None
+    if kind not in {"text", "image", "video", "vision"}:
+        reason = "UNSUPPORTED_CAPABILITY"
+    elif profile["provider"] == "anthropic":
+        reason = "CLOUD_PREFLIGHT_UNSUPPORTED"
+    elif not adapter:
+        reason = {"image": "FLUX_WORKFLOW_REQUIRED", "video": "MOTION_PROFILE_INCOMPATIBLE",
+                  "text": "LOCAL_TEXT_ADAPTER_REQUIRED", "vision": "VISION_ADAPTER_UNAVAILABLE"}[kind]
+    return {"capability": capability, "compatible": adapter is not None, "adapter": adapter_id,
+            "reason": reason, "output_limits": output}
+
+
+def capability_readiness(profile_id, capability, *, expected_revision, db_path=None):
+    """Check a single capability against one immutable Owner revision."""
+    _required_text(profile_id, ID_RE, "model ID")
+    _required_text(capability, TASK_RE, "capability")
+    revision, state = _read_state(db_path=db_path)
+    if type(expected_revision) is not int or revision != expected_revision:
+        raise ModelConfigError("MODEL_HUB_REVISION_CONFLICT")
+    profile = _profiles(state=state).get(profile_id)
+    if not profile:
+        raise ModelConfigError("Unknown model ID")
+    contract = capability_contract(capability, profile)
+    kind = orchestrator_policy.KINDS.get(capability)
+    if not profile["enabled"]:
+        status = "DISABLED"
+    elif not contract["compatible"]:
+        status = "INCOMPATIBLE"
+    elif kind == "text":
+        status = _check_ollama(profile)["status"]
+        if status == "LOCAL_MODEL_FOUND":
+            status = "READY"
+    elif kind == "image":
+        from agentforge.features.media.flux_runtime import readiness
+        status = readiness(profile["flux"], urlsplit(profile["base_url"]).port, inspect_all_nodes=True)
+    else:
+        status = orchestrator_policy.local_adapter(kind, profile).registry_readiness(profile)
+    reason = contract["reason"] if status == "INCOMPATIBLE" else status if status != "READY" else None
+    return {**contract, "profile_id": profile_id, "revision": revision, "configuration_valid": True,
+            "enabled": profile["enabled"], "status": status, "runtime_ready": status == "READY",
+            "reason": reason,
+            "scope": "METADATA_ONLY", "inference_invoked": False,
+            "checked_at": datetime.now(timezone.utc).isoformat()}
+
+
 def image_runtime(*, automated=False, db_path=None):
     revision, state = _read_state(db_path=db_path)
     profiles = _profiles(state=state)
@@ -456,14 +520,17 @@ def _catalog(revision, state):
             "has_api_key": "api_key_protected" in v, "source": (
             "owner"),
             "health": "UNVERIFIED",
-            "runtime_supported": v["provider"] in {"ollama", "anthropic"} or "flux" in v}
+            "runtime_supported": v["provider"] in {"ollama", "anthropic"} or "flux" in v
+                or orchestrator_policy.local_adapter("video", v) is not None,
+            "capability_contracts": [capability_contract(key, v) for key, kind in orchestrator_policy.KINDS.items()
+                                     if kind != "tool"]}
             for k, v in sorted(profiles.items())],
         "routes": routes,
         "orchestrator": _orchestrator_catalog(state, profiles, routes),
         "cloud_fallback": False,
         "gpu_auto_start": False,
         "provider_billing_verified": False,
-        "configuration_only_warning": "FLUX image profiles support local inference; video routing is configuration-only",
+        "configuration_only_warning": "A configured route does not establish local runtime readiness",
     }
 
 
@@ -500,9 +567,6 @@ def flux_probe_profile(profile_id, *, expected_revision, db_path=None):
 
 def check_local_profile(profile_id, *, db_path=None, opener=None):
     """Owner-invoked metadata preflight for supported loopback profiles."""
-    import urllib.error
-    import urllib.request
-
     _required_text(profile_id, ID_RE, "model ID")
     profile = _profiles(state=_read_state(db_path=db_path)[1]).get(profile_id)
     if not profile:
@@ -519,6 +583,14 @@ def check_local_profile(profile_id, *, db_path=None, opener=None):
         return {"profile_id": profile_id, "status": "NOT_CHECKED",
                 "reason": "Only local Ollama metadata preflight is supported",
                 "inference_invoked": False}
+    return _check_ollama(profile, opener=opener)
+
+
+def _check_ollama(profile, *, opener=None):
+    import urllib.error
+    import urllib.request
+
+    profile_id = profile["id"]
     url = _local_url(profile["base_url"]) + "/api/tags"
     request = urllib.request.Request(
         url, headers={"Accept": "application/json"}, method="GET")
@@ -544,6 +616,8 @@ def check_local_profile(profile_id, *, db_path=None, opener=None):
         found = any(isinstance(item, dict) and
                     item.get("name") == profile["model"] for item in models)
         status = "LOCAL_MODEL_FOUND" if found else "MODEL_NOT_INSTALLED"
+    except urllib.error.HTTPError:
+        status = "HTTP_ERROR"
     except (TimeoutError, urllib.error.URLError, OSError):
         status = "UNAVAILABLE"
     except (ValueError, UnicodeError, TypeError, AttributeError):

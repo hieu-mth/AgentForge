@@ -36,7 +36,7 @@ def _json(path, *, port, body=None, timeout=5):
         path, body=body, port=port, timeout=timeout))
 
 
-def readiness(config, port):
+def readiness(config, port, *, inspect_all_nodes=False):
     graph = config["workflow"]
     ids = flux_workflow.node_ids(graph)
     try:
@@ -44,13 +44,21 @@ def readiness(config, port):
         if not any(isinstance(device, dict) and device.get("type") == "cuda"
                    for device in stats["devices"]):
             return "GPU_UNAVAILABLE"
-        for node_id, fields in (("38", ("unet_name",)), ("39", ("clip_name1", "clip_name2")),
-                                ("40", ("vae_name",))):
+        loaders = {"38": ("unet_name",), "39": ("clip_name1", "clip_name2"), "40": ("vae_name",)}
+        for node_id in ids if inspect_all_nodes else loaders:
+            fields = loaders.get(node_id, ())
             node = graph[ids[node_id]]
             kind = node["class_type"]
             definitions = _json("/object_info/" + kind, port=port)
             if kind not in definitions:
                 return "WORKFLOW_NODE_UNAVAILABLE"
+            if inspect_all_nodes:
+                groups = definitions[kind]["input"]
+                supported = groups.get("required", {}).keys() | groups.get("optional", {}).keys()
+                if not node["inputs"].keys() <= supported:
+                    return "WORKFLOW_NODE_UNAVAILABLE"
+            if not fields:
+                continue
             model_fields = definitions[kind]["input"]["required"]
             for field in fields:
                 if node["inputs"][field] not in model_fields[field][0]:

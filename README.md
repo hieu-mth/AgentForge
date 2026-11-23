@@ -27,6 +27,12 @@ Mở http://127.0.0.1:8780/dashboard/ và đăng nhập bằng mã Owner đượ
 
 Git cleanup **không xóa hay migrate** `data/`, `workspace/`, `.env`, model weights, secrets, video và backups của Owner. AgentForge không cần file `.env` để khởi động; source không tự nạp `.env`, nhưng file này vẫn được Git ignore để tránh lộ secrets. CI fixture không chứng minh GPU, continuity, voice hay upload thật.
 
+### Model Hub capability readiness
+
+`GET /api/model-hub` trả `capability_contracts` cho từng profile, gồm adapter tương thích, mã lý do và giới hạn đầu ra. Để kiểm tra runtime, phiên Owner gửi `POST /api/model-hub/readiness` với CSRF và payload gồm `ack: "CHECK_CAPABILITY_READINESS"`, `profile_id`, `capability` và `expected_revision` lấy từ catalog.
+
+`READY` xác nhận metadata local tại thời điểm kiểm tra. Với Ollama, preflight kiểm tra tag đã cài. Với FLUX, preflight kiểm tra node, input và tên weights trong ComfyUI. Với LTX, preflight kiểm tra launcher đã đăng ký, công cụ media, tên và kích thước weights, cùng preset node/API. SHA weights và tài nguyên khả dụng vẫn do runtime kiểm tra khi thực thi.
+
 ### Kiểm thử bộ nhớ Studio với ba bản nháp
 
 Khi Ollama và ComfyUI đang chạy và Model Hub đã gán các năng lực local, dùng một lúc máy rảnh để chạy:
