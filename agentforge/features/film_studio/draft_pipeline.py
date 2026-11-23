@@ -330,8 +330,12 @@ def _script_scene(job, profile, comfy, source, continuity, index, *, proposed_sh
     if authored:
         context.update(content_scene=proposed_shot["content_scene"], technical_shot=proposed_shot["content_shot"],
                        shots_in_scene=proposed_shot["content_shot_count"], script_context=proposed_shot["script_context"],
-                       beat=proposed_shot["beat"])
+                       beat=proposed_shot["beat"], camera=proposed_shot["camera"],
+                       scene_constraints=proposed_shot["scene_constraints"])
         fields["motion_prompt"] = {**STRING, "minLength": 1, "maxLength": 600}
+        if "rejected_duplicate_fields" in proposed_shot:
+            context["rejected_duplicate_fields"] = proposed_shot["rejected_duplicate_fields"]
+            context["already_covered"] = proposed_shot["already_covered"]
     if cast:
         fields["character_ids"] = {"type": "array", "items": {**STRING, "enum": list(cast)}, "maxItems": 2}
         context["cast"] = cast
@@ -346,9 +350,14 @@ def _script_scene(job, profile, comfy, source, continuity, index, *, proposed_sh
                     + ("Set duration_weight to 1 for a quick beat, 2 for normal motion or 3 for sustained action. "
                        if weighted else "")
                     + ("The authored source is binding. Use beat.assigned_text for this shot and its frame window "
-                       "to choose the moment. If two windows share a beat, show successive moments of that beat, "
+                       "to choose the moment. The previous shot is context for its end state only. "
+                       "Apply camera and constraints throughout the scene. If beat.continued_action is true, "
+                       "show a later portion of the same action or hold its end state, "
                        "without replaying the previous shot's action or merely changing the camera. "
                        "Do not add, omit or reorder actions, characters or dialogue. "
+                       "If rejected_duplicate_fields is present, the previous response repeated an earlier shot. "
+                       "Use already_covered to avoid replaying any accepted shot in this scene. Rewrite the "
+                       "listed fields around the specific moment assigned to this shot. "
                        "Return an English motion_prompt for this shot. "
                        if authored else ("Focus on the proposed action, using the source only as context. "
                                          if proposed_shot else ""))
@@ -555,19 +564,55 @@ def _validate_duration_plan(result, moving, max_shot_seconds, output, *, target=
             "initial_accepted_seconds": accepted}
 
 
-def _shot_beat(source, sequence, count, start_frame, frames, previous):
+_CAMERA = re.compile(r"(?:camera|máy quay|góc máy|khung hình|framing)\b", re.I)
+_GLOBAL_CONSTRAINT = re.compile(
+    r"(?:phong cách|ánh sáng|màu sắc|style|lighting|negative prompt|ràng buộc chung|"
+    r"yêu cầu chung|không|ưu tiên|giữ nguyên|no)\b", re.I)
+_SCENE_CONSTRAINT = re.compile(r"(?:ràng buộc cảnh|yêu cầu cảnh|không đổi góc|scene constraints)\b", re.I)
+_SEQUENCE = re.compile(r",?\s+(?:sau đó|rồi|tiếp đó|sau đấy|then|and then)\s+", re.I)
+_SCRIPT_CLAUSE = re.compile(
+    rf"(?<=[.!?…;])\s+|\n+|,\s+(?=(?:{_CAMERA.pattern}|{_GLOBAL_CONSTRAINT.pattern}|"
+    rf"{_SCENE_CONSTRAINT.pattern}))", re.I)
+
+
+def _scene_beats(source, *, last):
     heading, _, body = source.strip().partition("\n")
     timing = SCENE_TIME.search(heading)
     inline = heading[timing.end():].lstrip("* :—–-") if timing else heading.partition(":")[2].strip()
-    text = "\n".join(part for part in (inline, body) if part) or heading
-    beats = [part.strip() for part in re.split(r"(?<=[.!?…;])\s+|\n+", text) if part.strip()]
-    first = (sequence - 1) * len(beats) // count
-    end = max(first + 1, sequence * len(beats) // count)
-    return {"assigned_text": " ".join(beats[first:end])[:360], "start_frame_in_scene": start_frame,
-            "end_frame_exclusive": start_frame + frames, "previous_shot": previous}
+    actions, camera, constraints, global_constraints = [], [], [], []
+    for paragraph in re.split(r"\n\s*\n", "\n".join(part for part in (inline, body) if part)):
+        for part in _SCRIPT_CLAUSE.split(paragraph):
+            part = part.strip(" *")
+            if not part:
+                continue
+            if _CAMERA.match(part):
+                camera.append(part)
+            elif _SCENE_CONSTRAINT.match(part):
+                constraints.append(part)
+            elif _GLOBAL_CONSTRAINT.match(part):
+                (global_constraints if last else constraints).append(part)
+            else:
+                actions.extend(beat.strip(" ,;") for beat in _SEQUENCE.split(part) if beat.strip(" ,;"))
+    return {"actions": actions, "camera": camera, "constraints": constraints,
+            "global_constraints": global_constraints}
+
+
+def _shot_beat(actions, sequence, count, start_frame, frames, previous):
+    if not actions:
+        raise ValueError("Không tìm thấy hành động rõ trong cảnh. Hãy mô tả điều xảy ra trước khi tạo storyboard.")
+    first = (sequence - 1) * len(actions) // count
+    end = max(first + 1, sequence * len(actions) // count)
+    assigned = actions[first:end]
+    # When a scene has fewer actions than shots, allocate successive portions
+    # of the same action. A static observation is valid; a new event is not.
+    return {"assigned_text": " ".join(assigned)[:360], "start_frame_in_scene": start_frame,
+            "end_frame_exclusive": start_frame + frames, "previous_shot": previous,
+            "continued_action": sequence > 1 and (sequence - 2) * len(actions) // count == first}
 
 
 def _write_planned_board(job, bindings):
+    if job.get("board"):
+        raise ValueError("Storyboard đã hoàn chỉnh. Hãy dùng thao tác sửa storyboard để tạo phiên bản mới.")
     brief = job["brief"]
     if not job.get("duration_plan"):
         plan = _duration_plan(job, bindings["general.text"])
@@ -579,12 +624,43 @@ def _write_planned_board(job, bindings):
     layout = _storyboard_layout(job, brief["scene_count"], [shot["suggested_seconds"] for shot in plan["shots"]])
     script = brief["idea"]
     authored = bool(plan.get("content_scene_count"))
-    cast = _select_cast(job, bindings, script[:1600] if authored else " ".join(shot["action"] for shot in plan["shots"]))
+    checkpoint = job.get("storyboard_checkpoint") if authored else None
+    cast = (checkpoint["cast"] if checkpoint is not None else
+            _select_cast(job, bindings, script[:1600] if authored else " ".join(shot["action"] for shot in plan["shots"])))
+    accepted = list(checkpoint["shots"]) if checkpoint is not None else []
     ranges = ([shot["script_range"] for shot in plan["shots"]] if authored else
               _script_ranges(script, brief["scene_count"], brief["seconds"]) if _needs_scene_analysis(script) else [])
+    scene_keys, scene_inputs = {}, {}
+    global_context = ""
+    if authored:
+        for shot in plan["shots"]:
+            scene_number = shot["content_scene"]
+            if scene_number not in scene_inputs:
+                scene_inputs[scene_number] = _scene_beats(
+                    script[slice(*shot["script_range"])], last=scene_number == plan["content_scene_count"])
+        global_context = "\n".join([script[:ranges[0][0]].strip(), *(
+            constraint for scene in scene_inputs.values() for constraint in scene["global_constraints"])])[:2400]
+        scene_keys = {str(number): _sha(json.dumps([scene, global_context], ensure_ascii=False, sort_keys=True).encode())
+                      for number, scene in scene_inputs.items()}
+        if checkpoint is not None:
+            for index, shot in enumerate(plan["shots"][:len(accepted)]):
+                number = shot["content_scene"]
+                if "scene_keys" in checkpoint:
+                    changed = checkpoint["scene_keys"].get(str(number)) != scene_keys[str(number)]
+                else:
+                    # Older checkpoints have no per-scene provenance. Keep completed
+                    # scenes and rebuild the incomplete or contaminated scene onward.
+                    changed = (bool(scene_inputs[number]["global_constraints"])
+                               or index - shot["content_shot"] + 1 + shot["content_shot_count"] > len(accepted))
+                if changed:
+                    accepted = accepted[:index - shot["content_shot"] + 1]
+                    break
+            job["storyboard_checkpoint"] = {"cast": cast, "shots": accepted, "scene_keys": scene_keys}
+            _save(job)
     scenes, notes, motion_prompts = [], [], []
     shot_descriptions = []
-    seen_descriptions, seen_prompts = set(), set()
+    seen_descriptions, seen_prompts = {}, {}
+    covered = []
     previous = None
     frame_offset = 0
     title = continuity = ""
@@ -596,13 +672,44 @@ def _write_planned_board(job, bindings):
                 previous, frame_offset = None, 0
                 seen_descriptions.clear()
                 seen_prompts.clear()
-            request["script_context"] = script[:ranges[0][0]][:1000]
-            request["beat"] = _shot_beat(source, shot["content_shot"], shot["content_shot_count"],
+                covered.clear()
+            inputs = scene_inputs[shot["content_scene"]]
+            request["script_context"] = global_context
+            request["camera"] = [direction[:240] for direction in inputs["camera"][:8]]
+            request["scene_constraints"] = [constraint[:240] for constraint in inputs["constraints"][:8]]
+            request["beat"] = _shot_beat(inputs["actions"], shot["content_shot"], shot["content_shot_count"],
                                         frame_offset, layout[index], previous)
+            source = request["beat"]["assigned_text"]
+            request["action"] = source
             frame_offset += layout[index]
-        data = _script_scene(job, bindings["film.storyboard"], bindings["image.generate"],
-                             source, continuity, index, cast=cast,
-                             proposed_shot=request)
+        if index < len(accepted):
+            data = dict(accepted[index])
+        else:
+            for attempt in range(3 if authored else 1):
+                data = _script_scene(job, bindings["film.storyboard"], bindings["image.generate"],
+                                     source, continuity, index, cast=cast, proposed_shot=request)
+                if not authored:
+                    break
+                duplicates = {}
+                for field, limit, seen in (("description", 350, seen_descriptions),
+                                           ("motion_prompt", 600, seen_prompts)):
+                    key = " ".join(_text(data[field], limit).casefold().split())
+                    if key in seen:
+                        duplicates[field] = seen[key]
+                if not duplicates:
+                    accepted.append(dict(data))
+                    job["storyboard_checkpoint"] = {"cast": cast, "shots": accepted, "scene_keys": scene_keys}
+                    _save(job)
+                    break
+                diagnostic = {"scene": shot["content_scene"], "shot": shot["content_shot"], "attempt": attempt+1,
+                              "duplicates": duplicates, "response": dict(data)}
+                job["storyboard_rejections"] = (job.get("storyboard_rejections", []) + [diagnostic])[-3:]
+                _save(job)
+                matching = [covered[number-1] for number in sorted(set(duplicates.values()))]
+                request = {**request, "rejected_duplicate_fields": list(duplicates), "already_covered": matching}
+            else:
+                raise ValueError(f"AI vẫn lặp mô tả hoặc chuyển động ở cảnh {shot['content_scene']}, "
+                                 f"shot {shot['content_shot']} sau 3 lần thử. Các shot đã kiểm tra được giữ lại.")
         scene_title = _text(data.pop("title"), 100)
         title = title or scene_title
         continuity = _text(data.pop("continuity"), 240)
@@ -613,14 +720,12 @@ def _write_planned_board(job, bindings):
             data["description"] = description
             motion_prompt = _text(data.pop("motion_prompt"), 600)
             description_key, prompt_key = (" ".join(value.casefold().split()) for value in (description, motion_prompt))
-            if description_key in seen_descriptions or prompt_key in seen_prompts:
-                raise ValueError(f"AI lặp mô tả hoặc chuyển động ở cảnh {shot['content_scene']}, "
-                                 f"shot {shot['content_shot']}. Hãy tiếp tục từ checkpoint để lập lại shot.")
-            seen_descriptions.add(description_key)
-            seen_prompts.add(prompt_key)
+            seen_descriptions[description_key] = shot["content_shot"]
+            seen_prompts[prompt_key] = shot["content_shot"]
             shot_descriptions.append(description)
             motion_prompts.append(motion_prompt)
             previous = {"description": description[:180], "motion_prompt": motion_prompt[:240]}
+            covered.append(previous)
         scenes.append(data)
     board = _story({"title": title, "continuity": continuity, "scenes": scenes},
                    brief["scene_count"], brief["seconds"], cast)
@@ -633,6 +738,7 @@ def _write_planned_board(job, bindings):
             scene["motion_prompt"] = motion_prompts[index]
             scene["shot_description"] = shot_descriptions[index]
     job.update(board=board, cast=cast)
+    job.pop("storyboard_checkpoint", None)
     _save(job)
 
 

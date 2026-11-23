@@ -466,7 +466,7 @@ class DraftTests(unittest.TestCase):
                          [originals[0]]*2 + [originals[1]]*2)
         self.assertEqual([scene["description"] for scene in scenes], [scene["shot_description"] for scene in scenes])
         self.assertEqual([call.args[3].strip() for call in storyboard.call_args_list],
-                         [originals[0]]*2 + [originals[1]]*2)
+                         ["Miu mở mắt.", "Miu nhìn cửa.", "Lan nhặt chiếc hộp.", "Lan nhặt chiếc hộp."])
         draft._save(job)
         reloaded = draft._read(self.ident)
         self.assertEqual((reloaded["brief"]["duration_mode"], reloaded["brief"]["seconds"],
@@ -585,6 +585,61 @@ class DraftTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "không khớp mục tiêu 7 giây"):
             draft._duration_plan({"brief": {**manual, "seconds": 7}}, {})
 
+    def test_authored_nine_shots_rebuilds_only_contaminated_legacy_scene_and_resumes(self):
+        script = ("Video 15 giây\n\n"
+                  "Cảnh 1 (0–5 giây): Mèo bước tới hộp. Camera tiến nhẹ.\n\n"
+                  "Cảnh 2 (5–10 giây): Mèo chạm hộp. Hộp rung nhẹ. Camera trung cảnh.\n\n"
+                  "Cảnh 3 (10–15 giây): Quả bóng vàng lăn ra khỏi hộp. "
+                  "Mèo giật mình lùi lại, sau đó bước tới chạm nhẹ quả bóng. "
+                  "Camera giữ ổn định, phong cách 3D.\n\nKhông lời thoại, không watermark.")
+        job = {"id": self.ident, "status": "FAILED", "brief": {"idea": script, "mode": "motion",
+               "seconds": None, "duration_mode": "auto", "ratio": "16:9"}, "storyboard_version": 1,
+               "studio_plan": {"film.storyboard": "pinned"}}
+        plan = draft._duration_plan(job, {})
+        job["brief"].update(seconds=15, scene_count=9)
+        job["duration_plan"] = plan
+        original = [{"title": "Miu", "continuity": "A cat and a box", "description": f"Shot {i}",
+                     "motion_prompt": f"Motion {i}", "image_prompt": "A cat and a box", "audio": "Quiet"}
+                    for i in range(9)]
+        job["storyboard_checkpoint"] = {"cast": {}, "shots": original[:7]}
+        draft._save(job)
+        bindings = {"general.text": {}, "film.storyboard": {}, "image.generate": {}}
+        with patch.object(draft, "_script_scene", side_effect=[dict(original[6]),
+                {**original[7], "description": original[6]["description"]},
+                {**original[7], "motion_prompt": original[6]["motion_prompt"]},
+                {**original[7], "motion_prompt": original[6]["motion_prompt"]}]) as write:
+            with self.assertRaisesRegex(ValueError, "cảnh 3, shot 2"):
+                draft._write_planned_board(draft._read(self.ident), bindings)
+        saved = draft._read(self.ident)
+        self.assertNotIn("board", saved)
+        self.assertEqual(saved["studio_plan"], job["studio_plan"])
+        self.assertEqual(saved["storyboard_checkpoint"]["shots"], original[:7])
+        self.assertEqual([row["duplicates"] for row in saved["storyboard_rejections"]],
+                         [{"description": 1}, {"motion_prompt": 1}, {"motion_prompt": 1}])
+        self.assertEqual(saved["storyboard_rejections"][1]["response"]["motion_prompt"], "Motion 6")
+        self.assertEqual([call.args[5] for call in write.call_args_list], [6, 7, 7, 7])
+        with patch.object(draft, "_script_scene", side_effect=[dict(row) for row in original[7:]]) as write:
+            draft._write_planned_board(saved, bindings)
+        contexts = [call.kwargs["proposed_shot"] for call in write.call_args_list]
+        self.assertEqual([call.args[5] for call in write.call_args_list], [7, 8])
+        self.assertEqual([ctx["beat"]["assigned_text"] for ctx in contexts],
+                         ["Mèo giật mình lùi lại", "bước tới chạm nhẹ quả bóng."])
+        self.assertEqual(contexts[0]["camera"], ["Camera giữ ổn định"])
+        self.assertIn("phong cách 3D.", contexts[0]["script_context"])
+        self.assertIn("Không lời thoại", contexts[0]["script_context"])
+        self.assertEqual([x["description"] for x in draft._read(self.ident)["board"]["scenes"]],
+                         [x["description"] for x in original])
+        fewer = draft._shot_beat(["Mèo bước tới hộp."], 2, 3, 40, 40, None)
+        self.assertTrue(fewer["continued_action"])
+        self.assertEqual(fewer["assigned_text"], "Mèo bước tới hộp.")
+        complete = draft._read(self.ident)
+        draft._stamp_storyboard(complete)
+        complete["approved_storyboard_sha"] = complete["storyboard_sha"]
+        draft._save(complete)
+        with self.assertRaisesRegex(ValueError, "đã hoàn chỉnh"):
+            draft._write_planned_board(draft._read(self.ident), bindings)
+        self.assertEqual(draft._read(self.ident), complete)
+
     def test_authored_planner_refuses_duplicate_shot_content(self):
         job = {"id": self.ident, "status": "RUNNING", "brief": {"idea": "Video 6 giây\nCảnh 1 (6 giây): Miu nhảy qua cửa.",
                "mode": "motion", "seconds": None, "duration_mode": "auto"}}
@@ -593,10 +648,29 @@ class DraftTests(unittest.TestCase):
                   "motion_prompt": "Miu jumps", "image_prompt": "Cat", "audio": "Quiet"}
         with (patch.object(draft, "_select_cast", return_value={}),
               patch.object(draft, "_script_scene", side_effect=lambda *a, **k: dict(output)) as write):
-            with self.assertRaisesRegex(ValueError, "AI lặp mô tả hoặc chuyển động ở cảnh 1, shot 2"):
+            with self.assertRaisesRegex(ValueError, "cảnh 1, shot 2 sau 3 lần thử"):
                 draft._write_planned_board(job, bindings)
-        self.assertEqual(write.call_count, 2)
-        self.assertNotIn("board", draft._read(self.ident))
+        self.assertEqual([call.args[5] for call in write.call_args_list], [0, 1, 1, 1])
+        self.assertEqual(write.call_args.kwargs["proposed_shot"]["rejected_duplicate_fields"],
+                         ["description", "motion_prompt"])
+        self.assertEqual(write.call_args.kwargs["proposed_shot"]["already_covered"], [
+            {"description": output["description"], "motion_prompt": output["motion_prompt"]}])
+        saved = draft._read(self.ident)
+        self.assertNotIn("board", saved)
+        self.assertEqual(saved["storyboard_checkpoint"]["shots"], [output])
+        with (patch.object(draft, "_select_cast") as cast,
+              patch.object(draft, "_script_scene", side_effect=[
+                  dict(output),
+                  {**output, "description": "Miu qua mép cửa", "motion_prompt": "Miu crosses the threshold"},
+                  {**output, "description": "Miu tiếp đất", "motion_prompt": "Miu lands"},
+              ]) as resume):
+            draft._write_planned_board(saved, bindings)
+        cast.assert_not_called()
+        self.assertEqual([call.args[5] for call in resume.call_args_list], [1, 1, 2])
+        saved = draft._read(self.ident)
+        self.assertNotIn("storyboard_checkpoint", saved)
+        self.assertEqual([shot["motion_prompt"] for shot in saved["board"]["scenes"]],
+                         ["Miu jumps", "Miu crosses the threshold", "Miu lands"])
 
     def test_duration_replans_five_story_beats_into_nine_shots_without_gpu(self):
         job = {"id": self.ident, "brief": {"idea": "Miu đuổi theo bướm rồi quay về nhà.",
