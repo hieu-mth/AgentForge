@@ -9,6 +9,7 @@ consumes their bindings. A saved cloud profile never authorizes a cloud call.
 from __future__ import annotations
 
 import copy
+import hashlib
 import base64
 import binascii
 from contextlib import closing, contextmanager
@@ -390,16 +391,21 @@ def capability_contract(capability, profile):
     adapter = orchestrator_policy.local_adapter(kind, profile)
     output = None
     adapter_id = None
+    workflow_sha = None
     if adapter and kind == "text":
         adapter_id = "ollama"
         output = {"format": "structured_json"}
     elif adapter and kind == "image":
         adapter_id = "comfyui_flux_gguf"
+        graph = json.dumps(profile["flux"]["workflow"], sort_keys=True, separators=(",", ":"),
+                           ensure_ascii=False).encode("utf-8")
+        workflow_sha = hashlib.sha256(graph).hexdigest()
         output = {"format": "png", "batch": 1, "min_resolution": 256,
                   "max_resolution": profile["flux"]["max_resolution"], "dimension_multiple": 16,
                   "min_steps": 1, "max_steps": profile["flux"]["max_steps"]}
     elif adapter and kind == "video":
         adapter_id = adapter.ADAPTER_ID
+        workflow_sha = adapter.workflow_sha()
         spec = adapter.output_profile()
         output = {"format": "mp4", "fps": spec.fps, "max_frames": spec.max_frames,
                   "resolution": list(spec.resolution)}
@@ -412,7 +418,8 @@ def capability_contract(capability, profile):
         reason = {"image": "FLUX_WORKFLOW_REQUIRED", "video": "MOTION_PROFILE_INCOMPATIBLE",
                   "text": "LOCAL_TEXT_ADAPTER_REQUIRED", "vision": "VISION_ADAPTER_UNAVAILABLE"}[kind]
     return {"capability": capability, "compatible": adapter is not None, "adapter": adapter_id,
-            "reason": reason, "output_limits": output}
+            "reason": reason, "output_limits": output, "workflow_sha256": workflow_sha,
+            "configuration_status": "CONFIGURED", "readiness": "NOT_CHECKED"}
 
 
 def capability_readiness(profile_id, capability, *, expected_revision, db_path=None):
@@ -441,8 +448,11 @@ def capability_readiness(profile_id, capability, *, expected_revision, db_path=N
     else:
         status = orchestrator_policy.local_adapter(kind, profile).registry_readiness(profile)
     reason = contract["reason"] if status == "INCOMPATIBLE" else status if status != "READY" else None
+    readiness = {"READY": "READY", "DISABLED": "NOT_CHECKED",
+                 "INCOMPATIBLE": "UNSUPPORTED"}.get(status, "MISSING_DEPENDENCY")
     return {**contract, "profile_id": profile_id, "revision": revision, "configuration_valid": True,
-            "enabled": profile["enabled"], "status": status, "runtime_ready": status == "READY",
+            "enabled": profile["enabled"], "status": status, "readiness": readiness,
+            "runtime_ready": status == "READY",
             "reason": reason,
             "scope": "METADATA_ONLY", "inference_invoked": False,
             "checked_at": datetime.now(timezone.utc).isoformat()}

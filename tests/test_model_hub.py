@@ -62,8 +62,13 @@ class ModelHubTests(unittest.TestCase):
                 image = check(flux, "image.generate")
                 self.assertTrue(image["compatible"])
                 self.assertFalse(image["runtime_ready"])
+                self.assertEqual(image["readiness"], "MISSING_DEPENDENCY")
                 self.assertEqual(image["reason"], "WORKFLOW_NODE_UNAVAILABLE")
                 self.assertEqual(image["output_limits"]["max_resolution"], 1024)
+                updated = flux_profile()
+                updated["flux"]["workflow"]["6"]["inputs"]["text"] = "Changed workflow"
+                self.assertNotEqual(image["workflow_sha256"],
+                                    model_hub.capability_contract("image.generate", updated)["workflow_sha256"])
                 probe.assert_called_once_with(flux["flux"], 12345, inspect_all_nodes=True)
                 self.assertEqual(check(flux, "film.motion")["status"], "INCOMPATIBLE")
                 with self.assertRaisesRegex(ValueError, "REVISION_CONFLICT"):
@@ -79,6 +84,7 @@ class ModelHubTests(unittest.TestCase):
                                return_value={"devices": [{"type": "cuda"}]}) as request):
                 result = check(motion, "film.motion")
                 self.assertTrue(result["runtime_ready"])
+                self.assertEqual(result["workflow_sha256"], draft_motion.workflow_sha())
                 self.assertEqual(result["output_limits"],
                                  {"format": "mp4", "fps": 24, "max_frames": 49, "resolution": [512, 288]})
                 weights.assert_called_once_with(folder, motion["motion_encoder"], metadata_only=True)
