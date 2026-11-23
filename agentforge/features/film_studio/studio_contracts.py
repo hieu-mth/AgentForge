@@ -1,5 +1,9 @@
 """Data exchanged between the Studio pipeline and its runtime adapters."""
 from dataclasses import dataclass
+from contextlib import AbstractContextManager, nullcontext
+from typing import Callable
+
+DispatchGuard = Callable[[], AbstractContextManager[int | None]]
 
 
 @dataclass(frozen=True)
@@ -9,6 +13,7 @@ class ImageRequest:
     scene: str
     job_id: str
     revision: int
+    dispatch_guard: DispatchGuard = nullcontext
 
 
 @dataclass(frozen=True)

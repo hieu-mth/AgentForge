@@ -637,9 +637,7 @@ def _write_planned_board(job, bindings):
 
 
 def _select_cast(job, bindings, outline):
-    selector = bindings.get("character.select")
-    if not selector:
-        return {}
+    selector = bindings.get("character.select", bindings["film.storyboard"])
     candidates = {row["id"]: {"name": row["name"], "appearance": row["appearance"][:220]}
                   for row in characters.list_characters()["characters"][:10]}
     if not candidates:
@@ -807,10 +805,10 @@ def _image(job, index, scene, revision, profile):
                             scene.get("scene_notes", ""), scene["image_prompt"]))
         request = studio_runtime.ImageRequest(prompt, job["brief"]["ratio"],
                                               f"{job['id']}/episode-01/scene-{index+1:02d}",
-                                              scene["job_id"], revision)
+                                              scene["job_id"], revision, lambda: _dispatch_guard(job))
         try:
             output = studio_runtime.image_adapter(profile).generate(profile, request)
-        except (comfy_service.StartupError, draft_resources.ResourceBlocked, model_hub.ModelConfigError):
+        except (comfy_service.StartupError, draft_resources.ResourceBlocked, model_hub.ModelConfigError, DraftCancelled):
             scene["job_id"] = previous_job
             scene["attempts"] -= 1
             raise
@@ -976,6 +974,19 @@ def _studio_bindings(job):
     return revision, bindings, _check_studio_routing(job, revision, bindings)
 
 
+def _dispatch_guard(job):
+    moving = job["brief"].get("mode") == "motion"
+
+    def validate(revision, bindings):
+        if _cancellation(job["id"]):
+            raise DraftCancelled
+        identity_revision = _check_studio_routing(job, revision, bindings)
+        if moving:
+            _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
+
+    return model_hub.studio_dispatch(moving=moving, validate=validate)
+
+
 def _work(job, slot):
     global ACTIVE
     image_profile = None
@@ -1041,7 +1052,8 @@ def _work(job, slot):
                 _activity(job, "MOTION", "motion", motion_profile, scene=index + 1)
                 try:
                     motion.run_shot(scene, index, prepared, motion_profile,
-                                          lambda: _save(job), lambda: _cancellation(job["id"]))
+                                    lambda: _save(job), lambda: _cancellation(job["id"]),
+                                    dispatch_guard=lambda: _dispatch_guard(job))
                 except studio_runtime.NeedsReconciliation:
                     raise
                 except Exception:

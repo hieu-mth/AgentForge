@@ -509,6 +509,35 @@ def draft_routes(*, db_path=None, moving=None):
     return revision, _draft_bindings(state, moving=moving)
 
 
+@contextmanager
+def studio_dispatch(*, moving, validate, db_path=None):
+    """Serialize final Studio admission with registry changes, across processes.
+
+    Acquire after GPU admission. The caller releases on POST return, before
+    history polling, output import, or any next job.
+    """
+    path = ensure_local_root(_database(db_path))
+    if not path.is_file():
+        raise ModelConfigError("Chưa có cấu hình Model Hub để gửi tác vụ Studio.")
+    with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=rw", uri=True, timeout=5)) as conn:
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+        except sqlite3.OperationalError as exc:
+            if getattr(exc, "sqlite_errorcode", None) not in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}:
+                raise
+            raise ModelConfigError("Model Hub đang cập nhật cấu hình. Hãy tiếp tục lại sau khi cập nhật xong.") from None
+        try:
+            revision, state = _read_record(conn)
+            try:
+                bindings = _draft_bindings(state, moving=moving)
+            except PermissionError as exc:
+                raise ModelConfigError(str(exc)) from None
+            validate(revision, bindings)
+            yield revision
+        finally:
+            conn.rollback()
+
+
 def draft_routes_at(revision, *, db_path=None, moving=None):
     """Resolve a legacy approval from Model Hub history without writing SQLite."""
     path = _database(db_path)

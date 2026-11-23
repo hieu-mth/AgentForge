@@ -5,7 +5,7 @@ import json
 import re
 import tempfile
 import time
-from contextlib import closing
+from contextlib import closing, nullcontext
 from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 from uuid import UUID
@@ -247,7 +247,7 @@ def _collect_clip(job_id, name, folder):
             confirmed=True, db_path=motion_comfy.DB, film_root=motion_comfy.FILMS)
 
 
-def run_shot(scene, index, prepared, profile, save, cancelled):
+def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard=nullcontext):
     slug, plan_sha, workflow, digest = prepared
     if scene.get("motion_sha"):
         clip_path(scene)
@@ -268,7 +268,7 @@ def run_shot(scene, index, prepared, profile, save, cancelled):
                 workflow_path=workflow, workflow_sha=digest, seed=42+index, confirmed=True,
                 image_job=scene["job_id"], image_sha=scene["asset"],
                 ltx_encoder=Path(profile["motion_encoder"]), confirm_ltx_gate_b=True, on_reserved=reserve,
-                db_path=motion_comfy.DB, film_root=motion_comfy.FILMS)
+                db_path=motion_comfy.DB, film_root=motion_comfy.FILMS, dispatch_guard=dispatch_guard)
         except (OSError, ValueError, RuntimeError, http.client.HTTPException) as exc:
             if scene.get("motion_job") and motion_verify._job(scene["motion_job"], motion_comfy.DB)["state"] == "SUBMITTING":
                 raise NeedsReconciliation("Motion submission requires reconciliation") from exc

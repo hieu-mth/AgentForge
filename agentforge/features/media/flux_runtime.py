@@ -7,7 +7,7 @@ import os
 import re
 import secrets
 import time
-from contextlib import closing
+from contextlib import closing, nullcontext
 from urllib.parse import urlencode, urlsplit
 from uuid import UUID, uuid4
 
@@ -126,7 +126,8 @@ def _collect(provider_id, ident, port, config, metadata, *, sink=None):
 
 def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=None,
              automated=False, hub_db=None, db_path=None, profile_id=None, expected_revision=None,
-             production_job=None, production_revision=None, production_profile=None):
+             production_job=None, production_revision=None, production_profile=None,
+             dispatch_guard=nullcontext):
     """Entry point for Studio and trusted Orchestrator callers."""
     ops_control.require_active()
     if production_profile is not None:
@@ -186,30 +187,36 @@ def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=No
     def snapshot():
         return json.dumps(metadata, ensure_ascii=False, allow_nan=False)
 
-    with closing(visual_jobs._db(db_path, create=True)) as db, db:
-        db.execute("BEGIN IMMEDIATE")
-        if db.execute("""SELECT 1 FROM visual_jobs WHERE status IN
-                      ('SUBMITTING','SUBMITTED','COLLECTING') LIMIT 1""").fetchone():
-            raise PermissionError("An AgentForge visual job is already outstanding")
-        try:
-            queue = _json("/queue", port=port)
-        except (OSError, RuntimeError, ValueError, http.client.HTTPException):
-            raise draft_resources.ResourceBlocked("COMFYUI_QUEUE_UNAVAILABLE") from None
-        comfy_service.validate_idle_queue(queue)
-        draft_resources.require_gpu("image")
-        ensure_local_root(directory).mkdir(parents=True, exist_ok=True)
-        now = visual_jobs._now()
-        db.execute("INSERT INTO visual_jobs VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", (
-            ident, ident, "video" if scene else "image", 0, prompt.strip(), profile["model"],
-            None, "SUBMITTING", None, None, now, now))
-        db.execute("INSERT INTO visual_runtime(job_id,metadata) VALUES(?,?)", (ident, snapshot()))
     started = time.monotonic()
     provider_id = None
     digest = None
     created = False
     status = "SUBMIT_UNCERTAIN"
+    reserved = False
     try:
-        response = _json("/prompt", body={"prompt": bound}, port=port, timeout=12)
+        with dispatch_guard() as admitted_revision:
+            if admitted_revision is not None:
+                metadata["model_hub_revision"] = admitted_revision
+            with closing(visual_jobs._db(db_path, create=True)) as db, db:
+                db.execute("BEGIN IMMEDIATE")
+                if db.execute("""SELECT 1 FROM visual_jobs WHERE status IN
+                              ('SUBMITTING','SUBMITTED','COLLECTING') LIMIT 1""").fetchone():
+                    raise PermissionError("An AgentForge visual job is already outstanding")
+                try:
+                    queue = _json("/queue", port=port)
+                except (OSError, RuntimeError, ValueError, http.client.HTTPException):
+                    raise draft_resources.ResourceBlocked("COMFYUI_QUEUE_UNAVAILABLE") from None
+                comfy_service.validate_idle_queue(queue)
+                draft_resources.require_gpu("image")
+                ensure_local_root(directory).mkdir(parents=True, exist_ok=True)
+                now = visual_jobs._now()
+                db.execute("INSERT INTO visual_jobs VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", (
+                    ident, ident, "video" if scene else "image", 0, prompt.strip(), profile["model"],
+                    None, "SUBMITTING", None, None, now, now))
+                db.execute("INSERT INTO visual_runtime(job_id,metadata) VALUES(?,?)", (ident, snapshot()))
+            reserved = True
+            started = time.monotonic()
+            response = _json("/prompt", body={"prompt": bound}, port=port, timeout=12)
         provider_id = str(UUID(response["prompt_id"]))
         if response.get("node_errors"):
             raise JobError("EXECUTION_FAILED")
@@ -232,20 +239,22 @@ def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=No
                   else comfyui.failure_status(exc))
     except (OSError, RuntimeError, ValueError, KeyError, TypeError, AttributeError,
             http.client.HTTPException):
-        pass
-    finally:
-        metadata["duration_seconds"] = round(time.monotonic() - started, 3)
-        try:
-            with closing(visual_jobs._db(db_path, create=True)) as db, db:
-                db.execute("""UPDATE visual_jobs SET status=?,asset_sha=?,updated_at=? WHERE job_id=?""",
-                           (status, digest if status == "ASSET_READY" else None, visual_jobs._now(), ident))
-                db.execute("UPDATE visual_runtime SET metadata=? WHERE job_id=?", (snapshot(), ident))
-        except Exception:
-            if created:
-                target.unlink(missing_ok=True)
+        if not reserved:
             raise
-        if created and status != "ASSET_READY":
-            target.unlink(missing_ok=True)
+    finally:
+        if reserved:
+            metadata["duration_seconds"] = round(time.monotonic() - started, 3)
+            try:
+                with closing(visual_jobs._db(db_path, create=True)) as db, db:
+                    db.execute("""UPDATE visual_jobs SET status=?,asset_sha=?,updated_at=? WHERE job_id=?""",
+                               (status, digest if status == "ASSET_READY" else None, visual_jobs._now(), ident))
+                    db.execute("UPDATE visual_runtime SET metadata=? WHERE job_id=?", (snapshot(), ident))
+            except Exception:
+                if created:
+                    target.unlink(missing_ok=True)
+                raise
+            if created and status != "ASSET_READY":
+                target.unlink(missing_ok=True)
     return {"job_id": ident, "provider_id": provider_id, "status": status,
             "sha256": digest if status == "ASSET_READY" else None,
             "duration_seconds": metadata["duration_seconds"],
