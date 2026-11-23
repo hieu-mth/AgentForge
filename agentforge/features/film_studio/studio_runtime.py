@@ -1,4 +1,5 @@
 """Resolve Studio's supported capabilities from Owner-owned registry profiles."""
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, Protocol
 
@@ -17,14 +18,19 @@ class TextInference(Protocol):
 
 
 class ImageGeneration(Protocol):
+    def supports(self, profile: Profile) -> bool: ...
     def preflight(self, profile: Profile, *, include_profiles: bool = False) -> None: ...
     def release_idle_models(self, profile: Profile) -> bool: ...
     def generate(self, profile: Profile, request: ImageRequest) -> dict: ...
 
 
 class VideoMotion(Protocol):
+    ADAPTER_ID: str
     MAX_CLIP_BYTES: int
 
+    def supports(self, profile: Profile) -> bool: ...
+    def workflow_sha(self) -> str: ...
+    def weights_identity(self) -> dict[str, str]: ...
     def output_profile(self) -> MotionOutput: ...
     def bind(self, profile: Profile) -> Profile: ...
     def prepare(self, job: dict, folder: Path) -> PreparedMotion: ...
@@ -44,22 +50,45 @@ def text_adapter(profile: Profile | None) -> TextInference:
 
 
 def image_adapter(profile: Profile | None) -> ImageGeneration:
-    if not profile or profile.get("provider") != "comfyui" or "flux" not in profile:
-        raise ValueError("Studio requires a supported local image profile.")
+    if not profile or not studio_flux.supports(profile):
+        raise ValueError("Studio requires a compatible local image checkpoint and workflow.")
     return studio_flux
 
 
+MOTION_ADAPTERS: tuple[VideoMotion, ...] = (draft_motion,)
+LEGACY_MOTION_OUTPUT = MotionOutput(24, 49, (512, 288))
+
+
 def motion_adapter(profile: Profile | None) -> VideoMotion:
-    if not profile or profile.get("provider") != "comfyui":
-        raise ValueError("Studio requires a supported local motion profile.")
-    return draft_motion
+    matches = [adapter for adapter in MOTION_ADAPTERS if profile and adapter.supports(profile)]
+    if len(matches) != 1:
+        raise ValueError("Studio requires a compatible local motion checkpoint and workflow.")
+    return matches[0]
 
 
-def motion_artifacts() -> VideoMotion:
-    """Read or reconcile existing drafts without resolving a newly selected profile."""
-    return draft_motion
+def motion_identity(adapter: VideoMotion, profile: Profile) -> dict:
+    output = asdict(adapter.output_profile())
+    output["resolution"] = list(output["resolution"])
+    return {"adapter": adapter.ADAPTER_ID, "model": profile["model"], "profile": profile.get("id"),
+            "endpoint": profile.get("base_url"),
+            "endpoint": profile.get("base_url"),
+            "workflow_sha": adapter.workflow_sha(), "weights": adapter.weights_identity(), "output": output}
 
 
-def motion_output() -> MotionOutput:
-    """The production output contract shared by current and stored Studio jobs."""
-    return motion_artifacts().output_profile()
+def motion_artifacts(job=None) -> VideoMotion:
+    """Locate artifacts by stored adapter identity, independent of current routing."""
+    identity = (job or {}).get("approved_motion") or (job or {}).get("motion_plan")
+    if identity is None:
+        return draft_motion
+    matches = [adapter for adapter in MOTION_ADAPTERS if adapter.ADAPTER_ID == identity["adapter"]]
+    if len(matches) != 1:
+        raise ValueError("Stored motion adapter unavailable.")
+    return matches[0]
+
+
+def job_output(job) -> MotionOutput:
+    identity = job.get("motion_plan") or job.get("approved_motion")
+    if not identity:
+        return LEGACY_MOTION_OUTPUT
+    output = identity["output"]
+    return MotionOutput(output["fps"], output["max_frames"], tuple(output["resolution"]))

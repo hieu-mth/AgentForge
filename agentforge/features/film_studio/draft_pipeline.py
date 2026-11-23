@@ -378,7 +378,8 @@ def _duration_plan(job, profile):
     script = brief["idea"]
     cap = draft_timeline.MOTION_PRODUCTION_SHOT_BUDGET if moving else 6
     max_seconds = draft_timeline.MAX_DURATION_SECONDS
-    max_shot_seconds = draft_timeline.MOTION_OUTPUT.max_frames / draft_timeline.FPS if moving else max_seconds
+    output = studio_runtime.job_output(job)
+    max_shot_seconds = output.max_frames / output.fps if moving else max_seconds
     if len(SCRIPT_HEADING.findall(script)) > cap:
         raise ValueError(f"Kịch bản vượt {cap} cảnh. Hãy gộp các hành động liên quan hoặc chia video.")
     bounded_text = {**STRING, "minLength": 1, "maxLength": 180}
@@ -400,7 +401,7 @@ def _duration_plan(job, profile):
                                {"excerpt": script[start:start+1000]},
                                _object(beats={**STRING, "minLength": 1, "maxLength": 120}), None, cpu_only=True)
                 source.append(_text(excerpt["beats"], 120, label="Tóm tắt hành động"))
-        limits = {seconds: draft_timeline.duration_limits(seconds, moving)
+        limits = {seconds: draft_timeline.duration_limits(seconds, moving, output)
                   for seconds in range(4 if moving else 6, max_seconds + 1)}
         result = _ask(profile,
                       "Estimate timing from distinct actions and pacing, not word count. Keep important events "
@@ -417,7 +418,7 @@ def _duration_plan(job, profile):
                        "min_shot_seconds": 1 if moving else 2, "max_shot_seconds": max_shot_seconds,
                        "max_seconds": max_seconds}, schema, None, cpu_only=True, extended_plan=moving)
         try:
-            return _validate_duration_plan(brief, result, moving, max_shot_seconds)
+            return _validate_duration_plan(brief, result, moving, max_shot_seconds, output)
         except ShotBudgetMismatch as mismatch:
             if _cancellation(job["id"]):
                 raise DraftCancelled
@@ -435,12 +436,12 @@ def _duration_plan(job, profile):
                              "min_shot_seconds": 1 if moving else 2, "max_shot_seconds": max_shot_seconds},
                             retry_schema, None, cpu_only=True, extended_plan=moving)
             try:
-                return _validate_duration_plan(brief, repaired, moving, max_shot_seconds, required_estimate=target)
+                return _validate_duration_plan(brief, repaired, moving, max_shot_seconds, output, required_estimate=target)
             except ShotBudgetMismatch as exc:
                 raise ValueError(f"{exc} AI vẫn chưa lập được timeline sau khi điều chỉnh.") from None
 
 
-def _validate_duration_plan(brief, result, moving, max_shot_seconds, *, required_estimate=None):
+def _validate_duration_plan(brief, result, moving, max_shot_seconds, output, *, required_estimate=None):
     if not isinstance(result, dict):
         raise ValueError("AI trả kế hoạch thời lượng sai cấu trúc.")
     reasoning = _text(result.get("duration_reasoning"), 350, label="Lý do đề xuất thời lượng")
@@ -457,7 +458,7 @@ def _validate_duration_plan(brief, result, moving, max_shot_seconds, *, required
     count = len(proposed)
     accepted = estimate if brief["duration_mode"] == "auto" else brief["seconds"]
     for seconds in (estimate,) if estimate == accepted else (estimate, accepted):
-        minimum, maximum = draft_timeline.duration_limits(seconds, moving)
+        minimum, maximum = draft_timeline.duration_limits(seconds, moving, output)
         if not minimum <= count <= maximum:
             raise ShotBudgetMismatch(count, seconds, minimum, maximum)
     shots = []
@@ -470,7 +471,7 @@ def _validate_duration_plan(brief, result, moving, max_shot_seconds, *, required
                       "reason": _text(item.get("reason"), 180, label="Lý do giữ cảnh"),
                       "suggested_seconds": seconds})
     weights = [item["suggested_seconds"] for item in shots]
-    draft_timeline.planned_timeline(accepted, moving, weights)
+    draft_timeline.planned_timeline(accepted, moving, weights, output)
     return {"estimated_duration_seconds": estimate, "recommended_shot_count": count,
             "shots": shots, "duration_reasoning": reasoning, "production_feasibility": "feasible",
             "initial_accepted_seconds": accepted}
@@ -494,7 +495,7 @@ def _write_planned_board(job, bindings):
         source = script[slice(*ranges[index])] if ranges else script
         data = _script_scene(job, bindings["film.storyboard"], bindings["image.generate"],
                              source, continuity, index, cast=cast,
-                             proposed_shot={**shot, "timeline_seconds": layout[index] / draft_timeline.FPS})
+                             proposed_shot={**shot, "timeline_seconds": layout[index] / _job_fps(job)})
         scene_title = _text(data.pop("title"), 100)
         title = title or scene_title
         continuity = _text(data.pop("continuity"), 240)
@@ -615,26 +616,32 @@ def _stamp_storyboard(job):
     weight_key = "suggested_seconds" if "duration_mode" in job["brief"] else "duration_weight"
     layout = _storyboard_layout(job, len(board["scenes"]), [s.get(weight_key, 2) for s in board["scenes"]])
     moving = job["brief"].get("mode") == "motion"
+    fps = _job_fps(job)
     for scene, frames in zip(board["scenes"], layout):
         scene.setdefault("shot_id", uuid4().hex)
         scene.setdefault("motion_prompt", scene["description"])
-        scene.update(frames=frames, seconds=frames / draft_timeline.FPS if moving else frames // draft_timeline.FPS)
+        scene.update(frames=frames, seconds=frames / fps if moving else frames // fps)
     job["storyboard_sha"] = draft_timeline.digest(job)
     job.update(status="STORYBOARD_REVIEW", stage="STORYBOARD", error=None)
     job.pop("approved_storyboard_sha", None)
+
+
+def _job_fps(job):
+    return studio_runtime.job_output(job).fps if job["brief"].get("mode") == "motion" else draft_timeline.STILL_FPS
 
 
 def _storyboard_layout(job, count, weights=None):
     brief = job["brief"]
     if "duration_mode" in brief:
         return draft_timeline.planned_timeline(brief["seconds"], brief.get("mode") == "motion",
-                                               weights if weights is not None else [2]*count)
+                                               weights if weights is not None else [2]*count,
+                                               studio_runtime.job_output(job))
     if brief.get("mode") == "motion":
-        return draft_timeline.timeline(brief["seconds"], count, weights)
+        return draft_timeline.timeline(brief["seconds"], count, weights, studio_runtime.job_output(job))
     if not 2 <= count <= 6 or count * 2 > brief["seconds"]:
         raise ValueError("Bản nháp ảnh tĩnh cần 2–6 cảnh và ít nhất 2 giây mỗi cảnh.")
     length, extra = divmod(brief["seconds"], count)
-    return [(length + (index < extra)) * draft_timeline.FPS for index in range(count)]
+    return [(length + (index < extra)) * draft_timeline.STILL_FPS for index in range(count)]
 
 
 def _image(job, index, scene, revision, profile):
@@ -702,27 +709,28 @@ def _render(job):
         ids = [scene.get("motion_job") for scene in job["board"]["scenes"]]
         if None in ids or len(set(ids)) != len(ids):
             raise ValueError("Phim từ 30 giây cần clip riêng cho từng cảnh.")
-    width, height = draft_timeline.MOTION_OUTPUT.resolution if moving else SIZES[job["brief"]["ratio"]]
+    fps = _job_fps(job)
+    width, height = studio_runtime.job_output(job).resolution if moving else SIZES[job["brief"]["ratio"]]
     ffmpeg = render._ffmpeg()
     command = [ffmpeg, "-nostdin", "-n", "-v", "error"]
     filters, streams = [], []
     input_bytes = 0
     for index, scene in enumerate(job["board"]["scenes"]):
         if moving:
-            clip = studio_runtime.motion_artifacts().clip_path(scene)
+            clip = studio_runtime.motion_artifacts(job).clip_path(scene)
             input_bytes += clip.stat().st_size
             if input_bytes > MAX_MOTION_INPUTS:
                 raise ValueError("Motion clips exceed the production assembly budget")
             command += ["-threads", "1", "-i", str(clip)]
-            frames = scene.get("frames", int(scene["seconds"] * draft_timeline.FPS))
+            frames = scene.get("frames", int(scene["seconds"] * fps))
             filters.append(f"[{index}:v]trim=end_frame={frames},setpts=PTS-STARTPTS,setsar=1[v{index}]")
             streams.append(f"[v{index}]")
             continue
         command += ["-i", str(_scene_path(job, index))]
-        frames = scene["seconds"] * draft_timeline.FPS
+        frames = scene["seconds"] * fps
         filters.append(f"[{index}:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
                        f"crop={width}:{height},setsar=1,zoompan=z='1+0.00025*on':"
-                       f"x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d={frames}:s={width}x{height}:fps={draft_timeline.FPS},"
+                       f"x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d={frames}:s={width}x{height}:fps={fps},"
                        f"fade=t=in:st=0:d=0.2,fade=t=out:st={scene['seconds']-0.2}:d=0.2[v{index}]")
         streams.append(f"[v{index}]")
     filters.append("".join(streams) + f"concat=n={len(streams)}:v=1:a=0[out]")
@@ -741,16 +749,16 @@ def _render(job):
                                             "-map", "0:v:0", "-progress", "pipe:1", "-f", "null", "-"],
                                            cwd=folder, timeout=60)
         frames = re.findall(r"(?m)^frame=(\d+)", verification.stdout)
-        if not frames or int(frames[-1]) != job["brief"]["seconds"] * draft_timeline.FPS:
+        if not frames or int(frames[-1]) != job["brief"]["seconds"] * fps:
             raise ValueError("MP4 duration verification failed")
         with temporary.open("rb") as stream:
             digest = hashlib.file_digest(stream, "sha256").hexdigest()
         temporary.replace(ensure_local_root(target))
         if "storyboard_version" in job:
-            subtitles = draft_timeline.captions(job["board"]["scenes"])
+            subtitles = draft_timeline.captions(job["board"]["scenes"], fps)
             receipt = {"production_id": job["id"], "version": job["storyboard_version"],
                        "storyboard_sha": job["approved_storyboard_sha"], "video_sha": digest,
-                       "technical": {"frames_decoded": int(frames[-1]), "fps": draft_timeline.FPS, "width": width, "height": height},
+                       "technical": {"frames_decoded": int(frames[-1]), "fps": fps, "width": width, "height": height},
                        "visual_qa": "UNVERIFIED", "owner_qa": "PENDING",
                        "subtitle_sha": _sha(subtitles) if subtitles else None,
                        "shots": [{key: scene.get(key) for key in ("shot_id", "frames", "job_id", "asset",
@@ -770,6 +778,20 @@ def _render(job):
         temporary.unlink(missing_ok=True)
 
 
+def _resolve_job_motion(job, profile, *, planning=False):
+    adapter = studio_runtime.motion_adapter(profile)
+    identity = studio_runtime.motion_identity(adapter, profile)
+    stored = job.get("approved_motion") or job.get("motion_plan")
+    if stored is not None:
+        if identity != stored or job.get("motion_plan", identity) != identity:
+            raise ValueError("Motion adapter, model or workflow changed; create a new storyboard.")
+    elif planning and not job.get("board"):
+        job["motion_plan"] = identity
+    elif adapter is not studio_runtime.motion_artifacts() or adapter.output_profile() != studio_runtime.LEGACY_MOTION_OUTPUT:
+        raise ValueError("This stored draft requires its original motion runtime.")
+    return adapter, identity
+
+
 def _work(job, slot):
     global ACTIVE
     image_profile = None
@@ -783,7 +805,9 @@ def _work(job, slot):
         with model_hub.local_inference_slot():
             revision, bindings = model_hub.draft_routes()
             if reviewing:
-                studio_runtime.motion_artifacts().require_resolved_ledger(job)
+                if moving:
+                    _resolve_job_motion(job, bindings.get("film.motion"), planning=True)
+                studio_runtime.motion_artifacts(job).require_resolved_ledger(job)
                 if bindings["image.generate"].get("base_url"):
                     profile = bindings["image.generate"]
                     studio_runtime.image_adapter(profile).preflight(profile, include_profiles=True)
@@ -798,9 +822,9 @@ def _work(job, slot):
                 raise ValueError("Storyboard đã thay đổi. Cần Owner duyệt lại.")
             if (moving or "storyboard_version" in job) and revision != job["motion_revision"]:
                 raise ValueError("Model routing changed after approval; review and create a new draft")
-            motion = studio_runtime.motion_adapter(bindings.get("film.motion")) if moving else None
-            motion_profile = motion.bind(bindings["film.motion"]) if moving else None
             if moving:
+                motion, identity = _resolve_job_motion(job, bindings.get("film.motion"))
+                motion_profile = motion.bind(bindings["film.motion"])
                 motion.require_resolved_ledger(job)
             image_profile = bindings["image.generate"]
             board = job.get("board")
@@ -824,6 +848,8 @@ def _work(job, slot):
                 _release_idle_image(image_profile)
         if moving:
             prepared = motion.prepare(job, folder)
+            if prepared[3] != identity["workflow_sha"]:
+                raise ValueError("Prepared motion workflow differs from the approved workflow.")
             for index, scene in enumerate(job["board"]["scenes"]):
                 if _cancellation(job["id"]):
                     raise DraftCancelled
@@ -1020,7 +1046,9 @@ def _storyboard_action(job, action, data):
         ops_control.require_active()
         revision, bindings = model_hub.draft_routes()
         if job["brief"].get("mode") == "motion":
-            studio_runtime.motion_adapter(bindings.get("film.motion")).bind(bindings["film.motion"])
+            adapter, identity = _resolve_job_motion(job, bindings.get("film.motion"))
+            adapter.bind(bindings["film.motion"])
+            job["approved_motion"] = identity
         else:
             render._ffmpeg()
         job.update(approved_storyboard_sha=job["storyboard_sha"], motion_revision=revision, status="QUEUED")
@@ -1036,7 +1064,7 @@ def _storyboard_action(job, action, data):
         return job
     if job["status"] not in {"STORYBOARD_REVIEW", "REVIEW", "FAILED"}:
         raise ValueError("Storyboard chưa thể chỉnh ở trạng thái này.")
-    studio_runtime.motion_artifacts().require_resolved_ledger({})  # A possible dispatch must be reconciled before edit.
+    studio_runtime.motion_artifacts(job).require_resolved_ledger({})  # A possible dispatch must be reconciled before edit.
     if job["storyboard_version"] >= draft_timeline.MAX_VERSIONS:
         raise ValueError("Đã đạt giới hạn phiên bản. Tạo phim mới để tiếp tục.")
     original = draft_timeline.snapshot(job)
@@ -1050,7 +1078,8 @@ def _storyboard_action(job, action, data):
             raise ValueError("Video này sử dụng preset thời lượng đã lưu.")
         seconds = data["seconds"]
         draft_timeline.planned_timeline(seconds, job["brief"].get("mode") == "motion",
-                                        [scene.get("suggested_seconds", 2) for scene in scenes])
+                                        [scene.get("suggested_seconds", 2) for scene in scenes],
+                                        studio_runtime.job_output(job))
         if seconds == job["brief"]["seconds"]:
             return job
         job["brief"]["seconds"] = seconds
@@ -1097,6 +1126,7 @@ def _storyboard_action(job, action, data):
     job["storyboard_version"] += 1
     job["brief"]["scene_count"] = len(scenes)
     job["video_sha"] = None
+    job.pop("approved_motion", None)
     job.pop("receipt_sha", None)
     job.pop("subtitle_sha", None)
     _stamp_storyboard(job)
@@ -1111,7 +1141,7 @@ def _delete_draft(ident):
         has_video = job.get("video_sha") or any(entry.get("video_sha") for entry in job.get("storyboard_history", []))
         if job["status"] not in {"CANCELLED", "FAILED", "STORYBOARD_REVIEW"} or has_video:
             raise ValueError("Chỉ có thể xóa bản nháp chưa hoàn thành và đã dừng.")
-        studio_runtime.motion_artifacts().require_draft_removable(ident)
+        studio_runtime.motion_artifacts(job).require_draft_removable(ident)
         root = ensure_local_root(WORKSPACE_DIR / "drafts")
         folder = ensure_local_root(root / ident).resolve()
         if folder.parent != root.resolve():
@@ -1174,7 +1204,7 @@ def act(ident, action, data):
         if action != "resume" or job["status"] not in {"RUNNING", "FAILED", "WAITING_RESOURCES", "NEEDS_RECONCILIATION"}:
             raise ValueError("Draft cannot be resumed")
         if job["status"] == "NEEDS_RECONCILIATION" and _cancellation(ident):
-            if studio_runtime.motion_artifacts().reconcile_cancelled(job):
+            if studio_runtime.motion_artifacts(job).reconcile_cancelled(job):
                 job.update(status="CANCELLED", error=None, video_sha=None)
                 _save(job)
             return job

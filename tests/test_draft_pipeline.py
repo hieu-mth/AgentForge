@@ -1,6 +1,7 @@
 """Draft schema, checkpoint lifecycle, and real local MP4 quality gate."""
 import tempfile
 import io
+import json
 import sqlite3
 import unittest
 from pathlib import Path
@@ -12,6 +13,7 @@ from uuid import uuid4
 from agentforge.features.film_studio import draft_motion, draft_pipeline as draft, studio_ollama, studio_runtime
 from agentforge.features.media import flux_runtime, studio_flux
 from tests import owner_http_fixture
+from tests.test_flux_runtime import profile as flux_profile
 
 
 class DraftTests(unittest.TestCase):
@@ -36,6 +38,76 @@ class DraftTests(unittest.TestCase):
                  "character_ids": ["cat"], "audio": "Im lặng"}
         return {"title": "Mèo", "continuity": "Orange cat, morning", "scenes": [scene, scene]}
 
+    def motion_profile(self):
+        return {"id": "owner_motion", "provider": "comfyui", "model": draft_motion.motion_ltx.CHECKPOINT,
+                "motion_encoder": str(self.root / "encoder.safetensors"), "base_url": "http://127.0.0.1:8188"}
+
+    def test_alternate_motion_contract_survives_approval_resume_and_render(self):
+        class AlternateMotion:
+            ADAPTER_ID = "fixture.video.v1"
+            digest = "a" * 64
+
+            def supports(self, profile):
+                return profile.get("provider") == "comfyui" and profile.get("model") == "fixture-motion"
+
+            def workflow_sha(self):
+                return self.digest
+
+            def weights_identity(self):
+                return {"fixture-motion": "b" * 64}
+
+            def output_profile(self):
+                return studio_runtime.MotionOutput(12, 36, (320, 192))
+
+            def bind(self, profile):
+                return profile
+
+            def clip_path(self, scene):
+                return clip
+
+        adapter = AlternateMotion()
+        profile = {"id": "alternate", "provider": "comfyui", "model": "fixture-motion"}
+        bindings = {"film.motion": profile}
+        job = {"id": self.ident, "brief": {**self.brief, "mode": "motion", "duration_mode": "manual"},
+               "board": self.board(), "storyboard_version": 1, "status": "RUNNING", "video_sha": None}
+        with (patch.object(studio_runtime, "MOTION_ADAPTERS", (draft_motion, adapter)),
+              patch.object(draft.model_hub, "draft_routes", return_value=(8, bindings))):
+            self.assertIs(studio_runtime.motion_adapter(profile), adapter)
+            with self.assertRaises(ValueError):
+                studio_runtime.motion_adapter({**profile, "model": "unsupported"})
+            self.assertEqual(studio_runtime.job_output(job), studio_runtime.MotionOutput(24, 49, (512, 288)))
+            board = job.pop("board")
+            board["scenes"] = [dict(scene) for scene in board["scenes"]]
+            with self.assertRaisesRegex(ValueError, "original motion runtime"):
+                draft._resolve_job_motion({**job, "board": board}, profile)
+            draft._resolve_job_motion(job, profile, planning=True)
+            job["board"] = board
+            draft._stamp_storyboard(job)
+            self.assertEqual([scene["frames"] for scene in board["scenes"]], [36, 36])
+            draft._save(job)
+            draft.act(self.ident, "storyboard-approve", {"sha256": job["storyboard_sha"]})
+            reloaded = draft._read(self.ident)
+            self.assertEqual(reloaded["motion_plan"], reloaded["approved_motion"])
+            self.assertIs(studio_runtime.motion_artifacts(reloaded), adapter)
+            self.assertIs(draft._resolve_job_motion(reloaded, profile)[0], adapter)
+
+            adapter.digest = "c" * 64
+            with patch.object(draft, "_dispatch"), patch.object(draft, "_image") as submit_image:
+                draft._work(reloaded, nullcontext())
+            self.assertIn("workflow changed", draft._read(self.ident)["error"])
+            submit_image.assert_not_called()
+            adapter.digest = "a" * 64
+
+            folder = draft._folder(self.ident)
+            folder.mkdir(parents=True)
+            clip = folder / "source.mp4"
+            ffmpeg = draft.render._ffmpeg()
+            draft.render._run_process([ffmpeg, "-v", "error", "-f", "lavfi", "-i",
+                "testsrc2=size=320x192:rate=12", "-frames:v", "36", "-c:v", "libx264", str(clip)], cwd=folder)
+            reloaded["video_sha"] = draft._render(reloaded)
+            self.assertEqual(json.loads(draft.verified_receipt(reloaded))["technical"],
+                             {"frames_decoded": 72, "fps": 12, "width": 320, "height": 192})
+
     def test_runtime_selection_uses_registry_provider_and_refuses_cloud(self):
         transport = studio_ollama.runtime
         with (patch.object(transport, "_installed_local_model", return_value=True),
@@ -49,8 +121,8 @@ class DraftTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "supported local text"):
                 draft._ask({"provider": "anthropic"}, "Plan", {}, {}, None)
             self.assertEqual(call.call_count, 2)
-        self.assertIs(studio_runtime.image_adapter({"provider": "comfyui", "flux": {}}), studio_flux)
-        self.assertIs(studio_runtime.motion_adapter({"provider": "comfyui"}), draft_motion)
+        self.assertIs(studio_runtime.image_adapter(flux_profile()), studio_flux)
+        self.assertIs(studio_runtime.motion_adapter(self.motion_profile()), draft_motion)
         with self.assertRaisesRegex(ValueError, "checkpoint"):
             draft_motion.bind({"provider": "comfyui", "model": "wrong.safetensors",
                                "base_url": "http://127.0.0.1:8188"})
@@ -321,8 +393,7 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(client.req("POST", route, {**body, "seconds": 6})[0], 400)
         profile = {"id": "selected_by_registry", "provider": "comfyui", "model": ltx.CHECKPOINT,
                    "motion_encoder": str(self.root / ltx.ENCODER), "base_url": "http://127.0.0.1:8188"}
-        bindings = {"film.motion": profile, "image.generate": {
-            "provider": "comfyui", "model": "fixture.gguf", "flux": {"max_resolution": 768}}}
+        bindings = {"film.motion": profile, "image.generate": flux_profile()}
         output = self.root / "output"
         output.mkdir()
         asset = b"FLUX fixture"
@@ -488,11 +559,12 @@ class DraftTests(unittest.TestCase):
             args[0]["motion_job"] = "b" * 32
             args[4]()
             raise ValueError("Motion dispatch requires reconciliation")
-        with (patch.object(draft.model_hub, "draft_routes", return_value=(8, {"image.generate": {}, "film.motion": {"provider": "comfyui"}})),
+        with (patch.object(draft.model_hub, "draft_routes", return_value=(8, {"image.generate": {}, "film.motion": self.motion_profile()})),
               patch.object(draft, "_image"), patch.object(draft, "_release_idle_image"),
               patch.object(draft_motion, "bind", return_value={"provider": "comfyui", "model": "fixture"}),
               patch.object(draft_motion, "require_resolved_ledger"),
-              patch.object(draft_motion, "prepare"), patch.object(draft, "_dispatch"),
+              patch.object(draft_motion, "prepare", return_value=(None, None, None, draft_motion.workflow_sha())),
+              patch.object(draft, "_dispatch"),
               patch.object(draft_motion, "run_shot", side_effect=fail) as run,
               patch.object(draft, "_render") as render):
             draft._work(job, nullcontext())
@@ -589,7 +661,7 @@ class DraftTests(unittest.TestCase):
         (folder / "scene-01.png").write_bytes(known)
         job["board"]["scenes"][0]["asset"] = draft._sha(known)
         draft._save(job)
-        profile = {"provider": "comfyui", "model": "fixture.gguf", "flux": {"max_resolution": 768}}
+        profile = flux_profile()
         def missing_output(*args, **kwargs):
             self.assertEqual(draft._read(self.ident)["activity"], {
                 "operation": "image", "provider": "comfyui", "model": "fixture.gguf", "scene": 2,
@@ -622,7 +694,7 @@ class DraftTests(unittest.TestCase):
                "board": draft._story(self.board(), 2, 6, {"cat": {}}),
                "cast": {"cat": {"name": "Miu", "appearance": "orange cat"}}}
         scene = job["board"]["scenes"][0]
-        profile = {"provider": "comfyui", "flux": {"max_resolution": 768}}
+        profile = flux_profile()
         for error in ("COMFYUI_LAUNCHER_REQUIRED", "COMFYUI_ENDPOINT_MISMATCH"):
             with (self.subTest(error=error),
                   patch.object(flux_runtime, "generate",
@@ -670,7 +742,7 @@ class DraftTests(unittest.TestCase):
             draft._save(job)
             draft._cancellation(job["id"], mark=True)
 
-        profile = {"base_url": "http://127.0.0.1:8188", "provider": "comfyui", "model": "fixture.gguf", "flux": {}}
+        profile = {**flux_profile(), "base_url": "http://127.0.0.1:8188"}
         with (patch.object(draft.model_hub, "draft_routes", return_value=(1, {"image.generate": profile})),
               patch.object(draft.comfy_service, "require_other_queue_idle"),
               patch.object(draft.comfy_service, "require_idle_queue"),

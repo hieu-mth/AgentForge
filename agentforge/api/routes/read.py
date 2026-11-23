@@ -51,7 +51,7 @@ def dispatch(self, route):
             if not scene.get("motion_sha"):
                 return self._blocked(404, "film_preview_unavailable")
 
-            motion = studio_runtime.motion_artifacts()
+            motion = studio_runtime.motion_artifacts(job)
             return _serve(self, motion.clip_path(scene), motion.MAX_CLIP_BYTES, "motion.mp4",
                           lambda stream: motion.verify_clip(scene, stream))
         raise ValueError("Invalid draft asset route")

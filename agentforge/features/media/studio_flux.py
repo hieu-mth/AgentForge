@@ -3,8 +3,18 @@ import time
 from urllib.parse import urlsplit
 
 from agentforge.features.film_studio import draft_resources
-from agentforge.features.media import flux_runtime
+from agentforge.features.media import flux_runtime, flux_workflow
 from agentforge.integrations import comfy_service, comfyui
+
+
+def supports(profile):
+    if profile.get("provider") != "comfyui" or "motion_encoder" in profile:
+        return False
+    try:
+        flux_workflow.validate(profile["flux"], profile["model"], profile["base_url"])
+    except (ValueError, KeyError, TypeError):
+        return False
+    return True
 
 
 def preflight(profile, *, include_profiles=False):

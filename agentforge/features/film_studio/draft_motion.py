@@ -19,6 +19,19 @@ from agentforge.integrations import comfy_service
 from agentforge.paths import ensure_local_root
 
 FRAMES = 49  # Studio's approved preset, independent of experimental pilot presets.
+ADAPTER_ID = motion_ltx.FORMAT
+
+
+def workflow_sha():
+    return hashlib.sha256(_workflow_bytes()).hexdigest()
+
+
+def weights_identity():
+    return {motion_ltx.CHECKPOINT: motion_ltx.CHECKPOINT_SHA, motion_ltx.ENCODER: motion_ltx.ENCODER_SHA}
+
+
+def _workflow_bytes():
+    return (json.dumps(motion_ltx.workflow(FRAMES), indent=2) + "\n").encode()
 
 
 def output_profile():
@@ -26,10 +39,15 @@ def output_profile():
     return MotionOutput(profile["fps"], profile["frames"], (profile["width"], profile["height"]))
 
 
+def supports(profile):
+    return (profile.get("provider") == "comfyui"
+            and profile.get("model") in (motion_ltx.CHECKPOINT, motion_ltx.MODEL_ID)
+            and bool(profile.get("motion_encoder")) and "flux" not in profile)
+
+
 def bind(profile):
     endpoint = urlsplit(profile.get("base_url", ""))
-    if (profile.get("provider") != "comfyui" or profile.get("model") not in (motion_ltx.CHECKPOINT, motion_ltx.MODEL_ID)
-            or not profile.get("motion_encoder") or endpoint.port != motion_comfy.PORT
+    if (not supports(profile) or endpoint.port != motion_comfy.PORT
             or endpoint.hostname not in {"localhost", "127.0.0.1"}):
         raise ValueError("Assign an LTX 2B FP8 checkpoint and encoder to film.motion on the Motion endpoint")
     config = comfy_service._settings()
@@ -67,7 +85,7 @@ def prepare(job, folder):
         if long_form.load_plan(motion_comfy.FILMS, slug) != plan:
             raise ValueError("Motion plan changed; create a new draft") from None
     workflow = ensure_local_root(folder / "motion-workflow.json")
-    payload = (json.dumps(motion_ltx.workflow(FRAMES), indent=2) + "\n").encode()
+    payload = _workflow_bytes()
     try:
         with workflow.open("xb") as stream:
             stream.write(payload)
