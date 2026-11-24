@@ -1,17 +1,24 @@
 import unittest
+from unittest.mock import Mock
 
 from agentforge.features.film_studio.creative_plan import compile_plan, compiled_shots, propose_scene
 from agentforge.features.film_studio.studio_contracts import MotionOutput
 
 
 class CreativePlanTests(unittest.TestCase):
-    def test_model_omissions_are_restored_before_compilation(self):
+    def test_model_repairs_omissions_with_scene_context_before_compilation(self):
         scene = {"scene": 1, "source_range": [0, 40], "frames": 120,
                  "actions": ["approach", "open", "roll", "recoil", "touch"]}
         output = MotionOutput(24, 49, (512, 288))
         shot = {"seconds": 2.5, "camera": "static", "intent": "follow the action"}
         original = [{**shot, "actions": ["A02"]}, {**shot, "actions": ["A04"]}]
-        shots = propose_scene(scene, [], output.fps, lambda *_: {"shots": original})
+        corrected = [{**shot, "actions": ["A01", "A02", "A03"]}, {**shot, "actions": ["A04", "A05"]}]
+        infer = Mock(side_effect=[{"shots": original}, {"shots": corrected}])
+        shots = propose_scene(scene, [], output.fps, infer)
+        self.assertEqual(infer.call_count, 2)
+        repair = infer.call_args.args[1]
+        self.assertEqual(repair["previous_shots"], original)
+        self.assertEqual(repair["scene"]["actions"]["A03"], "roll")
         self.assertEqual([item["actions"] for item in shots],
                          [["A01", "A02", "A03"], ["A04", "A05"]])
         self.assertEqual([item["actions"] for item in original], [["A02"], ["A04"]])
