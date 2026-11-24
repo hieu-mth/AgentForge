@@ -26,20 +26,23 @@ def plan(production_id):
                        "frames": sum(shot["script_shot_frames"] for shot in shots), **context})
     globals_ = [item for scene in scenes for item in scene["global_constraints"]]
     output = studio_runtime.job_output(job)
-    schema = draft_pipeline._object(shots={"type": "array", "minItems": 1, "maxItems": 16,
-        "items": draft_pipeline._object(actions={"type": "array", "minItems": 1,
-            "items": {"type": "integer", "minimum": 0}}, seconds={"type": "number"},
-            camera=draft_pipeline.STRING, intent=draft_pipeline.STRING)})
     drafts = []
     with model_hub.local_inference_slot():
         for scene in scenes:
+            actions = {f"A{index+1:02d}": action for index, action in enumerate(scene["actions"])}
+            if not actions:
+                raise ValueError("The scene lacks identifiable authored actions")
+            schema = draft_pipeline._object(shots={"type": "array", "minItems": 1, "maxItems": 16,
+                "items": draft_pipeline._object(actions={"type": "array", "minItems": 1,
+                    "items": {"type": "string", "enum": list(actions)}}, seconds={"type": "number"},
+                    camera=draft_pipeline.STRING, intent=draft_pipeline.STRING)})
             response = studio_runtime.text_adapter(profile).infer_structured(profile,
                 "Direct this scene. Choose one or more useful creative shots. "
-                "Group adjacent actions when a single angle serves them. List each zero-based action index "
+                "Group adjacent actions when a single angle serves them. Use each supplied action ID "
                 "exactly once in order and preserve the script's camera directions and constraints. "
                 "Give each shot a relative duration, camera and storytelling intent. "
                 "Technical segments will be allocated separately. Do not invent actions.",
-                {"scene": scene, "global_constraints": globals_,
+                {"scene": {**scene, "actions": actions}, "global_constraints": globals_,
                  "seconds": scene["frames"] / output.fps}, schema, cpu_only=True)
             drafts.append(response["shots"])
     return {"production_id": production_id, "model": profile["model"],

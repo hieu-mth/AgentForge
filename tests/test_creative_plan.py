@@ -9,8 +9,8 @@ class CreativePlanTests(unittest.TestCase):
         scenes = [{"frames": 120, "actions": ["approach", "stop"]},
                   {"frames": 120, "actions": ["open", "react"]}]
         shot = {"seconds": 5, "camera": "hold framing", "intent": "maintain continuity"}
-        plan = compile_plan(scenes, [[{**shot, "actions": [0, 1]}],
-            [{**shot, "actions": [0], "seconds": 1}, {**shot, "actions": [1], "seconds": 4}]],
+        plan = compile_plan(scenes, [[{**shot, "actions": ["A01", "A02"]}],
+            [{**shot, "actions": ["A01"], "seconds": 1}, {**shot, "actions": ["A02"], "seconds": 4}]],
             MotionOutput(24, 49, (512, 288)))
         self.assertEqual(plan["total_frames"], 240)
         first, second = (scene["creative_shots"] for scene in plan["scenes"])
@@ -22,6 +22,6 @@ class CreativePlanTests(unittest.TestCase):
     def test_rejects_omitted_duplicate_and_reordered_actions(self):
         scene = {"frames": 120, "actions": ["open", "react"]}
         shot = {"seconds": 5, "camera": "static", "intent": "show the event"}
-        for actions in ([0], [1, 0], [0, 0]):
+        for actions in (["A01"], ["A02", "A01"], ["A01", "A01"]):
             with self.subTest(actions=actions), self.assertRaises(ValueError):
                 compile_plan([scene], [[{**shot, "actions": actions}]], MotionOutput(24, 49, (512, 288)))

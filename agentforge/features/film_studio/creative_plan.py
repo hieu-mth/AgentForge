@@ -14,15 +14,14 @@ def compile_plan(scenes, proposed, output):
         if not isinstance(shots, list) or not 1 <= len(shots) <= min(16, scene["frames"]):
             raise ValueError("Invalid creative shot count")
         weights = []
+        ordered_ids = [f"A{index+1:02d}" for index in range(len(scene["actions"]))]
         next_action = 0
         for shot in shots:
             if not isinstance(shot, dict) or set(shot) != {"actions", "seconds", "camera", "intent"}:
                 raise ValueError("Invalid creative shot schema")
             action_ids = shot["actions"]
             if (not isinstance(action_ids, list) or not action_ids
-                    or any(type(index) is not int for index in action_ids)
-                    or action_ids != list(range(next_action, next_action + len(action_ids)))
-                    or action_ids[-1] >= len(scene["actions"])):
+                    or action_ids != ordered_ids[next_action:next_action + len(action_ids)]):
                 raise ValueError("Creative plan must cover each action once in source order")
             next_action += len(action_ids)
             weight = shot["seconds"]
