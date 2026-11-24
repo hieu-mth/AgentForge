@@ -4,6 +4,29 @@ import math
 from agentforge.features.film_studio.draft_timeline import duration_limits
 
 
+def _restore_omitted_actions(scene, shots):
+    """Fill gaps in an ordered subset without accepting duplicate or unknown IDs."""
+    ordered = [f"A{index + 1:02d}" for index in range(len(scene["actions"]))]
+    positions = {action: index for index, action in enumerate(ordered)}
+    starts = []
+    previous = -1
+    for shot in shots:
+        actions = shot.get("actions") if isinstance(shot, dict) else None
+        if not isinstance(actions, list) or not actions:
+            return shots
+        for action in actions:
+            position = positions.get(action, -1) if isinstance(action, str) else -1
+            if position <= previous:
+                return shots
+            previous = position
+        starts.append(positions[actions[0]])
+    if not starts:
+        return shots
+    bounds = [0, *starts[1:], len(ordered)]
+    return [{**shot, "actions": ordered[start:end]}
+            for shot, start, end in zip(shots, bounds, bounds[1:])]
+
+
 def compile_plan(scenes, proposed, output):
     if (not scenes or not isinstance(proposed, list) or len(scenes) != len(proposed)
             or any(type(scene.get("frames")) is not int or scene["frames"] < 1 for scene in scenes)
@@ -17,7 +40,7 @@ def compile_plan(scenes, proposed, output):
     result = []
     offset = 0
     segment_count = 0
-    for scene, shots in zip(scenes, proposed):
+    for scene_number, (scene, shots) in enumerate(zip(scenes, proposed), 1):
         if not isinstance(shots, list) or not 1 <= len(shots) <= min(16, scene["frames"]):
             raise ValueError("Invalid creative shot count")
         weights = []
@@ -29,7 +52,11 @@ def compile_plan(scenes, proposed, output):
             action_ids = shot["actions"]
             if (not isinstance(action_ids, list) or not action_ids
                     or action_ids != ordered_ids[next_action:next_action + len(action_ids)]):
-                raise ValueError("Creative plan must cover each action once in source order")
+                expected = next(iter(ordered_ids[next_action:next_action + 1]), None)
+                detail = f"Hành động kế tiếp phải là {expected}." if expected else "Cảnh đã đủ hành động."
+                raise ValueError(
+                    f"Cảnh {scene_number}, góc quay {len(weights) + 1}: chuỗi hành động không hợp lệ. {detail}"
+                )
             next_action += len(action_ids)
             weight = shot["seconds"]
             if type(weight) not in (int, float) or not 0.1 <= weight <= 60 or not math.isfinite(weight):
@@ -39,7 +66,8 @@ def compile_plan(scenes, proposed, output):
                 raise ValueError("Invalid camera or creative intent")
             weights.append(weight)
         if next_action != len(scene["actions"]):
-            raise ValueError("Creative plan omitted source actions")
+            missing = ", ".join(ordered_ids[next_action:])
+            raise ValueError(f"Cảnh {scene_number}: kế hoạch thiếu hành động {missing}.")
         frames = [1] * len(shots)
         for _ in range(scene["frames"] - len(shots)):
             index = max(range(len(shots)), key=lambda i: (
@@ -117,4 +145,4 @@ def propose_scene(scene, global_constraints, fps, infer):
          "properties": {"shots": {"type": "array", "minItems": 1, "maxItems": 16, "items": shot}}})
     if not isinstance(result, dict) or result.keys() != {"shots"} or not isinstance(result["shots"], list):
         raise ValueError("AI trả cấu trúc kế hoạch góc quay không hợp lệ.")
-    return result["shots"]
+    return _restore_omitted_actions(scene, result["shots"])

@@ -5,6 +5,27 @@ from agentforge.features.film_studio.studio_contracts import MotionOutput
 
 
 class CreativePlanTests(unittest.TestCase):
+    def test_model_omissions_are_restored_before_compilation(self):
+        scene = {"scene": 1, "source_range": [0, 40], "frames": 120,
+                 "actions": ["approach", "open", "roll", "recoil", "touch"]}
+        output = MotionOutput(24, 49, (512, 288))
+        shot = {"seconds": 2.5, "camera": "static", "intent": "follow the action"}
+        original = [{**shot, "actions": ["A02"]}, {**shot, "actions": ["A04"]}]
+        shots = propose_scene(scene, [], output.fps, lambda *_: {"shots": original})
+        self.assertEqual([item["actions"] for item in shots],
+                         [["A01", "A02", "A03"], ["A04", "A05"]])
+        self.assertEqual([item["actions"] for item in original], [["A02"], ["A04"]])
+        plan = compile_plan([scene], [shots], output)
+        segments = compiled_shots(plan, output)
+        self.assertEqual(sum(segment["script_shot_frames"] for segment in segments), 120)
+        self.assertEqual(" ".join(segment["action"] for segment in segments),
+                         "approach open roll recoil touch")
+        for actions in (["A02", "A01"], ["A01", "A01"], ["A99"]):
+            with self.subTest(actions=actions), self.assertRaises(ValueError):
+                invalid = propose_scene(scene, [], output.fps,
+                                        lambda *_: {"shots": [{**shot, "actions": actions}]})
+                compile_plan([scene], [invalid], output)
+
     def test_unequal_creative_shots_fit_runtime_without_reordering_actions(self):
         scenes = [{"frames": 120, "actions": ["approach", "stop"]},
                   {"frames": 120, "actions": ["open", "react"]}]
