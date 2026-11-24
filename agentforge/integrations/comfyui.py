@@ -87,6 +87,7 @@ def validate_image_route(path, *, has_body=False):
             or IMAGE_HISTORY.fullmatch(path)
             or re.fullmatch(r"/object_info/(?:UnetLoaderGGUF|DualCLIPLoaderGGUF|VAELoader|"
                             r"CheckpointLoaderSimple|CLIPLoader|CLIPTextEncode|LoadImage|"
+                            r"SaveImage|EmptySD3LatentImage|KSampler|"
                             r"LTXVImgToVideo|LTXVConditioning|KSamplerSelect|ManualSigmas|"
                             r"SamplerCustom|VAEDecode|CreateVideo|SaveVideo)", path)):
         return
