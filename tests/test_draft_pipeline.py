@@ -585,6 +585,16 @@ class DraftTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "không khớp mục tiêu 7 giây"):
             draft._duration_plan({"brief": {**manual, "seconds": 7}}, {})
 
+    def test_global_requirements_after_an_authored_action_are_not_action_beats(self):
+        result = draft._scene_beats(
+            "Cảnh 3 (10–15 giây): Mèo nhìn ra cửa sổ, sau đó vẫy đuôi. "
+            "**Yêu cầu xuyên suốt:**\n- Giữ nhất quán căn phòng.\n"
+            "- AI tự quyết định góc máy.\n- Không chữ.", last=True)
+        self.assertEqual(result["actions"], ["Mèo nhìn ra cửa sổ", "vẫy đuôi."])
+        self.assertEqual(result["camera"], [])
+        self.assertEqual(result["global_constraints"],
+                         ["Giữ nhất quán căn phòng.", "AI tự quyết định góc máy.", "Không chữ."])
+
     def test_creative_production_review_edit_and_dispatch_use_persisted_segment_plan(self):
         profile = self.motion_profile()
         bindings = {"general.text": {}, "film.storyboard": {}, "image.generate": {}, "film.motion": profile}

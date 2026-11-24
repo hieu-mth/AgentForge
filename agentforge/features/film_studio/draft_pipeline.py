@@ -569,6 +569,9 @@ _GLOBAL_CONSTRAINT = re.compile(
     r"(?:phong cách|ánh sáng|màu sắc|style|lighting|negative prompt|ràng buộc chung|"
     r"yêu cầu chung|không|ưu tiên|giữ nguyên|no)\b", re.I)
 _SCENE_CONSTRAINT = re.compile(r"(?:ràng buộc cảnh|yêu cầu cảnh|không đổi góc|scene constraints)\b", re.I)
+_GLOBAL_HEADING = re.compile(
+    r"(?<!\w)\**(?:yêu cầu xuyên suốt|ràng buộc xuyên suốt|yêu cầu chung|"
+    r"ràng buộc chung|global constraints|global requirements)\**\s*:\**\s*", re.I)
 _SEQUENCE = re.compile(r",?\s+(?:sau đó|rồi|tiếp đó|sau đấy|then|and then)\s+", re.I)
 _SCRIPT_CLAUSE = re.compile(
     rf"(?<=[.!?…;])\s+|\n+|,\s+(?=(?:{_CAMERA.pattern}|{_GLOBAL_CONSTRAINT.pattern}|"
@@ -580,7 +583,12 @@ def _scene_beats(source, *, last):
     timing = SCENE_TIME.search(heading)
     inline = heading[timing.end():].lstrip("* :—–-") if timing else heading.partition(":")[2].strip()
     actions, camera, constraints, global_constraints = [], [], [], []
-    for paragraph in re.split(r"\n\s*\n", "\n".join(part for part in (inline, body) if part)):
+    content = "\n".join(part for part in (inline, body) if part)
+    if last and (header := _GLOBAL_HEADING.search(content)):
+        global_constraints.extend(line.strip(" *-\t") for line in content[header.end():].splitlines()
+                                  if line.strip(" *-\t"))
+        content = content[:header.start()]
+    for paragraph in re.split(r"\n\s*\n", content):
         for part in _SCRIPT_CLAUSE.split(paragraph):
             part = part.strip(" *")
             if not part:
@@ -621,11 +629,12 @@ def _write_planned_board(job, bindings):
                      duration_source=plan["duration_source"])
         _save(job)
     plan = job["duration_plan"]
-    if job.get("creative_director_version") == 1 and not plan.get("creative_plan"):
-        plan = _direct_authored_plan(job, plan, bindings["film.storyboard"])
-        job["duration_plan"] = plan
-        brief["scene_count"] = plan["recommended_shot_count"]
-        _save(job)
+    if job.get("creative_director_version") == 1 and not job.get("board"):
+        directed = _direct_authored_plan(job, plan, bindings["film.storyboard"])
+        if directed != plan:
+            plan = job["duration_plan"] = directed
+            brief["scene_count"] = plan["recommended_shot_count"]
+            _save(job)
     layout = _storyboard_layout(job, brief["scene_count"], [shot["suggested_seconds"] for shot in plan["shots"]])
     script = brief["idea"]
     authored = bool(plan.get("content_scene_count"))
@@ -771,8 +780,17 @@ def _direct_authored_plan(job, plan, profile):
     context = [script[:scenes[0]["source_range"][0]][:1600],
                *(item for scene in scenes for item in scene["global_constraints"])]
     output = studio_runtime.job_output(job)
+    existing = plan.get("creative_plan", {}).get("scenes", [])
+    if len(existing) == len(scenes) and all(
+            all(old.get(key) == value for key, value in scene.items()) for old, scene in zip(existing, scenes)):
+        return plan
     proposals = []
-    for scene in scenes:
+    for index, scene in enumerate(scenes):
+        old = existing[index] if index < len(existing) else None
+        if old and all(old.get(key) == value for key, value in scene.items()):
+            proposals.append([{key: shot[key] for key in ("actions", "seconds", "camera", "intent")}
+                              for shot in old["creative_shots"]])
+            continue
         _activity(job, "PLANNING", "creative_direction", profile, scene=scene["scene"])
         with _measured(job, "creative_direction"):
             proposals.append(creative_plan.propose_scene(scene, context, output.fps,
