@@ -713,6 +713,8 @@ class DraftTests(unittest.TestCase):
                          ["description", "motion_prompt"])
         self.assertEqual(write.call_args.kwargs["proposed_shot"]["already_covered"], [
             {"description": output["description"], "motion_prompt": output["motion_prompt"]}])
+        self.assertEqual(write.call_args.kwargs["proposed_shot"]["previous_candidate"],
+                         {"description": output["description"], "motion_prompt": output["motion_prompt"]})
         saved = draft._read(self.ident)
         self.assertNotIn("board", saved)
         self.assertEqual(saved["storyboard_checkpoint"]["shots"], [output])
