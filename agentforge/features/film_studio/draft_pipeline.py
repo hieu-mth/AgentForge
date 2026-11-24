@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from agentforge import ops_control
 from agentforge.ai import model_hub
-from agentforge.features.film_studio import characters
+from agentforge.features.film_studio import characters, creative_plan
 from agentforge.features.film_studio import draft_resources, draft_timeline, studio_runtime
 from agentforge.features.media import render, visual_jobs
 from agentforge.features.film_studio.draft_resources import ResourceWait
@@ -621,6 +621,11 @@ def _write_planned_board(job, bindings):
                      duration_source=plan["duration_source"])
         _save(job)
     plan = job["duration_plan"]
+    if job.get("creative_director_version") == 1 and not plan.get("creative_plan"):
+        plan = _direct_authored_plan(job, plan, bindings["film.storyboard"])
+        job["duration_plan"] = plan
+        brief["scene_count"] = plan["recommended_shot_count"]
+        _save(job)
     layout = _storyboard_layout(job, brief["scene_count"], [shot["suggested_seconds"] for shot in plan["shots"]])
     script = brief["idea"]
     authored = bool(plan.get("content_scene_count"))
@@ -640,7 +645,10 @@ def _write_planned_board(job, bindings):
                     script[slice(*shot["script_range"])], last=scene_number == plan["content_scene_count"])
         global_context = "\n".join([script[:ranges[0][0]].strip(), *(
             constraint for scene in scene_inputs.values() for constraint in scene["global_constraints"])])[:2400]
-        scene_keys = {str(number): _sha(json.dumps([scene, global_context], ensure_ascii=False, sort_keys=True).encode())
+        scene_keys = {str(number): _sha(json.dumps([
+            scene, global_context, *([shot for shot in plan["shots"] if shot["content_scene"] == number]
+                                      if plan.get("creative_plan") else [])],
+            ensure_ascii=False, sort_keys=True).encode())
                       for number, scene in scene_inputs.items()}
         if checkpoint is not None:
             for index, shot in enumerate(plan["shots"][:len(accepted)]):
@@ -679,6 +687,12 @@ def _write_planned_board(job, bindings):
             request["scene_constraints"] = [constraint[:240] for constraint in inputs["constraints"][:8]]
             request["beat"] = _shot_beat(inputs["actions"], shot["content_shot"], shot["content_shot_count"],
                                         frame_offset, layout[index], previous)
+            if "creative_shot" in shot:
+                request["camera"] = [shot["creative_camera"], *request["camera"]]
+                request["beat"].update(assigned_text=shot["action"][:900],
+                                       continued_action=shot["segment"] > 1,
+                                       creative_shot=shot["creative_shot"],
+                                       segment=shot["segment"], segment_count=shot["segment_count"])
             source = request["beat"]["assigned_text"]
             request["action"] = source
             frame_offset += layout[index]
@@ -737,9 +751,36 @@ def _write_planned_board(job, bindings):
             scene.update({key: shot[key] for key in ("content_scene", "content_shot", "content_shot_count", "script_shot_frames")})
             scene["motion_prompt"] = motion_prompts[index]
             scene["shot_description"] = shot_descriptions[index]
+            if "creative_shot" in shot:
+                scene.update({key: shot[key] for key in ("creative_shot", "segment", "segment_count", "creative_camera")})
     job.update(board=board, cast=cast)
     job.pop("storyboard_checkpoint", None)
     _save(job)
+
+
+def _direct_authored_plan(job, plan, profile):
+    script = job["brief"]["idea"]
+    scenes = []
+    for shot in plan["shots"]:
+        number = shot["content_scene"]
+        if shot["content_shot"] == 1:
+            start, end = shot["script_range"]
+            scenes.append({"scene": number, "source_range": [start, end], "frames": 0,
+                           **_scene_beats(script[start:end], last=number == plan["content_scene_count"])})
+        scenes[-1]["frames"] += shot["script_shot_frames"]
+    context = [script[:scenes[0]["source_range"][0]][:1600],
+               *(item for scene in scenes for item in scene["global_constraints"])]
+    output = studio_runtime.job_output(job)
+    proposals = []
+    for scene in scenes:
+        _activity(job, "PLANNING", "creative_direction", profile, scene=scene["scene"])
+        with _measured(job, "creative_direction"):
+            proposals.append(creative_plan.propose_scene(scene, context, output.fps,
+                lambda instructions, payload, schema: _ask(
+                    profile, instructions, payload, schema, None, cpu_only=True)))
+    compiled = creative_plan.compile_plan(scenes, proposals, output)
+    segments = creative_plan.compiled_shots(compiled, output)
+    return {**plan, "shots": segments, "recommended_shot_count": len(segments), "creative_plan": compiled}
 
 
 def _select_cast(job, bindings, outline):
@@ -867,6 +908,10 @@ def _storyboard_layout(job, count, weights=None):
     brief = job["brief"]
     plan = job.get("duration_plan") or {}
     if plan.get("content_scene_count"):
+        if "creative_plan" in plan:
+            compiled = creative_plan.compiled_shots(plan["creative_plan"], studio_runtime.job_output(job))
+            if compiled != plan["shots"]:
+                raise ValueError("Các segment không khớp kế hoạch Creative Director.")
         frames = [shot["script_shot_frames"] for shot in plan["shots"]]
         total = brief["seconds"] * _job_fps(job)
         cap = studio_runtime.job_output(job).max_frames if brief.get("mode") == "motion" else total
@@ -1124,6 +1169,10 @@ def _work(job, slot):
             if "storyboard_version" in job and (
                     job["approved_storyboard_sha"] != draft_timeline.digest(job)):
                 raise ValueError("Storyboard đã thay đổi. Cần Owner duyệt lại.")
+            if job.get("duration_plan", {}).get("creative_plan"):
+                scenes = job["board"]["scenes"]
+                if [scene["frames"] for scene in scenes] != _storyboard_layout(job, len(scenes)):
+                    raise ValueError("Số frame storyboard không khớp timeline đã duyệt.")
             if moving:
                 motion, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
                 motion_profile = motion.bind(bindings["film.motion"])
@@ -1321,6 +1370,8 @@ def submit(data):
     job = {"id": ident, "brief": brief, "stage": "QUEUED", "status": "QUEUED",
            "video_sha": None, "created_at": created_at, "updated_at": created_at}
     job["storyboard_version"] = 1
+    if motion_mode and duration_mode is not None and AUTHORED_HEADING.search(idea):
+        job["creative_director_version"] = 1
     job["studio_plan"] = studio_runtime.routing_identity(bindings, moving=motion_mode)
     job["submitted_brief"] = dict(brief)
     with comfy_service.LOCK, _db(True) as conn:

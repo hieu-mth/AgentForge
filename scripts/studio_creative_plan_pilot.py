@@ -29,22 +29,9 @@ def plan(production_id):
     drafts = []
     with model_hub.local_inference_slot():
         for scene in scenes:
-            actions = {f"A{index+1:02d}": action for index, action in enumerate(scene["actions"])}
-            if not actions:
-                raise ValueError("The scene lacks identifiable authored actions")
-            schema = draft_pipeline._object(shots={"type": "array", "minItems": 1, "maxItems": 16,
-                "items": draft_pipeline._object(actions={"type": "array", "minItems": 1,
-                    "items": {"type": "string", "enum": list(actions)}}, seconds={"type": "number"},
-                    camera=draft_pipeline.STRING, intent=draft_pipeline.STRING)})
-            response = studio_runtime.text_adapter(profile).infer_structured(profile,
-                "Direct this scene. Choose one or more useful creative shots. "
-                "Group adjacent actions when a single angle serves them. Use each supplied action ID "
-                "exactly once in order and preserve the script's camera directions and constraints. "
-                "Give each shot a relative duration, camera and storytelling intent. "
-                "Technical segments will be allocated separately. Do not invent actions.",
-                {"scene": {**scene, "actions": actions}, "global_constraints": globals_,
-                 "seconds": scene["frames"] / output.fps}, schema, cpu_only=True)
-            drafts.append(response["shots"])
+            drafts.append(creative_plan.propose_scene(scene, globals_, output.fps,
+                lambda instructions, payload, schema: studio_runtime.text_adapter(profile).infer_structured(
+                    profile, instructions, payload, schema, cpu_only=True)))
     return {"production_id": production_id, "model": profile["model"],
             **creative_plan.compile_plan(scenes, drafts, output)}
 

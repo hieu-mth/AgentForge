@@ -16,9 +16,12 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
   const scene=scenes[index];
   const reviewing=job.status==='STORYBOARD_REVIEW';
   const authoredScenes=job.duration_plan?.content_scene_count;
+  const creativeScenes=job.duration_plan?.creative_plan?.scenes;
+  const creativeCount=creativeScenes?.reduce((sum,entry)=>sum+entry.creative_shots.length,0);
   const groups=groupDraftScenes(job);
   const activeGroup=groups.find(group=>group.shots.some(shot=>shot.index===index));
-  const countLabel=authoredScenes?`${authoredScenes} cảnh · ${scenes.length} shot`:`${scenes.length} cảnh`;
+  const countLabel=creativeCount?`${authoredScenes} cảnh · ${creativeCount} góc quay · ${scenes.length} segment`:
+    authoredScenes?`${authoredScenes} cảnh · ${scenes.length} shot`:`${scenes.length} cảnh`;
   return <Modal open centered width={1080} rootClassName="storyboard-review" title={draftTitle(job)}
     onCancel={onClose} footer={<div className="storyboard-footer">
       <div><strong>{job.brief.seconds} giây · {countLabel}{job.storyboard_version&&' · Phiên bản '+job.storyboard_version}</strong>
@@ -57,10 +60,12 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
             {group.title&&<span>{group.label}</span>}</header>}
           <div className={authoredScenes?'storyboard-shot-strip':undefined}>
           {group.shots.map(({scene:item,index:i})=><button key={item.shot_id??i} type="button" aria-pressed={index===i}
-            aria-label={authoredScenes?`${group.label} · Shot ${item.content_shot}/${item.content_shot_count}`:undefined}
+            aria-label={item.creative_shot?`${group.label} · Góc ${item.creative_shot} · Segment ${item.segment}/${item.segment_count}`:
+              authoredScenes?`${group.label} · Shot ${item.content_shot}/${item.content_shot_count}`:undefined}
             onClick={()=>setShot(item.shot_id??i)}>
             <div className="storyboard-shot-meta">
-              <strong>{authoredScenes?`Shot ${item.content_shot}`:group.label}</strong>
+              <strong>{item.creative_shot?`Góc ${item.creative_shot} · Segment ${item.segment}/${item.segment_count}`:
+                authoredScenes?`Shot ${item.content_shot}`:group.label}</strong>
               <span>{Number(item.seconds.toFixed(2)).toLocaleString('vi-VN')} giây</span>
             </div>
             {!authoredScenes&&<span>{item.description}</span>}
@@ -70,11 +75,13 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
         {onAdd&&<Button disabled={busy} onClick={onAdd}>Thêm cảnh</Button>}
       </nav>
       {scene&&<article key={scene.shot_id??index} className="storyboard-detail">
-        <header className="storyboard-scene-title"><h3>{scene.content_scene?
+        <header className="storyboard-scene-title"><h3>{scene.creative_shot?
+          `${activeGroup.label} · Góc ${scene.creative_shot} · Segment ${scene.segment}/${scene.segment_count}`:scene.content_scene?
           `${activeGroup.label} · Shot ${scene.content_shot}/${scene.content_shot_count}`:'Cảnh '+(index+1)}</h3>
           <span>{Number(scene.seconds.toFixed(2)).toLocaleString('vi-VN')} giây</span>
         </header>
         <p>{scene.shot_description??scene.description}</p>
+        {scene.creative_camera&&<p className="env-muted">Góc máy · {scene.creative_camera}</p>}
         {scene.shot_reason&&!authoredScenes&&<p className="env-muted">{scene.shot_reason}</p>}
         {scene.asset&&<div className="storyboard-image"><Image loading="lazy" alt={'Ảnh cảnh '+(index+1)}
           src={'/api/film/drafts/'+job.id+'/scene-'+index+'?v='+scene.asset}/></div>}

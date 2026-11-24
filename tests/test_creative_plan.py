@@ -1,6 +1,6 @@
 import unittest
 
-from agentforge.features.film_studio.creative_plan import compile_plan
+from agentforge.features.film_studio.creative_plan import compile_plan, compiled_shots, propose_scene
 from agentforge.features.film_studio.studio_contracts import MotionOutput
 
 
@@ -25,3 +25,18 @@ class CreativePlanTests(unittest.TestCase):
         for actions in (["A01"], ["A02", "A01"], ["A01", "A01"]):
             with self.subTest(actions=actions), self.assertRaises(ValueError):
                 compile_plan([scene], [[{**shot, "actions": actions}]], MotionOutput(24, 49, (512, 288)))
+
+    def test_rejects_invalid_duration_and_modified_frames_using_adapter_limits(self):
+        scene = {"scene": 1, "source_range": [0, 20], "frames": 72, "actions": ["open"]}
+        shot = {"actions": ["A01"], "camera": "static", "intent": "show the event"}
+        output = MotionOutput(12, 20, (320, 192))
+        for seconds in (0, -1, True, float("nan")):
+            with self.subTest(seconds=seconds), self.assertRaises(ValueError):
+                compile_plan([scene], [[{**shot, "seconds": seconds}]], output)
+        plan = compile_plan([scene], [[{**shot, "seconds": 6}]], output)
+        self.assertEqual([item["script_shot_frames"] for item in compiled_shots(plan, output)], [18]*4)
+        plan["scenes"][0]["creative_shots"][0]["segments"][0]["frames"] = 0
+        with self.assertRaises(ValueError):
+            compiled_shots(plan, output)
+        with self.assertRaisesRegex(ValueError, "cấu trúc"):
+            propose_scene(scene, [], output.fps, lambda *_: {"unexpected": []})

@@ -3,8 +3,9 @@ import argparse
 from collections import defaultdict
 from datetime import datetime
 import json
+import time
 
-from agentforge.features.film_studio import draft_pipeline, motion_verify
+from agentforge.features.film_studio import draft_pipeline, draft_resources, motion_verify
 from agentforge.features.media import visual_jobs
 
 
@@ -39,8 +40,30 @@ def summarize(job):
     return {**result, "shots": shots}
 
 
+def sample(production_id, seconds):
+    """Emit actual 1 Hz observations, including the resource-wait phases."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        tick = time.monotonic()
+        snapshot = draft_resources.snapshot()
+        try:
+            job = draft_pipeline._read(production_id)
+        except draft_pipeline.DraftNotFound:
+            job = {}
+        yield {"production_id": production_id, "status": job.get("status"), "stage": job.get("stage"),
+               **snapshot}
+        time.sleep(max(0, min(deadline, tick+1) - time.monotonic()))
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("production_id")
+    parser.add_argument("--sample-seconds", type=int)
     arguments = parser.parse_args()
-    print(json.dumps(summarize(draft_pipeline._read(arguments.production_id)), indent=2))
+    if arguments.sample_seconds is None:
+        print(json.dumps(summarize(draft_pipeline._read(arguments.production_id)), indent=2))
+    else:
+        if not 1 <= arguments.sample_seconds <= 3600:
+            parser.error("--sample-seconds must be between 1 and 3600")
+        for reading in sample(arguments.production_id, arguments.sample_seconds):
+            print(json.dumps(reading), flush=True)

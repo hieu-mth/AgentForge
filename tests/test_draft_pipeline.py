@@ -585,6 +585,49 @@ class DraftTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "không khớp mục tiêu 7 giây"):
             draft._duration_plan({"brief": {**manual, "seconds": 7}}, {})
 
+    def test_creative_production_review_edit_and_dispatch_use_persisted_segment_plan(self):
+        profile = self.motion_profile()
+        bindings = {"general.text": {}, "film.storyboard": {}, "image.generate": {}, "film.motion": profile}
+        job = {"id": self.ident, "status": "RUNNING", "video_sha": None, "storyboard_version": 1,
+               "creative_director_version": 1, "brief": {
+                   "idea": "Video 6 giây\nCảnh 1 (0–3 giây): Mở cửa.\nCảnh 2 (3–6 giây): Bước vào.",
+                   "seconds": None, "scene_count": None, "ratio": "16:9", "mode": "motion", "duration_mode": "auto"}}
+        job["motion_plan"] = studio_runtime.motion_identity(draft_motion, profile)
+        job["studio_plan"] = studio_runtime.routing_identity(bindings, moving=True)
+        shot = {"actions": ["A01"], "seconds": 3, "camera": "Fixed camera", "intent": "Show the authored action"}
+        with (patch.object(draft, "_ask", return_value={"shots": [shot]}) as direction,
+              patch.object(draft, "_select_cast", return_value={}),
+              patch.object(draft, "_measured", return_value=nullcontext()),
+              patch.object(draft, "_script_scene", side_effect=lambda *a, **kw: {
+                  "title": "Test", "continuity": "Hall", "audio": "Quiet",
+                  "description": f"Action {a[5]}", "motion_prompt": f"Motion {a[5]}", "image_prompt": "Hall"}) as script):
+            draft._write_planned_board(job, bindings)
+            self.assertEqual(direction.call_count, 2)
+            self.assertEqual([c.kwargs["proposed_shot"]["beat"]["continued_action"] for c in script.call_args_list],
+                             [False, True, False, True])
+        draft._stamp_storyboard(job)
+        draft._save(job)
+        old_sha = job["storyboard_sha"]
+        with (patch.object(draft.model_hub, "draft_routes", return_value=(7, bindings)),
+              patch.object(draft_motion, "bind", return_value=profile),
+              patch.object(draft_motion, "require_resolved_ledger"),
+              patch.object(draft_motion, "prepare", return_value=(None, None, None, draft_motion.workflow_sha())),
+              patch.object(draft_motion, "run_shot") as dispatch, patch.object(draft, "_image"),
+              patch.object(draft, "_release_idle_image"), patch.object(draft, "_dispatch"),
+              patch.object(draft, "_render", return_value="verified-fixture"),
+              patch.object(draft, "_measured", return_value=nullcontext())):
+            revised = draft.act(self.ident, "storyboard-edit", {
+                "sha256": old_sha, "index": 0, "description": "Cửa bắt đầu mở",
+                "image_prompt": "A door starting to open", "motion_prompt": "The door swings slowly"})
+            self.assertEqual(revised["duration_plan"], job["duration_plan"])
+            with self.assertRaises(ValueError):
+                draft.act(self.ident, "storyboard-approve", {"sha256": old_sha})
+            draft.act(self.ident, "storyboard-approve", {"sha256": revised["storyboard_sha"]})
+            draft._work(draft._read(self.ident), nullcontext())
+        self.assertEqual([call.args[0]["frames"] for call in dispatch.call_args_list], [36]*4)
+        self.assertEqual(dispatch.call_args_list[0].args[0]["motion_prompt"], "The door swings slowly")
+        self.assertEqual(draft._read(self.ident)["status"], "REVIEW")
+
     def test_authored_nine_shots_rebuilds_only_contaminated_legacy_scene_and_resumes(self):
         script = ("Video 15 giây\n\n"
                   "Cảnh 1 (0–5 giây): Mèo bước tới hộp. Camera tiến nhẹ.\n\n"
