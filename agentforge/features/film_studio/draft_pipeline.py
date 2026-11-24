@@ -690,7 +690,7 @@ def _write_planned_board(job, bindings):
             if "creative_shot" in shot:
                 request["camera"] = [shot["creative_camera"], *request["camera"]]
                 request["beat"].update(assigned_text=shot["action"][:900],
-                                       continued_action=shot["segment"] > 1,
+                                       continued_action=shot["continued_action"],
                                        creative_shot=shot["creative_shot"],
                                        segment=shot["segment"], segment_count=shot["segment_count"])
             source = request["beat"]["assigned_text"]
@@ -1141,6 +1141,13 @@ def _dispatch_guard(job):
     return model_hub.studio_dispatch(moving=moving, validate=validate)
 
 
+def _validate_creative_frames(job):
+    if job.get("duration_plan", {}).get("creative_plan"):
+        scenes = job["board"]["scenes"]
+        if [scene["frames"] for scene in scenes] != _storyboard_layout(job, len(scenes)):
+            raise ValueError("Số frame storyboard không khớp timeline đã duyệt.")
+
+
 def _work(job, slot):
     global ACTIVE
     image_profile = None
@@ -1169,10 +1176,7 @@ def _work(job, slot):
             if "storyboard_version" in job and (
                     job["approved_storyboard_sha"] != draft_timeline.digest(job)):
                 raise ValueError("Storyboard đã thay đổi. Cần Owner duyệt lại.")
-            if job.get("duration_plan", {}).get("creative_plan"):
-                scenes = job["board"]["scenes"]
-                if [scene["frames"] for scene in scenes] != _storyboard_layout(job, len(scenes)):
-                    raise ValueError("Số frame storyboard không khớp timeline đã duyệt.")
+            _validate_creative_frames(job)
             if moving:
                 motion, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
                 motion_profile = motion.bind(bindings["film.motion"])
@@ -1400,6 +1404,7 @@ def _storyboard_action(job, action, data):
     if action == "storyboard-approve":
         if job["status"] != "STORYBOARD_REVIEW":
             raise ValueError("Storyboard không chờ duyệt.")
+        _validate_creative_frames(job)
         ops_control.require_active()
         revision, bindings, identity_revision = _studio_bindings(job)
         if job["brief"].get("mode") == "motion":

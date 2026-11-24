@@ -40,3 +40,13 @@ class CreativePlanTests(unittest.TestCase):
             compiled_shots(plan, output)
         with self.assertRaisesRegex(ValueError, "cấu trúc"):
             propose_scene(scene, [], output.fps, lambda *_: {"unexpected": []})
+
+    def test_segments_in_one_angle_do_not_replay_the_full_action_list(self):
+        scene = {"scene": 1, "source_range": [0, 20], "frames": 96, "actions": ["recoil", "touch ball"]}
+        shot = {"actions": ["A01", "A02"], "seconds": 4, "camera": "static", "intent": "show the reaction"}
+        output = MotionOutput(24, 49, (512, 288))
+        plan = compile_plan([scene], [[shot]], output)
+        segments = compiled_shots(plan, output)
+        self.assertEqual([item["action"] for item in segments], ["recoil", "touch ball"])
+        self.assertEqual([item["continued_action"] for item in segments], [False, False])
+        self.assertEqual([item["creative_shot"] for item in segments], [1, 1])

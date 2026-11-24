@@ -79,13 +79,18 @@ def compiled_shots(plan, output):
         start = len(result)
         for index, shot in enumerate(scene["creative_shots"], 1):
             actions = [scene["actions"][int(key[1:])-1] for key in shot["actions"]]
+            count = len(shot["segments"])
             for segment_index, segment in enumerate(shot["segments"], 1):
                 frames = segment["frames"]
+                first = (segment_index - 1) * len(actions) // count
+                end = max(first + 1, segment_index * len(actions) // count)
+                continues = segment_index > 1 and (segment_index - 2) * len(actions) // count == first
                 result.append({"content_scene": scene["scene"], "script_range": scene["source_range"],
                                "content_shot": len(result)-start+1, "script_shot_frames": frames,
-                               "suggested_seconds": frames / output.fps, "action": " ".join(actions),
+                               "suggested_seconds": frames / output.fps, "action": " ".join(actions[first:end]),
                                "reason": shot["intent"], "creative_shot": index, "segment": segment_index,
-                               "segment_count": len(shot["segments"]), "creative_camera": shot["camera"]})
+                               "segment_count": count, "continued_action": continues,
+                               "creative_camera": shot["camera"]})
         for item in result[start:]:
             item["content_shot_count"] = len(result) - start
     return result
