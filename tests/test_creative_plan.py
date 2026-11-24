@@ -33,6 +33,16 @@ class CreativePlanTests(unittest.TestCase):
                                         lambda *_: {"shots": [{**shot, "actions": actions}]})
                 compile_plan([scene], [invalid], output)
 
+    def test_even_complete_omission_gets_only_one_revision(self):
+        scene = {"frames": 120, "actions": ["open", "react"]}
+        for shots in ([], [{"actions": []}], [{"actions": ["A01"]}]):
+            with self.subTest(shots=shots):
+                infer = Mock(return_value={"shots": shots})
+                with self.assertRaises(ValueError):
+                    propose_scene(scene, [], 24, infer)
+                self.assertEqual(infer.call_count, 2)
+                self.assertEqual(infer.call_args.args[1]["required_sequence"], ["A01", "A02"])
+
     def test_unequal_creative_shots_fit_runtime_without_reordering_actions(self):
         scenes = [{"frames": 120, "actions": ["approach", "stop"]},
                   {"frames": 120, "actions": ["open", "react"]}]

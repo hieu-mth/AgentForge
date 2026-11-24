@@ -126,12 +126,11 @@ def propose_scene(scene, global_constraints, fps, infer):
         if not isinstance(result, dict) or result.keys() != {"shots"} or not isinstance(result["shots"], list):
             raise ValueError("AI trả cấu trúc kế hoạch góc quay không hợp lệ.")
         shots = result["shots"]
-        if not 1 <= len(shots) <= 16 or any(
-                not isinstance(item, dict) or not isinstance(item.get("actions"), list)
-                or not item["actions"] for item in shots):
-            raise ValueError("Mỗi góc quay cần ít nhất một hành động.")
+        if len(shots) > 16 or any(
+                not isinstance(item, dict) or not isinstance(item.get("actions"), list) for item in shots):
+            raise ValueError("Cấu trúc danh sách hành động không hợp lệ.")
         sequence = [action for item in shots for action in item["actions"]]
-        if sequence == list(actions):
+        if sequence == list(actions) and all(item["actions"] for item in shots):
             return shots
         if attempt == 0:
             instructions += " Revise the previous shots, including framing and pacing, to cover the required sequence."
