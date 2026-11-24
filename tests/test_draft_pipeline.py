@@ -1209,6 +1209,78 @@ class DraftTests(unittest.TestCase):
             self.assertEqual(scene["motion_sha"], "verified")
             submit.assert_not_called()
 
+    def test_confirmed_motion_retry_replaces_only_the_failed_attempt(self):
+        runner = draft_motion
+        old_id, new_id = "a"*32, "b"*32
+        scene = {"motion_job": old_id, "job_id": "image", "asset": "image-sha", "description": "A cat"}
+        row = {"state": "FAILED", "film_slug": "film", "shot_id": "sh-00003", "plan_sha": "plan"}
+        prepared = ("film", "plan", self.root/"graph.json", "sha")
+        with (patch.object(runner.motion_verify, "_job", return_value=row),
+              patch.object(runner, "_provider") as provider,
+              patch.object(runner.motion_verify, "inspect_receipt", return_value={"clip_sha256": "clip"}),
+              patch.object(runner.motion_comfy, "submit_shot",
+                           side_effect=lambda **args: args["on_reserved"](new_id)) as submit):
+            runner.run_shot(scene, 2, prepared, {"motion_encoder": "encoder"}, lambda: None,
+                            lambda: False, retry_motion_job=old_id)
+            self.assertIs(submit.call_args.kwargs["confirm_new_attempt"], True)
+            self.assertEqual(submit.call_args.kwargs["image_job"], "image")
+            self.assertEqual(scene["motion_job"], new_id)
+            self.assertEqual(scene["motion_sha"], "clip")
+            provider.assert_called_once()
+            row["state"] = "SUBMITTING"
+            with self.assertRaises(ValueError):
+                runner.retryable_motion_job(old_id)
+
+    def test_resume_requires_confirmation_bound_to_the_failed_motion_checkpoint(self):
+        attempt = "a"*32
+        draft._save({"id": self.ident, "status": "FAILED", "stage": "MOTION",
+                     "brief": self.brief, "failed_scene": 2, "board": {"scenes": [
+                         {"motion_job": "b"*32, "motion_sha": "verified"}, {"motion_job": attempt}]}})
+        with (patch.object(draft, "_studio_bindings"),
+              patch.object(draft, "_start", side_effect=lambda job, slot, _: slot.__exit__(None, None, None)) as start,
+              patch.object(draft_motion, "retryable_motion_job") as eligible):
+            with self.assertRaises(ValueError):
+                draft.act(self.ident, "resume", {"retry_motion_job": "b"*32})
+            start.assert_not_called()
+            eligible.assert_not_called()
+            draft.act(self.ident, "resume", {"retry_motion_job": attempt})
+            eligible.assert_called_once_with(attempt)
+            self.assertEqual(start.call_args.args[2], attempt)
+
+    def test_motion_interrupt_reports_resource_reason_and_targets_only_its_prompt(self):
+        runner = draft_motion
+        provider = str(uuid4())
+        with (patch.object(runner.motion_verify, "_job", return_value={"provider_id": provider}),
+              patch.object(runner.motion_comfy, "job_status", side_effect=[
+                  {"status": "PROVIDER_QUEUED_OR_UNKNOWN"},
+                  {"status": "PROVIDER_QUEUED_OR_UNKNOWN"}, {"status": "PROVIDER_FAILED"}]),
+              patch.object(runner.draft_resources, "memory_snapshot", return_value={
+                  "ram_available": 5*1024**3, "commit_used": 38*1024**3, "commit_limit": 42*1024**3}),
+              patch.object(runner.comfy_service.comfyui, "request_image_bytes", side_effect=[
+                  json.dumps({"queue_pending": [], "queue_running": [[0, str(uuid4())]]}).encode(),
+                  json.dumps({"queue_pending": [], "queue_running": [[0, provider]]}).encode()]),
+              patch.object(runner.http.client, "HTTPConnection") as transport,
+              patch.object(runner.time, "sleep")):
+            transport.return_value.getresponse.return_value.status = 200
+            with self.assertRaisesRegex(ValueError, "commit headroom"):
+                runner._provider("b"*32, lambda: False)
+            transport.return_value.request.assert_called_once_with(
+                "POST", "/interrupt", body=json.dumps({"prompt_id": provider}),
+                headers={"Content-Type": "application/json"})
+
+    def test_motion_interrupt_transport_failure_requires_reconciliation(self):
+        runner = draft_motion
+        provider = str(uuid4())
+        queue = json.dumps({"queue_pending": [], "queue_running": [[0, provider]]}).encode()
+        with (patch.object(runner.motion_verify, "_job", return_value={"provider_id": provider}),
+              patch.object(runner.motion_comfy, "job_status", return_value={"status": "PROVIDER_QUEUED_OR_UNKNOWN"}),
+              patch.object(runner.comfy_service.comfyui, "request_image_bytes", return_value=queue),
+              patch.object(runner.http.client, "HTTPConnection") as transport):
+            transport.return_value.getresponse.side_effect = TimeoutError()
+            with self.assertRaises(runner.NeedsReconciliation):
+                runner._provider("b"*32, lambda: True)
+            transport.return_value.request.assert_called_once()
+
     def test_storyboard_rejects_unknown_cast_and_distributes_exact_duration(self):
         with self.assertRaisesRegex(ValueError, "unknown character"):
             draft._story(self.board(), 2, 7, {})

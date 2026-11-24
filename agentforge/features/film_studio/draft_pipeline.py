@@ -1168,7 +1168,7 @@ def _validate_creative_frames(job):
             raise ValueError("Số frame storyboard không khớp timeline đã duyệt.")
 
 
-def _work(job, slot):
+def _work(job, slot, retry_motion_job=None):
     global ACTIVE
     image_profile = None
     used_image = False
@@ -1233,9 +1233,11 @@ def _work(job, slot):
                 _resolve_job_motion(job, current_bindings.get("film.motion"), revision=identity_revision)
                 _activity(job, "MOTION", "motion", motion_profile, scene=index + 1)
                 try:
+                    retry = ({"retry_motion_job": retry_motion_job}
+                             if retry_motion_job is not None and scene.get("motion_job") == retry_motion_job else {})
                     motion.run_shot(scene, index, prepared, motion_profile,
                                     lambda: _save(job), lambda: _cancellation(job["id"]),
-                                    dispatch_guard=lambda: _dispatch_guard(job))
+                                    dispatch_guard=lambda: _dispatch_guard(job), **retry)
                 except studio_runtime.NeedsReconciliation:
                     raise
                 except Exception:
@@ -1288,7 +1290,7 @@ def _work(job, slot):
             _dispatch()
 
 
-def _start(job, slot):
+def _start(job, slot, retry_motion_job=None):
     global ACTIVE
     with comfy_service.LOCK:
         if _cancellation(job["id"]):
@@ -1304,7 +1306,8 @@ def _start(job, slot):
         snapshot = copy.deepcopy(job)
         ACTIVE = job["id"]
         try:
-            threading.Thread(target=_work, args=(job, slot), daemon=True).start()
+            retry = {"retry_motion_job": retry_motion_job} if retry_motion_job is not None else {}
+            threading.Thread(target=_work, args=(job, slot), kwargs=retry, daemon=True).start()
         except BaseException:
             ACTIVE = None
             raise
@@ -1576,7 +1579,7 @@ def act(ident, action, data):
                 _save(job)
         _dispatch()
         return job
-    if action == "resume" and _read(ident)["status"] == "QUEUED":
+    if action == "resume" and "retry_motion_job" not in data and _read(ident)["status"] == "QUEUED":
         started = _dispatch()
         return started if started and started["id"] == ident else _read(ident)
     slot = _worker_slot()
@@ -1618,7 +1621,22 @@ def act(ident, action, data):
                 raise ValueError("Resume the draft that is waiting for resources first")
         ops_control.require_active()
         _studio_bindings(job)
-        job = _start(job, slot)
+        retry_motion_job = None
+        if "retry_motion_job" in data:
+            scenes = job.get("board", {}).get("scenes", [])
+            index = job.get("failed_scene")
+            retry_motion_job = data["retry_motion_job"]
+            if (job["status"] not in {"FAILED", "WAITING_RESOURCES"} or job.get("stage") != "MOTION"
+                    or type(index) is not int or not 1 <= index <= len(scenes)
+                    or not isinstance(retry_motion_job, str)
+                    or scenes[index-1].get("motion_job") != retry_motion_job
+                    or scenes[index-1].get("motion_sha")):
+                raise ValueError("Checkpoint chuyển động đã thay đổi. Hãy tải lại trước khi thử lại.")
+            validate_retry = getattr(studio_runtime.motion_artifacts(job), "retryable_motion_job", None)
+            if validate_retry is None:
+                raise ValueError("Runtime chuyển động này chưa hỗ trợ xác nhận thử lại từ checkpoint.")
+            validate_retry(retry_motion_job)
+        job = (_start(job, slot, retry_motion_job) if retry_motion_job is not None else _start(job, slot))
         started = True
         return job
     finally:

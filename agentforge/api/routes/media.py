@@ -31,6 +31,8 @@ def handle(server, path, request, session=None):
         required = {"sha256"} if action in {"approve", "reject"} else (
             {"index", "description", "image_prompt"} if action == "edit" else storyboard.get(action, set()))
         optional = {"caption", "scene_notes"} if action in {"storyboard-edit", "storyboard-add"} else set()
+        if action == "resume":
+            optional = {"retry_motion_job"}
         if not required <= request.keys() <= required | optional:
             raise ValueError("Invalid draft action fields")
         if action in {"approve", "reject"}:

@@ -8,7 +8,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
 from agentforge.api import auth
-from agentforge.api.auth import COOKIE, SESSION_SECONDS
 from agentforge.api.static import _react_asset
 from agentforge.api.routes import read
 from agentforge.features.film_studio.draft_pipeline import DraftNotFound, DraftStoreUnavailable

@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 BANNED_DIRECTORIES = {".venv", "data", "workspace", "node_modules", "models",
                       "__pycache__", ".pytest_cache"}
 BANNED_EXTENSIONS = {
-    ".safetensors", ".ckpt", ".onnx", ".pth", ".pt",
+    ".safetensors", ".gguf", ".ckpt", ".onnx", ".pth", ".pt",
     ".p12", ".pfx", ".pem", ".key",
     ".sqlite3", ".db", ".mp4", ".mov", ".wav", ".mp3", ".zip",
 }

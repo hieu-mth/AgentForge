@@ -130,15 +130,21 @@ def _windows_processes():
     return result
 
 
-def snapshot():
+def memory_snapshot():
     memory = discovery._memory()
     commit_used, commit_limit = _windows_commit()
+    return {
+        "ram_total": memory["total_bytes"], "ram_available": memory["available_bytes"],
+        "commit_used": commit_used, "commit_limit": commit_limit,
+    }
+
+
+def snapshot():
+    memory = memory_snapshot()
     devices = discovery._gpu()["devices"]
     device = devices[0] if len(devices) == 1 else {}
     return {
-        "checked_at": datetime.now(timezone.utc).isoformat(),
-        "ram_total": memory["total_bytes"], "ram_available": memory["available_bytes"],
-        "commit_used": commit_used, "commit_limit": commit_limit,
+        "checked_at": datetime.now(timezone.utc).isoformat(), **memory,
         "vram_total_mib": device.get("vram_total_mib"), "vram_free_mib": device.get("vram_free_mib"),
         "processes": _windows_processes(),
     }
