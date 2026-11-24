@@ -594,6 +594,11 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(result["camera"], [])
         self.assertEqual(result["global_constraints"],
                          ["Giữ nhất quán căn phòng.", "AI tự quyết định góc máy.", "Không chữ."])
+        scene = draft._scene_beats(
+            "Cảnh 1 (0–5 giây): Mèo nằm bên cửa sổ. Ánh nắng buổi sáng chiếu nhẹ vào căn phòng. "
+            "Bướm bay qua trước mặt mèo.", last=False)
+        self.assertEqual(scene["actions"], ["Mèo nằm bên cửa sổ.", "Bướm bay qua trước mặt mèo."])
+        self.assertEqual(scene["constraints"], ["Ánh nắng buổi sáng chiếu nhẹ vào căn phòng."])
 
     def test_creative_production_review_edit_and_dispatch_use_persisted_segment_plan(self):
         profile = self.motion_profile()

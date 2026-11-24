@@ -568,7 +568,9 @@ _CAMERA = re.compile(r"(?:camera|máy quay|góc máy|khung hình|framing)\b", re
 _GLOBAL_CONSTRAINT = re.compile(
     r"(?:phong cách|ánh sáng|màu sắc|style|lighting|negative prompt|ràng buộc chung|"
     r"yêu cầu chung|không|ưu tiên|giữ nguyên|no)\b", re.I)
-_SCENE_CONSTRAINT = re.compile(r"(?:ràng buộc cảnh|yêu cầu cảnh|không đổi góc|scene constraints)\b", re.I)
+_SCENE_CONSTRAINT = re.compile(
+    r"(?:bối cảnh\s*:|(?:ràng buộc cảnh|yêu cầu cảnh|không đổi góc|scene constraints|"
+    r"ánh nắng(?:\s+(?:buổi sáng|buổi chiều|ban mai))?\s+chiếu)\b)", re.I)
 _GLOBAL_HEADING = re.compile(
     r"(?<!\w)\**(?:yêu cầu xuyên suốt|ràng buộc xuyên suốt|yêu cầu chung|"
     r"ràng buộc chung|global constraints|global requirements)\**\s*:\**\s*", re.I)
