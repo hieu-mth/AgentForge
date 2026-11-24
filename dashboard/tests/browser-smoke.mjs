@@ -446,8 +446,12 @@ try {
     return [item.right-rect.right,rect.top-item.top,rect.width,rect.height];
   });
   const cancelPosition=await draftActionPosition('Hủy tác vụ');
-  draftFixture={...draftFixture,status:'FAILED',worker_active:false,error:'Fixture runtime unavailable'};
+  draftFixture={...draftFixture,status:'FAILED',worker_active:false,error:'Fixture runtime unavailable',
+    duration_plan:{recommended_shot_count:9},storyboard_checkpoint:{shots:Array.from({length:7},()=>({}))}};
   await settings.getByText('Fixture runtime unavailable',{exact:true}).waitFor();
+  await draftProgress.getByText('7/9 shot storyboard đã lưu',{exact:true}).waitFor();
+  if(await draftProgress.getByRole('progressbar').count())
+    throw new Error('Partial storyboard showed a synthetic production percentage');
   const deletePosition=await draftActionPosition('Xóa bản nháp');
   if(cancelPosition.some((value,index)=>Math.abs(value-deletePosition[index])>1))
     throw new Error(`Draft controls do not align: cancel ${cancelPosition}; delete ${deletePosition}`);
