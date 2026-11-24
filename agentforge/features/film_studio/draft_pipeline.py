@@ -744,8 +744,9 @@ def _write_planned_board(job, bindings):
 
 def _select_cast(job, bindings, outline):
     selector = bindings.get("character.select", bindings["film.storyboard"])
+    rows = characters.list_characters()["characters"][:10]
     candidates = {row["id"]: {"name": row["name"], "appearance": row["appearance"][:220]}
-                  for row in characters.list_characters()["characters"][:10]}
+                  for row in rows}
     if not candidates:
         return {}
     comfy = bindings["image.generate"]
@@ -758,7 +759,9 @@ def _select_cast(job, bindings, outline):
     ids = selection["ids"]
     if not isinstance(ids, list) or len(ids) > 2 or any(not isinstance(x, str) or x not in candidates for x in ids):
         raise ValueError("Invalid character selection")
-    return {key: candidates[key] for key in ids}
+    versions = {row["id"]: row["version"] for row in rows if type(row.get("version")) is int}
+    return {key: {**candidates[key], **({"reference_version": versions[key]} if key in versions else {})}
+            for key in ids}
 
 
 def _write_board(job, bindings):

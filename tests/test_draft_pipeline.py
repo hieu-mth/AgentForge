@@ -113,10 +113,10 @@ class DraftTests(unittest.TestCase):
         job = {"id": self.ident, "brief": {**self.brief, "mode": "motion"},
                "studio_plan": studio_runtime.routing_identity(bindings, moving=True)}
         with (patch.object(draft.characters, "list_characters", return_value={
-                  "characters": [{"id": "cat", "name": "Miu", "appearance": "Orange cat"}]}),
+                  "characters": [{"id": "cat", "name": "Miu", "appearance": "Orange cat", "version": 3}]}),
               patch.object(draft, "_activity"), patch.object(draft, "_measured", return_value=nullcontext()),
               patch.object(draft, "_ask", return_value={"ids": ["cat"]}) as ask):
-            self.assertIn("cat", draft._select_cast(job, bindings, "A cat"))
+            self.assertEqual(draft._select_cast(job, bindings, "A cat")["cat"]["reference_version"], 3)
             self.assertEqual(ask.call_args.args[0]["id"], "owner_story")
             policy = draft.model_hub.orchestrator_policy.defaults()
             policy.update(permissions=dict.fromkeys(policy["permissions"], True), tools=["ffmpeg"],
