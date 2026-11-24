@@ -25,6 +25,9 @@ export function ProductionProgress({job,starting,labels,warnings}){
   const status=job?.status;
   const a=job?.activity;
   const authored=Boolean(job?.duration_plan?.content_scene_count);
+  const planned=job?.duration_plan?.recommended_shot_count;
+  const savedShots=job?.storyboard_checkpoint?.shots?.length??0;
+  const pendingStoryboard=!job?.board&&Number.isInteger(planned)&&planned>0;
   const groups=groupDraftScenes(job);
   const complete=scene=>Boolean(p.moving?scene.motion_sha:scene.asset);
   const completedScenes=groups.filter(group=>group.shots.every(({scene})=>complete(scene))).length;
@@ -77,8 +80,10 @@ export function ProductionProgress({job,starting,labels,warnings}){
         p.verified?'success':status==='FAILED'?'error':p.active?'processing':'default'}>{labels[status]??status}</Tag>}
     </header>
     <div className="production-overall" role="status">
-      <strong>{title}</strong><Progress percent={p.percent} format={value=>value+'%'}
-        status={status==='FAILED'?'exception':p.verified?'success':'normal'}/>
+      <strong>{title}</strong>{pendingStoryboard
+        ?<div className="production-meta">{savedShots}/{planned} shot storyboard đã lưu</div>
+        :<Progress percent={p.percent} format={value=>value+'%'}
+          status={status==='FAILED'?'exception':p.verified?'success':'normal'}/>}
       {job?.stage==='MOTION'&&!authored&&<small>{p.clips}/{p.total} clip đã xác minh</small>}
       {job?.error&&<p className="production-error"><ExclamationCircleOutlined/> {warnings[job.error]??job.error}</p>}
       {a?.model&&<div className="production-meta">{a.provider==='ollama'?'Ollama':a.provider==='comfyui'?'ComfyUI':a.provider} · {a.model}</div>}
