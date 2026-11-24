@@ -494,7 +494,9 @@ try {
   await settings.locator('.studio-drafts-list').getByRole('button',{name:'Làm mới',exact:false}).click();
   await draftProgress.locator('.production-header').getByText('Storyboard chờ duyệt',{exact:true}).waitFor();
   async function checkDraftIconsAligned(row, labels){
-    const bounds=await Promise.all(labels.map(name=>row.getByRole('button',{name,exact:true}).evaluate(button=>{
+    const bounds=await row.evaluate((element,names)=>names.map(name=>{
+      const button=[...element.querySelectorAll('button')].find(item=>item.getAttribute('aria-label')===name);
+      if(!button)throw new Error('Missing draft action: '+name);
       const svg=button.querySelector('svg');
       const paths=[...svg.querySelectorAll('path')];
       const glyph=paths[0].getBoundingClientRect();
@@ -507,7 +509,7 @@ try {
       const box=button.getBoundingClientRect();
       return {middle:glyph.top+glyph.height/2,height:glyph.height,intact,buttonTop:box.top,
         iconTop:button.querySelector('.ant-btn-icon').getBoundingClientRect().top};
-    })));
+    }),labels);
     if(bounds.some(glyph=>!glyph.intact)||Math.abs(bounds[0].middle-bounds[1].middle)>0.75||
       Math.abs(bounds[0].height-bounds[1].height)>1.1)
       throw new Error(`Draft icons differ in alignment or visible height: ${JSON.stringify(bounds)}`);
