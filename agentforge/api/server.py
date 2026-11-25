@@ -123,7 +123,9 @@ class _Handler(BaseHTTPRequestHandler):
             return self._blocked(error="invalid_fetch_site")
         path = urlsplit(self.path).path
         try:
-            data = self._read_json(256 * 1024 if path == "/api/film/drafts/start" else MAX_BODY)
+            limits = {"/api/film/drafts/start": 256 * 1024,
+                      "/api/characters/references/save": 3 * 1024 * 1024}
+            data = self._read_json(limits.get(path, MAX_BODY))
         except (UnicodeError, json.JSONDecodeError, ValueError):
             return self._blocked(400, "bad_json")
         if path == "/api/login":

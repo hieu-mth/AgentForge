@@ -58,6 +58,15 @@ def dispatch(self, route):
     if route == "/api/characters":
         from agentforge.features.film_studio.characters import list_characters
         return self._reply(200, list_characters())
+    if route.startswith("/api/characters/"):
+        from agentforge.features.film_studio import character_references
+        parts = route.split("/")
+        if len(parts) == 5 and parts[4] == "references":
+            return self._reply(200, character_references.list_packs(parts[3]))
+        if len(parts) == 7 and parts[4] == "references" and parts[5].isascii() and parts[5].isdecimal():
+            payload, mime = character_references.image_bytes(parts[3], int(parts[5]), parts[6])
+            return self._reply(200, payload, mime=mime)
+        raise ValueError("Invalid character reference route")
     if route == "/api/session":
         session = self._session()
         return self._reply(200, {
