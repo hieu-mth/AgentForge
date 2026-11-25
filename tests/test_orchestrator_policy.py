@@ -140,7 +140,8 @@ class OrchestratorTests(unittest.TestCase):
                   "permissions": {**legacy["permissions"], "plan": True}, "tools": ["ffmpeg"]}
         result = self.save(active, revision=2)
         saved = result["orchestrator"]["policy"]
-        self.assertEqual(saved, active)
+        self.assertEqual(saved, {**active, "cloud_call_limit": policy.defaults()["cloud_call_limit"],
+                                 "permissions": {**active["permissions"], "call_cloud": False}})
         self.assertTrue(saved["permissions"]["plan"])
         self.assertEqual(saved["tools"], ["ffmpeg"])
         self.assertEqual(next(row for row in result["routes"] if row["id"] == "general.text")["model_ref"],

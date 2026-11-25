@@ -395,7 +395,7 @@ class DraftTests(unittest.TestCase):
                            "base_url": "http://127.0.0.1:11434"}
                 self.assertEqual(draft._ask(profile, "Plan", {}, {}, None), {"ready": True})
                 self.assertEqual(call.call_args.kwargs["payload"]["model"], name)
-            with self.assertRaisesRegex(ValueError, "supported local text"):
+            with self.assertRaisesRegex(ValueError, "supported text API or local runtime"):
                 draft._ask({"provider": "unsupported"}, "Plan", {}, {}, None)
             self.assertEqual(call.call_count, 2)
         self.assertIs(studio_runtime.image_adapter(flux_profile()), studio_flux)
@@ -883,7 +883,7 @@ class DraftTests(unittest.TestCase):
             **self.brief, "idea": source}}
         provider = {"provider":"ollama", "model":"fixture"}
         excerpts = []
-        def respond(profile, instructions, data, schema, comfy):
+        def respond(profile, instructions, data, schema, comfy, **kwargs):
             if "excerpt" in data:
                 excerpts.append(data["excerpt"])
                 self.assertLessEqual(len(data["excerpt"]), 900)

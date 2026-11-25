@@ -226,7 +226,10 @@ def _ask(profile, instructions, data, schema, comfy_profile, *, cpu_only=False, 
             raise PermissionError("Cloud inference requires a production context.")
         if _cancellation(job["id"]):
             raise DraftCancelled
-        limit = model_hub.cloud_call_limit(profile)
+        limit = model_hub.cloud_call_limit(
+            profile, moving=job["brief"].get("mode") == "motion",
+            planning=bool(job.get("deferred_media_binding")),
+            validate=lambda revision, bindings: _check_studio_routing(job, revision, bindings))
         # Reserve before sending. Failed or uncertain requests count, including resume.
         limit = min(limit, job.get("cloud_call_limit", limit))
         used = job.get("cloud_calls", 0)
@@ -1214,9 +1217,11 @@ def _work(job, slot, retry_motion_job=None):
         moving = job["brief"].get("mode") == "motion"
         reviewing = "storyboard_version" in job and not job.get("approved_storyboard_sha")
         revision, bindings, identity_revision = _studio_bindings(job)
-        cloud_only = (reviewing and job.get("deferred_media_binding")
+        cloud_only = (reviewing and job.get("deferred_media_binding") and bool(bindings)
                       and all(profile.get("provider") in {"openai", "anthropic"} for profile in bindings.values()))
         with (nullcontext() if cloud_only else model_hub.local_inference_slot()):
+            if not cloud_only:
+                revision, bindings, identity_revision = _studio_bindings(job)
             if reviewing:
                 if not job.get("deferred_media_binding"):
                     if moving:

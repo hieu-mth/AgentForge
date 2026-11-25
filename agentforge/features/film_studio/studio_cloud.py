@@ -83,11 +83,11 @@ def readiness(profile):
         return "AUTH_REQUIRED"
 
 
-def infer_structured(profile, instructions, data, schema, *, cpu_only=False, extended_plan=False):
+def infer_structured(profile, instructions, data, schema, *, cpu_only=False, extended_plan=False, max_output_tokens=None):
     # Local placement flags deliberately have no effect on cloud inference.
     system = instructions + "\nReturn ONLY a JSON object matching this schema, no markdown:\n" + json.dumps(schema, ensure_ascii=False)
     user = json.dumps(data, ensure_ascii=False)
-    limit = 5200 if extended_plan else 2600
+    limit = max_output_tokens if max_output_tokens is not None else (5200 if extended_plan else 2600)
     if profile["provider"] == "anthropic":
         result = _request(profile, "POST", "/messages", {
             "model": profile["model"], "max_tokens": limit, "system": system,
@@ -121,7 +121,7 @@ def infer_structured(profile, instructions, data, schema, *, cpu_only=False, ext
 def probe(profile):
     value = infer_structured(profile, "Return the JSON object {\"ready\":true}.",
                              {}, {"type": "object", "required": ["ready"],
-                                  "properties": {"ready": {"type": "boolean"}}})
-    if value != {"ready": True}:
+                                  "properties": {"ready": {"type": "boolean"}}}, max_output_tokens=64)
+    if value.keys() != {"ready"} or value["ready"] is not True:
         raise CloudRequestError("INVALID_STRUCTURED_RESPONSE")
     return {"status": "PASS_RUNTIME", "inference_verified": True}

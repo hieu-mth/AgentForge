@@ -149,7 +149,7 @@ class ModelHubTests(unittest.TestCase):
                 self.assertEqual(check(ollama, "film.storyboard")["status"], "METADATA_COMPATIBLE")
             self.assertEqual(db.read_bytes(), before)
 
-    def test_disabled_and_cloud_preflight_do_not_probe_providers(self):
+    def test_disabled_and_missing_cloud_credentials_do_not_probe_providers(self):
         with tempfile.TemporaryDirectory() as folder:
             db = Path(folder) / "hub.sqlite3"
             profiles = (
@@ -160,7 +160,9 @@ class ModelHubTests(unittest.TestCase):
             )
             for revision, profile in enumerate(profiles):
                 model_hub.change("SAVE_MODEL_PROFILE", expected_revision=revision, db_path=db, profile=profile)
-            with patch.object(model_hub, "_check_ollama", side_effect=AssertionError("unexpected probe")):
+            with (patch.object(model_hub, "_check_ollama", side_effect=AssertionError("unexpected probe")),
+                  patch.dict("os.environ", {"ANTHROPIC_AUTH_TOKEN": "", "ANTHROPIC_BASE_URL": ""}),
+                  patch("http.client.HTTPSConnection", side_effect=AssertionError("unexpected HTTPS"))):
                 disabled, cloud = [model_hub.capability_readiness(
                     profile["id"], "general.text", expected_revision=2, db_path=db) for profile in profiles]
             self.assertEqual((disabled["status"], disabled["reason"]), ("NOT_CHECKED", "DISABLED"))
@@ -215,7 +217,7 @@ class ModelHubTests(unittest.TestCase):
                                      db_path=db, profile=profile)
                     with self.assertRaises(model_hub.ModelConfigError):
                         model_hub.validate_profile({**profile, "api_key": "secret"})
-            self.assertEqual(len(model_hub.catalog(db_path=db)["profiles"]), 3)
+            self.assertEqual(len(model_hub.catalog(db_path=db)["profiles"]), 4)
             with self.assertRaises(model_hub.ModelConfigError):
                 model_hub.validate_profile({**profile, "api_key_env": "Bearer actual-key"})
 

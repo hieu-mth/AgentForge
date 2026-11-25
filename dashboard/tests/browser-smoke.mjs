@@ -883,7 +883,7 @@ try {
     const cloud=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
     if(cloud.profiles[0]?.has_api_key!==true||JSON.stringify(cloud).includes(fixtureKey))
       throw new Error('Direct Cloud registration failed or exposed the key');
-    await settings.getByText('Chưa xác minh kết nối',{exact:true}).waitFor();
+    await settings.getByText('Chưa kiểm tra',{exact:true}).first().waitFor();
     await settings.getByText('Đã lưu hồ sơ model',{exact:true}).waitFor();
   }
   const concurrent=await browser.newContext();

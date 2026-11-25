@@ -662,19 +662,14 @@ def probe_cloud_profile(profile_id, *, expected_revision, db_path=None):
             "checked_at": datetime.now(timezone.utc).isoformat()}
 
 
-def cloud_call_limit(profile, *, db_path=None):
-    """Recheck current permission and selected profile before each cloud dispatch."""
-    _, state = _read_state(db_path=db_path)
-    policy = _active_policy(state)
-    permissions = policy["permissions"]
-    if policy["mode"] == "MANUAL" or not all(permissions[key] for key in ("plan", "assign_local", "call_cloud")):
-        raise PermissionError("Chưa cấp quyền gọi AI cloud.")
-    if _profiles(state=state).get(profile["id"]) != profile:
-        raise ModelConfigError("Hồ sơ cloud đã thay đổi.")
-    assigned = {state["routes"].get(key, policy["mappings"].get(key)) for key in PLANNING_CAPABILITIES}
-    if profile["id"] not in assigned:
-        raise ModelConfigError("Hồ sơ cloud chưa được phân công.")
-    return policy["cloud_call_limit"]
+def cloud_call_limit(profile, *, moving, planning, validate, db_path=None):
+    """Check permission and pinned routes against one snapshot before each dispatch."""
+    revision, state = _read_state(db_path=db_path)
+    bindings = _draft_bindings(state, moving=moving, planning=planning)
+    validate(revision, bindings)
+    if not any(bindings.get(key) == profile for key in PLANNING_CAPABILITIES):
+        raise ModelConfigError("Hồ sơ cloud không khớp phân công.")
+    return _active_policy(state)["cloud_call_limit"]
 
 
 def probe_local_profile(profile_id, *, expected_revision, db_path=None):

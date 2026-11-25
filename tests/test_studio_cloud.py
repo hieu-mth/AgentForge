@@ -66,3 +66,30 @@ class CloudTextTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "ngân sách"):
                     draft._ask(profile, "Test", {}, {}, None, job=saved)
             self.assertFalse(policy["permissions"]["call_local"])
+            policy["permissions"]["call_cloud"] = False
+            model_hub.change("SAVE_ORCHESTRATOR", expected_revision=2, policy=policy, route_changes={})
+            with patch.object(studio_cloud, "infer_structured", side_effect=AssertionError("revoked permission")):
+                with self.assertRaises(PermissionError):
+                    draft._ask(profile, "Test", {}, {}, None, job=saved)
+
+    def test_cloud_metadata_uses_https_without_post_or_redirect(self):
+        with (patch.dict(os.environ, {"TEST_API_BASE": "https://example.test/v1", "TEST_API_KEY": "fixture-key"}),
+              patch("http.client.HTTPSConnection") as connection):
+            response = connection.return_value.getresponse.return_value
+            response.status = 200
+            response.read.return_value = b'{"id":"fixture/model"}'
+            self.assertEqual(studio_cloud.readiness(self.profile()), "READY")
+            self.assertEqual(connection.return_value.request.call_args.args[:2],
+                             ("GET", "/v1/models/fixture%2Fmodel"))
+            self.assertEqual(connection.return_value.request.call_args.kwargs["headers"]["Authorization"],
+                             "Bearer fixture-key")
+            response.status = 302
+            self.assertEqual(studio_cloud.readiness(self.profile()), "HTTP_302")
+            self.assertEqual(connection.return_value.request.call_count, 2)
+
+    @unittest.skipUnless(os.name == "nt", "Windows DPAPI")
+    def test_direct_key_roundtrip(self):
+        from agentforge.ai import cloud_credentials
+        value = cloud_credentials.protect_api_key("fixture-key")
+        self.assertNotEqual(value, "fixture-key")
+        self.assertEqual(cloud_credentials.unprotect_api_key(value), "fixture-key")
