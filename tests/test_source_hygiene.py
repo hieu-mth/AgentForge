@@ -18,7 +18,7 @@ class SourceHygieneTests(unittest.TestCase):
         for path in banned:
             with self.subTest(path=path):
                 self.assertTrue(forbidden_path(path))
-        for path in ["agentforge/api/server.py", "docs/README.md",
+        for path in ["agentforge/api/server.py", "docs/ARCHITECTURE.md",
                      "agentforge/ai/orchestrator_policy.py", ".env.example",
                      "dashboard/src/App.jsx"]:
             with self.subTest(path=path):

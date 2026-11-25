@@ -58,9 +58,9 @@ class OrchestratorTests(unittest.TestCase):
                     "planner": {"provider": "ollama", "enabled": True},
                     "painter": flux_profile()}
         settings = {**policy.defaults(), "permissions": dict.fromkeys(policy.defaults()["permissions"], True),
-                    "tools": ["ffmpeg"], "mappings": {"film.motion": "custom_motion_id"}}
+                    "tools": ["ffmpeg"]}
         state = {"routes": {"general.text": "planner", "film.storyboard": "planner",
-                            "image.generate": "painter"}, "orchestrator": settings}
+                            "image.generate": "painter", "film.motion": "custom_motion_id"}, "orchestrator": settings}
         with (patch.object(model_hub, "_read_state", return_value=(20, state)),
               patch.object(model_hub, "_profiles", return_value=profiles)):
             revision, bindings = model_hub.draft_routes(db_path=self.db)
@@ -108,6 +108,7 @@ class OrchestratorTests(unittest.TestCase):
         old_state = {"profiles": {}, "routes": {}, "orchestrator": old_policy}
         with closing(sqlite3.connect(self.db)) as conn, conn:
             conn.execute("UPDATE hub_state SET payload=?", (json.dumps(old_state),))
+            conn.execute("UPDATE hub_history SET payload=? WHERE revision=1", (json.dumps(old_state),))
         current = model_hub.catalog(db_path=self.db)
         self.assertEqual(current["revision"], 1)
         self.assertEqual(current["orchestrator"]["policy"], policy.defaults())

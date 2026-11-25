@@ -54,8 +54,8 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
   const runTools=Form.useWatch(['permissions','run_tools'],form)??policy.permissions.run_tools;
   const profiles=snapshot.profiles;
   const options=profiles.filter(p=>p.enabled).map(p=>({value:p.id,label:p.id+' · '+p.model}));
-  const initial={mode:policy.mode==='MANUAL'?'MANUAL':'SUPERVISED',
-    permissions:policy.permissions,tools:policy.tools.filter(tool=>tool==='ffmpeg'),
+  const initial={mode:policy.mode,
+    permissions:policy.permissions,tools:policy.tools,
     bindings:Object.fromEntries(capabilities.filter(row=>!row.tool&&row.kind!=='vision')
       .map(row=>[row.id,row.model_ref??unset]))};
 
@@ -71,7 +71,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
     modal.confirm({
       title:reset?'Đặt lại chính sách điều phối?':'Lưu chính sách điều phối?',
       content:reset?'Chính sách và các mapping điều phối sẽ trở về mặc định.':
-        'Áp dụng quyền thực thi và model đã gán cho Studio. Các tùy chọn cũ không còn được hỗ trợ sẽ trở về mặc định; dữ liệu lịch sử vẫn được giữ.',
+        'Áp dụng quyền thực thi và model đã gán cho Studio. Chỉ lưu các quyền và phân công hiện hành; dữ liệu lịch sử vẫn được giữ.',
       okText:reset?'Đặt lại':'Lưu cấu hình',cancelText:'Hủy',
       onOk:async()=>{
         setSaving(true);
