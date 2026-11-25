@@ -378,6 +378,13 @@ export function StudioDrafts({mutate,onCharacters}) {
       onApprove={()=>run('/'+reviewing.id+'/storyboard-approve',{sha256:reviewing.storyboard_sha},()=>setStoryboardId(null))}
       onEdit={canEdit?(index,scene)=>setEditor({job:reviewing,index,scene}):null}
       onRewrite={canEdit?(index,scene)=>setEditor({job:reviewing,index,scene,rewrite:true}):null}
+      onRegenerate={canEdit&&reviewing.status==='REVIEW'&&reviewing.video_sha?(index,scope)=>modal.confirm({
+        title:'Tạo lại cảnh '+(index+1)+'?',
+        content:scope==='motion'?'Giữ ảnh và các cảnh khác; chỉ làm lại chuyển động cảnh này. Cần duyệt storyboard mới trước khi chạy.':
+          'Tạo lại ảnh và chuyển động phụ thuộc (nếu có). Giữ các cảnh khác và phiên bản cũ. Cần duyệt storyboard mới trước khi chạy.',
+        okText:'Tạo phiên bản mới',cancelText:'Để sau',
+        onOk:()=>storyboard(reviewing,'regenerate',{index,scope}),
+      }):null}
       onMove={canChangeLayout?(index,target)=>storyboard(reviewing,'move',{index,target}):null}
       onRemove={canChangeLayout&&sceneCount>minScenes?index=>storyboard(reviewing,'remove',{index}):null}
       onAdd={canChangeLayout&&sceneCount<maxScenes?()=>setEditor({job:reviewing,adding:true,index:sceneCount,scene:{}}):null}

@@ -20,6 +20,7 @@ def handle(server, path, request, session=None):
             "storyboard-remove": {"sha256", "index"},
             "storyboard-move": {"sha256", "index", "target"},
             "storyboard-rewrite": {"sha256", "index", "feedback"},
+            "storyboard-regenerate": {"sha256", "index", "scope"},
             "storyboard-duration": {"sha256", "seconds"},
         }
         if len(parts) != 6 or parts[5] not in {"approve", "reject", "edit", "resume", "cancel", "delete", *storyboard}:

@@ -7,7 +7,7 @@ import {groupDraftScenes} from './studioScenes.js';
 import {MAX_STUDIO_SECONDS} from './studioDuration.js';
 import './storyboard-review.css';
 
-export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewrite,onAdd,onMove,onRemove,onPreview,onDuration}){
+export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewrite,onAdd,onMove,onRemove,onPreview,onDuration,onRegenerate}){
   const [shot,setShot]=useState(null);
   const [seconds,setSeconds]=useState(null);
   const [view,setView]=useState('scenes');
@@ -106,6 +106,8 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
           {onMove&&index>0&&<Button disabled={busy} onClick={()=>onMove(index,index-1)}>Đưa lên</Button>}
           {onMove&&index+1<scenes.length&&<Button disabled={busy} onClick={()=>onMove(index,index+1)}>Đưa xuống</Button>}
           {onRemove&&<Button danger disabled={busy} onClick={()=>onRemove(index)}>Bỏ cảnh</Button>}
+          {onRegenerate&&scene.asset&&<Button disabled={busy} onClick={()=>onRegenerate(index,'image')}>Tạo lại ảnh{job.brief.mode==='motion'?' và chuyển động':''}</Button>}
+          {onRegenerate&&scene.motion_sha&&job.brief.mode==='motion'&&<Button disabled={busy} onClick={()=>onRegenerate(index,'motion')}>Tạo lại chuyển động</Button>}
           {scene.motion_sha&&<Button onClick={()=>onPreview(index,scene.motion_sha)}>Xem chuyển động</Button>}
         </Space>
       </article>}
