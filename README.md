@@ -20,6 +20,7 @@ Mở http://127.0.0.1:8780/dashboard/ và đăng nhập bằng mã Owner đượ
 - [Phát triển và CI](docs/DEVELOPMENT.md)
 - [Cấu trúc nền tảng](docs/architecture/REPOSITORY_STRUCTURE.md)
 - [Film Studio](docs/architecture/LONG_FORM_AI_FILM_STUDIO.md)
+- [Creative Director và giới hạn nghiệm thu](docs/verification/STUDIO_CREATIVE_DIRECTOR.md)
 - [Motion ComfyUI 12 GiB](docs/verification/MOTION.md)
 - [Production/FFmpeg](docs/verification/PRODUCTION.md)
 - [Publishing handoff](docs/verification/PUBLISHING.md)

@@ -4,6 +4,10 @@ New motion drafts with authored scene headings and the current duration mode use
 
 The approval digest includes the compiled plan, the segment storyboard and the existing model and motion identity. On resume the stored plan is recompiled against the pinned output profile and the storyboard frame counts are rechecked. Editing segment text updates the storyboard digest and uses the existing asset invalidation rules. Authored scene boundaries and the creative segment layout stay fixed during segment edits. A new production is required to propose a different layout.
 
+## Planning repair and limitations
+
+Incomplete or out-of-order action coverage receives at most one contextual model revision; invalid coverage after that stops planning. Segment prompts distinguish prepare, progress and complete for continued actions. Exact duplicate descriptions or motion prompts receive bounded repair. These controls do not establish semantic or visual continuity.
+
 ## Video comparison
 
 On an executable rollback, leave version 1 drafts paused until the compatible build is restored. Older builds do not understand this layout or its approval digest. Registry rollback to the exact pinned profile remains supported by the existing dispatch guard.
