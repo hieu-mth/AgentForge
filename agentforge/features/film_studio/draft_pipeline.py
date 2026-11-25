@@ -1015,7 +1015,7 @@ def _image(job, index, scene, revision, profile):
         identity = ". ".join(cast[key]["name"] + ": " + cast[key]["appearance"] for key in scene["character_ids"])
         start_state = scene.get("continuity_plan", {}).get("start_state", "")
         prompt = ". ".join((scene.get("continuity", job["board"]["continuity"]), identity,
-                            start_state,
+                            *((start_state,) if start_state else ()),
                             scene.get("scene_notes", ""), scene["image_prompt"]))
         request = studio_runtime.ImageRequest(prompt, job["brief"]["ratio"],
                                               f"{job['id']}/episode-01/scene-{index+1:02d}",
@@ -1120,7 +1120,8 @@ def _render(job):
                        "visual_qa": "UNVERIFIED", "owner_qa": "PENDING",
                        "subtitle_sha": _sha(subtitles) if subtitles else None,
                        "shots": [{key: scene.get(key) for key in ("shot_id", "frames", "job_id", "asset",
-                                  "motion_job", "motion_sha", "motion_source")} for scene in job["board"]["scenes"]]}
+                                  "motion_job", "motion_sha")} | ({"motion_source": scene["motion_source"]}
+                                      if scene.get("motion_source") else {}) for scene in job["board"]["scenes"]]}
             if audio_evidence:
                 receipt["audio"] = audio_evidence
             record = ensure_local_root(target.with_suffix(".receipt.json"))
@@ -1556,7 +1557,8 @@ def _storyboard_action(job, action, data):
         _, motion_plan = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
     scenes = job["board"]["scenes"]
     checkpoints = [{key: scene.get(key) for key in (
-        "shot_id", "image_key", "job_id", "asset", "motion_job", "motion_sha")} for scene in scenes]
+        "shot_id", "image_key", "job_id", "asset", "motion_job", "motion_sha")} | (
+        {"motion_source": scene["motion_source"]} if scene.get("motion_source") else {}) for scene in scenes]
     if action not in {"storyboard-duration", "storyboard-audio", "storyboard-continuity"}:
         index = _number(data["index"], 0, len(scenes) if action == "storyboard-add" else len(scenes)-1)
     if action == "storyboard-continuity":

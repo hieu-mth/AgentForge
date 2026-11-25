@@ -18,7 +18,7 @@ def validate_entry(entry, index, previous_id):
 
 
 def validate(job):
-    scenes = job["board"]["scenes"]
+    scenes = job.get("board", {}).get("scenes", []) if job.get("board") else []
     for index, scene in enumerate(scenes):
         if "continuity_plan" in scene:
             if job["brief"].get("mode") != "motion":
@@ -81,6 +81,9 @@ def clear_stale_boundaries(scenes):
         if plan and (plan["previous_shot_id"] != (scenes[index-1]["shot_id"] if index else None)
                      or (index == 0 and plan["transition"] != "CUT")):
             scene.pop("continuity_plan")
+            # The old image was prompted with the removed boundary; rebuild it too.
+            from uuid import uuid4
+            scene.update(image_key=uuid4().hex, asset=None, job_id=None, attempts=0)
             clear_motion(scene)
 
 

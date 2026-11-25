@@ -333,7 +333,10 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
 
 def _record_continuation(scene, previous_motion):
     marker = motion_verify.continuation_marker(previous_motion)
-    with closing(motion_comfy._db(motion_comfy.DB)) as conn:
+    conn = motion_comfy._db(motion_comfy.DB)
+    if conn is None:
+        raise ValueError("Motion source ledger unavailable")
+    with closing(conn):
         row = conn.execute("SELECT image_job,image_sha FROM motion_sources WHERE job_id=?",
                            (scene["motion_job"],)).fetchone()
     if row is None or row["image_job"] != marker or not motion_comfy.SHA.fullmatch(row["image_sha"]):
