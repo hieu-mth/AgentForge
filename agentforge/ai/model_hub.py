@@ -257,6 +257,8 @@ def validate_profile(value, *, profile_id=None, preview=False):
             common[key] = _required_text(value[key], ENV_NAME, "environment variable name")
     else:
         raise ModelConfigError("Fields do not match the selected Cloud credentials")
+    if provider == "ltx_cloud" and "base_url" in common and common["base_url"] not in {"https://api.ltx.io", "https://api.ltx.io/v2"}:
+        raise ModelConfigError("LTX video chỉ chấp nhận endpoint HTTPS chính thức.")
     return common
 
 

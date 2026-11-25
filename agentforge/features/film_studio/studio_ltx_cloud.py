@@ -163,7 +163,7 @@ def _verify(path, seconds, *, require_audio=False):
     if (video["width"], video["height"], video["avg_frame_rate"]) != (1280, 720, "24/1"):
         raise ValueError("LTX output does not match pilot profile.")
     decoded = render._run_process([render._ffmpeg(), "-nostdin", "-v", "error", "-xerror",
-        "-i", str(path), "-map", "0:v:0", "-f", "null", "-", "-progress", "pipe:1"],
+        "-i", str(path), "-map", "0:v:0", "-progress", "pipe:1", "-f", "null", "-"],
         cwd=path.parent, timeout=90)
     frames = re.findall(r"(?m)^frame=(\d+)", decoded.stdout)
     if not frames or int(frames[-1]) != seconds * 24:

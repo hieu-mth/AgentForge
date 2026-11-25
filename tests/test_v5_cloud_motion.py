@@ -18,3 +18,118 @@ class CloudMotionTests(unittest.TestCase):
                "board": {"scenes": [{"frames": 144}]}}
         with self.assertRaises(ValueError):
             motion.prepare(job, None)
+
+
+class CloudMotionIntegrationTests(unittest.TestCase):
+    def test_cloud_direct_from_storyboard_to_verified_native_audio(self):
+        import json
+        import os
+        import shutil
+        import tempfile
+        from contextlib import nullcontext
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from agentforge.ai import model_hub, orchestrator_policy
+        from agentforge.features.film_studio import draft_pipeline as draft, studio_cloud
+        from agentforge.features.media import render
+        if not all(render.find_media_tool(tool) for tool in ("ffmpeg", "ffprobe")):
+            self.skipTest("FFmpeg fixture requires installed media tools")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fixture = root / "fixture.mp4"
+            render._run_process([render._ffmpeg(), "-nostdin", "-v", "error", "-f", "lavfi",
+                "-i", "color=c=blue:s=1280x720:r=24:d=6", "-f", "lavfi",
+                "-i", "sine=frequency=440:sample_rate=48000:duration=6",
+                "-c:v", "libx264", "-threads", "1", "-preset", "ultrafast",
+                "-pix_fmt", "yuv420p", "-c:a", "aac", "-t", "6", str(fixture)], cwd=root, timeout=90)
+            with (patch.object(model_hub, "DB_PATH", root/"hub.db"),
+                  patch.object(draft, "DB", root/"draft.db"),
+                  patch.object(draft, "WORKSPACE_DIR", root/"workspace"),
+                  patch.object(motion, "DB", root/"cloud.db"),
+                  patch.object(draft, "_dispatch"),
+                  patch.object(draft, "_measured", side_effect=lambda *a, **k: nullcontext()),
+                  patch.object(model_hub, "local_inference_slot", side_effect=lambda: nullcontext()),
+                  patch.object(draft.ops_control, "require_active"),
+                  patch.object(draft.characters, "list_characters", return_value={"characters": []}),
+                  patch.object(draft.studio_runtime, "image_adapter", side_effect=AssertionError("FLUX required")),
+                  patch.dict(os.environ, {"LTX_BASE_URL": "https://api.ltx.io", "LTX_API_KEY": "fixture-key"})):
+                writer = {"id": "writer", "provider": "openai", "enabled": True,
+                          "model": "fixture-writer", "base_url_env": "TEST_API_BASE", "api_key_env": "TEST_API_KEY"}
+                video = {"id": "cloud_video", "provider": "ltx_cloud", "enabled": True,
+                         "model": "ltx-2-3-fast", "base_url_env": "LTX_BASE_URL", "api_key_env": "LTX_API_KEY"}
+                model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0, profile=writer)
+                model_hub.change("SAVE_MODEL_PROFILE", expected_revision=1, profile=video)
+                policy = orchestrator_policy.defaults()
+                policy["permissions"].update(plan=True, assign_local=True, call_cloud=True, run_tools=True)
+                policy["tools"] = ["ffmpeg"]
+                model_hub.change("SAVE_ORCHESTRATOR", expected_revision=2, policy=policy,
+                                 route_changes={"general.text": "writer", "film.storyboard": "writer"})
+                job = draft.submit({"id": "a"*32, "idea": "Mèo nhìn cửa rồi bước đi.",
+                                    "seconds": None, "scene_count": None, "ratio": "16:9",
+                                    "mode": "motion", "duration_mode": "auto",
+                                    "route_strategy": "cloud", "max_cloud_seconds": 12})
+                plan = {"estimated_duration_seconds": 4, "production_feasibility": "feasible",
+                        "duration_reasoning": "Hai hành động ngắn.", "shots": [
+                            {"action": "Mèo nhìn cửa.", "reason": "Mở đầu", "suggested_seconds": 2},
+                            {"action": "Mèo bước đi.", "reason": "Tiếp nối", "suggested_seconds": 2}]}
+                shots = [{"title": "Mèo", "continuity": "Cùng căn phòng", "description": desc,
+                          "image_prompt": prompt, "audio": "Quiet"}
+                         for desc, prompt in (("Mèo nhìn cửa", "Cat looks at door"),
+                                              ("Mèo bước đi", "Cat walks away"))]
+                with patch.object(studio_cloud, "infer_structured", side_effect=[plan, *shots]):
+                    draft._work(job, nullcontext())
+                job = draft._read(job["id"])
+                self.assertEqual(job["status"], "STORYBOARD_REVIEW", job.get("error"))
+                self.assertEqual(job["production_plan"]["method"], "cloud")
+                self.assertEqual(job["motion_plan"]["output"]["resolution"], [1280, 720])
+                self.assertEqual(job["cloud_calls"], 3)
+                self.assertNotIn("cloud_motion_seconds", job)
+                draft._storyboard_action(job, "storyboard-approve", {"sha256": job["storyboard_sha"]})
+                self.assertEqual(job["status"], "QUEUED")
+                remote = iter(["d"*32, "e"*32])
+                post_bodies = []
+
+                def request(method, path, key, body=None):
+                    if method == "POST":
+                        post_bodies.append(body)
+                        self.assertEqual(path, "/v2/text-to-video")
+                        self.assertTrue(body["generate_audio"])
+                        self.assertEqual(body["duration"], 6)
+                        return {"id": next(remote)}
+                    return {"id": path.rsplit("/", 1)[1], "status": "completed",
+                            "result": {"video_url": "https://storage.googleapis.com/fixture/video.mp4"}}
+
+                with (patch.object(motion.ltx, "_request", side_effect=request),
+                      patch.object(motion.ltx, "_download", side_effect=lambda _, target: shutil.copyfile(fixture, target))):
+                    draft._work(job, nullcontext())
+                result = draft._read(job["id"])
+                self.assertEqual(result["status"], "REVIEW", result.get("error"))
+                self.assertEqual(len(post_bodies), 2)
+                self.assertEqual(result["cloud_motion_seconds"], 12)
+                self.assertEqual(result["cloud_calls"], 5)
+                self.assertTrue(all(not s["asset"] and s["motion_sha"] for s in result["board"]["scenes"]))
+                receipt = json.loads(draft.verified_receipt(result))
+                self.assertEqual(receipt["technical"]["frames_decoded"], 96)
+                self.assertTrue(receipt["audio"]["audio_decoded"])
+                self.assertEqual(receipt["audio"]["mode"], "CLOUD_NATIVE")
+
+    def test_ambiguous_post_is_not_repeated(self):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from agentforge.features.film_studio.draft_resources import NeedsReconciliation
+        with tempfile.TemporaryDirectory() as tmp, patch.object(motion, "DB", Path(tmp)/"ledger.db"):
+            job = {"production_plan": {"method": "cloud", "max_cloud_seconds": 6}}
+            scene = {"frames": 144, "image_prompt": "Cat", "description": "Cat walks", "audio": "Quiet"}
+            profile = {"model": "ltx-2-3-fast"}
+            prepared = ("a"*32, job, Path(tmp), motion.workflow_sha())
+            with (patch.object(motion, "_key", return_value="fixture"),
+                  patch.object(motion, "_reserve"),
+                  patch.object(motion.ops_control, "require_active"),
+                  patch.object(motion.ltx, "_request", side_effect=ValueError("timeout")) as request):
+                for _ in range(2):
+                    with self.assertRaises(NeedsReconciliation):
+                        motion.run_shot(scene, 0, prepared, profile, lambda: None, lambda: False)
+                self.assertEqual(request.call_count, 1)
+                self.assertEqual(motion._row(scene["motion_job"])["state"], "SUBMITTING")

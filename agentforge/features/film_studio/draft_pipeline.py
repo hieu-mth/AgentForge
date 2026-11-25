@@ -233,7 +233,8 @@ def _plan_production(job, bindings):
     strategy = job["brief"]["route_strategy"]
     cap = job["brief"]["max_cloud_seconds"]
     _, candidates = model_hub.production_candidates(strategy)
-    candidates = [c for c in candidates if c["method"] == "local" or cap >= 6]
+    minimum_cloud = max(12, job["brief"].get("seconds") or 0)
+    candidates = [c for c in candidates if c["method"] == "local" or cap >= minimum_cloud]
     if not candidates:
         raise ValueError("Không có model video phù hợp quyền và ngân sách. Đăng ký model hoặc chọn tuyến đã gán.")
     planner = bindings["general.text"]
@@ -1288,7 +1289,7 @@ def _work(job, slot, retry_motion_job=None):
                     if moving:
                         _resolve_job_motion(job, bindings.get("film.motion"), planning=True, revision=identity_revision)
                     studio_runtime.motion_artifacts(job).require_resolved_ledger(job)
-                    if bindings["image.generate"].get("base_url"):
+                    if bindings.get("image.generate", {}).get("base_url"):
                         profile = bindings["image.generate"]
                         studio_runtime.image_adapter(profile).preflight(profile, include_profiles=True)
                 if not job.get("board"):
@@ -1497,8 +1498,8 @@ def submit(data):
         if not motion_mode or duration_mode is None or data.get("route_strategy") not in {"auto", "local", "hybrid", "cloud"}:
             raise ValueError("Chọn tuyến sản xuất chỉ áp dụng storyboard motion mới.")
         cap = _number(data.get("max_cloud_seconds"), 0, 240)
-        if data["route_strategy"] in {"hybrid", "cloud"} and cap < 6:
-            raise ValueError("Cloud video cần ngân sách ít nhất 6 giây.")
+        if data["route_strategy"] in {"hybrid", "cloud"} and cap < 12:
+            raise ValueError("Cloud video cần ngân sách ít nhất 12 giây cho hai shot.")
         brief.update(route_strategy=data["route_strategy"], max_cloud_seconds=cap)
     try:
         prior = _read(ident)

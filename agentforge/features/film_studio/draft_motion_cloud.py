@@ -207,14 +207,20 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
              retry_motion_job=None, previous_motion=None):
     production, job, folder, _ = prepared
     if retry_motion_job:
-        raise ValueError("Cloud requests do not support automatic retry; approve a new storyboard.")
+        if scene.get("motion_job") != retry_motion_job:
+            raise ValueError("Cloud retry checkpoint changed.")
+        retryable_motion_job(retry_motion_job)
+        draft_continuity.clear_motion(scene)
+        save()
     if scene.get("motion_sha"):
         clip_path(scene)
         return
     seconds = billed_seconds(scene["frames"])
     if not scene.get("motion_job"):
         image, source = _source(job, scene, index, previous_motion, folder)
-        prompt = (scene["image_prompt"] + ". " + draft_continuity.prompt(scene))[:5000]
+        prompt = (scene["image_prompt"] + ". " + draft_continuity.prompt(scene) +
+                  "\nAudio direction: " + scene.get("audio", "") +
+                  ". Keep the original actions; do not invent dialogue.")[:5000]
         body = ltx.payload(profile["model"], prompt, seconds, image=image, audio=True)
         endpoint = "image-to-video" if image is not None else "text-to-video"
         request_sha = hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
@@ -304,3 +310,8 @@ def reconcile_cancelled(job):
             return False
         _state(row["id"], "CANCELLED_REMOTE_TERMINAL")
     return True
+
+
+def retryable_motion_job(ident):
+    if _row(ident)["state"] != "FAILED":
+        raise ValueError("Only explicitly confirmed terminal provider failures can be retried.")

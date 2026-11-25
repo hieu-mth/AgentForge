@@ -50,6 +50,7 @@ const warnings={RAM_LOW:'RAM khả dụng không đủ',COMMIT_LOW:'Hạn mức 
   VRAM_UNAVAILABLE:'Không đo được VRAM khả dụng',
   COMFYUI_QUEUE_BUSY:'ComfyUI còn tác vụ đang chạy hoặc đang chờ.',
   COMFYUI_QUEUE_UNAVAILABLE:'Chưa xác minh được hàng đợi ComfyUI.',
+  CLOUD_MOTION_RECONCILIATION_REQUIRED:'Có yêu cầu cloud chưa đối soát. Kiểm tra job nhà cung cấp trước khi tiếp tục.',
   MOTION_RECONCILIATION_REQUIRED:'Cần đối soát tác vụ chuyển động trước khi nhận GPU.',
   GPU_RESOURCE_FAILURE:'ComfyUI báo lỗi bộ nhớ. Kiểm tra tài nguyên trước khi tiếp tục từ checkpoint.',
   OLLAMA_RESOURCE_OR_SERVER_ERROR:'Ollama trả lỗi máy chủ. Kiểm tra tài nguyên và log trước khi tiếp tục.',
@@ -307,8 +308,8 @@ export function StudioDrafts({mutate,onCharacters}) {
             {value:'hybrid',label:'Hybrid · ảnh local, video cloud'},
             {value:'cloud',label:'Cloud video trực tiếp'},
           ]}/></Form.Item>
-          {['auto','hybrid','cloud'].includes(values.routeStrategy)&&<Form.Item name="cloudSeconds" label="Tối đa giây video trả phí" rules={[{required:true,type:'integer',min:values.routeStrategy==='auto'?0:6,max:240}]}>
-            <NumberField min={values.routeStrategy==='auto'?0:6} max={240} precision={0} suffix="giây"/>
+          {['auto','hybrid','cloud'].includes(values.routeStrategy)&&<Form.Item name="cloudSeconds" label="Tối đa giây video trả phí" rules={[{required:true,type:'integer',min:values.routeStrategy==='auto'?0:12,max:240}]}>
+            <NumberField min={values.routeStrategy==='auto'?0:12} max={240} precision={0} suffix="giây"/>
           </Form.Item>}
         </Space>
         <p className="env-muted">Model cloud tối thiểu 6 giây mỗi shot, kể cả đoạn bị cắt ngắn. 0 giây chỉ cho phép local. Chưa gọi video API cho đến khi bạn duyệt storyboard.</p>
