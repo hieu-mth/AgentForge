@@ -145,7 +145,7 @@ def _credentials(data, previous=None):
     access = data.get("access_token")
     refresh = data.get("refresh_token", previous.get("refresh_token"))
     expires = data.get("expires_in")
-    if (not isinstance(scopes, str) or PLAN_SCOPE not in scopes.split()
+    if (not isinstance(scopes, str) or not {PLAN_SCOPE, "resource.invoke"}.issubset(scopes.split())
             or not isinstance(access, str) or not re.fullmatch(r"[!-~]{1,32768}", access)
             or not isinstance(refresh, str) or not re.fullmatch(r"[!-~]{1,32768}", refresh)
             or type(expires) is not int or not 1 <= expires <= 86400 * 30
@@ -186,12 +186,17 @@ def sign_in(ref):
     outcome = {}
 
     class Handler(BaseHTTPRequestHandler):
+        def setup(self):
+            self.request.settimeout(5)
+            super().setup()
+
         def log_message(self, *_args):
             pass
 
         def do_GET(self):
             path = urlsplit(self.path)
-            if path.path != "/auth/callback":
+            if (path.path != "/auth/callback" or
+                    self.headers.get("Host") != f"127.0.0.1:{self.server.server_port}"):
                 self.send_error(404)
                 return
             try:
@@ -206,6 +211,7 @@ def sign_in(ref):
                 message = b"Invalid sign-in callback."
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
+            self.send_header("Referrer-Policy", "no-referrer")
             self.send_header("Content-Length", str(len(message)))
             self.end_headers()
             self.wfile.write(message)
@@ -255,7 +261,7 @@ def access_token(ref):
     # SQLite write transaction serializes rotating refresh tokens across CLI and Studio.
     with _db() as conn:
         record = _load(conn, ref)
-        if PLAN_SCOPE not in record.get("scope", "").split():
+        if not {PLAN_SCOPE, "resource.invoke"}.issubset(record.get("scope", "").split()):
             raise AuthError("ChatGPT plan usage not connected.")
         if record["expires_at"] <= time.time() + 90:
             data = _token({"grant_type": "refresh_token", "client_id": record["client_id"],

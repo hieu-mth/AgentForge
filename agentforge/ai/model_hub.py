@@ -136,7 +136,7 @@ ADAPTERS = {
     "chatgpt": {
         "label": "ChatGPT Plan (preview)", "connection": "cloud", "model_label": "Model slug",
         "model_example": "model-tu-lenh-models", "description": "Kết nối local bằng OAuth chính thức; không nhập API key. Chạy CLI chatgpt_auth login trước.",
-        "defaults": {"account_ref": ""}, "local_probe": False, "cloud_probe": True,
+        "defaults": {"account_ref": "owner"}, "local_probe": False, "cloud_probe": True,
     },
     "elevenlabs": {
         "label": "ElevenLabs-compatible", "connection": "cloud", "model_label": "Model ID",
