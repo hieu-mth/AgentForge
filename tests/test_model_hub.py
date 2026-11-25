@@ -349,6 +349,21 @@ class ModelHubReadinessHttpTests(OwnerHttpFixture):
             check.assert_not_called()
             self.assertEqual(self.req("POST", path, body)[:2], (200, {"scope": "METADATA_ONLY"}))
             check.assert_called_once_with("owner_text", "general.text", expected_revision=1)
+ 
+    def test_cloud_probe_requires_owner_csrf_and_explicit_external_actions(self):
+        path = "/api/model-hub/probe"
+        body = {"ack": "RUN_CLOUD_MODEL_PROBE", "profile_id": "cloud_writer", "expected_revision": 1}
+        with patch.object(model_hub, "probe_cloud_profile", return_value={"status": "PASS_RUNTIME"}) as probe:
+            self.assertEqual(self.req("POST", path, body)[0], 401)
+            self.login()
+            self.assertEqual(self.req("POST", path, body, csrf=False)[0], 403)
+            self.server.allow_external_actions = False
+            self.assertIn(self.req("POST", path, body)[0], (400, 403))
+            self.server.allow_external_actions = True
+            self.assertIn(self.req("POST", path, {**body, "prompt": "unexpected"})[0], (400, 403))
+            probe.assert_not_called()
+            self.assertEqual(self.req("POST", path, body)[:2], (200, {"status": "PASS_RUNTIME"}))
+            probe.assert_called_once_with("cloud_writer", expected_revision=1)
 
 
 if __name__ == "__main__":

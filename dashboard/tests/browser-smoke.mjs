@@ -799,6 +799,10 @@ try {
   await planModel.click();
   await openOptions.filter({hasText:/local_primary/}).click();
   await planToggle.click();
+  const cloudToggle=settings.getByRole('switch',{name:'Gọi AI cloud',exact:true});
+  await cloudToggle.click();
+  const cloudLimit=settings.getByRole('spinbutton',{name:'Giới hạn lượt gọi cloud mỗi production'});
+  await cloudLimit.fill('12');
   const toolsToggle=settings.getByRole('switch',{name:'Chạy công cụ local'});
   const toolsSelect=settings.getByRole('combobox',{name:'Công cụ local được phép'});
   if(await toolsSelect.count())throw new Error('Disabled tools permission shows the allowlist');
@@ -816,6 +820,9 @@ try {
   if((await planToggle.getAttribute('aria-checked'))!=='true')
     throw new Error('Settings did not persist after reload');
   const persisted=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
+  if(!persisted.orchestrator.policy.permissions.call_cloud||
+    persisted.orchestrator.policy.permissions.call_local||persisted.orchestrator.policy.cloud_call_limit!==12)
+    throw new Error('Independent cloud permission or call budget did not persist');
   if(persisted.orchestrator.policy.permissions.run_tools||
     !persisted.orchestrator.policy.tools.includes('ffmpeg'))
     throw new Error('Hiding the tools allowlist discarded the selection');
@@ -835,7 +842,7 @@ try {
   await settings.getByRole('button',{name:'Đặt lại mặc định'}).click();
   await settings.getByRole('dialog').getByRole('button',{name:'Đặt lại',exact:true}).click();
   await settings.getByText('Mặc định · Phiên bản 3',{exact:true}).waitFor();
-  if((await planToggle.getAttribute('aria-checked'))==='true')
+  if((await planToggle.getAttribute('aria-checked'))==='true'||(await cloudToggle.getAttribute('aria-checked'))==='true')
     throw new Error('Reset did not restore defaults');
   for(const width of [390,900,1440]){
     await settings.setViewportSize({width,height:850});

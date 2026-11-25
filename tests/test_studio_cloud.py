@@ -56,12 +56,20 @@ class CloudTextTests(unittest.TestCase):
             with (patch.object(model_hub, "local_inference_slot", side_effect=AssertionError("local inference")),
                   patch.object(draft.draft_resources, "snapshot", side_effect=AssertionError("local resource check")),
                   patch.object(draft.characters, "list_characters", return_value={"characters": []}),
-                  patch.object(studio_cloud, "infer_structured", side_effect=[{"outline": "Cat sits and stands."}, board]) as infer):
+                  patch.dict(os.environ, {"TEST_API_BASE": "https://example.test/v1", "TEST_API_KEY": "fixture-key"}),
+                  patch("http.client.HTTPSConnection") as connection):
+                response = connection.return_value.getresponse.return_value
+                response.status = 200
+                response.read.side_effect = [
+                    json.dumps({"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(result)}}]}).encode()
+                    for result in ({"outline": "Cat sits and stands."}, board)]
                 draft._work(job, nullcontext())
+                self.assertEqual(connection.return_value.request.call_count, 2)
+                self.assertEqual(connection.return_value.request.call_args.args[:2],
+                                 ("POST", "/v1/chat/completions"))
             saved = draft._read(job["id"])
             self.assertEqual(saved["status"], "STORYBOARD_REVIEW", saved.get("error"))
             self.assertEqual(saved["cloud_calls"], 2)
-            self.assertEqual(infer.call_count, 2)
             with patch.object(studio_cloud, "infer_structured", side_effect=AssertionError("budget bypass")):
                 with self.assertRaisesRegex(ValueError, "ngân sách"):
                     draft._ask(profile, "Test", {}, {}, None, job=saved)

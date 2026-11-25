@@ -385,7 +385,7 @@ class DraftTests(unittest.TestCase):
             self.assertEqual(json.loads(draft.verified_receipt(reloaded))["technical"],
                              {"frames_decoded": 72, "fps": 12, "width": 320, "height": 192})
 
-    def test_runtime_selection_uses_registry_provider_and_refuses_cloud(self):
+    def test_runtime_selection_uses_registry_provider_and_refuses_unknown_adapter(self):
         transport = studio_ollama.runtime
         with (patch.object(transport, "_installed_local_model", return_value=True),
               patch.object(transport, "_http_json", return_value={

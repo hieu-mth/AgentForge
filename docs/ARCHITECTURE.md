@@ -9,7 +9,7 @@ Tách ba trách nhiệm:
 - Execution: lập kế hoạch kỹ thuật từ ý đồ đã kiểm tra và khả năng adapter thật; khóa đầu vào, route, tài nguyên, approval và receipt. Nếu không khả thi thì báo rõ, không tự đổi model hoặc thay đổi nội dung.
 - Quality/post-production: kiểm tra kỹ thuật, chất lượng trực quan và duyệt Owner; FFmpeg xử lý hậu kỳ. CI kỹ thuật không xác nhận chất lượng điện ảnh.
 
-Pipeline chạy được hiện tại vẫn là tạo ảnh local rồi tạo chuyển động từ ảnh (hoặc ghép ảnh tĩnh). Không công bố Reference-to-Video, Text-to-Video, cloud inference hoặc visual QA tự động là tính năng hiện có. Chỉ thêm adapter, route và UI cho phương pháp đã qua benchmark. Không dùng một model cụ thể làm hợp đồng chung của Studio.
+Pipeline chạy được hiện tại vẫn là tạo ảnh local rồi tạo chuyển động từ ảnh (hoặc ghép ảnh tĩnh). Không công bố Reference-to-Video, Text-to-Video, cloud media inference hoặc visual QA tự động là tính năng hiện có. Chỉ thêm adapter, route và UI cho phương pháp đã qua benchmark. Không dùng một model cụ thể làm hợp đồng chung của Studio.
 
 ## Hợp đồng tài sản nhân vật
 
@@ -78,7 +78,7 @@ Studio có thể lập storyboard từ nội dung Owner, tạo ảnh và motion 
 - Lưu profile và gán route **không chạy model**. Film/image routes `CONFIG_ONLY`; `ops.monitor` deterministic. Studio lấy route đã phân công từ snapshot Model Hub và kiểm tra fingerprint trước dispatch; trạng thái CONFIG_ONLY không tự cấp quyền thực thi.
 - Owner có thể xóa profile chưa được phân công cho năng lực hiện hành. Muốn xóa profile đang được phân công phải bỏ gán trước. Xóa profile không xóa weights, DB khác hay workspace.
 - Cơ sở dữ liệu đã tồn tại được giữ nguyên, không tự sửa hoặc migrate khi GET. Overlay/profile Owner cũ tiếp tục được đọc. Các ID route lịch sử ngoài catalog chỉ lưu trữ, không xuất hiện hay thực thi. Owner đăng ký hồ sơ cần dùng.
-- Các giá trị `api_key_env`, `base_url_env` của cloud profile là **tên biến môi trường**, không phải token; không có cơ chế tự nạp file `.env` ở ứng dụng. Nếu cần dùng credentials về sau, chúng phải được inject an toàn vào môi trường tiến trình. Cloud text inference dùng quyền call_cloud đã cấp; mỗi production có giới hạn lượt gọi thực thi, không tự fallback.
+- Các giá trị `api_key_env`, `base_url_env` của cloud profile là **tên biến môi trường**, không phải token; không có cơ chế tự nạp file `.env` ở ứng dụng. Khi dùng kiểu biến môi trường, credentials phải được inject an toàn vào môi trường tiến trình. Cloud text inference dùng quyền call_cloud đã cấp; mỗi production có giới hạn lượt gọi thực thi, không tự fallback.
 - `.env` không nằm trong Git, bị ignore để ngăn lộ bí mật. Không cần tạo file `.env` để chạy local Video Studio; không xóa `.env` sẵn có trên máy Owner bằng Git cleanup.
 
 Chỉ ComfyUI loopback + workflow/SHA/Owner consent thuộc Film Studio mới được gửi GPU thật. Profile có mặt không chứng minh model đã tải, khả năng sinh hoặc độ phù hợp VRAM.
@@ -89,7 +89,7 @@ Trong **Cài đặt → Model AI**, Owner có thể xem lại và xác thực c�
 
 `GET /api/model-hub` trả `capability_contracts` cho từng profile, gồm adapter tương thích, mã lý do và giới hạn đầu ra. Để kiểm tra runtime, phiên Owner gửi `POST /api/model-hub/readiness` với CSRF và payload gồm `ack: "CHECK_CAPABILITY_READINESS"`, `profile_id`, `capability` và `expected_revision` lấy từ catalog.
 
-`route_configurable` phản ánh chính sách gán route, còn `local_runtime_compatible` phản ánh adapter local. Hồ sơ OpenAI-compatible và Anthropic-compatible hỗ trợ text inference qua HTTPS. Metadata kiểm tra endpoint model, không xác nhận inference; probe cố định cần Owner xác nhận riêng.
+`route_configurable` phản ánh chính sách gán route; `runtime_compatible` phản ánh adapter thực thi, `local_runtime_compatible` chỉ phản ánh adapter local. Hồ sơ OpenAI-compatible và Anthropic-compatible hỗ trợ text inference qua HTTPS. Metadata kiểm tra endpoint model, không xác nhận inference; probe cố định cần Owner xác nhận riêng.
 
 Preflight trả `METADATA_COMPATIBLE`, `UNAVAILABLE`, `UNSUPPORTED`, `MISSING_DEPENDENCY` hoặc `NOT_CHECKED`, cùng mã `reason` cụ thể. `runtime_available` cho biết runtime có trả được metadata cần thiết, còn `endpoint_metadata_compatible` cho biết metadata đó phù hợp với model/workflow. Giá trị `null` là chưa xác định. Kết quả luôn có `inference_verified: false` và `endpoint_ownership: "NOT_CHECKED"`. ComfyUI mở bên ngoài có thể trả metadata tương thích. LTX vẫn cần cấu hình thư mục Portable, công cụ media và weights local theo chính sách dispatch hiện hành. SHA weights và tài nguyên khả dụng vẫn do runtime kiểm tra khi thực thi.
 
@@ -98,7 +98,7 @@ Preflight trả `METADATA_COMPATIBLE`, `UNAVAILABLE`, `UNSUPPORTED`, `MISSING_DE
 
 Bản nháp motion có tiêu đề cảnh và chế độ thời lượng hiện hành dùng Creative Director. Bản nháp cũ, ý tưởng tự do và sản xuất ảnh tĩnh vẫn dùng planner hiện tại. Không cần migrate SQLite. AI đề xuất nhóm hành động theo thứ tự, góc quay, ý đồ và thời lượng tương đối; nhận thời lượng cảnh bằng giây thay vì số frame kỹ thuật. `creative_plan.validate_scene_shots` kiểm tra hợp đồng sáng tạo không phụ thuộc output profile. `compile_plan` chuyển nội dung đã kiểm tra thành segment theo output profile và ngân sách runtime hiện hành. Định dạng creative plan đã lưu và cách kiểm tra digest không đổi.
 
-Đây là ranh giới đầu tiên trong đường chạy authored script, chưa phải planner độc lập hoàn toàn với runtime. Free-form planning và worker vẫn yêu cầu pipeline local hiện hành; không tuyên bố hỗ trợ phương pháp sản xuất khác trước khi adapter thật được kiểm chứng.
+Đây là ranh giới đầu tiên trong đường chạy authored script, chưa phải planner độc lập hoàn toàn với runtime. Free-form planning vẫn dùng ngân sách timeline I2V hiện hành; worker sản xuất media vẫn yêu cầu adapter local; không tuyên bố hỗ trợ phương pháp sản xuất khác trước khi adapter thật được kiểm chứng.
 
 The approval digest includes the compiled plan, the segment storyboard and the existing model and motion identity. On resume the stored plan is recompiled against the pinned output profile and the storyboard frame counts are rechecked. Editing segment text updates the storyboard digest and uses the existing asset invalidation rules. Authored scene boundaries and the creative segment layout stay fixed during segment edits. A new production is required to propose a different layout.
 
@@ -110,4 +110,4 @@ Xem [runtime](RUNTIME.md) và [production](PRODUCTION.md) để kiểm tra hành
 
 Chính sách điều phối lưu mode, mappings, permissions, tools và cloud_call_limit. Các snapshot cũ được đọc qua lớp tương thích và chiếu sang chính sách hiện hành; không tự ghi lại SQLite khi đọc. Khi Owner lưu chính sách mới, các trường đã ngừng hỗ trợ không còn được lưu trong snapshot mới. Lịch sử và rollback vẫn bảo toàn dữ liệu gốc.
 
-Cloud text: endpoint là API base URL (ví dụ `https://provider.example/v1`), không phải URL đầy đủ của `/chat/completions` hoặc `/messages`. Dùng API key nhập trực tiếp được DPAPI bảo vệ hoặc biến môi trường hiện có. Chỉ cấp quyền `call_cloud` nếu đồng ý gửi nội dung và metadata nhân vật đến provider. Lượt gọi được lưu trước khi dispatch và tính cả thất bại; giới hạn số lượt không phải giới hạn tiền. Không tự retry, không chuyển provider. Kiểm tra model metadata có thể không được gateway hỗ trợ; thử inference riêng để xác nhận JSON. Cloud image/video chưa hỗ trợ.
+Cloud text: endpoint là API base URL (ví dụ `https://provider.example/v1`), không phải URL đầy đủ của `/chat/completions` hoặc `/messages`. Dùng API key nhập trực tiếp được DPAPI bảo vệ hoặc biến môi trường hiện có. `assign_local` là tên trường SQLite giữ tương thích cho quyền phân công model, không còn giới hạn local. Chỉ cấp quyền `call_cloud` nếu đồng ý gửi nội dung và metadata nhân vật đến provider. Lượt gọi được lưu trước khi dispatch và tính cả thất bại; giới hạn số lượt không phải giới hạn tiền. Giới hạn được khóa từ lượt đầu, có thể giảm nếu Owner giảm chính sách; không tự nâng cap của production đã chạy. Endpoint/key lấy từ biến môi trường không nên đổi trong lúc production đang chạy. OpenAI-compatible cần hỗ trợ Chat Completions với `max_completion_tokens`; gateway không tương thích sẽ báo lỗi, không tự đổi protocol. Không tự retry, không chuyển provider. Kiểm tra model metadata có thể không được gateway hỗ trợ; thử inference riêng để xác nhận JSON. Cloud image/video chưa hỗ trợ.

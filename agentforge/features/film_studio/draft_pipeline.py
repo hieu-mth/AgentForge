@@ -1308,7 +1308,7 @@ def _work(job, slot, retry_motion_job=None):
         else:
             job.update(status="FAILED", error=str(exc)[:240])
     except Exception:
-        job.update(status="FAILED", error="Local runtime failed at " + job["stage"] + "; check Ollama, ComfyUI or FFmpeg before resuming.")
+        job.update(status="FAILED", error="Studio failed at " + job["stage"] + "; check the assigned model/API and runtime before resuming.")
     finally:
         try:
             if used_image and job.get("status") != "WAITING_RESOURCES" and image_profile.get("base_url"):

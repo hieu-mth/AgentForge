@@ -113,7 +113,9 @@ def infer_structured(profile, instructions, data, schema, *, cpu_only=False, ext
         value = json.loads(content, parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
     except (ValueError, TypeError):
         raise CloudRequestError("INVALID_STRUCTURED_RESPONSE") from None
-    if not isinstance(value, dict):
+    if not isinstance(value, dict) or not set(schema.get("required", ())) <= value.keys():
+        raise CloudRequestError("INVALID_STRUCTURED_RESPONSE")
+    if schema.get("additionalProperties") is False and not value.keys() <= schema.get("properties", {}).keys():
         raise CloudRequestError("INVALID_STRUCTURED_RESPONSE")
     return value
 

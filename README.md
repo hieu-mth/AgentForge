@@ -6,7 +6,7 @@ Source hiện hỗ trợ Ollama, FLUX/ComfyUI, LTX và FFmpeg. Cloud text hỗ t
 
 ## Khởi động
 
-Yêu cầu Python 3.13+, Node 22 và runtime media local do Owner cài đặt.
+Yêu cầu Python 3.13+, Node 22. Chỉ cần runtime media local nếu sản xuất bằng pipeline media hiện hành. Storyboard cloud không cần Ollama hoặc ComfyUI.
 
 ```powershell
 cd D:\AgentForge
@@ -17,12 +17,12 @@ npm.cmd run build --prefix dashboard
 .\.venv\Scripts\python.exe -m agentforge --port 8780
 ```
 
-Mở http://127.0.0.1:8780/dashboard/ và đăng nhập bằng mã Owner in tại terminal. Chỉ bật `--allow-external-tools` khi chủ động chạy thao tác media đã duyệt.
+Mở http://127.0.0.1:8780/dashboard/ và đăng nhập bằng mã Owner in tại terminal. Bật `--allow-external-tools` khi chủ động tạo storyboard, gọi thử model hoặc chạy production. Quyền gọi local/cloud vẫn được kiểm tra trong Model Hub.
 
 ## Quy trình sử dụng
 
 1. Đăng ký model và kiểm tra metadata tại Cài đặt → Model AI.
-2. Phân công model local hoặc cloud theo năng lực, cấp quyền thực thi và FFmpeg tại AI điều phối.
+2. Phân công model local hoặc cloud theo năng lực, cấp quyền thực thi tương ứng tại AI điều phối. FFmpeg chỉ bắt buộc khi duyệt sản xuất.
 3. Nhập nội dung và thời lượng tại Studio video; AI chọn nhân vật từ hồ sơ đã đăng ký. Hồ sơ hiện là metadata, chưa phải bộ ảnh nhận diện.
 4. Kiểm tra, chỉnh sửa và duyệt storyboard trước khi tạo media.
 5. Xem video, kiểm tra chất lượng và duyệt thành phẩm. Xuất bản là thao tác riêng.
