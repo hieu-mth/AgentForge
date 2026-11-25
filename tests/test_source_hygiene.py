@@ -8,6 +8,7 @@ class SourceHygieneTests(unittest.TestCase):
     def test_credentials_weights_and_generated_artifacts_never_tracked(self):
         banned = [
             "models/diffusion_models/wan2.2.safetensors",
+            "examples/checkpoint.gguf",
             "workspace/films/episode.mp4", "data/company/state.sqlite3",
             ".venv/Scripts/python.exe", "dashboard/node_modules/react/index.js",
             "client_secret_123.json", "Demos/OAuthDesktopClient.json",

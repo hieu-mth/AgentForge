@@ -13,7 +13,8 @@ MAX_VERSIONS = 12
 STORY_FIELDS = ("description", "image_prompt", "motion_prompt", "character_ids",
                 "audio", "continuity", "script_range", "shot_id", "frames", "caption", "scene_notes", "duration_weight",
                 "suggested_seconds", "shot_reason", "content_scene", "content_shot", "content_shot_count",
-                "script_shot_frames", "shot_description")
+                "script_shot_frames", "shot_description", "creative_shot", "segment", "segment_count",
+                "creative_camera")
 
 
 def duration_limits(seconds, moving, output=LEGACY_MOTION_OUTPUT):
@@ -116,6 +117,9 @@ def snapshot(job):
         value["motion_plan"] = job["motion_plan"]
     if "studio_plan" in job:
         value["studio_plan"] = job["studio_plan"]
+    creative = job.get("duration_plan", {}).get("creative_plan")
+    if creative is not None:
+        value["creative_plan"] = creative
     return value
 
 

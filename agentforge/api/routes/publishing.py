@@ -1,6 +1,6 @@
 """Owner-authenticated local publishing actions. Never calls YouTube API."""
 from agentforge.api.routes._shared import UNHANDLED
-from agentforge.features.film_studio import production, publishing
+from agentforge.features.film_studio import publishing
 
 
 def handle(server, path, request, session=None):

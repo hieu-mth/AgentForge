@@ -8,6 +8,18 @@ from agentforge.features.film_studio import motion_comfy as motion
 
 
 class ComfyUIIntegrationTests(unittest.TestCase):
+    def test_flux_readiness_can_read_every_approved_node_definition(self):
+        from agentforge.features.media.flux_workflow import NODES
+
+        for kind, _ in NODES.values():
+            route = "/object_info/" + kind
+            with self.subTest(route=route):
+                comfyui.validate_image_route(route)
+                with self.assertRaises(comfyui.ComfyUITransportError):
+                    comfyui.validate_image_route(route, has_body=True)
+        with self.assertRaises(comfyui.ComfyUITransportError):
+            comfyui.validate_image_route("/object_info/UnknownNode")
+
     def test_fixed_loopback_host_method_payload_and_bounded_response(self):
         with patch.object(comfyui.http.client, "HTTPConnection") as conn_type:
             conn = conn_type.return_value

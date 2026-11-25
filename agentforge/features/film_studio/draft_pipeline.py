@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from agentforge import ops_control
 from agentforge.ai import model_hub
-from agentforge.features.film_studio import characters
+from agentforge.features.film_studio import characters, creative_plan
 from agentforge.features.film_studio import draft_resources, draft_timeline, studio_runtime
 from agentforge.features.media import render, visual_jobs
 from agentforge.features.film_studio.draft_resources import ResourceWait
@@ -336,6 +336,7 @@ def _script_scene(job, profile, comfy, source, continuity, index, *, proposed_sh
         if "rejected_duplicate_fields" in proposed_shot:
             context["rejected_duplicate_fields"] = proposed_shot["rejected_duplicate_fields"]
             context["already_covered"] = proposed_shot["already_covered"]
+            context["previous_candidate"] = proposed_shot["previous_candidate"]
     if cast:
         fields["character_ids"] = {"type": "array", "items": {**STRING, "enum": list(cast)}, "maxItems": 2}
         context["cast"] = cast
@@ -354,10 +355,16 @@ def _script_scene(job, profile, comfy, source, continuity, index, *, proposed_sh
                        "Apply camera and constraints throughout the scene. If beat.continued_action is true, "
                        "show a later portion of the same action or hold its end state, "
                        "without replaying the previous shot's action or merely changing the camera. "
+                       "When beat.action_phase is prepare or progress, keep the event unfinished in the "
+                       "description, image prompt and motion prompt. Reserve its decisive moment for "
+                       "complete. In complete, start at the previous endpoint and finish once; if the "
+                       "event has already happened, hold its result without a new gesture or event. "
                        "Do not add, omit or reorder actions, characters or dialogue. "
                        "If rejected_duplicate_fields is present, the previous response repeated an earlier shot. "
                        "Use already_covered to avoid replaying any accepted shot in this scene. Rewrite the "
-                       "listed fields around the specific moment assigned to this shot. "
+                       "listed fields around the specific moment assigned to this shot. Preserve the other "
+                       "field from previous_candidate. For a continuation, depict the resulting pose or "
+                       "settling movement after the previous shot's endpoint. "
                        "Return an English motion_prompt for this shot. "
                        if authored else ("Focus on the proposed action, using the source only as context. "
                                          if proposed_shot else ""))
@@ -568,7 +575,12 @@ _CAMERA = re.compile(r"(?:camera|máy quay|góc máy|khung hình|framing)\b", re
 _GLOBAL_CONSTRAINT = re.compile(
     r"(?:phong cách|ánh sáng|màu sắc|style|lighting|negative prompt|ràng buộc chung|"
     r"yêu cầu chung|không|ưu tiên|giữ nguyên|no)\b", re.I)
-_SCENE_CONSTRAINT = re.compile(r"(?:ràng buộc cảnh|yêu cầu cảnh|không đổi góc|scene constraints)\b", re.I)
+_SCENE_CONSTRAINT = re.compile(
+    r"(?:bối cảnh\s*:|(?:ràng buộc cảnh|yêu cầu cảnh|không đổi góc|scene constraints|"
+    r"ánh nắng(?:\s+(?:buổi sáng|buổi chiều|ban mai))?\s+chiếu)\b)", re.I)
+_GLOBAL_HEADING = re.compile(
+    r"(?<!\w)\**(?:yêu cầu xuyên suốt|ràng buộc xuyên suốt|yêu cầu chung|"
+    r"ràng buộc chung|global constraints|global requirements)\**\s*:\**\s*", re.I)
 _SEQUENCE = re.compile(r",?\s+(?:sau đó|rồi|tiếp đó|sau đấy|then|and then)\s+", re.I)
 _SCRIPT_CLAUSE = re.compile(
     rf"(?<=[.!?…;])\s+|\n+|,\s+(?=(?:{_CAMERA.pattern}|{_GLOBAL_CONSTRAINT.pattern}|"
@@ -580,7 +592,12 @@ def _scene_beats(source, *, last):
     timing = SCENE_TIME.search(heading)
     inline = heading[timing.end():].lstrip("* :—–-") if timing else heading.partition(":")[2].strip()
     actions, camera, constraints, global_constraints = [], [], [], []
-    for paragraph in re.split(r"\n\s*\n", "\n".join(part for part in (inline, body) if part)):
+    content = "\n".join(part for part in (inline, body) if part)
+    if last and (header := _GLOBAL_HEADING.search(content)):
+        global_constraints.extend(line.strip(" *-\t") for line in content[header.end():].splitlines()
+                                  if line.strip(" *-\t"))
+        content = content[:header.start()]
+    for paragraph in re.split(r"\n\s*\n", content):
         for part in _SCRIPT_CLAUSE.split(paragraph):
             part = part.strip(" *")
             if not part:
@@ -621,6 +638,12 @@ def _write_planned_board(job, bindings):
                      duration_source=plan["duration_source"])
         _save(job)
     plan = job["duration_plan"]
+    if job.get("creative_director_version") == 1 and not job.get("board"):
+        directed = _direct_authored_plan(job, plan, bindings["film.storyboard"])
+        if directed != plan:
+            plan = job["duration_plan"] = directed
+            brief["scene_count"] = plan["recommended_shot_count"]
+            _save(job)
     layout = _storyboard_layout(job, brief["scene_count"], [shot["suggested_seconds"] for shot in plan["shots"]])
     script = brief["idea"]
     authored = bool(plan.get("content_scene_count"))
@@ -640,7 +663,10 @@ def _write_planned_board(job, bindings):
                     script[slice(*shot["script_range"])], last=scene_number == plan["content_scene_count"])
         global_context = "\n".join([script[:ranges[0][0]].strip(), *(
             constraint for scene in scene_inputs.values() for constraint in scene["global_constraints"])])[:2400]
-        scene_keys = {str(number): _sha(json.dumps([scene, global_context], ensure_ascii=False, sort_keys=True).encode())
+        scene_keys = {str(number): _sha(json.dumps([
+            scene, global_context, *([shot for shot in plan["shots"] if shot["content_scene"] == number]
+                                      if plan.get("creative_plan") else [])],
+            ensure_ascii=False, sort_keys=True).encode())
                       for number, scene in scene_inputs.items()}
         if checkpoint is not None:
             for index, shot in enumerate(plan["shots"][:len(accepted)]):
@@ -679,6 +705,16 @@ def _write_planned_board(job, bindings):
             request["scene_constraints"] = [constraint[:240] for constraint in inputs["constraints"][:8]]
             request["beat"] = _shot_beat(inputs["actions"], shot["content_shot"], shot["content_shot_count"],
                                         frame_offset, layout[index], previous)
+            if "creative_shot" in shot:
+                request["camera"] = [shot["creative_camera"], *request["camera"]]
+                following = plan["shots"][index + 1:index + 2]
+                carries_forward = bool(following and following[0].get("continued_action"))
+                phase = ("progress" if shot["continued_action"] else "prepare") if carries_forward else "complete"
+                request["beat"].update(assigned_text=shot["action"][:900],
+                                       action_phase=phase,
+                                       continued_action=shot["continued_action"],
+                                       creative_shot=shot["creative_shot"],
+                                       segment=shot["segment"], segment_count=shot["segment_count"])
             source = request["beat"]["assigned_text"]
             request["action"] = source
             frame_offset += layout[index]
@@ -706,7 +742,8 @@ def _write_planned_board(job, bindings):
                 job["storyboard_rejections"] = (job.get("storyboard_rejections", []) + [diagnostic])[-3:]
                 _save(job)
                 matching = [covered[number-1] for number in sorted(set(duplicates.values()))]
-                request = {**request, "rejected_duplicate_fields": list(duplicates), "already_covered": matching}
+                request = {**request, "rejected_duplicate_fields": list(duplicates), "already_covered": matching,
+                           "previous_candidate": {field: data[field] for field in ("description", "motion_prompt")}}
             else:
                 raise ValueError(f"AI vẫn lặp mô tả hoặc chuyển động ở cảnh {shot['content_scene']}, "
                                  f"shot {shot['content_shot']} sau 3 lần thử. Các shot đã kiểm tra được giữ lại.")
@@ -737,9 +774,45 @@ def _write_planned_board(job, bindings):
             scene.update({key: shot[key] for key in ("content_scene", "content_shot", "content_shot_count", "script_shot_frames")})
             scene["motion_prompt"] = motion_prompts[index]
             scene["shot_description"] = shot_descriptions[index]
+            if "creative_shot" in shot:
+                scene.update({key: shot[key] for key in ("creative_shot", "segment", "segment_count", "creative_camera")})
     job.update(board=board, cast=cast)
     job.pop("storyboard_checkpoint", None)
     _save(job)
+
+
+def _direct_authored_plan(job, plan, profile):
+    script = job["brief"]["idea"]
+    scenes = []
+    for shot in plan["shots"]:
+        number = shot["content_scene"]
+        if shot["content_shot"] == 1:
+            start, end = shot["script_range"]
+            scenes.append({"scene": number, "source_range": [start, end], "frames": 0,
+                           **_scene_beats(script[start:end], last=number == plan["content_scene_count"])})
+        scenes[-1]["frames"] += shot["script_shot_frames"]
+    context = [script[:scenes[0]["source_range"][0]][:1600],
+               *(item for scene in scenes for item in scene["global_constraints"])]
+    output = studio_runtime.job_output(job)
+    existing = plan.get("creative_plan", {}).get("scenes", [])
+    if len(existing) == len(scenes) and all(
+            all(old.get(key) == value for key, value in scene.items()) for old, scene in zip(existing, scenes)):
+        return plan
+    proposals = []
+    for index, scene in enumerate(scenes):
+        old = existing[index] if index < len(existing) else None
+        if old and all(old.get(key) == value for key, value in scene.items()):
+            proposals.append([{key: shot[key] for key in ("actions", "seconds", "camera", "intent")}
+                              for shot in old["creative_shots"]])
+            continue
+        _activity(job, "PLANNING", "creative_direction", profile, scene=scene["scene"])
+        with _measured(job, "creative_direction"):
+            proposals.append(creative_plan.propose_scene(scene, context, output.fps,
+                lambda instructions, payload, schema: _ask(
+                    profile, instructions, payload, schema, None, cpu_only=True)))
+    compiled = creative_plan.compile_plan(scenes, proposals, output)
+    segments = creative_plan.compiled_shots(compiled, output)
+    return {**plan, "shots": segments, "recommended_shot_count": len(segments), "creative_plan": compiled}
 
 
 def _select_cast(job, bindings, outline):
@@ -867,6 +940,10 @@ def _storyboard_layout(job, count, weights=None):
     brief = job["brief"]
     plan = job.get("duration_plan") or {}
     if plan.get("content_scene_count"):
+        if "creative_plan" in plan:
+            compiled = creative_plan.compiled_shots(plan["creative_plan"], studio_runtime.job_output(job))
+            if compiled != plan["shots"]:
+                raise ValueError("Các segment không khớp kế hoạch Creative Director.")
         frames = [shot["script_shot_frames"] for shot in plan["shots"]]
         total = brief["seconds"] * _job_fps(job)
         cap = studio_runtime.job_output(job).max_frames if brief.get("mode") == "motion" else total
@@ -1096,7 +1173,14 @@ def _dispatch_guard(job):
     return model_hub.studio_dispatch(moving=moving, validate=validate)
 
 
-def _work(job, slot):
+def _validate_creative_frames(job):
+    if job.get("duration_plan", {}).get("creative_plan"):
+        scenes = job["board"]["scenes"]
+        if [scene["frames"] for scene in scenes] != _storyboard_layout(job, len(scenes)):
+            raise ValueError("Số frame storyboard không khớp timeline đã duyệt.")
+
+
+def _work(job, slot, retry_motion_job=None):
     global ACTIVE
     image_profile = None
     used_image = False
@@ -1124,6 +1208,7 @@ def _work(job, slot):
             if "storyboard_version" in job and (
                     job["approved_storyboard_sha"] != draft_timeline.digest(job)):
                 raise ValueError("Storyboard đã thay đổi. Cần Owner duyệt lại.")
+            _validate_creative_frames(job)
             if moving:
                 motion, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
                 motion_profile = motion.bind(bindings["film.motion"])
@@ -1160,9 +1245,11 @@ def _work(job, slot):
                 _resolve_job_motion(job, current_bindings.get("film.motion"), revision=identity_revision)
                 _activity(job, "MOTION", "motion", motion_profile, scene=index + 1)
                 try:
+                    retry = ({"retry_motion_job": retry_motion_job}
+                             if retry_motion_job is not None and scene.get("motion_job") == retry_motion_job else {})
                     motion.run_shot(scene, index, prepared, motion_profile,
                                     lambda: _save(job), lambda: _cancellation(job["id"]),
-                                    dispatch_guard=lambda: _dispatch_guard(job))
+                                    dispatch_guard=lambda: _dispatch_guard(job), **retry)
                 except studio_runtime.NeedsReconciliation:
                     raise
                 except Exception:
@@ -1215,7 +1302,7 @@ def _work(job, slot):
             _dispatch()
 
 
-def _start(job, slot):
+def _start(job, slot, retry_motion_job=None):
     global ACTIVE
     with comfy_service.LOCK:
         if _cancellation(job["id"]):
@@ -1231,7 +1318,8 @@ def _start(job, slot):
         snapshot = copy.deepcopy(job)
         ACTIVE = job["id"]
         try:
-            threading.Thread(target=_work, args=(job, slot), daemon=True).start()
+            retry = {"retry_motion_job": retry_motion_job} if retry_motion_job is not None else {}
+            threading.Thread(target=_work, args=(job, slot), kwargs=retry, daemon=True).start()
         except BaseException:
             ACTIVE = None
             raise
@@ -1321,6 +1409,8 @@ def submit(data):
     job = {"id": ident, "brief": brief, "stage": "QUEUED", "status": "QUEUED",
            "video_sha": None, "created_at": created_at, "updated_at": created_at}
     job["storyboard_version"] = 1
+    if motion_mode and duration_mode is not None and AUTHORED_HEADING.search(idea):
+        job["creative_director_version"] = 1
     job["studio_plan"] = studio_runtime.routing_identity(bindings, moving=motion_mode)
     job["submitted_brief"] = dict(brief)
     with comfy_service.LOCK, _db(True) as conn:
@@ -1349,6 +1439,7 @@ def _storyboard_action(job, action, data):
     if action == "storyboard-approve":
         if job["status"] != "STORYBOARD_REVIEW":
             raise ValueError("Storyboard không chờ duyệt.")
+        _validate_creative_frames(job)
         ops_control.require_active()
         revision, bindings, identity_revision = _studio_bindings(job)
         if job["brief"].get("mode") == "motion":
@@ -1500,7 +1591,7 @@ def act(ident, action, data):
                 _save(job)
         _dispatch()
         return job
-    if action == "resume" and _read(ident)["status"] == "QUEUED":
+    if action == "resume" and "retry_motion_job" not in data and _read(ident)["status"] == "QUEUED":
         started = _dispatch()
         return started if started and started["id"] == ident else _read(ident)
     slot = _worker_slot()
@@ -1542,7 +1633,22 @@ def act(ident, action, data):
                 raise ValueError("Resume the draft that is waiting for resources first")
         ops_control.require_active()
         _studio_bindings(job)
-        job = _start(job, slot)
+        retry_motion_job = None
+        if "retry_motion_job" in data:
+            scenes = job.get("board", {}).get("scenes", [])
+            index = job.get("failed_scene")
+            retry_motion_job = data["retry_motion_job"]
+            if (job["status"] not in {"FAILED", "WAITING_RESOURCES"} or job.get("stage") != "MOTION"
+                    or type(index) is not int or not 1 <= index <= len(scenes)
+                    or not isinstance(retry_motion_job, str)
+                    or scenes[index-1].get("motion_job") != retry_motion_job
+                    or scenes[index-1].get("motion_sha")):
+                raise ValueError("Checkpoint chuyển động đã thay đổi. Hãy tải lại trước khi thử lại.")
+            validate_retry = getattr(studio_runtime.motion_artifacts(job), "retryable_motion_job", None)
+            if validate_retry is None:
+                raise ValueError("Runtime chuyển động này chưa hỗ trợ xác nhận thử lại từ checkpoint.")
+            validate_retry(retry_motion_job)
+        job = (_start(job, slot, retry_motion_job) if retry_motion_job is not None else _start(job, slot))
         started = True
         return job
     finally:

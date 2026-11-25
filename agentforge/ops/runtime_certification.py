@@ -22,7 +22,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import uuid4
 
-from agentforge.paths import REPOSITORY_ROOT, WORKSPACE_DIR
+from agentforge.paths import WORKSPACE_DIR
 
 REPORT_FORMAT = "agentforge.owner-runtime-evidence.v1"
 SHA = re.compile(r"[0-9a-f]{64}\Z")

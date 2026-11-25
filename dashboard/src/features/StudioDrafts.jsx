@@ -344,7 +344,20 @@ export function StudioDrafts({mutate,onCharacters}) {
               onClick={event=>{
                 event.stopPropagation();
                 setSelectedId(job.id);
-                run('/'+job.id+'/resume',{});
+                const shot=job.board?.scenes?.[job.failed_scene-1];
+                const retryJob=job.stage==='MOTION'&&['FAILED','WAITING_RESOURCES'].includes(job.status)
+                  &&!shot?.motion_sha&&shot?.motion_job;
+                if(retryJob){
+                  modal.confirm({
+                    title:'Thử lại shot chuyển động bị lỗi?',
+                    content:'Studio sẽ tạo lần chạy mới cho shot lỗi và tiếp tục từ checkpoint. Các ảnh và clip đã xác minh được dùng lại.',
+                    okText:'Thử lại và tiếp tục',
+                    cancelText:'Để sau',
+                    onOk:()=>run('/'+job.id+'/resume',{retry_motion_job:retryJob}),
+                  });
+                }else{
+                  run('/'+job.id+'/resume',{});
+                }
               }}/></AppTooltip>}
           {draftViews(job)}
         </div>,

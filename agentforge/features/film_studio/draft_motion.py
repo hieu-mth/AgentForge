@@ -174,6 +174,18 @@ def reconcile_cancelled(job):
     return True
 
 
+def _resource_stop_reason():
+    sample = draft_resources.memory_snapshot()
+    ram, used, limit = (sample[key] for key in ("ram_available", "commit_used", "commit_limit"))
+    if ram is None or used is None or limit is None:
+        return "Không đọc được RAM hoặc Windows commit."
+    if ram < 4*1024**3:
+        return "RAM khả dụng dưới 4 GiB."
+    if limit-used < 6*1024**3:
+        return "Windows commit headroom dưới 6 GiB."
+    return None
+
+
 def _provider(job_id, cancelled):
     row = motion_verify._job(job_id, motion_comfy.DB)
     if not row["provider_id"]:
@@ -181,6 +193,7 @@ def _provider(job_id, cancelled):
     provider = str(UUID(row["provider_id"]))
     deadline = time.monotonic() + 240
     stop_actions = set()
+    stop_reason = None
     while time.monotonic() < deadline:
         try:
             status = motion_comfy.job_status(job_id, db_path=motion_comfy.DB)["status"]
@@ -191,22 +204,28 @@ def _provider(job_id, cancelled):
                 raise ValueError("Motion finished after an interrupt request; review before continuing")
             return
         if status != "PROVIDER_QUEUED_OR_UNKNOWN":
+            if status in {"PROVIDER_FAILED", "GPU_RESOURCE_FAILURE"} and stop_reason:
+                raise ValueError("AgentForge đã yêu cầu ngắt chuyển động. " + stop_reason)
             raise ValueError("Motion stopped: " + status)
-        sample = draft_resources.snapshot()
-        used, limit = sample["commit_used"], sample["commit_limit"]
-        ram = sample["ram_available"]
-        if (stop_actions or cancelled() or ram is None or ram < 4*1024**3
-                or used is None or limit is None or limit-used < 6*1024**3):
-            queue = json.loads(comfy_service.comfyui.request_image_bytes("/queue", port=motion_comfy.PORT))
-            pending = any(entry[1] == provider for entry in queue["queue_pending"])
-            action, body = (("/queue", {"delete": [provider]}) if pending
-                            else ("/interrupt", {"prompt_id": provider}))
-            if action not in stop_actions:
-                stop_actions.add(action)
-                with closing(http.client.HTTPConnection("127.0.0.1", motion_comfy.PORT, timeout=3)) as conn:
-                    conn.request("POST", action, body=json.dumps(body), headers={"Content-Type": "application/json"})
-                    if conn.getresponse().status != 200:
-                        raise NeedsReconciliation("Motion interrupt unconfirmed; reconcile before continuing")
+        reason = stop_reason or ("Owner yêu cầu hủy." if cancelled() else _resource_stop_reason())
+        if reason:
+            try:
+                queue = json.loads(comfy_service.comfyui.request_image_bytes("/queue", port=motion_comfy.PORT))
+                pending = any(entry[1] == provider for entry in queue["queue_pending"])
+                running = any(entry[1] == provider for entry in queue["queue_running"])
+                action = "/queue" if pending else "/interrupt" if running else None
+                if action and action not in stop_actions:
+                    body = {"delete": [provider]} if pending else {"prompt_id": provider}
+                    with closing(http.client.HTTPConnection("127.0.0.1", motion_comfy.PORT, timeout=3)) as conn:
+                        conn.request("POST", action, body=json.dumps(body), headers={"Content-Type": "application/json"})
+                        if conn.getresponse().status != 200:
+                            raise NeedsReconciliation("Motion interrupt unconfirmed; reconcile before continuing")
+                    stop_actions.add(action)
+                    stop_reason = reason
+            except NeedsReconciliation:
+                raise
+            except (OSError, http.client.HTTPException, ValueError, RuntimeError, KeyError, IndexError, TypeError) as exc:
+                raise NeedsReconciliation("Motion interrupt unconfirmed; reconcile before continuing") from exc
         time.sleep(1)
     raise NeedsReconciliation("Motion completion unconfirmed; reconcile the existing job before continuing")
 
@@ -247,12 +266,25 @@ def _collect_clip(job_id, name, folder):
             confirmed=True, db_path=motion_comfy.DB, film_root=motion_comfy.FILMS)
 
 
-def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard=nullcontext):
+def retryable_motion_job(job_id):
+    row = motion_verify._job(job_id, motion_comfy.DB)
+    if row["state"] not in {"FAILED", "FAILED_RESOURCE"}:
+        raise ValueError("Lần chạy chuyển động cũ chưa kết thúc ở trạng thái lỗi. Hãy đối soát trước.")
+    return row
+
+
+def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard=nullcontext,
+             retry_motion_job=None):
     slug, plan_sha, workflow, digest = prepared
     if scene.get("motion_sha"):
         clip_path(scene)
         return
-    if not scene.get("motion_job"):
+    if retry_motion_job is not None:
+        row = retryable_motion_job(retry_motion_job)
+        if (scene.get("motion_job") != retry_motion_job or
+                (row["film_slug"], row["shot_id"], row["plan_sha"]) != (slug, f"sh-{index+1:05d}", plan_sha)):
+            raise ValueError("Checkpoint chuyển động đã thay đổi. Hãy tải lại trước khi thử lại.")
+    if not scene.get("motion_job") or retry_motion_job is not None:
         if cancelled():
             return
 
@@ -268,6 +300,7 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
                 workflow_path=workflow, workflow_sha=digest, seed=42+index, confirmed=True,
                 image_job=scene["job_id"], image_sha=scene["asset"],
                 ltx_encoder=Path(profile["motion_encoder"]), confirm_ltx_gate_b=True, on_reserved=reserve,
+                confirm_new_attempt=retry_motion_job is not None,
                 db_path=motion_comfy.DB, film_root=motion_comfy.FILMS, dispatch_guard=dispatch_guard)
         except (OSError, ValueError, RuntimeError, http.client.HTTPException) as exc:
             if scene.get("motion_job") and motion_verify._job(scene["motion_job"], motion_comfy.DB)["state"] == "SUBMITTING":

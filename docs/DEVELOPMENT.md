@@ -14,6 +14,11 @@ npm.cmd run build --prefix dashboard
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\agentforge_acceptance_windows.ps1 -RunContractTests
 ```
 
+`draft_resources.require_gpu()` kiểm tra RAM, Windows commit và VRAM trước khi gửi job.
+Trong lúc chạy motion, worker chỉ đọc RAM và Windows commit để quyết định có cần ngắt.
+Nếu không xác nhận được lệnh ngắt, production chuyển sang **Cần đối soát** và giữ attempt hiện tại.
+Lần chạy mới phải được Owner xác nhận cho đúng checkpoint đã kết thúc lỗi.
+
 Để chạy Dashboard:
 ```powershell
 .\.venv\Scripts\python.exe -m agentforge --port 8780
