@@ -22,6 +22,7 @@ def handle(server, path, request, session=None):
             "storyboard-rewrite": {"sha256", "index", "feedback"},
             "storyboard-regenerate": {"sha256", "index", "scope"},
             "storyboard-duration": {"sha256", "seconds"},
+            "storyboard-audio": {"sha256", "engine", "voice_name"},
         }
         if len(parts) != 6 or parts[5] not in {"approve", "reject", "edit", "resume", "cancel", "delete", "visual-review", *storyboard}:
             raise ValueError("Unknown draft action")

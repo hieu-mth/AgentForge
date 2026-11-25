@@ -14,7 +14,7 @@ from uuid import uuid4
 from agentforge import ops_control
 from agentforge.ai import model_hub
 from agentforge.features.film_studio import characters, creative_plan
-from agentforge.features.film_studio import draft_resources, draft_timeline, studio_runtime
+from agentforge.features.film_studio import draft_audio, draft_resources, draft_timeline, studio_runtime
 from agentforge.features.media import render, visual_jobs
 from agentforge.features.film_studio.draft_resources import NeedsReconciliation, ResourceWait
 from agentforge.integrations import comfy_service
@@ -1082,10 +1082,21 @@ def _render(job):
     target = _video_file(job)
     temporary = ensure_local_root(folder / (uuid4().hex + ".mp4"))
     try:
-        render._run_process(command + ["-filter_complex_threads", "1", "-filter_complex", ";".join(filters),
-                                       "-map", "[out]", "-an", "-c:v", "libx264", "-threads", "2", "-preset", "fast",
-                                       "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(temporary)],
-                            cwd=folder, timeout=150)
+        with draft_audio.prepare(job, folder, fps) as audio:
+            sound_args = ["-an"]
+            audio_evidence = None
+            if audio:
+                command += ["-i", str(audio["path"])]
+                sound_args = ["-map", f"{len(streams)}:a:0", "-c:a", "aac", "-b:a", "96k"]
+                audio_evidence = audio["evidence"]
+            render._run_process(command + ["-filter_complex_threads", "1", "-filter_complex", ";".join(filters),
+                                           "-map", "[out]", *sound_args, "-c:v", "libx264", "-threads", "2",
+                                           "-preset", "fast", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                                           str(temporary)], cwd=folder, timeout=150)
+            if audio:
+                render._run_process([ffmpeg, "-nostdin", "-v", "error", "-xerror", "-i", str(temporary),
+                                     "-map", "0:a:0", "-f", "null", "-"], cwd=folder, timeout=60)
+                audio_evidence["audio_decoded"] = True
         if not 1024 <= temporary.stat().st_size <= MAX_VIDEO:
             raise ValueError("Unexpected MP4 size")
         if job.get("status") == "RUNNING":
@@ -1108,6 +1119,8 @@ def _render(job):
                        "subtitle_sha": _sha(subtitles) if subtitles else None,
                        "shots": [{key: scene.get(key) for key in ("shot_id", "frames", "job_id", "asset",
                                   "motion_job", "motion_sha")} for scene in job["board"]["scenes"]]}
+            if audio_evidence:
+                receipt["audio"] = audio_evidence
             record = ensure_local_root(target.with_suffix(".receipt.json"))
             staged = ensure_local_root(folder / (uuid4().hex + ".json.tmp"))
             try:
@@ -1473,6 +1486,7 @@ def _storyboard_action(job, action, data):
         if job["status"] != "STORYBOARD_REVIEW":
             raise ValueError("Storyboard không chờ duyệt.")
         _validate_creative_frames(job)
+        draft_audio.validate(job)
         ops_control.require_active()
         moving = job["brief"].get("mode") == "motion"
         deferred = job.get("deferred_media_binding")
@@ -1537,9 +1551,18 @@ def _storyboard_action(job, action, data):
     scenes = job["board"]["scenes"]
     checkpoints = [{key: scene.get(key) for key in (
         "shot_id", "image_key", "job_id", "asset", "motion_job", "motion_sha")} for scene in scenes]
-    if action != "storyboard-duration":
+    if action not in {"storyboard-duration", "storyboard-audio"}:
         index = _number(data["index"], 0, len(scenes) if action == "storyboard-add" else len(scenes)-1)
-    if action == "storyboard-duration":
+    if action == "storyboard-audio":
+        audio = draft_audio.plan(data["engine"], data["voice_name"])
+        if audio == job.get("audio_plan"):
+            return job
+        if audio is None:
+            job.pop("audio_plan", None)
+        else:
+            job["audio_plan"] = audio
+            draft_audio.validate(job)
+    elif action == "storyboard-duration":
         if "duration_mode" not in job["brief"]:
             raise ValueError("Video này sử dụng preset thời lượng đã lưu.")
         seconds = data["seconds"]
@@ -1781,7 +1804,7 @@ def verify_video(job, stream):
 
 def verified_receipt(job):
     record = ensure_local_root(video_path(job).with_suffix(".receipt.json"))
-    if not record.is_file() or record.stat().st_size > 16_384:
+    if not record.is_file() or record.stat().st_size > 65_536:
         raise ValueError("Draft receipt unavailable")
     data = record.read_bytes()
     if _sha(data) != job.get("receipt_sha"):

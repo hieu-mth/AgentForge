@@ -385,6 +385,7 @@ export function StudioDrafts({mutate,onCharacters}) {
         okText:'Tạo phiên bản mới',cancelText:'Để sau',
         onOk:()=>storyboard(reviewing,'regenerate',{index,scope}),
       }):null}
+      onAudio={canEdit?(engine,voice_name)=>storyboard(reviewing,'audio',{engine,voice_name}):null}
       onMove={canChangeLayout?(index,target)=>storyboard(reviewing,'move',{index,target}):null}
       onRemove={canChangeLayout&&sceneCount>minScenes?index=>storyboard(reviewing,'remove',{index}):null}
       onAdd={canChangeLayout&&sceneCount<maxScenes?()=>setEditor({job:reviewing,adding:true,index:sceneCount,scene:{}}):null}

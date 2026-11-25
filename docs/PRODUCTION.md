@@ -105,6 +105,10 @@ The samples are interval observations and can miss shorter peaks. Use the saved 
 
 Record action coverage, count purposeful angles, and compare each adjacent segment boundary for subject, prop, pose and camera continuity. A technical pass leaves creative quality unverified. Frame chaining, conditioning and targeted regeneration require evidence from the resulting video before adoption.
 
+## Lời thoại trong Studio (tùy chọn)
+
+Trong storyboard, mở Nội dung & phiên bản → Âm thanh, chọn Windows SAPI hoặc Piper đã cài local. Piper cần tên file voice .onnx hợp lệ và JSON đi kèm; Windows có thể dùng voice mặc định hoặc tên đã cài. Không tải voice tự động. Sau khi Owner duyệt phiên bản mới, Studio dùng phụ đề từng cảnh làm lời thoại, tạo PCM WAV tạm, kiểm tra độ dài, pad khoảng im lặng đúng timeline, ghép AAC và kiểm tra decode. Nếu lời thoại dài hơn cảnh, production giữ ảnh/clip và báo cảnh cần rút ngắn; không tự cắt lời. Thay cấu hình âm thanh giữ checkpoint hình ảnh/chuyển động và tạo phiên bản mới. Receipt ghi nguồn, SHA, số mẫu và trạng thái decode; không khẳng định giọng đọc đúng ngôn ngữ hoặc chất lượng nghệ thuật. Không hỗ trợ tạo nhạc hoặc hiệu ứng âm thanh bằng model ở pilot này.
+
 ## Xuất bản
 
 **Status:** local release ledger, explicit Owner review, optional private-only YouTube OAuth CLI, signed video handoff, manual schedule intent and owner-recorded metrics **implemented in code/CI**. Real OAuth account, real private upload, platform analytics, and public scheduling are not verified.
