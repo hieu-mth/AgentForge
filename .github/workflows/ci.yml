@@ -42,6 +42,16 @@ jobs:
         run: .\scripts\agentforge_acceptance_windows.ps1
       - name: Run FFmpeg fixture (real encode/decode, no model)
         run: python -B -m agentforge.ops.runtime_certification --run-ffmpeg --confirm-local-exec
+      - name: Install FFmpeg and ffprobe for cloud E2E
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ffprobe -ErrorAction SilentlyContinue) -or -not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+            choco install ffmpeg -y --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "FFmpeg installation failed" }
+          }
+          python -c "from agentforge.features.media.render import find_media_tool; assert all(find_media_tool(t) for t in ('ffmpeg','ffprobe')), 'Missing FFmpeg/ffprobe'"
+      - name: Run V5 cloud video integration with real media tools
+        run: python -m unittest tests.test_v5_cloud_motion -v
       - name: Run no-inference Owner preflight wrapper
         shell: powershell
         run: .\scripts\agentforge_runtime_certify_windows.ps1
