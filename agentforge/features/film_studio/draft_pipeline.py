@@ -1559,7 +1559,7 @@ def _storyboard_action(job, action, data):
     checkpoints = [{key: scene.get(key) for key in (
         "shot_id", "image_key", "job_id", "asset", "motion_job", "motion_sha")} | (
         {"motion_source": scene["motion_source"]} if scene.get("motion_source") else {}) for scene in scenes]
-    if action not in {"storyboard-duration", "storyboard-audio", "storyboard-continuity"}:
+    if action not in {"storyboard-duration", "storyboard-audio", "storyboard-continuity", "storyboard-audio-direct"}:
         index = _number(data["index"], 0, len(scenes) if action == "storyboard-add" else len(scenes)-1)
     if action == "storyboard-continuity":
         if job["brief"].get("mode") != "motion":
@@ -1578,6 +1578,20 @@ def _storyboard_action(job, action, data):
                 scene["continuity_plan"] = entry
                 scene.update(image_key=uuid4().hex, asset=None, job_id=None, attempts=0)
                 draft_continuity.clear_motion(scene)
+    elif action == "storyboard-audio-direct":
+        from agentforge.features.film_studio import audio_director
+        _, bindings, _ = _studio_bindings(job)
+        writer = bindings["film.storyboard"]
+        ops_control.require_active()
+        slot = nullcontext() if writer.get("provider") in {"openai", "anthropic"} else model_hub.local_inference_slot()
+        with slot, _measured(job, "storyboard", bindings.get("image.generate")):
+            audio = audio_director.propose(job, data["engine"], data["voice_name"], data["voices"],
+                lambda instructions, payload, schema:
+                    _ask(writer, instructions, payload, schema, bindings.get("image.generate"), job=job))
+        if audio == job.get("audio_plan"):
+            return job
+        job["audio_plan"] = audio
+        draft_audio.validate(job)
     elif action == "storyboard-audio":
         audio = draft_audio.plan(data["engine"], data["voice_name"])
         if audio == job.get("audio_plan"):

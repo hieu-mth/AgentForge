@@ -78,7 +78,7 @@ def clear_stale_boundaries(scenes):
     """Reordering/removing shots must not implicitly authorize a different predecessor."""
     for index, scene in enumerate(scenes):
         plan = scene.get("continuity_plan")
-        if plan and (plan["previous_shot_id"] != (scenes[index-1]["shot_id"] if index else None)
+        if plan and (plan["previous_shot_id"] != (scenes[index-1].get("shot_id") if index else None)
                      or (index == 0 and plan["transition"] != "CUT")):
             scene.pop("continuity_plan")
             # The old image was prompted with the removed boundary; rebuild it too.
