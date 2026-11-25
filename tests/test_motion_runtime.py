@@ -80,9 +80,9 @@ class MotionRuntimeTests(unittest.TestCase):
                 job_id=info["job_id"], filename=filename, output_dir=self.outputs,
                 confirmed=True, db_path=self.db, film_root=self.films, **kwargs)
 
-    def test_repository_workflow_example_is_strict_wan5b_49_frame_graph(self):
+    def test_archived_wan_workflow_fixture_remains_readable(self):
         from agentforge.paths import REPOSITORY_ROOT
-        example = REPOSITORY_ROOT / "examples" / "film_studio" / "wan22_5b_4s_api.json"
+        example = REPOSITORY_ROOT / "tests" / "fixtures" / "wan22_5b_4s_api.json"
         record = motion.inspect_workflow(example)
         self.assertEqual(record["profile"]["frames"], 49)
         self.assertEqual(record["profile"]["fps"], 12)

@@ -30,4 +30,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\agentforge_runtime
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\agentforge_runtime_certify_windows.ps1 -RunFFmpeg -ConfirmLocalExec -SaveReport
 ```
 
-Các luồng có tác động yêu cầu xét quyền/SHA, không tự upload. Cấm `git clean -fdx` và `reset --hard` để cleanup, vì sẽ đụng dữ liệu local. Owner có thể test GPU và continuity theo [runtime checklist](verification/RUNTIME.md). CI không thay thế Owner runtime QA.
+Các luồng có tác động yêu cầu xét quyền/SHA, không tự upload. Cấm `git clean -fdx` và `reset --hard` để cleanup, vì sẽ đụng dữ liệu local. Owner có thể test GPU và continuity theo [runtime checklist](RUNTIME.md). CI không thay thế Owner runtime QA.
+
+Frontend Edge smoke: `npm.cmd run test:browser --prefix dashboard` sau khi build và cài Microsoft Edge. Kết quả nghiệm thu dùng CI cùng commit; fixture không gọi model thật.

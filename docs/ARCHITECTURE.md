@@ -1,0 +1,81 @@
+# Kiến trúc AgentForge
+
+## Cấu trúc repository
+
+```text
+agentforge/
+  api/           # Owner-auth localhost HTTP, CSRF, feature endpoints
+  ai/            # SQLite Model Hub + source capability policy, no implicit execution
+  features/
+    film_studio/  # characters, long_form, motion, production, publishing
+    media/        # visual jobs, Comfy image, FFmpeg, MP4 validation
+  integrations/  # ComfyUI loopback, optional YouTube private upload
+  ops/           # read-only environment discovery, runtime evidence
+  paths.py       # canonical path, symlink/junction checks
+  ops_control.py # pause/resume owner-gated actions
+dashboard/       # React/Ant Design
+examples/film_studio/
+scripts/         # Windows setup, preflight, verification and source/docs hygiene
+tests/           # only current video/security tests
+```
+
+Film Studio giữ SHA-bound receipts và explicit Owner approval. GPU tasks, external subprocess/YouTube upload không tự chạy khi truy cập GET/UI. Schema và receipt cần thiết để đọc dữ liệu Owner đã lưu vẫn được bảo toàn.
+
+Model profiles, model-route assignments và chính sách AI điều phối được lưu ở `data/company/model_hub.sqlite3` (Owner-managed). Một checkout mới không có model mặc định. Catalog capability chỉ nằm trong Python; `config/` đã bị loại bỏ.
+
+`data/`, `workspace/`, `.env`, `models/` thuộc Owner, ngoài phạm vi xóa. Không có migration tự động đối với historical SQLite. Không có `.env` auto-loader; Windows/process environment vẫn có thể được dùng cho tham chiếu secret nếu Owner cần.
+
+## Pipeline và Model Hub routing
+
+### Model routing và tiếp tục production
+
+Studio đọc các capability đã phân công từ một snapshot SQLite của Model Hub. Lập kế hoạch, storyboard và ảnh cần route local tương thích. Video động còn cần route motion. Khi thư viện có nhân vật và Owner chưa gán route casting riêng, Studio dùng model storyboard local đã khóa trong cùng production. Route casting được gán tường minh nhưng không hợp lệ sẽ bị chặn. Studio không dùng model mặc định, đề xuất tự động hay cloud fallback để thay cho route Owner đã chọn.
+
+Bản nháp mới lưu fingerprint của hồ sơ đã chọn ngay khi nhận việc. Storyboard SHA bao gồm các fingerprint đó và danh tính adapter motion hiện có. Khi duyệt, Studio giữ thêm dấu nhận dạng cấu hình ComfyUI Portable cho motion. Resume đối chiếu các route liên quan trước khi gọi adapter. Thay đổi Hồ sơ Model Hub ngoài các route này không làm mất hiệu lực duyệt. Rollback về đúng cấu hình đã duyệt có thể cho phép tiếp tục, dù số revision đã tăng.
+
+Bản nháp cũ dùng revision gốc và dữ liệu lịch sử Model Hub để xác minh route khi revision hiện tại khác. Nếu không đủ bằng chứng, Studio giữ checkpoint và yêu cầu khôi phục cấu hình. Mất kết nối ComfyUI không thay đổi danh tính runtime. Job có trạng thái chưa chắc chắn vẫn phải đối soát ledger trước khi tiếp tục. Các ảnh và clip đã xác minh được đọc lại từ checkpoint.
+
+Fingerprint pin cấu hình profile và preset, không xác nhận bytes của tag Ollama hoặc weights FLUX đã bị thay thế tại chỗ trên runtime. LTX tiếp tục xác minh SHA checkpoint và encoder trước dispatch. Kiểm thử fixture không xác nhận inference GPU trên máy Owner.
+
+FLUX và LTX kiểm tra lại route đã duyệt sau bước chuẩn bị runtime, trong giao dịch SQLite dùng cùng ranh giới ghi với Model Hub. Registry không thể commit thay đổi giữa lần kiểm tra đó và POST. Giao dịch giữ qua bước đặt chỗ và upload ảnh nguồn LTX, rồi nhả ngay sau POST, trước khi theo dõi hay thu kết quả. Gửi job đã được chấp nhận vẫn tiếp tục theo ledger nếu Owner thay đổi registry sau đó.
+
+Pipeline hiện có trong source: lập immutable film plan và shot slots → Owner review → ComfyUI motion job một lượt đã duyệt → nhận clip MP4, verify SHA/frames/FFmpeg → versioned production + optional local TTS → render episode có receipt → Owner review → publishing handoff local/optional private-only YouTube CLI.
+
+Studio có thể lập storyboard từ nội dung Owner, tạo ảnh và motion theo timeline đã duyệt, rồi ghép MP4. Chất lượng visual identity, continuity và hiệu suất phim dài cần nghiệm thu riêng. Mỗi lượt dispatch cần workflow, weights và quyền phù hợp.
+
+## Quản lý model và chính sách Owner
+
+**Không còn thư mục `config/` hay model mặc định trong Git.** Owner đăng ký, chỉnh sửa và xóa profile từ **Cài đặt → Model AI**. Một máy mới có **0 model đã đăng ký**. Ollama hoặc ComfyUI được phát hiện bởi trang Môi trường không đồng nghĩa được tự thêm vào Model Hub.
+
+- Nguồn dữ liệu duy nhất của model profile, các model được gán cho tác vụ và chính sách điều phối: `data/company/model_hub.sqlite3` (ignored), revision/CAS, rollback transaction và Owner confirmation.
+- Danh mục capability (`general.text`, `film.storyboard`, `film.motion`, `image.generate`, `ops.monitor`) được khai báo từ `agentforge/ai/orchestrator_policy.py` và `model_hub.route_catalog()` — chỉ metadata thuộc source, **không chứa model ID mặc định**.
+- Lưu profile và gán route **không chạy model**. Film/image routes `CONFIG_ONLY`; `ops.monitor` deterministic. Studio lấy route đã phân công từ snapshot Model Hub và kiểm tra fingerprint trước dispatch; trạng thái CONFIG_ONLY không tự cấp quyền thực thi.
+- Owner có thể xóa profile chưa được tham chiếu. Muốn xóa profile đang được phân công phải bỏ gán trước. Xóa profile không xóa weights, DB khác hay workspace.
+- Cơ sở dữ liệu đã tồn tại được giữ nguyên, không tự sửa hoặc migrate khi GET. Overlay/profile Owner cũ tiếp tục được đọc. Các ID route lịch sử ngoài catalog chỉ lưu trữ, không xuất hiện hay thực thi. Model trước đây chỉ tồn tại trong TOML **không tự đăng ký lại**; Owner chọn thêm khi muốn dùng.
+- Các giá trị `api_key_env`, `base_url_env` của cloud profile là **tên biến môi trường**, không phải token; không có cơ chế tự nạp file `.env` ở ứng dụng. Nếu cần dùng credentials về sau, chúng phải được inject an toàn vào môi trường tiến trình. Cloud call luôn phải được duyệt, không tự fallback.
+- `.env` không nằm trong Git, bị ignore để ngăn lộ bí mật. Không cần tạo file `.env` để chạy local Video Studio; không xóa `.env` sẵn có trên máy Owner bằng Git cleanup.
+
+Chỉ ComfyUI loopback + workflow/SHA/Owner consent thuộc Film Studio mới được gửi GPU thật. Profile có mặt không chứng minh model đã tải, khả năng sinh hoặc độ phù hợp VRAM.
+
+## Hợp đồng readiness
+
+Trong **Cài đặt → Model AI**, Owner có thể xem lại và xác thực cấu hình trước khi lưu, phân công hồ sơ theo năng lực và kiểm tra metadata theo yêu cầu. API `POST /api/model-hub/profile/preview` nhận `ack: "PREVIEW_MODEL_PROFILE"`, `expected_revision` và `profile` để xác thực hồ sơ nháp. API key chỉ gửi ở thao tác lưu hồ sơ.
+
+`GET /api/model-hub` trả `capability_contracts` cho từng profile, gồm adapter tương thích, mã lý do và giới hạn đầu ra. Để kiểm tra runtime, phiên Owner gửi `POST /api/model-hub/readiness` với CSRF và payload gồm `ack: "CHECK_CAPABILITY_READINESS"`, `profile_id`, `capability` và `expected_revision` lấy từ catalog.
+
+`route_configurable` phản ánh chính sách gán route, còn `local_runtime_compatible` phản ánh adapter local. Hồ sơ Anthropic dùng cho cấu hình route văn bản vẫn được giữ và trả `NOT_CHECKED` khi preflight.
+
+Preflight trả `METADATA_COMPATIBLE`, `UNAVAILABLE`, `UNSUPPORTED`, `MISSING_DEPENDENCY` hoặc `NOT_CHECKED`, cùng mã `reason` cụ thể. `runtime_available` cho biết runtime có trả được metadata cần thiết, còn `endpoint_metadata_compatible` cho biết metadata đó phù hợp với model/workflow. Giá trị `null` là chưa xác định. Kết quả luôn có `inference_verified: false` và `endpoint_ownership: "NOT_CHECKED"`. ComfyUI mở bên ngoài có thể trả metadata tương thích. LTX vẫn cần cấu hình thư mục Portable, công cụ media và weights local theo chính sách dispatch hiện hành. SHA weights và tài nguyên khả dụng vẫn do runtime kiểm tra khi thực thi.
+
+
+## Creative Director
+
+New motion drafts with authored scene headings and the current duration mode use Creative Director. Existing drafts, free-form ideas and still productions retain their existing planner. SQLite requires no migration. The storyboard model proposes ordered groups of action IDs, camera direction and relative duration. Python validates coverage and compiles runtime-sized segments within the existing production frame and segment budget.
+
+The approval digest includes the compiled plan, the segment storyboard and the existing model and motion identity. On resume the stored plan is recompiled against the pinned output profile and the storyboard frame counts are rechecked. Editing segment text updates the storyboard digest and uses the existing asset invalidation rules. Authored scene boundaries and the creative segment layout stay fixed during segment edits. A new production is required to propose a different layout.
+
+### Planning repair and limitations
+
+Incomplete or out-of-order action coverage receives at most one contextual model revision; invalid coverage after that stops planning. Segment prompts distinguish prepare, progress and complete for continued actions. Exact duplicate descriptions or motion prompts receive bounded repair. These controls do not establish semantic or visual continuity.
+
+Xem [runtime](RUNTIME.md) và [production](PRODUCTION.md) để kiểm tra hành vi thực tế.
