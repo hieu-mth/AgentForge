@@ -675,8 +675,8 @@ try {
     throw new Error('Fresh Owner Model Hub must not preload any model');
   await settings.goto(policyOrigin+'/dashboard/#/orchestrator',{waitUntil:'networkidle'});
   await settings.getByRole('heading',{name:'AI điều phối tác vụ',exact:true}).waitFor();
-  for(const title of ['AI điều phối chính','Phân công AI theo năng lực',
-    'Quy tắc tự động điều phối','Quyền hạn & giới hạn']){
+  for(const title of ['Chế độ thực thi','Phân công AI theo năng lực',
+    'An toàn runtime','Quyền thực thi']){
     await settings.getByText(title,{exact:true}).waitFor();
   }
   if((await settings.request.post(endpoint,postOptions)).status()!==403)
@@ -690,30 +690,12 @@ try {
   if(await openOptions.filter({hasText:/local_primary|cloud_primary/}).count())
     throw new Error('Video binding offers incompatible text models');
   await motionModel.press('Escape');
-  const allowed=settings.getByRole('combobox',{name:'Model được phép đề xuất'});
-  if(await allowed.count())throw new Error('Fixed selection shows suggestion options');
-  const suggest=settings.getByText('AI đề xuất',{exact:true});
-  await suggest.evaluate(node=>node.scrollIntoView({block:'center',behavior:'instant'}));
-  const scrollBefore=await settings.evaluate(()=>window.scrollY);
-  const controlBefore=await suggest.evaluate(node=>node.getBoundingClientRect().top);
-  await suggest.click();
-  await allowed.waitFor();
-  const scrollAfter=await settings.evaluate(()=>window.scrollY);
-  const controlAfter=await suggest.evaluate(node=>node.getBoundingClientRect().top);
-  if(Math.abs(scrollAfter-scrollBefore)>2||Math.abs(controlAfter-controlBefore)>2)
-    throw new Error('Editing orchestration rules moved the viewport: '+JSON.stringify({
-      scrollBefore,scrollAfter,controlBefore,controlAfter,
-    }));
-  await savePolicy.click();
-  await settings.getByText('Chọn model khả dụng cho danh sách đề xuất.',{exact:true}).waitFor();
-  await settings.getByRole('button',{name:'Hủy thay đổi'}).click();
-  const fallbackMode=settings.getByRole('combobox',{name:'Model không khả dụng'});
-  await fallbackMode.click();
-  await openOptions.filter({hasText:/^Dùng model local dự phòng đã gán$/}).click();
-  await settings.getByText('Chưa gán model dự phòng.',{exact:false}).waitFor();
-  await settings.getByRole('button',{name:'Hủy thay đổi'}).click();
-  const decompose=settings.getByRole('checkbox',{name:'Tự phân tích và chia nhỏ yêu cầu'});
-  await decompose.check();
+  for(const name of ['Model điều phối','Model không khả dụng','Model được phép đề xuất',
+    'Tác vụ GPU đồng thời','Lượt gọi API trả phí mỗi ngày','Số lần thử lại tối đa']){
+    if(await settings.getByLabel(name,{exact:true}).count())throw new Error('Retired control still visible: '+name);
+  }
+  const planToggle=settings.getByRole('switch',{name:'Lập kế hoạch',exact:true});
+  await planToggle.click();
   await settings.getByText('Có thay đổi chưa lưu',{exact:true}).waitFor();
   await settings.setViewportSize({width:1280,height:850});
   const tabs=settings.locator('.af-section-tabs');
@@ -722,18 +704,18 @@ try {
   await modelTab.click();
   await discardDialog.getByRole('button',{name:'Ở lại chỉnh sửa'}).click();
   await discardDialog.waitFor({state:'hidden'});
-  if(!await decompose.isChecked())throw new Error('Staying on tab discarded the draft');
+  if((await planToggle.getAttribute('aria-checked'))!=='true')throw new Error('Staying on tab discarded the draft');
   await settings.evaluate(()=>{location.hash='#/models';});
   await discardDialog.getByRole('button',{name:'Ở lại chỉnh sửa'}).click();
   await discardDialog.waitFor({state:'hidden'});
-  if(!settings.url().endsWith('#/orchestrator')||!await decompose.isChecked())
+  if(!settings.url().endsWith('#/orchestrator')||(await planToggle.getAttribute('aria-checked'))!=='true')
     throw new Error('Hash navigation discarded the draft');
   await modelTab.click();
   await discardDialog.getByRole('button',{name:'Bỏ thay đổi',exact:true}).click();
   await settings.waitForURL('**/#/models');
   await tabs.locator('[data-node-key="orchestrator"] [role="tab"]').click();
-  await decompose.waitFor();
-  if(await decompose.isChecked()||await savePolicy.isEnabled())throw new Error('Discard kept edits');
+  await planToggle.waitFor();
+  if((await planToggle.getAttribute('aria-checked'))==='true'||await savePolicy.isEnabled())throw new Error('Discard kept edits');
   await settings.setViewportSize({width:390,height:850});
   await settings.goto(policyOrigin+'/dashboard/#/models');
   await settings.getByRole('button',{name:'Đăng ký model'}).click();
@@ -813,16 +795,10 @@ try {
   console.log('Model adapter selection, validation and real SQLite registration: PASS');
   await settings.goto(policyOrigin+'/dashboard/#/orchestrator');
   await settings.getByRole('heading',{name:'AI điều phối tác vụ',exact:true}).waitFor();
-  await settings.getByRole('combobox',{name:'Model điều phối'}).click();
+  const planModel=settings.getByRole('combobox',{name:'Model chính · Lập kế hoạch'});
+  await planModel.click();
   await openOptions.filter({hasText:/local_primary/}).click();
-  await decompose.check();
-  const dailyLimit=settings.getByRole('spinbutton',{name:'Lượt gọi API trả phí mỗi ngày'});
-  if(await dailyLimit.inputValue()!=='10')throw new Error('Default paid API limit is incorrect');
-  if(!await dailyLimit.evaluate(input=>Boolean(input.closest('.dashboard-number-field')
-    ?.querySelector('.ant-input-number-suffix'))))throw new Error('Settings does not use the shared number field');
-  await dailyLimit.press('ArrowUp');
-  if(await dailyLimit.inputValue()!=='11')throw new Error('Number field lost keyboard stepping');
-  await dailyLimit.fill('37');
+  await planToggle.click();
   const toolsToggle=settings.getByRole('switch',{name:'Chạy công cụ local'});
   const toolsSelect=settings.getByRole('combobox',{name:'Công cụ local được phép'});
   if(await toolsSelect.count())throw new Error('Disabled tools permission shows the allowlist');
@@ -832,27 +808,19 @@ try {
   await toolsSelect.press('Escape');
   await toolsToggle.click();
   await toolsSelect.waitFor({state:'hidden'});
-  const gpuJobs=settings.getByRole('spinbutton',{name:'Tác vụ GPU đồng thời'});
-  if(await gpuJobs.count())throw new Error('Serial GPU mode shows concurrency input');
-  await settings.getByText('Chạy đồng thời',{exact:true}).click();
-  await gpuJobs.fill('3');
-  await fallbackMode.click();
-  await openOptions.filter({hasText:/^Dùng model local dự phòng đã gán$/}).click();
-  await settings.getByRole('combobox',{name:'Model dự phòng · Lập kế hoạch'}).click();
-  await openOptions.filter({hasText:/local_primary/}).click();
-  await settings.getByText('Đã gán dự phòng cho 1 năng lực: Lập kế hoạch.').waitFor();
   await savePolicy.click();
   await settings.getByRole('dialog').getByRole('button',{name:'Lưu cấu hình'}).click();
   await settings.getByText('Owner tùy chỉnh · Phiên bản 2',{exact:true}).waitFor();
   await settings.reload();
   await settings.getByText('Owner tùy chỉnh · Phiên bản 2',{exact:true}).waitFor();
-  if(!await decompose.isChecked()||await dailyLimit.inputValue()!=='37'||await gpuJobs.inputValue()!=='3')
+  if((await planToggle.getAttribute('aria-checked'))!=='true')
     throw new Error('Settings did not persist after reload');
   const persisted=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
   if(persisted.orchestrator.policy.permissions.run_tools||
     !persisted.orchestrator.policy.tools.includes('ffmpeg'))
     throw new Error('Hiding the tools allowlist discarded the selection');
-  if(persisted.orchestrator.policy.primary!=='local_primary')
+  if(persisted.routes.find(row=>row.id==='general.text')?.model_ref!=='local_primary'||
+    persisted.orchestrator.policy.primary!==null||persisted.orchestrator.policy.gpu_concurrency!==1)
     throw new Error('Saved model was not read back from real Model Hub');
   const {csrf}=await (await settings.request.get(policyOrigin+'/api/session')).json();
   const invalid=await settings.request.post(endpoint,{headers:{...postOptions.headers,'X-CSRF-Token':csrf},
@@ -867,7 +835,7 @@ try {
   await settings.getByRole('button',{name:'Đặt lại mặc định'}).click();
   await settings.getByRole('dialog').getByRole('button',{name:'Đặt lại',exact:true}).click();
   await settings.getByText('Mặc định · Phiên bản 3',{exact:true}).waitFor();
-  if(await decompose.isChecked()||await dailyLimit.inputValue()!=='10'||await gpuJobs.count())
+  if((await planToggle.getAttribute('aria-checked'))==='true')
     throw new Error('Reset did not restore defaults');
   for(const width of [390,900,1440]){
     await settings.setViewportSize({width,height:850});

@@ -121,7 +121,25 @@ def validate(policy, *, id_pattern, extra_routes):
     return policy
 
 
-def resolve(capability, policy, available_profiles, primary_ref, *, allow_fallback=False):
+# The stored schema remains readable for Owner databases and rollback snapshots.
+# Only these settings participate in the current Studio execution contract.
+EDITABLE_FIELDS = frozenset({"mode", "mappings", "permissions", "tools"})
+
+
+def editable(policy):
+    """Canonicalize on explicit save only, never on catalog reads or rollback."""
+    return {**defaults(), **{key: policy[key] for key in EDITABLE_FIELDS},
+            "mode": "MANUAL" if policy["mode"] == "MANUAL" else "SUPERVISED",
+            "tools": [tool for tool in policy["tools"] if tool == "ffmpeg"]}
+
+
+def validate_save(policy, *, id_pattern, extra_routes):
+    if isinstance(policy, dict) and policy.keys() == EDITABLE_FIELDS:
+        policy = {**defaults(), **policy}
+    return validate(policy, id_pattern=id_pattern, extra_routes=extra_routes)
+
+
+def resolve(capability, policy, available_profiles, primary_ref):
     """Resolve a configured candidate using an available-profile snapshot."""
     kind = KINDS.get(capability)
     if kind is None:
@@ -135,20 +153,13 @@ def resolve(capability, policy, available_profiles, primary_ref, *, allow_fallba
     primary = available_profiles.get(primary_ref)
     candidates = [ref for ref in policy["allowed_profiles"]
                   if compatible(kind, available_profiles.get(ref))]
-    if policy["selection"] == "SUGGEST" and candidates and not allow_fallback:
+    if policy["selection"] == "SUGGEST" and candidates:
         return {"status": "CONFIG_ONLY", "candidates": candidates,
                 "reason": "OWNER_SELECTION_REQUIRED", "execution_allowed": False}
-    if compatible(kind, primary):
-        selected, source = primary_ref, "PRIMARY"
-    else:
-        fallback_ref = policy["fallbacks"].get(capability)
-        fallback = available_profiles.get(fallback_ref)
-        if (allow_fallback and fallback_ref != primary_ref and policy["fallback"] == "LOCAL" and
-                compatible(kind, fallback) and fallback["provider"] == "ollama"):
-            selected, source = fallback_ref, "LOCAL_FALLBACK"
-        else:
-            return {"status": "UNAVAILABLE", "reason": "NO_COMPATIBLE_PROFILE",
-                    "execution_allowed": False}
+    if not compatible(kind, primary):
+        return {"status": "UNAVAILABLE", "reason": "NO_COMPATIBLE_PROFILE",
+                "execution_allowed": False}
+    selected, source = primary_ref, "PRIMARY"
     return {"status": "CONFIG_ONLY", "model_ref": selected, "source": source,
             "requires_owner_approval": available_profiles[selected]["provider"] == "anthropic",
             "execution_allowed": False}

@@ -730,7 +730,7 @@ def _tables(conn):
 
 def _save_orchestrator(updated, policy, route_changes):
     routes = route_catalog()
-    policy = orchestrator_policy.validate(
+    policy = orchestrator_policy.validate_save(
         policy, id_pattern=ID_RE, extra_routes=_extra_capabilities(routes))
     editable = {key for key in routes if orchestrator_policy.KINDS.get(key)
                 in {"text", "image", "video"}}
@@ -765,7 +765,7 @@ def _save_orchestrator(updated, policy, route_changes):
         else:
             validate_ref(ref, routes[key]["kind"])
             updated["routes"][key] = ref
-    updated["orchestrator"] = policy
+    updated["orchestrator"] = orchestrator_policy.editable(policy)
 
 
 def change(action, *, expected_revision, db_path=None, profile=None, profile_id=None,

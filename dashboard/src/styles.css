@@ -384,13 +384,11 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .orchestrator-rule-copy h3{margin:0 0 5px;font-size:14px;font-weight:700;color:var(--text)}
 .orchestrator-rule-controls{display:grid;align-content:start;gap:12px;min-width:0;max-width:520px}
 .orchestrator-rule-controls .ant-form-item{margin:0}
-.orchestrator-rule-hint{margin:0}
 .orchestrator-rule-note{margin:12px 0 0}
 .orchestrator-permission{display:flex;justify-content:space-between;align-items:center;gap:14px;
   min-width:0;padding:10px 12px;border-radius:10px;background:var(--env-raised)}
 .orchestrator-permission strong{display:block;font-size:13px}
 .orchestrator-permission > div:first-child > span{display:block;margin-top:3px;color:var(--muted);font-size:12px}
-.orchestrator-limit-fields{display:grid;gap:12px}
 .dashboard-number-field.ant-input-number{
   width:var(--number-field-width,160px);max-width:100%;overflow:hidden;
 }
@@ -413,18 +411,13 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .dashboard-number-field.ant-input-number .ant-input-number-action:hover:not(.ant-input-number-action-up-disabled):not(.ant-input-number-action-down-disabled){
   height:auto;color:var(--primary);background:color-mix(in srgb,var(--primary) 12%,transparent);
 }
-.orchestrator-limit-fields{--number-field-width:224px}
 .orchestrator-approval-note{display:flex;gap:10px;align-items:flex-start;
   border-top:1px solid var(--env-border);padding-top:14px;color:var(--muted);font-size:12px}
 .orchestrator-approval-note > .anticon{color:var(--primary);margin-top:3px}
 .orchestrator-approval-note strong{display:block;color:var(--text);margin-bottom:3px}
-.orchestrator-gpu-controls{display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px}
-.orchestrator-gpu-count{display:flex;align-items:flex-start;gap:8px}
-.orchestrator-gpu-count > span{line-height:38px;color:var(--muted);white-space:nowrap}
 @media(width < 680px){
   .orchestrator-rule-row{grid-template-columns:1fr;gap:12px;padding:14px 0}
 }
-.orchestrator-toggle.ant-form-item{margin:12px 0 0}
 .orchestrator-fields + .ant-typography{display:block;margin-top:12px}
 .orchestrator-fields + .ant-alert{margin-top:16px}
 .orchestrator-capabilities{display:grid;gap:12px}

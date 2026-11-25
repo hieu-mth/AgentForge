@@ -13,3 +13,5 @@
 Chỉ ComfyUI loopback + workflow/SHA/Owner consent thuộc Film Studio mới được gửi GPU thật. Profile có mặt không chứng minh model đã tải, khả năng sinh hoặc độ phù hợp VRAM.
 
 Xem [cấu trúc](REPOSITORY_STRUCTURE.md) và [runtime Owner](../verification/RUNTIME.md).
+
+Trang AI điều phối chỉ cho sửa chế độ thực thi, model theo năng lực, quyền local và FFmpeg. GPU luôn chạy lần lượt; không tự chọn model dự phòng, không có ngân sách API trả phí đang thực thi. Snapshot chính sách cũ vẫn đọc và rollback được; chỉ khi Owner chủ động lưu mới đưa các tùy chọn đã ngừng hỗ trợ về mặc định. Không thay đổi SQLite khi đọc.

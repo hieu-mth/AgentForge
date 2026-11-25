@@ -99,10 +99,10 @@ class OrchestratorTests(unittest.TestCase):
         self.assertFalse(reset["orchestrator"]["owner_override"])
         restored = model_hub.change("ROLLBACK_MODEL_HUB", expected_revision=4,
                                     target_revision=3, db_path=self.db)
-        self.assertEqual(restored["orchestrator"]["policy"], values)
+        self.assertEqual(restored["orchestrator"]["policy"], policy.editable(values))
         self.assertEqual(model_hub.catalog(db_path=self.db), restored)
 
-    def test_paid_api_limit_loads_legacy_policy_then_persists_owner_value(self):
+    def test_legacy_policy_reads_unchanged_and_retires_inactive_values_on_save(self):
         self.save(policy.defaults())
         old_policy = policy.defaults()
         del old_policy["paid_api_daily_limit"]
@@ -118,8 +118,32 @@ class OrchestratorTests(unittest.TestCase):
         values = {**current["orchestrator"]["policy"], "paid_api_daily_limit": 37}
         self.save(values, revision=1)
         updated = model_hub.catalog(db_path=self.db)["orchestrator"]["policy"]
-        self.assertEqual(updated["paid_api_daily_limit"], 37)
+        self.assertEqual(updated["paid_api_daily_limit"], 10)
         self.assertTrue(updated["approvals"]["cloud"])
+
+    def test_current_save_accepts_only_runtime_controls_and_preserves_routes(self):
+        self.seed()
+        legacy = {**policy.defaults(), "gpu_exclusive": False, "gpu_concurrency": 4,
+                  "mode": "AUTOMATIC", "paid_api_daily_limit": 37, "primary": "local_primary"}
+        state = {"profiles": model_hub._read_state(db_path=self.db)[1]["profiles"],
+                 "routes": {"general.text": "local_primary"}, "orchestrator": legacy}
+        with closing(sqlite3.connect(self.db)) as conn, conn:
+            conn.execute("UPDATE hub_state SET payload=?", (json.dumps(state),))
+        self.assertEqual(model_hub.catalog(db_path=self.db)["orchestrator"]["policy"], legacy)
+        active = {"mode": "SUPERVISED", "mappings": {},
+                  "permissions": {**legacy["permissions"], "plan": True}, "tools": ["ffmpeg"]}
+        result = self.save(active, revision=2)
+        saved = result["orchestrator"]["policy"]
+        self.assertTrue(saved["gpu_exclusive"])
+        self.assertEqual(saved["gpu_concurrency"], 1)
+        self.assertIsNone(saved["primary"])
+        self.assertEqual(saved["paid_api_daily_limit"], 10)
+        self.assertTrue(saved["permissions"]["plan"])
+        self.assertEqual(saved["tools"], ["ffmpeg"])
+        self.assertEqual(next(row for row in result["routes"] if row["id"] == "general.text")["model_ref"],
+                         "local_primary")
+        with self.assertRaises(ValueError):
+            self.save({**active, "unknown": True}, revision=3)
 
     def test_invalid_later_binding_rolls_back_policy_and_first_binding(self):
         self.seed()
@@ -148,20 +172,18 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual(row["status"], "UNAVAILABLE")
         self.assertNotIn("cloud_primary", row["options"])
 
-    def test_resolver_is_pure_and_explicitly_refuses_cloud_fallback(self):
+    def test_resolver_is_pure_and_does_not_fallback(self):
         profiles = {"local": {"provider": "ollama", "enabled": True},
                     "cloud": {"provider": "anthropic", "enabled": True}}
         config = {**policy.defaults(), "fallback": "LOCAL",
                   "fallbacks": {"general.text": "cloud"}}
         with patch("urllib.request.urlopen", side_effect=AssertionError("network")):
-            self.assertEqual(policy.resolve("general.text", config, profiles, None,
-                                            allow_fallback=True)["status"], "UNAVAILABLE")
+            self.assertEqual(policy.resolve("general.text", config, profiles, None)["status"], "UNAVAILABLE")
             selected = policy.resolve("general.text", config, profiles, "cloud")
             self.assertTrue(selected["requires_owner_approval"])
             self.assertFalse(selected["execution_allowed"])
             config["fallbacks"]["general.text"] = "local"
-            self.assertEqual(policy.resolve("general.text", config, profiles, None,
-                                            allow_fallback=True)["source"], "LOCAL_FALLBACK")
+            self.assertEqual(policy.resolve("general.text", config, profiles, None)["status"], "UNAVAILABLE")
             config.update(selection="SUGGEST", allowed_profiles=["local", "cloud"])
             suggested = policy.resolve("general.text", config, profiles, None)
             self.assertEqual(suggested["candidates"], ["local", "cloud"])
