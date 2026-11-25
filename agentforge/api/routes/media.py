@@ -23,14 +23,16 @@ def handle(server, path, request, session=None):
             "storyboard-regenerate": {"sha256", "index", "scope"},
             "storyboard-duration": {"sha256", "seconds"},
         }
-        if len(parts) != 6 or parts[5] not in {"approve", "reject", "edit", "resume", "cancel", "delete", *storyboard}:
+        if len(parts) != 6 or parts[5] not in {"approve", "reject", "edit", "resume", "cancel", "delete", "visual-review", *storyboard}:
             raise ValueError("Unknown draft action")
         from agentforge.features.film_studio import draft_pipeline
         identifier, action = parts[4:]
-        if action in {"resume", "storyboard-approve", "storyboard-rewrite"} and not server.allow_external_actions:
+        if action in {"resume", "storyboard-approve", "storyboard-rewrite", "visual-review"} and not server.allow_external_actions:
             raise PermissionError("Draft production requires external-tools mode")
         required = {"sha256"} if action in {"approve", "reject"} else (
             {"index", "description", "image_prompt"} if action == "edit" else storyboard.get(action, set()))
+        if action == "visual-review":
+            required = {"sha256", "video_sha", "index", "allow_cloud"}
         optional = {"caption", "scene_notes"} if action in {"storyboard-edit", "storyboard-add"} else set()
         if action == "resume":
             optional = {"retry_motion_job"}
