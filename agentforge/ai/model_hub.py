@@ -33,7 +33,7 @@ ENV_NAME = re.compile(r"[A-Z_][A-Z0-9_]*\Z")
 # Retain stable IDs for existing Owner SQLite routes and Dashboard clients.
 ROUTE_CAPABILITIES = frozenset({
     "general.text", "film.storyboard", "film.motion",
-    "image.generate", "vision.qa", "film.tts", "ops.monitor",
+    "image.generate", "vision.qa", "film.tts", "film.sound", "film.music", "ops.monitor",
 })
 # Persisted Owner overlays for retired products are accepted read-only but
 # excluded from active routes. Never rewrite the Owner's SQLite on GET.
@@ -41,7 +41,7 @@ ROUTE_CAPABILITIES = frozenset({
 ID_RE = re.compile(r"[a-z][a-z0-9_]{2,39}\Z")
 TASK_RE = re.compile(r"[a-z][a-z0-9_.]{2,59}\Z")
 MODEL_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/+-]{0,159}\Z")
-KINDS = {"text", "image", "video", "vision", "audio", "rules"}
+KINDS = {"text", "image", "video", "vision", "audio", "sound", "music", "rules"}
 MAX_PROFILE_COUNT = 32
 MAX_STATE_BYTES = 65536
 _LOCAL_INFERENCE = Lock()
@@ -132,6 +132,14 @@ ADAPTERS = {
         "defaults": {"base_url": ""},
         "legacy_defaults": {"base_url_env": "OPENAI_BASE_URL", "api_key_env": "OPENAI_API_KEY"},
         "local_probe": False, "cloud_probe": True,
+    },
+    "elevenlabs": {
+        "label": "ElevenLabs-compatible", "connection": "cloud", "model_label": "Model ID",
+        "model_example": "model-id-da-cap",
+        "description": "API HTTPS tạo hiệu ứng âm thanh hoặc nhạc; Owner tự chọn model và endpoint.",
+        "defaults": {"base_url": ""},
+        "legacy_defaults": {"base_url_env": "ELEVENLABS_BASE_URL", "api_key_env": "ELEVENLABS_API_KEY"},
+        "local_probe": False, "cloud_probe": False,
     },
 }
 
@@ -237,7 +245,7 @@ def validate_profile(value, *, profile_id=None, preview=False):
 def _save_profile(value, api_key, profiles):
     if not isinstance(value, dict) or "api_key_protected" in value:
         raise ModelConfigError("Invalid model profile")
-    if value.get("provider") not in {"anthropic", "openai"} or "base_url" not in value:
+    if value.get("provider") not in {"anthropic", "openai", "elevenlabs"} or "base_url" not in value:
         if api_key is not None:
             raise ModelConfigError("API key chỉ dùng với endpoint Cloud nhập trực tiếp")
         return validate_profile(value)
@@ -414,6 +422,9 @@ def capability_contract(capability, profile):
         if kind == "vision":
             output["input"] = "jpeg_contact_sheet"
             output["max_image_bytes"] = adapter.MAX_SHEET_BYTES
+    elif adapter and kind in {"sound", "music"}:
+        adapter_id = "elevenlabs_" + kind
+        output = {"format": "mp3", "max_input_chars": 180, "max_output_bytes": adapter.MAX_AUDIO_BYTES}
     elif adapter and kind == "audio":
         adapter_id = "openai_compatible_speech"
         output = {"format": "wav", "max_input_chars": 180, "max_output_bytes": adapter.MAX_WAV_BYTES}
@@ -432,12 +443,13 @@ def capability_contract(capability, profile):
         output = {"format": "mp4", "fps": spec.fps, "max_frames": spec.max_frames,
                   "resolution": list(spec.resolution)}
     reason = None
-    if kind not in {"text", "image", "video", "vision", "audio"}:
+    if kind not in {"text", "image", "video", "vision", "audio", "sound", "music"}:
         reason = "UNSUPPORTED_CAPABILITY"
     elif not adapter:
         reason = {"image": "FLUX_WORKFLOW_REQUIRED", "video": "MOTION_PROFILE_INCOMPATIBLE",
                   "text": "TEXT_ADAPTER_REQUIRED", "vision": "VISION_ADAPTER_UNAVAILABLE",
-                  "audio": "AUDIO_ADAPTER_UNAVAILABLE"}[kind]
+                  "audio": "AUDIO_ADAPTER_UNAVAILABLE", "sound": "AUDIO_ADAPTER_UNAVAILABLE",
+                  "music": "AUDIO_ADAPTER_UNAVAILABLE"}[kind]
     return {"capability": capability,
             "route_configurable": orchestrator_policy.compatible(kind, profile),
             "runtime_compatible": adapter is not None, "local_runtime_compatible": local and adapter is not None,
@@ -475,6 +487,8 @@ def capability_readiness(profile_id, capability, *, expected_revision, db_path=N
         observation = "DISABLED"
     elif not contract["runtime_compatible"]:
         observation = contract["reason"]
+    elif kind in {"sound", "music"}:
+        observation = "AUDIO_GENERATION_NOT_PROBED"
     elif kind in {"text", "vision", "audio"}:
         if profile["provider"] == "ollama":
             observation = _check_ollama(profile)["status"]
@@ -497,7 +511,7 @@ def capability_readiness(profile_id, capability, *, expected_revision, db_path=N
 
 
 def _preflight_result(observation, contract):
-    if observation == "DISABLED":
+    if observation in {"DISABLED", "AUDIO_GENERATION_NOT_PROBED"}:
         return "NOT_CHECKED", None, None
     if not contract["runtime_compatible"] or observation == "MOTION_ENDPOINT_MISMATCH":
         return "UNSUPPORTED", None, None
@@ -641,7 +655,7 @@ def _catalog(revision, state):
             "has_api_key": "api_key_protected" in v, "source": (
             "owner"),
             "health": "UNVERIFIED",
-            "runtime_supported": v["provider"] in {"ollama", "anthropic", "openai"} or "flux" in v
+            "runtime_supported": v["provider"] in {"ollama", "anthropic", "openai", "elevenlabs"} or "flux" in v
                 or orchestrator_policy.local_adapter("video", v) is not None,
             "capability_contracts": [capability_contract(key, v) for key, kind in orchestrator_policy.KINDS.items()
                                      if kind != "tool"]}
@@ -667,6 +681,24 @@ def probe_cloud_profile(profile_id, *, expected_revision, db_path=None):
         raise ModelConfigError("Probe requires an enabled cloud text profile")
     return {**studio_cloud.probe(profile), "model": profile["model"], "revision": revision,
             "checked_at": datetime.now(timezone.utc).isoformat()}
+
+
+def audio_generation_binding(capability, *, db_path=None, optional=False):
+    if capability not in {"film.sound", "film.music"}:
+        raise ModelConfigError("Unknown generated audio capability")
+    revision, state = _read_state(db_path=db_path)
+    ref = state["routes"].get(capability)
+    if ref is None and optional:
+        return None
+    profile = _profiles(state=state).get(ref)
+    if not orchestrator_policy.compatible(orchestrator_policy.KINDS[capability], profile):
+        raise ModelConfigError(capability + ": cần phân công model âm thanh tương thích.")
+    policy = _active_policy(state)
+    permissions = policy["permissions"]
+    if (policy["mode"] == "MANUAL" or not all(permissions[key] for key in ("assign_local", "call_cloud", "run_tools"))
+            or "ffmpeg" not in policy["tools"]):
+        raise PermissionError("Sinh âm thanh cloud cần quyền cloud và FFmpeg.")
+    return revision, profile, policy["cloud_call_limit"]
 
 
 def speech_binding(*, db_path=None):
@@ -816,7 +848,7 @@ def _save_orchestrator(updated, policy, route_changes):
     policy = orchestrator_policy.validate(
         policy, id_pattern=ID_RE, extra_routes=_extra_capabilities(routes))
     editable = {key for key in routes if orchestrator_policy.KINDS.get(key)
-                in {"text", "image", "video", "vision", "audio"}}
+                in {"text", "image", "video", "vision", "audio", "sound", "music"}}
     if not isinstance(route_changes, dict) or not route_changes.keys() <= editable:
         raise ModelConfigError("Danh sách tuyến điều phối không hợp lệ")
     profiles = _profiles(state=updated)
@@ -905,7 +937,7 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
         elif action == "RESET_ORCHESTRATOR":
             updated.pop("orchestrator", None)
             for key in route_catalog():
-                if orchestrator_policy.KINDS.get(key) in {"text", "image", "video", "vision", "audio"}:
+                if orchestrator_policy.KINDS.get(key) in {"text", "image", "video", "vision", "audio", "sound", "music"}:
                     updated["routes"].pop(key, None)
         else:
             if (type(target_revision) is not int or target_revision < 0

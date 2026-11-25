@@ -1587,7 +1587,8 @@ def _storyboard_action(job, action, data):
         with slot, _measured(job, "storyboard", bindings.get("image.generate")):
             audio = audio_director.propose(job, data["engine"], data["voice_name"], data["voices"],
                 lambda instructions, payload, schema:
-                    _ask(writer, instructions, payload, schema, bindings.get("image.generate"), job=job))
+                    _ask(writer, instructions, payload, schema, bindings.get("image.generate"), job=job),
+                generate=data.get("generate_audio", False))
         if audio == job.get("audio_plan"):
             return job
         job["audio_plan"] = audio

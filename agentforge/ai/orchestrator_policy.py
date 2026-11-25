@@ -10,6 +10,8 @@ CAPABILITIES = (
     ("film.motion", "Tạo chuyển động", "video", None),
     ("vision.qa", "Kiểm tra chất lượng hình ảnh", "vision", None),
     ("film.tts", "Tạo thoại cloud", "audio", None),
+    ("film.sound", "Sinh hiệu ứng và môi trường", "sound", None),
+    ("film.music", "Sinh nhạc nền", "music", None),
     ("film.assemble", "Dựng video", "tool", "FFmpeg"),
     ("ops.monitor", "Giám sát hệ thống", "tool", "Python rules"),
 )
@@ -54,6 +56,9 @@ def runtime_adapter(kind, profile):
     """Resolve against the same adapter predicates used by the runtime."""
     from agentforge.features.film_studio import studio_runtime
 
+    if kind in {"sound", "music"}:
+        from agentforge.features.film_studio import studio_audio_generation
+        return studio_audio_generation if studio_audio_generation.supports(profile) else None
     if kind == "audio":
         from agentforge.features.film_studio import studio_speech
         return studio_speech if studio_speech.supports(profile) else None
@@ -71,7 +76,7 @@ def runtime_adapter(kind, profile):
 
 
 def local_adapter(kind, profile):
-    if (profile or {}).get("provider") in {"openai", "anthropic"}:
+    if (profile or {}).get("provider") in {"openai", "anthropic", "elevenlabs"}:
         return None
     return runtime_adapter(kind, profile)
 
@@ -191,5 +196,5 @@ def resolve(capability, available_profiles, primary_ref):
                 "execution_allowed": False}
     selected, source = primary_ref, "PRIMARY"
     return {"status": "CONFIG_ONLY", "model_ref": selected, "source": source,
-            "requires_owner_approval": available_profiles[selected]["provider"] in {"openai", "anthropic"},
+            "requires_owner_approval": available_profiles[selected]["provider"] in {"openai", "anthropic", "elevenlabs"},
             "execution_allowed": False}
