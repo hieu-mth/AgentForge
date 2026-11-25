@@ -23,7 +23,7 @@ Khi triển khai thư viện tài sản, hợp đồng phải phân biệt:
 - Creative plan chọn nhân vật và yêu cầu diễn xuất, bối cảnh; execution plan chọn đúng asset revision và chuyển các tham chiếu được phép theo khả năng adapter. Không tự sinh ngoại hình mới để thay thế asset đã duyệt.
 - Approval phải ràng buộc asset revision và file digest cùng nội dung, cấu hình thực thi; thay asset thì duyệt lại phần phụ thuộc. Thiếu hoặc sai file phải dừng, không tự dùng ảnh khác. Gửi ảnh ra cloud cần quyền phù hợp và kiểm soát chi phí; không tự upload.
 
-Đây là hợp đồng phát triển, chưa phải schema SQLite/API lưu ảnh đang chạy. Chưa tạo bảng, endpoint, UI hoặc placeholder asset giả. Việc chọn cách lưu, nhập ảnh và tạo bộ tham chiếu sẽ dựa trên benchmark thực tế. Metadata và production cũ không bị migrate hoặc đổi digest chỉ vì thay đổi định hướng.
+Kho ảnh local đã có API/UI nhập bộ tham chiếu PNG/JPEG do Owner chọn, tối đa ba ảnh theo vai trò, lưu phiên bản bất biến trong bảng SQLite riêng với SHA-256 từng ảnh. GET không tạo bảng; phiên bản hồ sơ và phiên bản bộ ảnh được kiểm tra khi lưu. Đây là kho tài sản độc lập: chưa tự bind ảnh vào storyboard, chưa gửi ảnh đến model và chưa chứng minh hiệu quả conditioning. Chỉ kích hoạt binding sau benchmark thực tế. Metadata và production cũ không bị migrate hoặc đổi digest.
 
 
 ## Cấu trúc repository

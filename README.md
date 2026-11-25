@@ -23,7 +23,7 @@ Mở http://127.0.0.1:8780/dashboard/ và đăng nhập bằng mã Owner in tạ
 
 1. Đăng ký model và kiểm tra metadata tại Cài đặt → Model AI.
 2. Phân công model local hoặc cloud theo năng lực, cấp quyền thực thi tương ứng tại AI điều phối. FFmpeg chỉ bắt buộc khi duyệt sản xuất.
-3. Nhập nội dung và thời lượng tại Studio video; AI chọn nhân vật từ hồ sơ đã đăng ký. Hồ sơ hiện là metadata, chưa phải bộ ảnh nhận diện.
+3. Nhập nội dung và thời lượng tại Studio video; AI chọn nhân vật từ hồ sơ đã đăng ký. Thư viện nhân vật cho phép lưu bộ ảnh nhận diện local theo phiên bản; Studio chưa tự gửi bộ ảnh đó vào pipeline tạo media.
 4. Kiểm tra, chỉnh sửa và duyệt storyboard trước khi tạo media.
 5. Xem video, kiểm tra chất lượng và duyệt thành phẩm. Xuất bản là thao tác riêng.
 
