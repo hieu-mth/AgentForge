@@ -4,7 +4,40 @@ import math
 from agentforge.features.film_studio.draft_timeline import duration_limits
 
 
+def validate_scene_shots(actions, shots, *, scene_number=1):
+    """Validate creative intent independently of a provider's frame or clip budget."""
+    if not isinstance(shots, list) or not 1 <= len(shots) <= 16:
+        raise ValueError("Invalid creative shot count")
+    weights = []
+    ordered_ids = [f"A{index+1:02d}" for index in range(len(actions))]
+    next_action = 0
+    for shot in shots:
+        if not isinstance(shot, dict) or set(shot) != {"actions", "seconds", "camera", "intent"}:
+            raise ValueError("Invalid creative shot schema")
+        action_ids = shot["actions"]
+        if (not isinstance(action_ids, list) or not action_ids
+                or action_ids != ordered_ids[next_action:next_action + len(action_ids)]):
+            expected = next(iter(ordered_ids[next_action:next_action + 1]), None)
+            detail = f"Hành động kế tiếp phải là {expected}." if expected else "Cảnh đã đủ hành động."
+            raise ValueError(
+                f"Cảnh {scene_number}, góc quay {len(weights) + 1}: chuỗi hành động không hợp lệ. {detail}"
+            )
+        next_action += len(action_ids)
+        weight = shot["seconds"]
+        if type(weight) not in (int, float) or not 0.1 <= weight <= 60 or not math.isfinite(weight):
+            raise ValueError("Invalid creative shot duration")
+        if any(not isinstance(shot[key], str) or not 1 <= len(shot[key].strip()) <= 240
+               for key in ("camera", "intent")):
+            raise ValueError("Invalid camera or creative intent")
+        weights.append(weight)
+    if next_action != len(actions):
+        missing = ", ".join(ordered_ids[next_action:])
+        raise ValueError(f"Cảnh {scene_number}: kế hoạch thiếu hành động {missing}.")
+    return weights
+
+
 def compile_plan(scenes, proposed, output):
+    """Compile validated creative intent for the selected motion output; preserve the receipt format."""
     if (not scenes or not isinstance(proposed, list) or len(scenes) != len(proposed)
             or any(type(scene.get("frames")) is not int or scene["frames"] < 1 for scene in scenes)
             or type(output.fps) is not int or output.fps < 1
@@ -20,31 +53,7 @@ def compile_plan(scenes, proposed, output):
     for scene_number, (scene, shots) in enumerate(zip(scenes, proposed), 1):
         if not isinstance(shots, list) or not 1 <= len(shots) <= min(16, scene["frames"]):
             raise ValueError("Invalid creative shot count")
-        weights = []
-        ordered_ids = [f"A{index+1:02d}" for index in range(len(scene["actions"]))]
-        next_action = 0
-        for shot in shots:
-            if not isinstance(shot, dict) or set(shot) != {"actions", "seconds", "camera", "intent"}:
-                raise ValueError("Invalid creative shot schema")
-            action_ids = shot["actions"]
-            if (not isinstance(action_ids, list) or not action_ids
-                    or action_ids != ordered_ids[next_action:next_action + len(action_ids)]):
-                expected = next(iter(ordered_ids[next_action:next_action + 1]), None)
-                detail = f"Hành động kế tiếp phải là {expected}." if expected else "Cảnh đã đủ hành động."
-                raise ValueError(
-                    f"Cảnh {scene_number}, góc quay {len(weights) + 1}: chuỗi hành động không hợp lệ. {detail}"
-                )
-            next_action += len(action_ids)
-            weight = shot["seconds"]
-            if type(weight) not in (int, float) or not 0.1 <= weight <= 60 or not math.isfinite(weight):
-                raise ValueError("Invalid creative shot duration")
-            if any(not isinstance(shot[key], str) or not 1 <= len(shot[key].strip()) <= 240
-                   for key in ("camera", "intent")):
-                raise ValueError("Invalid camera or creative intent")
-            weights.append(weight)
-        if next_action != len(scene["actions"]):
-            missing = ", ".join(ordered_ids[next_action:])
-            raise ValueError(f"Cảnh {scene_number}: kế hoạch thiếu hành động {missing}.")
+        weights = validate_scene_shots(scene["actions"], shots, scene_number=scene_number)
         frames = [1] * len(shots)
         for _ in range(scene["frames"] - len(shots)):
             index = max(range(len(shots)), key=lambda i: (
@@ -117,8 +126,10 @@ def propose_scene(scene, global_constraints, fps, infer):
         "Use each supplied action ID exactly once in order. Respect authored camera and constraints. "
         "Give relative duration, camera and storytelling intent. Do not invent actions."
     )
-    payload = {"scene": {**scene, "actions": actions}, "global_constraints": global_constraints,
-               "seconds": scene["frames"] / fps}
+    # Frame budgets are execution details, not instructions to the director.
+    payload = {"scene": {**{key: value for key, value in scene.items() if key != "frames"},
+                         "actions": actions},
+               "global_constraints": global_constraints, "seconds": scene["frames"] / fps}
     schema = {"type": "object", "additionalProperties": False, "required": ["shots"],
               "properties": {"shots": {"type": "array", "minItems": 1, "maxItems": 16, "items": shot}}}
     for attempt in range(2):
@@ -131,6 +142,7 @@ def propose_scene(scene, global_constraints, fps, infer):
             raise ValueError("Cấu trúc danh sách hành động không hợp lệ.")
         sequence = [action for item in shots for action in item["actions"]]
         if sequence == list(actions) and all(item["actions"] for item in shots):
+            validate_scene_shots(list(actions.values()), shots, scene_number=scene.get("scene", 1))
             return shots
         if attempt == 0:
             instructions += " Revise the previous shots, including framing and pacing, to cover the required sequence."

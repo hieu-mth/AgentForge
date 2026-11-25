@@ -1,11 +1,49 @@
 import unittest
 from unittest.mock import Mock
 
-from agentforge.features.film_studio.creative_plan import compile_plan, compiled_shots, propose_scene
+from agentforge.features.film_studio.creative_plan import (
+    compile_plan, compiled_shots, propose_scene, validate_scene_shots,
+)
 from agentforge.features.film_studio.studio_contracts import MotionOutput
 
 
 class CreativePlanTests(unittest.TestCase):
+    def test_director_sees_story_timing_not_runtime_frames(self):
+        scene = {"scene": 1, "source_range": [0, 20], "frames": 144,
+                 "actions": ["approach", "open"]}
+        shots = [{"actions": ["A01", "A02"], "seconds": 6,
+                  "camera": "wide", "intent": "show the event"}]
+        infer = Mock(return_value={"shots": shots})
+        self.assertEqual(propose_scene(scene, [], 24, infer), shots)
+        payload = infer.call_args.args[1]
+        self.assertEqual(payload["seconds"], 6)
+        self.assertNotIn("frames", payload["scene"])
+        self.assertEqual(payload["scene"]["actions"], {"A01": "approach", "A02": "open"})
+        self.assertEqual(validate_scene_shots(scene["actions"], shots), [6])
+
+    def test_same_creative_intent_compiles_for_different_motion_limits(self):
+        scene = {"scene": 1, "source_range": [0, 20], "frames": 144,
+                 "actions": ["approach", "open"]}
+        shot = {"actions": ["A01", "A02"], "seconds": 6,
+                "camera": "wide", "intent": "show the event"}
+        short = MotionOutput(24, 49, (512, 288))
+        longer = MotionOutput(24, 96, (512, 288))
+        plans = [compile_plan([scene], [[shot]], output) for output in (short, longer)]
+        for plan in plans:
+            compiled = plan["scenes"][0]["creative_shots"][0]
+            self.assertEqual({key: compiled[key] for key in shot}, shot)
+            self.assertEqual(plan["total_frames"], 144)
+        self.assertEqual([len(compiled_shots(plan, output))
+                          for plan, output in zip(plans, (short, longer))], [3, 2])
+
+    def test_director_rejects_invalid_creative_fields_before_compilation(self):
+        scene = {"frames": 144, "actions": ["open"]}
+        for shot in ({"actions": ["A01"], "seconds": 0, "camera": "wide", "intent": "open"},
+                     {"actions": ["A01"], "seconds": 6, "camera": "", "intent": "open"},
+                     {"actions": ["A01"], "seconds": 6, "camera": "wide"}):
+            with self.subTest(shot=shot), self.assertRaises(ValueError):
+                propose_scene(scene, [], 24, lambda *_: {"shots": [shot]})
+
     def test_model_repairs_omissions_with_scene_context_before_compilation(self):
         scene = {"scene": 1, "source_range": [0, 40], "frames": 120,
                  "actions": ["approach", "open", "roll", "recoil", "touch"]}

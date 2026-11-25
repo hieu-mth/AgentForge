@@ -1,5 +1,31 @@
 # Kiến trúc AgentForge
 
+## Nguyên tắc sản xuất phim
+
+AgentForge quản lý nội dung, tài sản, quyết định của Owner, trạng thái sản xuất và hậu kỳ; model là công cụ thay thế được theo năng lực đã kiểm chứng. Local-first áp dụng cho quyền sở hữu dữ liệu và điều phối, không bắt buộc toàn bộ inference chạy local. Chất lượng, độ nhất quán và chi phí trên video sử dụng được quyết định phương pháp sản xuất.
+
+Tách ba trách nhiệm:
+- Creative: kịch bản, nhân vật, hành động, góc quay và thời lượng theo nội dung. Không để số frame hoặc giới hạn một model quyết định ý đồ đạo diễn.
+- Execution: lập kế hoạch kỹ thuật từ ý đồ đã kiểm tra và khả năng adapter thật; khóa đầu vào, route, tài nguyên, approval và receipt. Nếu không khả thi thì báo rõ, không tự đổi model hoặc thay đổi nội dung.
+- Quality/post-production: kiểm tra kỹ thuật, chất lượng trực quan và duyệt Owner; FFmpeg xử lý hậu kỳ. CI kỹ thuật không xác nhận chất lượng điện ảnh.
+
+Pipeline chạy được hiện tại vẫn là tạo ảnh local rồi tạo chuyển động từ ảnh (hoặc ghép ảnh tĩnh). Không công bố Reference-to-Video, Text-to-Video, cloud inference hoặc visual QA tự động là tính năng hiện có. Chỉ thêm adapter, route và UI cho phương pháp đã qua benchmark. Không dùng một model cụ thể làm hợp đồng chung của Studio.
+
+## Hợp đồng tài sản nhân vật
+
+Hồ sơ nhân vật hiện lưu metadata trong SQLite. ID hồ sơ và version mô tả dùng cho snapshot casting; trường `model_ref` và `reference_version` hiện không phải định danh ảnh nhận diện hay bằng chứng giữ ngoại hình.
+
+Khi triển khai thư viện tài sản, hợp đồng phải phân biệt:
+- Character ID: định danh ổn định của nhân vật, độc lập với model/provider.
+- Asset revision: phiên bản bất biến của bộ nhận diện đã duyệt, gắn với character ID. Bộ nhận diện gồm ảnh gốc hoặc ảnh tạo hình được Owner duyệt, có vai trò rõ (ảnh chính diện, toàn thân, góc nhìn khác khi cần). Không yêu cầu model 3D hoặc LoRA nếu ảnh tham chiếu đáp ứng chất lượng.
+- Mỗi file tham chiếu có định danh nội bộ, SHA-256 của bytes, loại media và vai trò. Bytes nằm trong storage local ngoài Git; không ghi credential hay URL tạm vào creative plan.
+- Provider binding (nếu cần): ánh xạ từ asset revision sang định danh tài sản của provider, riêng theo provider. Không coi ID provider là Character ID.
+- Creative plan chọn nhân vật và yêu cầu diễn xuất, bối cảnh; execution plan chọn đúng asset revision và chuyển các tham chiếu được phép theo khả năng adapter. Không tự sinh ngoại hình mới để thay thế asset đã duyệt.
+- Approval phải ràng buộc asset revision và file digest cùng nội dung, cấu hình thực thi; thay asset thì duyệt lại phần phụ thuộc. Thiếu hoặc sai file phải dừng, không tự dùng ảnh khác. Gửi ảnh ra cloud cần quyền phù hợp và kiểm soát chi phí; không tự upload.
+
+Đây là hợp đồng phát triển, chưa phải schema SQLite/API lưu ảnh đang chạy. Chưa tạo bảng, endpoint, UI hoặc placeholder asset giả. Việc chọn cách lưu, nhập ảnh và tạo bộ tham chiếu sẽ dựa trên benchmark thực tế. Metadata và production cũ không bị migrate hoặc đổi digest chỉ vì thay đổi định hướng.
+
+
 ## Cấu trúc repository
 
 ```text
@@ -70,7 +96,9 @@ Preflight trả `METADATA_COMPATIBLE`, `UNAVAILABLE`, `UNSUPPORTED`, `MISSING_DE
 
 ## Creative Director
 
-New motion drafts with authored scene headings and the current duration mode use Creative Director. Existing drafts, free-form ideas and still productions retain their existing planner. SQLite requires no migration. The storyboard model proposes ordered groups of action IDs, camera direction and relative duration. Python validates coverage and compiles runtime-sized segments within the existing production frame and segment budget.
+Bản nháp motion có tiêu đề cảnh và chế độ thời lượng hiện hành dùng Creative Director. Bản nháp cũ, ý tưởng tự do và sản xuất ảnh tĩnh vẫn dùng planner hiện tại. Không cần migrate SQLite. AI đề xuất nhóm hành động theo thứ tự, góc quay, ý đồ và thời lượng tương đối; nhận thời lượng cảnh bằng giây thay vì số frame kỹ thuật. `creative_plan.validate_scene_shots` kiểm tra hợp đồng sáng tạo không phụ thuộc output profile. `compile_plan` chuyển nội dung đã kiểm tra thành segment theo output profile và ngân sách runtime hiện hành. Định dạng creative plan đã lưu và cách kiểm tra digest không đổi.
+
+Đây là ranh giới đầu tiên trong đường chạy authored script, chưa phải planner độc lập hoàn toàn với runtime. Free-form planning và worker vẫn yêu cầu pipeline local hiện hành; không tuyên bố hỗ trợ phương pháp sản xuất khác trước khi adapter thật được kiểm chứng.
 
 The approval digest includes the compiled plan, the segment storyboard and the existing model and motion identity. On resume the stored plan is recompiled against the pinned output profile and the storyboard frame counts are rechecked. Editing segment text updates the storyboard digest and uses the existing asset invalidation rules. Authored scene boundaries and the creative segment layout stay fixed during segment edits. A new production is required to propose a different layout.
 
