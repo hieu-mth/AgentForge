@@ -89,7 +89,7 @@ def review(job, data):
     scene = scenes[index]
     ops_control.require_active()
     revision, profile, limit = model_hub.vision_binding()
-    cloud = profile["provider"] in {"openai", "anthropic"}
+    cloud = profile["provider"] in {"openai", "anthropic", "chatgpt"}
     if cloud and not data["allow_cloud"]:
         raise PermissionError("Cần xác nhận gửi frame video cho model cloud.")
     # Only local inference is serialized; extracting sample frames is a local tool.

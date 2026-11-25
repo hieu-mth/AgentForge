@@ -14,11 +14,12 @@ const fieldLabels={
   base_url:'Địa chỉ runtime local',
   base_url_env:'Biến môi trường chứa endpoint',
   api_key_env:'Biến môi trường chứa API key',
+  account_ref:'Mã tài khoản ChatGPT',
 };
 const localUrl=/^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):([0-9]{1,5})\/?$/;
 const envName=/^[A-Z_][A-Z0-9_]*$/;
 
-const comparisonFields=['id','provider','model','enabled','base_url','base_url_env','api_key_env','motion_encoder','flux'];
+const comparisonFields=['id','provider','model','enabled','base_url','base_url_env','api_key_env','motion_encoder','flux','account_ref'];
 const comparisonData=profile=>Object.fromEntries(comparisonFields.filter(key=>key in profile)
   .map(key=>[key,profile[key]]));
 
@@ -37,7 +38,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
   const fluxEnabled=Form.useWatch('flux_enabled',form)??initial.flux_enabled;
   const adapter=adapters.find(item=>item.id===provider);
   const [useEnv,setUseEnv]=useState(Boolean(profile?.api_key_env));
-  const directCloud=connection==='cloud'&&!useEnv;
+  const directCloud=connection==='cloud'&&!useEnv&&provider!=='chatgpt';
   const fields=useEnv&&adapter.legacy_defaults?adapter.legacy_defaults:adapter.defaults;
   const [review,setReview]=useState(null);
   const [contracts,setContracts]=useState([]);
@@ -150,7 +151,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         <Input placeholder={adapter.model_example}/>
       </Form.Item>
       <div className="model-dialog-divider"/>
-      {connection==='cloud'&&<Button type="link" className="model-dialog-mode" onClick={()=>{
+      {connection==='cloud'&&provider!=='chatgpt'&&<Button type="link" className="model-dialog-mode" onClick={()=>{
         form.setFieldsValue({...(useEnv?adapter.defaults:adapter.legacy_defaults),api_key:undefined});
         setUseEnv(!useEnv);
       }}>{useEnv?'Nhập trực tiếp':'Dùng biến môi trường'}</Button>}
@@ -159,7 +160,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         rules={[{required:true,message:'Hãy điền trường này.'},{validator:(_,value)=>{
           if(!value)return Promise.resolve();
           const port=Number(localUrl.exec(value)?.[2]);
-          const valid=directCloud?/^https:\/\/[^\s@?#\\]+$/.test(value)
+          const valid=key==='account_ref'?/^[a-z][a-z0-9_]{2,39}$/.test(value):directCloud?/^https:\/\/[^\s@?#\\]+$/.test(value)
             :key==='base_url'?port>=1&&port<=65535:envName.test(value);
           const error=directCloud?'Nhập URL HTTPS hợp lệ.':key==='base_url'
             ?'Dùng địa chỉ HTTP loopback với cổng từ 1 đến 65535.':'Chỉ nhập tên biến môi trường hợp lệ.';
@@ -167,6 +168,11 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         }}]}>
         <Input placeholder={directCloud?'https://api.example.com':example} spellCheck={false}/>
       </Form.Item>)}
+      {provider==='chatgpt'&&<Alert type="info" showIcon message="Using ChatGPT plan (preview)"
+        description={<><p>Trên máy chạy AgentForge, cài gói chatgpt và dùng CLI đăng nhập, lấy model slug. Không nhập mật khẩu, cookie hoặc token tại đây.</p>
+          <code>python -m agentforge.ai.chatgpt_auth login owner</code><br/>
+          <code>python -m agentforge.ai.chatgpt_auth models owner</code><br/>
+          <a href="https://chatgpt.com/#settings/Usage" target="_blank" rel="noreferrer">Quản lý hạn mức ChatGPT</a></>}/>}
       {directCloud&&<Form.Item name="api_key" label="API key" dependencies={['base_url']}
         extra={profile?.has_api_key?'Để trống để giữ API key đã lưu cho endpoint hiện tại.':'API key được mã hóa theo tài khoản Windows.'}
         rules={[({getFieldValue})=>({validator:(_,value)=>

@@ -17,6 +17,8 @@ media = [
     "imageio-ffmpeg==0.8.1",
 ]
 
+chatgpt = ["PyJWT[crypto]>=2.10,<3"]
+
 # Explicit consent only; NEVER installed by the default Dashboard setup.
 youtube = [
     "google-api-python-client==2.201.0",

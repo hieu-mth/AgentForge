@@ -60,6 +60,9 @@ def text_adapter(profile: Profile | None) -> TextInference:
     provider = (profile or {}).get("provider")
     if provider == "ollama":
         return studio_ollama
+    if provider == "chatgpt":
+        from agentforge.features.film_studio import studio_chatgpt
+        return studio_chatgpt
     if provider in studio_cloud.PROVIDERS:
         return studio_cloud
     raise ValueError("Studio requires a supported text API or local runtime.")

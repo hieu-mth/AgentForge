@@ -133,6 +133,11 @@ ADAPTERS = {
         "legacy_defaults": {"base_url_env": "OPENAI_BASE_URL", "api_key_env": "OPENAI_API_KEY"},
         "local_probe": False, "cloud_probe": True,
     },
+    "chatgpt": {
+        "label": "ChatGPT Plan (preview)", "connection": "cloud", "model_label": "Model slug",
+        "model_example": "model-tu-lenh-models", "description": "Kết nối local bằng OAuth chính thức; không nhập API key. Chạy CLI chatgpt_auth login trước.",
+        "defaults": {"account_ref": ""}, "local_probe": False, "cloud_probe": True,
+    },
     "elevenlabs": {
         "label": "ElevenLabs-compatible", "connection": "cloud", "model_label": "Model ID",
         "model_example": "model-id-da-cap",
@@ -192,6 +197,8 @@ def validate_profile(value, *, profile_id=None, preview=False):
         "id", "provider", "model", "enabled", "base_url",
         "base_url_env", "api_key_env", "api_key_protected",
     }
+    if value.get("provider") == "chatgpt":
+        allowed.add("account_ref")
     if value.get("provider") == "comfyui":
         allowed.update(("flux", "motion_encoder"))
     if not value.keys() <= allowed:
@@ -209,7 +216,11 @@ def validate_profile(value, *, profile_id=None, preview=False):
     common = {"id": ident, "provider": provider, "model": model,
               "enabled": enabled}
     fields = value.keys() - common.keys()
-    if ADAPTERS[provider]["connection"] == "local":
+    if provider == "chatgpt":
+        if fields != {"account_ref"}:
+            raise ModelConfigError("ChatGPT requires an account reference, not a key or URL")
+        common["account_ref"] = _required_text(value["account_ref"], ID_RE, "ChatGPT account reference")
+    elif ADAPTERS[provider]["connection"] == "local":
         if fields != {"base_url"} and not (
                 provider == "comfyui" and fields in ({"base_url", "flux"}, {"base_url", "motion_encoder"})):
             raise ModelConfigError("Fields do not match the selected adapter")
@@ -365,7 +376,7 @@ def effective_models(*, db_path=None):
     state = _read_state(db_path=db_path)[1]
     return {key: {k: v for k, v in value.items() if k != "id"}
             for key, value in _profiles(state=state).items()
-            if value["provider"] in {"ollama", "anthropic", "openai"}}
+            if value["provider"] in {"ollama", "anthropic", "openai", "chatgpt"}}
 
 
 def _extra_capabilities(routes):
@@ -492,6 +503,9 @@ def capability_readiness(profile_id, capability, *, expected_revision, db_path=N
     elif kind in {"text", "vision", "audio"}:
         if profile["provider"] == "ollama":
             observation = _check_ollama(profile)["status"]
+        elif profile["provider"] == "chatgpt":
+            from agentforge.features.film_studio import studio_chatgpt
+            observation = studio_chatgpt.readiness(profile)
         else:
             from agentforge.features.film_studio import studio_cloud
             observation = studio_cloud.readiness(profile)
@@ -655,7 +669,7 @@ def _catalog(revision, state):
             "has_api_key": "api_key_protected" in v, "source": (
             "owner"),
             "health": "UNVERIFIED",
-            "runtime_supported": v["provider"] in {"ollama", "anthropic", "openai", "elevenlabs"} or "flux" in v
+            "runtime_supported": v["provider"] in {"ollama", "anthropic", "openai", "elevenlabs", "chatgpt"} or "flux" in v
                 or orchestrator_policy.local_adapter("video", v) is not None,
             "capability_contracts": [capability_contract(key, v) for key, kind in orchestrator_policy.KINDS.items()
                                      if kind != "tool"]}
@@ -677,6 +691,10 @@ def probe_cloud_profile(profile_id, *, expected_revision, db_path=None):
     if type(expected_revision) is not int or revision != expected_revision:
         raise ModelConfigError("MODEL_HUB_REVISION_CONFLICT")
     profile = _profiles(state=state).get(profile_id)
+    if profile and profile["enabled"] and profile["provider"] == "chatgpt":
+        from agentforge.features.film_studio import studio_chatgpt
+        return {**studio_chatgpt.probe(profile), "model": profile["model"], "revision": revision,
+                "checked_at": datetime.now(timezone.utc).isoformat()}
     if not profile or not profile["enabled"] or profile["provider"] not in studio_cloud.PROVIDERS:
         raise ModelConfigError("Probe requires an enabled cloud text profile")
     return {**studio_cloud.probe(profile), "model": profile["model"], "revision": revision,
@@ -722,7 +740,7 @@ def vision_binding(*, db_path=None):
         raise ModelConfigError("vision.qa: hãy phân công model có hỗ trợ hình ảnh trong AI điều phối.")
     policy = _active_policy(state)
     permissions = policy["permissions"]
-    permission = "call_cloud" if profile["provider"] in {"openai", "anthropic"} else "call_local"
+    permission = "call_cloud" if profile["provider"] in {"openai", "anthropic", "chatgpt"} else "call_local"
     if (policy["mode"] == "MANUAL" or not permissions["assign_local"] or not permissions[permission]
             or not permissions["run_tools"] or "ffmpeg" not in policy["tools"]):
         raise PermissionError("vision.qa: cần cấp quyền model và công cụ FFmpeg trong AI điều phối.")

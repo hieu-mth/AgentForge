@@ -65,7 +65,7 @@ def _measured(job, operation, comfy_profile=None):
     if _cancellation(job["id"]):
         raise DraftCancelled
     if (operation in {"plan", "duration", "creative_direction", "cast", "storyboard"}
-            and job.get("activity", {}).get("provider") in {"openai", "anthropic"}):
+            and job.get("activity", {}).get("provider") in {"openai", "anthropic", "chatgpt"}):
         yield
         if _cancellation(job["id"]):
             raise DraftCancelled
@@ -221,7 +221,7 @@ def _release_idle_image(profile):
 
 def _ask(profile, instructions, data, schema, comfy_profile, *, cpu_only=False, extended_plan=False, job=None):
     adapter = studio_runtime.text_adapter(profile)
-    if profile.get("provider") in {"openai", "anthropic"}:
+    if profile.get("provider") in {"openai", "anthropic", "chatgpt"}:
         if job is None:
             raise PermissionError("Cloud inference requires a production context.")
         ops_control.require_active()
@@ -1235,7 +1235,7 @@ def _work(job, slot, retry_motion_job=None):
         reviewing = "storyboard_version" in job and not job.get("approved_storyboard_sha")
         revision, bindings, identity_revision = _studio_bindings(job)
         cloud_only = (reviewing and job.get("deferred_media_binding") and bool(bindings)
-                      and all(profile.get("provider") in {"openai", "anthropic"} for profile in bindings.values()))
+                      and all(profile.get("provider") in {"openai", "anthropic", "chatgpt"} for profile in bindings.values()))
         with (nullcontext() if cloud_only else model_hub.local_inference_slot()):
             if not cloud_only:
                 revision, bindings, identity_revision = _studio_bindings(job)
@@ -1567,7 +1567,7 @@ def _storyboard_action(job, action, data):
         _, bindings, _ = _studio_bindings(job)
         writer = bindings["film.storyboard"]
         ops_control.require_active()
-        slot = nullcontext() if writer.get("provider") in {"openai", "anthropic"} else model_hub.local_inference_slot()
+        slot = nullcontext() if writer.get("provider") in {"openai", "anthropic", "chatgpt"} else model_hub.local_inference_slot()
         with slot, _measured(job, "storyboard", bindings.get("image.generate")):
             entries = draft_continuity.propose(job, lambda instructions, payload, schema:
                 _ask(writer, instructions, payload, schema, bindings.get("image.generate"), job=job))
@@ -1583,7 +1583,7 @@ def _storyboard_action(job, action, data):
         _, bindings, _ = _studio_bindings(job)
         writer = bindings["film.storyboard"]
         ops_control.require_active()
-        slot = nullcontext() if writer.get("provider") in {"openai", "anthropic"} else model_hub.local_inference_slot()
+        slot = nullcontext() if writer.get("provider") in {"openai", "anthropic", "chatgpt"} else model_hub.local_inference_slot()
         with slot, _measured(job, "storyboard", bindings.get("image.generate")):
             audio = audio_director.propose(job, data["engine"], data["voice_name"], data["voices"],
                 lambda instructions, payload, schema:
@@ -1651,7 +1651,7 @@ def _storyboard_action(job, action, data):
                 shot["original_script_excerpt"] = job["brief"]["idea"][start:min(end, start + 1000)]
             writer = bindings["film.storyboard"]
             _activity(job, "STORYBOARD", "storyboard", writer)
-            slot = nullcontext() if writer.get("provider") in {"openai", "anthropic"} else model_hub.local_inference_slot()
+            slot = nullcontext() if writer.get("provider") in {"openai", "anthropic", "chatgpt"} else model_hub.local_inference_slot()
             with slot, _measured(job, "storyboard", bindings.get("image.generate")):
                 data = _ask(bindings["film.storyboard"], "Rewrite only this shot. Preserve the cast and its role "
                             "in the original scene when a script excerpt is provided. "
