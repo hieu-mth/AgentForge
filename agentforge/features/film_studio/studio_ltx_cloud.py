@@ -150,7 +150,7 @@ def _download(url, target):
         conn.close()
 
 
-def _verify(path, seconds):
+def _verify(path, seconds, *, require_audio=False):
     if path.stat().st_size < 1024:
         raise ValueError("Incomplete MP4.")
     ffprobe = render.find_media_tool("ffprobe")
@@ -168,6 +168,9 @@ def _verify(path, seconds):
     frames = re.findall(r"(?m)^frame=(\d+)", decoded.stdout)
     if not frames or int(frames[-1]) != seconds * 24:
         raise ValueError("LTX frame count differs from purchased duration.")
+    if require_audio:
+        render._run_process([render._ffmpeg(), "-nostdin", "-v", "error", "-xerror", "-i", str(path),
+                             "-map", "0:a:0", "-f", "null", "-"], cwd=path.parent, timeout=90)
     with path.open("rb") as f:
         return hashlib.file_digest(f, "sha256").hexdigest()
 

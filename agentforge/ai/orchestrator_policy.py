@@ -76,7 +76,7 @@ def runtime_adapter(kind, profile):
 
 
 def local_adapter(kind, profile):
-    if (profile or {}).get("provider") in {"openai", "anthropic", "elevenlabs", "chatgpt"}:
+    if (profile or {}).get("provider") in {"openai", "anthropic", "elevenlabs", "chatgpt", "ltx_cloud"}:
         return None
     return runtime_adapter(kind, profile)
 
@@ -196,5 +196,5 @@ def resolve(capability, available_profiles, primary_ref):
                 "execution_allowed": False}
     selected, source = primary_ref, "PRIMARY"
     return {"status": "CONFIG_ONLY", "model_ref": selected, "source": source,
-            "requires_owner_approval": available_profiles[selected]["provider"] in {"openai", "anthropic", "elevenlabs", "chatgpt"},
+            "requires_owner_approval": available_profiles[selected]["provider"] in {"openai", "anthropic", "elevenlabs", "chatgpt", "ltx_cloud"},
             "execution_allowed": False}

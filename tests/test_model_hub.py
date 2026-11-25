@@ -202,7 +202,7 @@ class ModelHubTests(unittest.TestCase):
             self.assertFalse(result["cloud_fallback"])
 
     def test_adapter_catalog_matches_persisted_profile_validation(self):
-        expected = {"ollama": "local", "comfyui": "local", "anthropic": "cloud", "openai": "cloud", "elevenlabs": "cloud", "chatgpt": "cloud"}
+        expected = {"ollama": "local", "comfyui": "local", "anthropic": "cloud", "openai": "cloud", "elevenlabs": "cloud", "chatgpt": "cloud", "ltx_cloud": "cloud"}
         with tempfile.TemporaryDirectory() as folder:
             db = Path(folder) / "hub.sqlite3"
             catalog = model_hub.catalog(db_path=db)["adapters"]
