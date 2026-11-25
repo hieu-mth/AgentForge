@@ -113,6 +113,8 @@ def snapshot(job):
             "seconds": job["brief"]["seconds"], "ratio": job["brief"]["ratio"],
             "scenes": [{key: scene[key] for key in STORY_FIELDS if key in scene}
                        for scene in board["scenes"]]}
+    if "audio_plan" in job:
+        value["audio_plan"] = job["audio_plan"]
     if "motion_plan" in job:
         value["motion_plan"] = job["motion_plan"]
     if "studio_plan" in job:

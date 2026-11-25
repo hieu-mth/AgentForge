@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {Alert,Button,Image,Modal,Segmented,Space,Tag} from 'antd';
+import {Alert,Button,Image,Input,Modal,Segmented,Select,Space,Tag} from 'antd';
 import {NumberField} from '../components/NumberField.jsx';
 import {ScriptContent} from './ScriptContent.jsx';
 import {draftTitle} from './scriptPresentation.js';
@@ -7,10 +7,12 @@ import {groupDraftScenes} from './studioScenes.js';
 import {MAX_STUDIO_SECONDS} from './studioDuration.js';
 import './storyboard-review.css';
 
-export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewrite,onAdd,onMove,onRemove,onPreview,onDuration,onRegenerate}){
+export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewrite,onAdd,onMove,onRemove,onPreview,onDuration,onRegenerate,onAudio}){
   const [shot,setShot]=useState(null);
   const [seconds,setSeconds]=useState(null);
   const [view,setView]=useState('scenes');
+  const [engine,setEngine]=useState(job.audio_plan?.engine??'none');
+  const [voice,setVoice]=useState(job.audio_plan?.voice_name??'');
   const scenes=job.board.scenes;
   const index=Math.max(0,scenes.findIndex((s,i)=>(s.shot_id??i)===shot));
   const scene=scenes[index];
@@ -49,6 +51,20 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
             precision={0} value={seconds??job.brief.seconds} onChange={setSeconds} suffix="giây"/>
           <Button disabled={busy||seconds===null||seconds===job.brief.seconds} onClick={()=>onDuration(seconds)}>Cập nhật thời lượng</Button>
         </Space>}
+      </div>}
+      <h3>Âm thanh</h3>
+      <p>{job.audio_plan?'Lời thoại từ phụ đề · '+job.audio_plan.engine:'Không có lời thoại tự động'}</p>
+      {onAudio&&<div className="storyboard-context">
+        <p className="env-muted">Tùy chọn TTS local từ phụ đề từng cảnh. Chỉ tạo lời thoại sau khi duyệt storyboard; không tự tải voice. Phụ đề phải đủ ngắn để đọc trong cảnh.</p>
+        <Space wrap>
+          <Select aria-label="Nguồn lời thoại" value={engine} onChange={setEngine} options={[
+            {value:'none',label:'Không lời thoại'},{value:'windows',label:'Windows SAPI'},
+            {value:'piper',label:'Piper local'},
+          ]}/>
+          {engine!=='none'&&<Input aria-label="Tên voice local" value={voice} maxLength={100}
+            onChange={e=>setVoice(e.target.value)} placeholder={engine==='piper'?'voice.onnx':'Voice mặc định nếu để trống'}/>}
+          <Button disabled={busy||engine==='piper'&&!voice} onClick={()=>onAudio(engine,engine==='none'?'':voice)}>Lưu cấu hình lời thoại</Button>
+        </Space>
       </div>}
       <h3>Nội dung video</h3>
       <ScriptContent text={job.brief.idea}/>
