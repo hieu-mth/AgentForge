@@ -127,3 +127,59 @@ def review(job, data):
     job["visual_reviews"] = reviews
     draft._save(job)
     return job
+
+
+MAX_BATCH = 8
+MAX_REPAIRS = 2
+
+
+def current_review(job, scene):
+    report = job.get("visual_reviews", {}).get(scene["shot_id"], {})
+    if (report.get("video_sha") == job.get("video_sha")
+            and report.get("storyboard_sha") == job.get("storyboard_sha")
+            and report.get("asset_sha") == scene.get("asset")
+            and report.get("motion_sha") == scene.get("motion_sha")
+            and report.get("shot_id") == scene["shot_id"]):
+        return report
+    return None
+
+
+def _check_current(job, data):
+    if (job.get("status") != "REVIEW" or not job.get("video_sha")
+            or data.get("video_sha") != job["video_sha"]
+            or data.get("sha256") != job.get("storyboard_sha")
+            or data.get("sha256") != job.get("approved_storyboard_sha")
+            or data.get("sha256") != draft_timeline.digest(job)):
+        raise ValueError("Video hoặc storyboard đã thay đổi. Hãy tải lại.")
+
+
+def review_batch(job, data):
+    _check_current(job, data)
+    if type(data.get("allow_cloud")) is not bool:
+        raise ValueError("Explicit cloud image review consent required")
+    limit = data.get("max_reviews")
+    if type(limit) is not int or not 1 <= limit <= MAX_BATCH:
+        raise ValueError("Review batch must contain 1–8 shots.")
+    pending = [i for i, scene in enumerate(job["board"]["scenes"]) if not current_review(job, scene)]
+    # Each completed review is persisted independently; no hidden retry or auto-approval.
+    for i in pending[:limit]:
+        job = review(job, {**data, "index": i})
+    return job
+
+
+def repair_targets(job, data):
+    _check_current(job, data)
+    limit = data.get("max_repairs")
+    if type(limit) is not int or not 1 <= limit <= MAX_REPAIRS:
+        raise ValueError("Repair limit must be 1–2 shots.")
+    remaining = MAX_REPAIRS - job.get("qa_repairs", 0)
+    if remaining <= 0:
+        raise ValueError("Đã hết ngân sách sửa cảnh tự động của production.")
+    targets = []
+    for i, scene in enumerate(job["board"]["scenes"]):
+        report = current_review(job, scene)
+        if report and report.get("verdict") == "FAIL":
+            targets.append((i, report))
+    if not targets:
+        raise ValueError("Không có cảnh FAIL đã được đánh giá trên phiên bản hiện tại.")
+    return targets[:min(limit, remaining)]

@@ -398,6 +398,14 @@ export function StudioDrafts({mutate,onCharacters}) {
       onRemove={canChangeLayout&&sceneCount>minScenes?index=>storyboard(reviewing,'remove',{index}):null}
       onAdd={canChangeLayout&&sceneCount<maxScenes?()=>setEditor({job:reviewing,adding:true,index:sceneCount,scene:{}}):null}
       onDuration={canChangeLayout&&reviewing.brief.duration_mode?seconds=>storyboard(reviewing,'duration',{seconds}):null}
+      onVisualReviewBatch={reviewing.status==='REVIEW'&&reviewing.video_sha?()=>modal.confirm({
+        title:'Đánh giá các cảnh chưa kiểm tra?',content:'Tối đa 8 lượt AI. Nếu dùng cloud, frame mẫu sẽ được gửi đến provider đã chọn và tính vào ngân sách.',
+        okText:'Đánh giá',cancelText:'Hủy',onOk:()=>run('/'+reviewing.id+'/visual-review-batch',{sha256:reviewing.storyboard_sha,video_sha:reviewing.video_sha,max_reviews:8,allow_cloud:true}),
+      }):null}
+      onQualityRepair={reviewing.status==='REVIEW'&&reviewing.video_sha?()=>modal.confirm({
+        title:'AI đề xuất sửa các cảnh lỗi?',content:'Tối đa 2 cảnh mỗi production. AI sửa prompt, giữ kịch bản và tạo phiên bản mới. Model cloud có thể tính phí. Không tự render trước duyệt.',
+        okText:'Đề xuất sửa',cancelText:'Hủy',onOk:()=>storyboard(reviewing,'quality-repair',{video_sha:reviewing.video_sha,max_repairs:2,allow_cloud:true}),
+      }):null}
       onVisualReview={reviewing.status==='REVIEW'&&reviewing.video_sha?index=>modal.confirm({
         title:'AI đánh giá cảnh '+(index+1)+'?',
         content:'AgentForge sẽ lấy frame mẫu từ video đã xác minh và gọi model Kiểm tra chất lượng hình ảnh đã phân công. Nếu dùng cloud, ảnh và mô tả cảnh sẽ được gửi đến endpoint đã cấu hình và có thể tính phí. Kết quả chỉ là gợi ý.',

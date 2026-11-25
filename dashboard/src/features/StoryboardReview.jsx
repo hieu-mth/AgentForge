@@ -7,7 +7,7 @@ import {groupDraftScenes} from './studioScenes.js';
 import {MAX_STUDIO_SECONDS} from './studioDuration.js';
 import './storyboard-review.css';
 
-export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewrite,onAdd,onMove,onRemove,onPreview,onDuration,onRegenerate,onVisualReview,onAudio,onContinuity,onAudioDirect}){
+export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewrite,onAdd,onMove,onRemove,onPreview,onDuration,onRegenerate,onVisualReview,onVisualReviewBatch,onQualityRepair,onAudio,onContinuity,onAudioDirect}){
   const [shot,setShot]=useState(null);
   const [seconds,setSeconds]=useState(null);
   const [view,setView]=useState('scenes');
@@ -41,6 +41,14 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
     {reviewing&&job.deferred_media_binding&&<Alert type="info" showIcon
       message="Storyboard chưa khóa model media"
       description="Bạn có thể xem và chỉnh nội dung trước khi đăng ký model ảnh hoặc video. Khi duyệt sản xuất, hệ thống kiểm tra và khóa các model media đang được phân công. Timeline hiện vẫn theo giới hạn I2V."/>}
+    {onVisualReviewBatch&&<div className="storyboard-context">
+      <Space wrap>
+        <Button disabled={busy} onClick={onVisualReviewBatch}>AI đánh giá tối đa 8 cảnh chưa kiểm tra</Button>
+        {onQualityRepair&&<Button disabled={busy||(job.qa_repairs??0)>=2||!scenes.some(s=>job.visual_reviews?.[s.shot_id]?.verdict==='FAIL'&&job.visual_reviews[s.shot_id].video_sha===job.video_sha)}
+          onClick={onQualityRepair}>AI đề xuất sửa cảnh lỗi ({job.qa_repairs??0}/2)</Button>}
+      </Space>
+      <p className="env-muted">Chỉ kiểm tra frame mẫu. AI sửa tối đa 2 cảnh mỗi production; cần duyệt storyboard mới trước khi render.</p>
+    </div>}
     <div className="storyboard-toolbar">
       <Segmented aria-label="Chế độ xem storyboard" value={view} onChange={setView}
         options={[{label:'Các cảnh',value:'scenes'},{label:'Nội dung & phiên bản',value:'source'}]}/>
