@@ -472,6 +472,38 @@ class DraftTests(unittest.TestCase):
                 draft.act(self.ident, "storyboard-regenerate",
                           dict(request, sha256=result["storyboard_sha"]))
 
+    def test_regenerate_completed_motion_shot_keeps_image_and_pins_new_seed(self):
+        board = self.board()
+        board["scenes"] = [dict(scene, asset=str(i)*64, job_id=str(i)*32, attempts=1,
+                                motion_sha=str(i+2)*64, motion_job=str(i+2)*32)
+                           for i, scene in enumerate(board["scenes"], 1)]
+        output = studio_runtime.LEGACY_MOTION_OUTPUT
+        motion_plan = {"adapter": draft_motion.ADAPTER_ID, "encoder_path_sha": "fixture",
+                       "output": {"fps": output.fps, "max_frames": output.max_frames,
+                                  "resolution": list(output.resolution)}}
+        job = {"id": self.ident, "brief": dict(self.brief, mode="motion", seconds=4),
+               "board": board, "cast": {}, "storyboard_version": 1, "video_sha": None,
+               "motion_plan": motion_plan}
+        draft._stamp_storyboard(job)
+        job.update(status="REVIEW", video_sha="f"*64, approved_storyboard_sha=job["storyboard_sha"])
+        draft._save(job)
+        other = dict(job["board"]["scenes"][1])
+        with patch.object(draft_motion, "require_resolved_ledger"):
+            result = draft.act(self.ident, "storyboard-regenerate",
+                               {"sha256": job["storyboard_sha"], "index": 0, "scope": "motion"})
+        first, second = result["board"]["scenes"]
+        self.assertEqual(first["asset"], "1"*64)
+        self.assertEqual(first["job_id"], "1"*32)
+        self.assertNotIn("motion_job", first)
+        self.assertNotIn("motion_sha", first)
+        self.assertEqual(first["motion_seed"], 1042)
+        self.assertEqual(second, other)
+        self.assertEqual(result["storyboard_history"][0]["checkpoints"][0]["motion_sha"], "3"*64)
+        digest = result["storyboard_sha"]
+        self.assertEqual(draft.draft_timeline.digest(result), digest)
+        first["motion_seed"] += 1
+        self.assertNotEqual(draft.draft_timeline.digest(result), digest)
+
     def test_finished_drafts_are_read_only_for_scene_edits(self):
         for status in ("APPROVED", "REJECTED", "CANCELLED"):
             with self.subTest(status=status):

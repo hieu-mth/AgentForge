@@ -1561,6 +1561,9 @@ def _storyboard_action(job, action, data):
         # Keep historical files; a replaced image also invalidates its dependent clip.
         if scope == "image":
             scene.update(image_key=uuid4().hex, asset=None, job_id=None, attempts=0)
+        if moving:
+            # A new deterministic, approval-bound seed per storyboard version.
+            scene["motion_seed"] = 42 + index + 1000 * job["storyboard_version"]
         scene.pop("motion_job", None)
         scene.pop("motion_sha", None)
     elif action == "storyboard-remove":

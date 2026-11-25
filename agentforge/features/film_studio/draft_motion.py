@@ -297,7 +297,7 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
             motion_comfy.submit_shot(film_slug=slug, shot_id=f"sh-{index+1:05d}", plan_sha=plan_sha,
                 prompt=("Animate this shot with natural movement, preserving character identity. "
                         + scene.get("motion_prompt", scene["description"]) + " " + scene.get("scene_notes", "")),
-                workflow_path=workflow, workflow_sha=digest, seed=42+index, confirmed=True,
+                workflow_path=workflow, workflow_sha=digest, seed=scene.get("motion_seed", 42+index), confirmed=True,
                 image_job=scene["job_id"], image_sha=scene["asset"],
                 ltx_encoder=Path(profile["motion_encoder"]), confirm_ltx_gate_b=True, on_reserved=reserve,
                 confirm_new_attempt=retry_motion_job is not None,
