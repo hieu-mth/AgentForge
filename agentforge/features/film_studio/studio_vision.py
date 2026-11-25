@@ -5,7 +5,7 @@ import json
 from agentforge.features.film_studio import studio_cloud
 from agentforge.ops import runtime_certification as runtime
 
-PROVIDERS = frozenset({"ollama", "openai", "anthropic"})
+PROVIDERS = frozenset({"ollama", "openai", "anthropic", "chatgpt"})
 MAX_SHEET_BYTES = 64 * 1024
 SCHEMA = {
     "type": "object", "additionalProperties": False,
@@ -71,6 +71,11 @@ def infer(profile, context, sheet):
             if response.get("done") is not True or response.get("done_reason") == "length":
                 raise ValueError("Vision model returned an incomplete response")
             content = response["message"]["content"]
+        elif provider == "chatgpt":
+            from agentforge.features.film_studio import studio_chatgpt
+            content = studio_chatgpt.request(profile, INSTRUCTIONS, [
+                {"type": "input_text", "text": data},
+                {"type": "input_image", "image_url": "data:image/jpeg;base64," + encoded}])
         elif provider == "anthropic":
             response = studio_cloud._request(profile, "POST", "/messages", {
                 "model": profile["model"], "max_tokens": 1400, "system": INSTRUCTIONS,

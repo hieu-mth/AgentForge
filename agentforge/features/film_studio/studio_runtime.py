@@ -6,12 +6,12 @@ import os.path
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, Protocol
 
-from agentforge.features.film_studio import draft_motion, studio_ollama, studio_cloud
+from agentforge.features.film_studio import draft_motion, studio_ollama, studio_cloud, draft_motion_cloud
 from agentforge.features.film_studio.studio_contracts import DispatchGuard, ImageRequest, MotionOutput
 from agentforge.features.media import studio_flux
 
 Profile = dict[str, Any]
-PreparedMotion = tuple[str, str, Path, str]
+PreparedMotion = tuple[str, Any, Path, str]
 
 
 def routing_identity(bindings, *, moving):
@@ -60,6 +60,9 @@ def text_adapter(profile: Profile | None) -> TextInference:
     provider = (profile or {}).get("provider")
     if provider == "ollama":
         return studio_ollama
+    if provider == "chatgpt":
+        from agentforge.features.film_studio import studio_chatgpt
+        return studio_chatgpt
     if provider in studio_cloud.PROVIDERS:
         return studio_cloud
     raise ValueError("Studio requires a supported text API or local runtime.")
@@ -71,14 +74,14 @@ def image_adapter(profile: Profile | None) -> ImageGeneration:
     return studio_flux
 
 
-MOTION_ADAPTERS: tuple[VideoMotion, ...] = (draft_motion,)
+MOTION_ADAPTERS: tuple[VideoMotion, ...] = (draft_motion, draft_motion_cloud)
 LEGACY_MOTION_OUTPUT = MotionOutput(24, 49, (512, 288))
 
 
 def motion_adapter(profile: Profile | None) -> VideoMotion:
     matches = [adapter for adapter in MOTION_ADAPTERS if profile and adapter.supports(profile)]
     if len(matches) != 1:
-        raise ValueError("Studio requires a compatible local motion checkpoint and workflow.")
+        raise ValueError("Studio requires a compatible motion adapter and profile.")
     return matches[0]
 
 

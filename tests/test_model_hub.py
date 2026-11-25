@@ -202,7 +202,7 @@ class ModelHubTests(unittest.TestCase):
             self.assertFalse(result["cloud_fallback"])
 
     def test_adapter_catalog_matches_persisted_profile_validation(self):
-        expected = {"ollama": "local", "comfyui": "local", "anthropic": "cloud", "openai": "cloud", "elevenlabs": "cloud"}
+        expected = {"ollama": "local", "comfyui": "local", "anthropic": "cloud", "openai": "cloud", "elevenlabs": "cloud", "chatgpt": "cloud", "ltx_cloud": "cloud"}
         with tempfile.TemporaryDirectory() as folder:
             db = Path(folder) / "hub.sqlite3"
             catalog = model_hub.catalog(db_path=db)["adapters"]
@@ -217,7 +217,7 @@ class ModelHubTests(unittest.TestCase):
                                      db_path=db, profile=profile)
                     with self.assertRaises(model_hub.ModelConfigError):
                         model_hub.validate_profile({**profile, "api_key": "secret"})
-            self.assertEqual(len(model_hub.catalog(db_path=db)["profiles"]), 5)
+            self.assertEqual(len(model_hub.catalog(db_path=db)["profiles"]), len(expected))
             with self.assertRaises(model_hub.ModelConfigError):
                 model_hub.validate_profile({**profile, "api_key_env": "Bearer actual-key"})
 

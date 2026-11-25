@@ -7,7 +7,8 @@ def handle(server, path, request, session=None):
         required = {"id", "idea", "seconds", "ratio", "scene_count"}
         if not server.allow_external_actions or request.keys() not in (
                 required, required | {"mode"}, required | {"mode", "motion_approved"},
-                required | {"mode", "duration_mode"}):
+                required | {"mode", "duration_mode"},
+                required | {"mode", "duration_mode", "route_strategy", "max_cloud_seconds"}):
             raise PermissionError("Draft production requires external-tools mode and a complete brief")
         from agentforge.features.film_studio import draft_pipeline
         return draft_pipeline.submit(request)
@@ -21,21 +22,24 @@ def handle(server, path, request, session=None):
             "storyboard-move": {"sha256", "index", "target"},
             "storyboard-rewrite": {"sha256", "index", "feedback"},
             "storyboard-regenerate": {"sha256", "index", "scope"},
+            "storyboard-quality-repair": {"sha256", "video_sha", "max_repairs", "allow_cloud"},
             "storyboard-duration": {"sha256", "seconds"},
             "storyboard-audio": {"sha256", "engine", "voice_name"},
             "storyboard-audio-direct": {"sha256", "engine", "voice_name", "voices"},
             "storyboard-continuity": {"sha256"},
         }
-        if len(parts) != 6 or parts[5] not in {"approve", "reject", "edit", "resume", "cancel", "delete", "visual-review", *storyboard}:
+        if len(parts) != 6 or parts[5] not in {"approve", "reject", "edit", "resume", "cancel", "delete", "visual-review", "visual-review-batch", *storyboard}:
             raise ValueError("Unknown draft action")
         from agentforge.features.film_studio import draft_pipeline
         identifier, action = parts[4:]
-        if action in {"resume", "storyboard-approve", "storyboard-rewrite", "storyboard-continuity", "storyboard-audio-direct", "visual-review"} and not server.allow_external_actions:
+        if action in {"resume", "storyboard-approve", "storyboard-rewrite", "storyboard-continuity", "storyboard-audio-direct", "storyboard-quality-repair", "visual-review", "visual-review-batch"} and not server.allow_external_actions:
             raise PermissionError("Draft production requires external-tools mode")
         required = {"sha256"} if action in {"approve", "reject"} else (
             {"index", "description", "image_prompt"} if action == "edit" else storyboard.get(action, set()))
         if action == "visual-review":
             required = {"sha256", "video_sha", "index", "allow_cloud"}
+        if action == "visual-review-batch":
+            required = {"sha256", "video_sha", "max_reviews", "allow_cloud"}
         optional = {"caption", "scene_notes"} if action in {"storyboard-edit", "storyboard-add"} else set()
         if action == "storyboard-audio-direct":
             optional = {"generate_audio"}

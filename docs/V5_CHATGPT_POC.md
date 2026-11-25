@@ -1,0 +1,16 @@
+# V5.0/5.1 — local ChatGPT preview
+
+This branch implements a Windows-only opt-in OAuth CLI and model profile. It does not claim live account acceptance. Only the Owner's local runtime may use the connection; no background scheduling, account rotation or proxy API is added. The user must authorize plan usage; the existing cloud consent and call cap remain in force. Do not use hosted/shared runtimes. Usage counts against the user's ChatGPT limits and credits.
+
+## Local verification
+
+1. Run `python -m pip install -e ".[media,chatgpt]"`.
+2. Run `python -m agentforge.ai.chatgpt_auth login owner`, review consent in the browser.
+3. Run `python -m agentforge.ai.chatgpt_auth models owner` and choose an actual slug.
+4. Run `python -m agentforge.ai.chatgpt_auth probe owner --model YOUR_SLUG`.
+5. Register a ChatGPT Plan profile in Model Hub with account reference owner and that slug. Assign general.text, film.storyboard, character.select or vision.qa as appropriate. Enable cloud permission and explicitly approve cloud data transfer; verify a real storyboard and visual review.
+6. Run `python -m agentforge.ai.chatgpt_auth logout owner` to clear local tokens; if remote revocation is not confirmed, disconnect in ChatGPT Settings.
+
+DPAPI encrypted account records are outside the repository at ~/.agentforge/chatgpt.sqlite3. Account reference is configuration, not a token. No credentials in the UI or production receipts. The CLI is a POC, not a fully integrated browser sign-in UI. The ID token must verify against official JWKS. The Responses endpoint requires store=false, stream=true; incomplete streams fail, quota failures do not fall back. No model is hardcoded. No real account has been used in CI.
+
+Official docs: https://developers.openai.com/siwc/token-sharing-open-source/sign-in ; https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference ; https://openai.com/policies/sign-in-with-chatgpt-terms/ .

@@ -133,6 +133,18 @@ ADAPTERS = {
         "legacy_defaults": {"base_url_env": "OPENAI_BASE_URL", "api_key_env": "OPENAI_API_KEY"},
         "local_probe": False, "cloud_probe": True,
     },
+    "chatgpt": {
+        "label": "ChatGPT Plan (preview)", "connection": "cloud", "model_label": "Model slug",
+        "model_example": "model-tu-lenh-models", "description": "Kết nối local bằng OAuth chính thức; không nhập API key. Chạy CLI chatgpt_auth login trước.",
+        "defaults": {"account_ref": "owner"}, "local_probe": False, "cloud_probe": True,
+    },
+    "ltx_cloud": {
+        "label": "LTX Cloud V2", "connection": "cloud", "model_label": "Model ID",
+        "model_example": "ltx-2-3-fast", "description": "LTX V2 video; 720p, 24 fps, 6/8/10 giây. Chỉ gửi sau duyệt ngân sách.",
+        "defaults": {"base_url": "https://api.ltx.io"},
+        "legacy_defaults": {"base_url_env": "LTX_BASE_URL", "api_key_env": "LTX_API_KEY"},
+        "local_probe": False, "cloud_probe": False,
+    },
     "elevenlabs": {
         "label": "ElevenLabs-compatible", "connection": "cloud", "model_label": "Model ID",
         "model_example": "model-id-da-cap",
@@ -192,6 +204,8 @@ def validate_profile(value, *, profile_id=None, preview=False):
         "id", "provider", "model", "enabled", "base_url",
         "base_url_env", "api_key_env", "api_key_protected",
     }
+    if value.get("provider") == "chatgpt":
+        allowed.add("account_ref")
     if value.get("provider") == "comfyui":
         allowed.update(("flux", "motion_encoder"))
     if not value.keys() <= allowed:
@@ -209,7 +223,11 @@ def validate_profile(value, *, profile_id=None, preview=False):
     common = {"id": ident, "provider": provider, "model": model,
               "enabled": enabled}
     fields = value.keys() - common.keys()
-    if ADAPTERS[provider]["connection"] == "local":
+    if provider == "chatgpt":
+        if fields != {"account_ref"}:
+            raise ModelConfigError("ChatGPT requires an account reference, not a key or URL")
+        common["account_ref"] = _required_text(value["account_ref"], ID_RE, "ChatGPT account reference")
+    elif ADAPTERS[provider]["connection"] == "local":
         if fields != {"base_url"} and not (
                 provider == "comfyui" and fields in ({"base_url", "flux"}, {"base_url", "motion_encoder"})):
             raise ModelConfigError("Fields do not match the selected adapter")
@@ -239,13 +257,15 @@ def validate_profile(value, *, profile_id=None, preview=False):
             common[key] = _required_text(value[key], ENV_NAME, "environment variable name")
     else:
         raise ModelConfigError("Fields do not match the selected Cloud credentials")
+    if provider == "ltx_cloud" and "base_url" in common and common["base_url"] not in {"https://api.ltx.io", "https://api.ltx.io/v2"}:
+        raise ModelConfigError("LTX video chỉ chấp nhận endpoint HTTPS chính thức.")
     return common
 
 
 def _save_profile(value, api_key, profiles):
     if not isinstance(value, dict) or "api_key_protected" in value:
         raise ModelConfigError("Invalid model profile")
-    if value.get("provider") not in {"anthropic", "openai", "elevenlabs"} or "base_url" not in value:
+    if value.get("provider") not in {"anthropic", "openai", "elevenlabs", "ltx_cloud"} or "base_url" not in value:
         if api_key is not None:
             raise ModelConfigError("API key chỉ dùng với endpoint Cloud nhập trực tiếp")
         return validate_profile(value)
@@ -365,7 +385,7 @@ def effective_models(*, db_path=None):
     state = _read_state(db_path=db_path)[1]
     return {key: {k: v for k, v in value.items() if k != "id"}
             for key, value in _profiles(state=state).items()
-            if value["provider"] in {"ollama", "anthropic", "openai"}}
+            if value["provider"] in {"ollama", "anthropic", "openai", "chatgpt"}}
 
 
 def _extra_capabilities(routes):
@@ -489,9 +509,14 @@ def capability_readiness(profile_id, capability, *, expected_revision, db_path=N
         observation = contract["reason"]
     elif kind in {"sound", "music"}:
         observation = "AUDIO_GENERATION_NOT_PROBED"
+    elif profile["provider"] == "ltx_cloud":
+        observation = "CLOUD_VIDEO_NOT_PROBED"
     elif kind in {"text", "vision", "audio"}:
         if profile["provider"] == "ollama":
             observation = _check_ollama(profile)["status"]
+        elif profile["provider"] == "chatgpt":
+            from agentforge.features.film_studio import studio_chatgpt
+            observation = studio_chatgpt.readiness(profile)
         else:
             from agentforge.features.film_studio import studio_cloud
             observation = studio_cloud.readiness(profile)
@@ -511,7 +536,7 @@ def capability_readiness(profile_id, capability, *, expected_revision, db_path=N
 
 
 def _preflight_result(observation, contract):
-    if observation in {"DISABLED", "AUDIO_GENERATION_NOT_PROBED"}:
+    if observation in {"DISABLED", "AUDIO_GENERATION_NOT_PROBED", "CLOUD_VIDEO_NOT_PROBED"}:
         return "NOT_CHECKED", None, None
     if not contract["runtime_compatible"] or observation == "MOTION_ENDPOINT_MISMATCH":
         return "UNSUPPORTED", None, None
@@ -544,14 +569,14 @@ def image_runtime(*, automated=False, db_path=None):
 PLANNING_CAPABILITIES = ("general.text", "film.storyboard", "character.select")
 
 
-def draft_routes(*, db_path=None, moving=None, planning=False):
+def draft_routes(*, db_path=None, moving=None, planning=False, motion_ref=None, direct_cloud=False):
     """Resolve text-only planning or full production from one Owner policy snapshot."""
     revision, state = _read_state(db_path=db_path)
-    return revision, _draft_bindings(state, moving=moving, planning=planning)
+    return revision, _draft_bindings(state, moving=moving, planning=planning, motion_ref=motion_ref, direct_cloud=direct_cloud)
 
 
 @contextmanager
-def studio_dispatch(*, moving, validate, db_path=None):
+def studio_dispatch(*, moving, validate, db_path=None, motion_ref=None, direct_cloud=False):
     """Serialize final Studio admission with registry changes, across processes.
 
     Acquire after GPU admission. The caller releases on POST return, before
@@ -570,7 +595,7 @@ def studio_dispatch(*, moving, validate, db_path=None):
         try:
             revision, state = _read_record(conn)
             try:
-                bindings = _draft_bindings(state, moving=moving)
+                bindings = _draft_bindings(state, moving=moving, motion_ref=motion_ref, direct_cloud=direct_cloud)
             except PermissionError as exc:
                 raise ModelConfigError(str(exc)) from None
             validate(revision, bindings)
@@ -596,7 +621,7 @@ def draft_routes_at(revision, *, db_path=None, moving=None):
     return _draft_bindings(state, moving=moving)
 
 
-def _draft_bindings(state, *, moving, planning=False):
+def _draft_bindings(state, *, moving, planning=False, motion_ref=None, direct_cloud=False):
     policy = _active_policy(state)
     permissions = policy["permissions"]
     if (policy["mode"] == "MANUAL" or not all(permissions[key] for key in
@@ -608,9 +633,9 @@ def _draft_bindings(state, *, moving, planning=False):
     bindings = {}
     capabilities = PLANNING_CAPABILITIES if planning else (*PLANNING_CAPABILITIES, "image.generate", "film.motion")
     for capability in capabilities:
-        if capability == "film.motion" and moving is False:
+        if (capability == "film.motion" and moving is False) or (capability == "image.generate" and direct_cloud):
             continue
-        ref = state["routes"].get(capability, policy["mappings"].get(capability))
+        ref = motion_ref if capability == "film.motion" and motion_ref else state["routes"].get(capability, policy["mappings"].get(capability))
         if ref is None and (capability == "character.select" or (capability == "film.motion" and moving is None)):
             continue
         profile = profiles.get(ref)
@@ -623,6 +648,8 @@ def _draft_bindings(state, *, moving, planning=False):
             raise PermissionError(f"{capability}: chưa cấp quyền {permission} trong AI điều phối.")
         if not orchestrator_policy.runtime_adapter(orchestrator_policy.KINDS[capability], profile):
             raise ModelConfigError(f"{capability}: hồ sơ {ref} không tương thích với adapter Studio.")
+        if capability == "film.motion" and direct_cloud and profile["provider"] != "ltx_cloud":
+            raise ModelConfigError("Cloud trực tiếp cần adapter cloud video.")
         bindings[capability] = profile
     return bindings
 
@@ -655,7 +682,7 @@ def _catalog(revision, state):
             "has_api_key": "api_key_protected" in v, "source": (
             "owner"),
             "health": "UNVERIFIED",
-            "runtime_supported": v["provider"] in {"ollama", "anthropic", "openai", "elevenlabs"} or "flux" in v
+            "runtime_supported": v["provider"] in {"ollama", "anthropic", "openai", "elevenlabs", "chatgpt", "ltx_cloud"} or "flux" in v
                 or orchestrator_policy.local_adapter("video", v) is not None,
             "capability_contracts": [capability_contract(key, v) for key, kind in orchestrator_policy.KINDS.items()
                                      if kind != "tool"]}
@@ -677,6 +704,10 @@ def probe_cloud_profile(profile_id, *, expected_revision, db_path=None):
     if type(expected_revision) is not int or revision != expected_revision:
         raise ModelConfigError("MODEL_HUB_REVISION_CONFLICT")
     profile = _profiles(state=state).get(profile_id)
+    if profile and profile["enabled"] and profile["provider"] == "chatgpt":
+        from agentforge.features.film_studio import studio_chatgpt
+        return {**studio_chatgpt.probe(profile), "model": profile["model"], "revision": revision,
+                "checked_at": datetime.now(timezone.utc).isoformat()}
     if not profile or not profile["enabled"] or profile["provider"] not in studio_cloud.PROVIDERS:
         raise ModelConfigError("Probe requires an enabled cloud text profile")
     return {**studio_cloud.probe(profile), "model": profile["model"], "revision": revision,
@@ -722,19 +753,20 @@ def vision_binding(*, db_path=None):
         raise ModelConfigError("vision.qa: hãy phân công model có hỗ trợ hình ảnh trong AI điều phối.")
     policy = _active_policy(state)
     permissions = policy["permissions"]
-    permission = "call_cloud" if profile["provider"] in {"openai", "anthropic"} else "call_local"
+    permission = "call_cloud" if profile["provider"] in {"openai", "anthropic", "chatgpt"} else "call_local"
     if (policy["mode"] == "MANUAL" or not permissions["assign_local"] or not permissions[permission]
             or not permissions["run_tools"] or "ffmpeg" not in policy["tools"]):
         raise PermissionError("vision.qa: cần cấp quyền model và công cụ FFmpeg trong AI điều phối.")
     return revision, profile, policy["cloud_call_limit"]
 
 
-def cloud_call_limit(profile, *, moving, planning, validate, db_path=None):
+def cloud_call_limit(profile, *, moving, planning, validate, db_path=None, motion_ref=None, direct_cloud=False, allow_motion=False):
     """Check permission and pinned routes against one snapshot before each dispatch."""
     revision, state = _read_state(db_path=db_path)
-    bindings = _draft_bindings(state, moving=moving, planning=planning)
+    bindings = _draft_bindings(state, moving=moving, planning=planning, motion_ref=motion_ref, direct_cloud=direct_cloud)
     validate(revision, bindings)
-    if not any(bindings.get(key) == profile for key in PLANNING_CAPABILITIES):
+    capabilities = (*PLANNING_CAPABILITIES, "film.motion") if allow_motion else PLANNING_CAPABILITIES
+    if not any(bindings.get(key) == profile for key in capabilities):
         raise ModelConfigError("Hồ sơ cloud không khớp phân công.")
     return _active_policy(state)["cloud_call_limit"]
 
@@ -964,3 +996,28 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
                      (next_revision, payload, action, moment))
         result = _catalog(next_revision, updated)
     return result
+
+
+def production_candidates(strategy, *, db_path=None):
+    """Owner-enabled profiles and permission-checked methods; no runtime/network probe."""
+    if strategy not in {"auto", "local", "hybrid", "cloud"}:
+        raise ModelConfigError("Unknown production strategy.")
+    revision, state = _read_state(db_path=db_path)
+    candidates = []
+    for ident, profile in _profiles(state=state).items():
+        if not orchestrator_policy.compatible("video", profile):
+            continue
+        methods = ("cloud", "hybrid") if profile["provider"] == "ltx_cloud" else ("local",)
+        for method in methods:
+            if strategy not in {"auto", method}:
+                continue
+            try:
+                _draft_bindings(state, moving=True, motion_ref=ident, direct_cloud=method == "cloud")
+            except (ValueError, PermissionError):
+                continue
+            adapter = orchestrator_policy.runtime_adapter("video", profile)
+            candidates.append({"id": ident, "method": method, "model": profile["model"],
+                               "max_frames": adapter.output_profile().max_frames,
+                               "fps": adapter.output_profile().fps,
+                               "min_billable_seconds": 6 if method != "local" else 0})
+    return revision, candidates

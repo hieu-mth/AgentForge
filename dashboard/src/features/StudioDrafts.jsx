@@ -17,7 +17,7 @@ import './studio-draft-progress.css';
 
 const API='/api/film/drafts';
 const editorKey='agentforge.studio.video-brief.v1';
-const briefDefaults={idea:'',durationMode:'auto',targetSeconds:12,ratio:'9:16',mode:'motion'};
+const briefDefaults={idea:'',durationMode:'auto',targetSeconds:12,ratio:'9:16',mode:'motion',routeStrategy:'assigned',cloudSeconds:0};
 const motionShots={4:2,6:3,15:8,30:15};
 const videoModes={motion:'Có chuyển động',still:'Ảnh tĩnh (lia và thu phóng)'};
 const motionMaxShots={4:2,6:3,15:9,30:16};
@@ -50,6 +50,7 @@ const warnings={RAM_LOW:'RAM khả dụng không đủ',COMMIT_LOW:'Hạn mức 
   VRAM_UNAVAILABLE:'Không đo được VRAM khả dụng',
   COMFYUI_QUEUE_BUSY:'ComfyUI còn tác vụ đang chạy hoặc đang chờ.',
   COMFYUI_QUEUE_UNAVAILABLE:'Chưa xác minh được hàng đợi ComfyUI.',
+  CLOUD_MOTION_RECONCILIATION_REQUIRED:'Có yêu cầu cloud chưa đối soát. Kiểm tra job nhà cung cấp trước khi tiếp tục.',
   MOTION_RECONCILIATION_REQUIRED:'Cần đối soát tác vụ chuyển động trước khi nhận GPU.',
   GPU_RESOURCE_FAILURE:'ComfyUI báo lỗi bộ nhớ. Kiểm tra tài nguyên trước khi tiếp tục từ checkpoint.',
   OLLAMA_RESOURCE_OR_SERVER_ERROR:'Ollama trả lỗi máy chủ. Kiểm tra tài nguyên và log trước khi tiếp tục.',
@@ -239,6 +240,7 @@ export function StudioDrafts({mutate,onCharacters}) {
     const payload={idea:values.idea,mode:values.mode,duration_mode:values.durationMode,
       seconds:values.durationMode==='manual'?values.targetSeconds:null,scene_count:null,
       ratio:motion?'16:9':values.ratio};
+    if(motion&&values.routeStrategy!=='assigned')Object.assign(payload,{route_strategy:values.routeStrategy,max_cloud_seconds:values.cloudSeconds??0});
     const brief=JSON.stringify(payload);
     if(request.current?.brief!==brief)request.current={brief,id:crypto.randomUUID().replaceAll('-','')};
     return run('/start',{...payload,id:request.current.id},result=>{
@@ -296,6 +298,22 @@ export function StudioDrafts({mutate,onCharacters}) {
         <Button className="draft-submit" type="primary" htmlType="submit"
           loading={pending} disabled={waiting>0||characterCount>limit}>Tạo storyboard</Button>
       </div>
+      {moving&&<details className="draft-resource-details">
+        <summary>Tuyến sản xuất V5 · {values.routeStrategy==='assigned'?'Model đã phân công':'Tùy chọn production'}</summary>
+        <Space wrap align="start">
+          <Form.Item name="routeStrategy" label="Phương pháp"><Select style={{width:230}} options={[
+            {value:'assigned',label:'Giữ pipeline V4 / model đã gán'},
+            {value:'auto',label:'AI chọn tuyến'},
+            {value:'local',label:'Local'},
+            {value:'hybrid',label:'Hybrid · ảnh local, video cloud'},
+            {value:'cloud',label:'Cloud video trực tiếp'},
+          ]}/></Form.Item>
+          {['auto','hybrid','cloud'].includes(values.routeStrategy)&&<Form.Item name="cloudSeconds" label="Tối đa giây video trả phí" rules={[{required:true,type:'integer',min:values.routeStrategy==='auto'?0:12,max:240}]}>
+            <NumberField min={values.routeStrategy==='auto'?0:12} max={240} precision={0} suffix="giây"/>
+          </Form.Item>}
+        </Space>
+        <p className="env-muted">Model cloud tối thiểu 6 giây mỗi shot, kể cả đoạn bị cắt ngắn. 0 giây chỉ cho phép local. Chưa gọi video API cho đến khi bạn duyệt storyboard.</p>
+      </details>}
       <details className="draft-resource-details">
         <summary>Thời lượng · {manual?(values.targetSeconds??'—')+' giây':'AI tự đề xuất'}</summary>
         <Space wrap align="start">
@@ -398,6 +416,14 @@ export function StudioDrafts({mutate,onCharacters}) {
       onRemove={canChangeLayout&&sceneCount>minScenes?index=>storyboard(reviewing,'remove',{index}):null}
       onAdd={canChangeLayout&&sceneCount<maxScenes?()=>setEditor({job:reviewing,adding:true,index:sceneCount,scene:{}}):null}
       onDuration={canChangeLayout&&reviewing.brief.duration_mode?seconds=>storyboard(reviewing,'duration',{seconds}):null}
+      onVisualReviewBatch={reviewing.status==='REVIEW'&&reviewing.video_sha?()=>modal.confirm({
+        title:'Đánh giá các cảnh chưa kiểm tra?',content:'Tối đa 8 lượt AI. Nếu dùng cloud, frame mẫu sẽ được gửi đến provider đã chọn và tính vào ngân sách.',
+        okText:'Đánh giá',cancelText:'Hủy',onOk:()=>run('/'+reviewing.id+'/visual-review-batch',{sha256:reviewing.storyboard_sha,video_sha:reviewing.video_sha,max_reviews:8,allow_cloud:true}),
+      }):null}
+      onQualityRepair={reviewing.status==='REVIEW'&&reviewing.video_sha?()=>modal.confirm({
+        title:'AI đề xuất sửa các cảnh lỗi?',content:'Tối đa 2 cảnh mỗi production. AI sửa prompt, giữ kịch bản và tạo phiên bản mới. Model cloud có thể tính phí. Không tự render trước duyệt.',
+        okText:'Đề xuất sửa',cancelText:'Hủy',onOk:()=>storyboard(reviewing,'quality-repair',{video_sha:reviewing.video_sha,max_repairs:2,allow_cloud:true}),
+      }):null}
       onVisualReview={reviewing.status==='REVIEW'&&reviewing.video_sha?index=>modal.confirm({
         title:'AI đánh giá cảnh '+(index+1)+'?',
         content:'AgentForge sẽ lấy frame mẫu từ video đã xác minh và gọi model Kiểm tra chất lượng hình ảnh đã phân công. Nếu dùng cloud, ảnh và mô tả cảnh sẽ được gửi đến endpoint đã cấu hình và có thể tính phí. Kết quả chỉ là gợi ý.',
