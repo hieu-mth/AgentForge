@@ -181,7 +181,7 @@ class ModelHubTests(unittest.TestCase):
         routes = model_hub.route_catalog()
         self.assertEqual(set(routes), {
             "general.text", "film.storyboard", "film.motion",
-            "image.generate", "ops.monitor"})
+            "image.generate", "vision.qa", "ops.monitor"})
         self.assertTrue(all("worker" not in item and
                             "default_model" not in item for item in routes.values()))
         self.assertTrue(all(item["execution"] in {"config_only", "rules"}

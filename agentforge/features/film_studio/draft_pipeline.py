@@ -1704,6 +1704,9 @@ def act(ident, action, data):
     started = False
     try:
         job = _read(ident)
+        if action == "visual-review":
+            from agentforge.features.film_studio import draft_quality
+            return draft_quality.review(job, data)
         if action.startswith("storyboard-"):
             return _storyboard_action(job, action, data)
         if action in {"approve", "reject"}:

@@ -56,7 +56,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
   const options=profiles.filter(p=>p.enabled).map(p=>({value:p.id,label:p.id+' · '+p.model}));
   const initial={mode:policy.mode,
     permissions:policy.permissions,tools:policy.tools,cloud_call_limit:policy.cloud_call_limit,
-    bindings:Object.fromEntries(capabilities.filter(row=>!row.tool&&row.kind!=='vision')
+    bindings:Object.fromEntries(capabilities.filter(row=>!row.tool&&(row.kind!=='vision'||row.existing_route))
       .map(row=>[row.id,row.model_ref??unset]))};
 
   useEffect(()=>{
@@ -92,7 +92,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
     const route_changes={};
     const mappings={};
     for(const row of capabilities){
-      if(row.tool||row.kind==='vision')continue;
+      if(row.tool||(row.kind==='vision'&&!row.existing_route))continue;
       const ref=values.bindings?.[row.id];
       if(row.existing_route){
         if(ref!==initial.bindings[row.id])route_changes[row.id]=ref||null;
@@ -113,7 +113,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
     </Form.Item>;
   }
 
-  const mainBinding=row=>row.kind==='vision'
+  const mainBinding=row=>row.kind==='vision'&&!row.existing_route
       ?<Text type="secondary">Chưa có adapter kiểm tra thị giác.</Text>
       :row.tool||modelField(['bindings',row.id],
       options.filter(option=>row.options.includes(option.value)),row.model_ref,

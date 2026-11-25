@@ -7,7 +7,7 @@ import {groupDraftScenes} from './studioScenes.js';
 import {MAX_STUDIO_SECONDS} from './studioDuration.js';
 import './storyboard-review.css';
 
-export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewrite,onAdd,onMove,onRemove,onPreview,onDuration,onRegenerate,onAudio}){
+export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewrite,onAdd,onMove,onRemove,onPreview,onDuration,onRegenerate,onVisualReview,onAudio}){
   const [shot,setShot]=useState(null);
   const [seconds,setSeconds]=useState(null);
   const [view,setView]=useState('scenes');
@@ -17,6 +17,8 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
   const index=Math.max(0,scenes.findIndex((s,i)=>(s.shot_id??i)===shot));
   const scene=scenes[index];
   const reviewing=job.status==='STORYBOARD_REVIEW';
+  const review=job.visual_reviews?.[scene?.shot_id];
+  const visualReview=review?.video_sha===job.video_sha&&review?.storyboard_sha===job.storyboard_sha?review:null;
   const authoredScenes=job.duration_plan?.content_scene_count;
   const creativeScenes=job.duration_plan?.creative_plan?.scenes;
   const creativeCount=creativeScenes?.reduce((sum,entry)=>sum+entry.creative_shots.length,0);
@@ -116,7 +118,13 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
           {scene.motion_prompt&&<p><strong>Prompt chuyển động</strong><br/>{scene.motion_prompt}</p>}
           {scene.audio&&<p><strong>Âm thanh dự kiến</strong><br/>{scene.audio}</p>}
         </details>
+        {visualReview&&<Alert showIcon type={visualReview.verdict==='FAIL'?'warning':'info'}
+          message={'AI đánh giá frame mẫu · '+({PASS:'Mẫu phù hợp',FAIL:'Có lỗi',UNCERTAIN:'Chưa đủ bằng chứng'}[visualReview.verdict]??visualReview.verdict)}
+          description={<div><p>{visualReview.summary}</p>{visualReview.issues.map((issue,i)=><p key={i}>• {issue}</p>)}
+            {visualReview.repair_hint&&<p><strong>Gợi ý sửa:</strong> {visualReview.repair_hint}</p>}
+            <p className="env-muted">{visualReview.model_id} · Chỉ đánh giá frame mẫu, không thay thế duyệt video.</p></div>}/>}
         <Space wrap className="storyboard-actions">
+          {onVisualReview&&<Button disabled={busy} onClick={()=>onVisualReview(index)}>AI đánh giá cảnh</Button>}
           {onEdit&&<Button disabled={busy} onClick={()=>onEdit(index,scene)}>Sửa cảnh</Button>}
           {onRewrite&&<Button disabled={busy} onClick={()=>onRewrite(index,scene)}>AI viết lại</Button>}
           {onMove&&index>0&&<Button disabled={busy} onClick={()=>onMove(index,index-1)}>Đưa lên</Button>}

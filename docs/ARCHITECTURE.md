@@ -9,7 +9,7 @@ Tách ba trách nhiệm:
 - Execution: lập kế hoạch kỹ thuật từ ý đồ đã kiểm tra và khả năng adapter thật; khóa đầu vào, route, tài nguyên, approval và receipt. Nếu không khả thi thì báo rõ, không tự đổi model hoặc thay đổi nội dung.
 - Quality/post-production: kiểm tra kỹ thuật, chất lượng trực quan và duyệt Owner; FFmpeg xử lý hậu kỳ. CI kỹ thuật không xác nhận chất lượng điện ảnh.
 
-Pipeline chạy được hiện tại vẫn là tạo ảnh local rồi tạo chuyển động từ ảnh (hoặc ghép ảnh tĩnh). Không công bố Reference-to-Video, Text-to-Video, cloud media inference hoặc visual QA tự động là tính năng hiện có. Chỉ thêm adapter, route và UI cho phương pháp đã qua benchmark. Không dùng một model cụ thể làm hợp đồng chung của Studio.
+Pipeline chạy được hiện tại vẫn là tạo ảnh local rồi tạo chuyển động từ ảnh (hoặc ghép ảnh tĩnh). Không công bố Reference-to-Video, Text-to-Video, cloud media inference hoặc visual QA tự động là tính năng hiện có. Vision QA có luồng thử nghiệm có giám sát riêng: Owner gán tuyến vision.qa và yêu cầu đánh giá frame mẫu từ MP4 đã xác minh; không tự duyệt hoặc sửa video. Chỉ thêm adapter, route và UI cho phương pháp đã qua benchmark. Không dùng một model cụ thể làm hợp đồng chung của Studio.
 
 ## Hợp đồng tài sản nhân vật
 
@@ -23,7 +23,7 @@ Khi triển khai thư viện tài sản, hợp đồng phải phân biệt:
 - Creative plan chọn nhân vật và yêu cầu diễn xuất, bối cảnh; execution plan chọn đúng asset revision và chuyển các tham chiếu được phép theo khả năng adapter. Không tự sinh ngoại hình mới để thay thế asset đã duyệt.
 - Approval phải ràng buộc asset revision và file digest cùng nội dung, cấu hình thực thi; thay asset thì duyệt lại phần phụ thuộc. Thiếu hoặc sai file phải dừng, không tự dùng ảnh khác. Gửi ảnh ra cloud cần quyền phù hợp và kiểm soát chi phí; không tự upload.
 
-Đây là hợp đồng phát triển, chưa phải schema SQLite/API lưu ảnh đang chạy. Chưa tạo bảng, endpoint, UI hoặc placeholder asset giả. Việc chọn cách lưu, nhập ảnh và tạo bộ tham chiếu sẽ dựa trên benchmark thực tế. Metadata và production cũ không bị migrate hoặc đổi digest chỉ vì thay đổi định hướng.
+Kho ảnh local đã có API/UI nhập bộ tham chiếu PNG/JPEG do Owner chọn, tối đa ba ảnh theo vai trò, lưu phiên bản bất biến trong bảng SQLite riêng với SHA-256 từng ảnh. GET không tạo bảng; phiên bản hồ sơ và phiên bản bộ ảnh được kiểm tra khi lưu. Đây là kho tài sản độc lập: chưa tự bind ảnh vào storyboard, chưa gửi ảnh đến model và chưa chứng minh hiệu quả conditioning. Chỉ kích hoạt binding sau benchmark thực tế. Metadata và production cũ không bị migrate hoặc đổi digest.
 
 
 ## Cấu trúc repository
@@ -74,7 +74,7 @@ Studio có thể lập storyboard từ nội dung Owner, tạo ảnh và motion 
 **Model Hub dùng SQLite, không có model mặc định trong Git.** Owner đăng ký, chỉnh sửa và xóa profile từ **Cài đặt → Model AI**. Một máy mới có **0 model đã đăng ký**. Ollama hoặc ComfyUI được phát hiện bởi trang Môi trường không đồng nghĩa được tự thêm vào Model Hub.
 
 - Nguồn dữ liệu duy nhất của model profile, các model được gán cho tác vụ và chính sách điều phối: `data/company/model_hub.sqlite3` (ignored), revision/CAS, rollback transaction và Owner confirmation.
-- Danh mục capability (`general.text`, `film.storyboard`, `film.motion`, `image.generate`, `ops.monitor`) được khai báo từ `agentforge/ai/orchestrator_policy.py` và `model_hub.route_catalog()` — chỉ metadata thuộc source, **không chứa model ID mặc định**.
+- Danh mục capability (`general.text`, `film.storyboard`, `film.motion`, `image.generate`, `vision.qa`, `ops.monitor`) được khai báo từ `agentforge/ai/orchestrator_policy.py` và `model_hub.route_catalog()` — chỉ metadata thuộc source, **không chứa model ID mặc định**.
 - Lưu profile và gán route **không chạy model**. Film/image routes `CONFIG_ONLY`; `ops.monitor` deterministic. Studio lấy route đã phân công từ snapshot Model Hub và kiểm tra fingerprint trước dispatch; trạng thái CONFIG_ONLY không tự cấp quyền thực thi.
 - Owner có thể xóa profile chưa được phân công cho năng lực hiện hành. Muốn xóa profile đang được phân công phải bỏ gán trước. Xóa profile không xóa weights, DB khác hay workspace.
 - Cơ sở dữ liệu đã tồn tại được giữ nguyên, không tự sửa hoặc migrate khi GET. Overlay/profile Owner cũ tiếp tục được đọc. Các ID route lịch sử ngoài catalog chỉ lưu trữ, không xuất hiện hay thực thi. Owner đăng ký hồ sơ cần dùng.

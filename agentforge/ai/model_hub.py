@@ -33,7 +33,7 @@ ENV_NAME = re.compile(r"[A-Z_][A-Z0-9_]*\Z")
 # Retain stable IDs for existing Owner SQLite routes and Dashboard clients.
 ROUTE_CAPABILITIES = frozenset({
     "general.text", "film.storyboard", "film.motion",
-    "image.generate", "ops.monitor",
+    "image.generate", "vision.qa", "ops.monitor",
 })
 # Persisted Owner overlays for retired products are accepted read-only but
 # excluded from active routes. Never rewrite the Owner's SQLite on GET.
@@ -41,7 +41,7 @@ ROUTE_CAPABILITIES = frozenset({
 ID_RE = re.compile(r"[a-z][a-z0-9_]{2,39}\Z")
 TASK_RE = re.compile(r"[a-z][a-z0-9_.]{2,59}\Z")
 MODEL_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/+-]{0,159}\Z")
-KINDS = {"text", "image", "video", "rules"}
+KINDS = {"text", "image", "video", "vision", "rules"}
 MAX_PROFILE_COUNT = 32
 MAX_STATE_BYTES = 65536
 _LOCAL_INFERENCE = Lock()
@@ -408,9 +408,12 @@ def capability_contract(capability, profile):
     output = None
     adapter_id = None
     workflow_sha = None
-    if adapter and kind == "text":
-        adapter_id = profile["provider"]
+    if adapter and kind in {"text", "vision"}:
+        adapter_id = profile["provider"] if kind == "text" else profile["provider"] + "_vision"
         output = {"format": "structured_json"}
+        if kind == "vision":
+            output["input"] = "jpeg_contact_sheet"
+            output["max_image_bytes"] = adapter.MAX_SHEET_BYTES
     elif adapter and kind == "image":
         adapter_id = "comfyui_flux_gguf"
         graph = json.dumps(profile["flux"]["workflow"], sort_keys=True, separators=(",", ":"),
@@ -468,7 +471,7 @@ def capability_readiness(profile_id, capability, *, expected_revision, db_path=N
         observation = "DISABLED"
     elif not contract["runtime_compatible"]:
         observation = contract["reason"]
-    elif kind == "text":
+    elif kind in {"text", "vision"}:
         if profile["provider"] == "ollama":
             observation = _check_ollama(profile)["status"]
         else:
@@ -662,6 +665,21 @@ def probe_cloud_profile(profile_id, *, expected_revision, db_path=None):
             "checked_at": datetime.now(timezone.utc).isoformat()}
 
 
+def vision_binding(*, db_path=None):
+    """Read one explicitly assigned review profile and its execution permissions."""
+    revision, state = _read_state(db_path=db_path)
+    profile = _profiles(state=state).get(state["routes"].get("vision.qa"))
+    if not orchestrator_policy.compatible("vision", profile):
+        raise ModelConfigError("vision.qa: hãy phân công model có hỗ trợ hình ảnh trong AI điều phối.")
+    policy = _active_policy(state)
+    permissions = policy["permissions"]
+    permission = "call_cloud" if profile["provider"] in {"openai", "anthropic"} else "call_local"
+    if (policy["mode"] == "MANUAL" or not permissions["assign_local"] or not permissions[permission]
+            or not permissions["run_tools"] or "ffmpeg" not in policy["tools"]):
+        raise PermissionError("vision.qa: cần cấp quyền model và công cụ FFmpeg trong AI điều phối.")
+    return revision, profile, policy["cloud_call_limit"]
+
+
 def cloud_call_limit(profile, *, moving, planning, validate, db_path=None):
     """Check permission and pinned routes against one snapshot before each dispatch."""
     revision, state = _read_state(db_path=db_path)
@@ -781,7 +799,7 @@ def _save_orchestrator(updated, policy, route_changes):
     policy = orchestrator_policy.validate(
         policy, id_pattern=ID_RE, extra_routes=_extra_capabilities(routes))
     editable = {key for key in routes if orchestrator_policy.KINDS.get(key)
-                in {"text", "image", "video"}}
+                in {"text", "image", "video", "vision"}}
     if not isinstance(route_changes, dict) or not route_changes.keys() <= editable:
         raise ModelConfigError("Danh sách tuyến điều phối không hợp lệ")
     profiles = _profiles(state=updated)
@@ -870,7 +888,7 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
         elif action == "RESET_ORCHESTRATOR":
             updated.pop("orchestrator", None)
             for key in route_catalog():
-                if orchestrator_policy.KINDS.get(key) in {"text", "image", "video"}:
+                if orchestrator_policy.KINDS.get(key) in {"text", "image", "video", "vision"}:
                     updated["routes"].pop(key, None)
         else:
             if (type(target_revision) is not int or target_revision < 0

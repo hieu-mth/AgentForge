@@ -390,6 +390,13 @@ export function StudioDrafts({mutate,onCharacters}) {
       onRemove={canChangeLayout&&sceneCount>minScenes?index=>storyboard(reviewing,'remove',{index}):null}
       onAdd={canChangeLayout&&sceneCount<maxScenes?()=>setEditor({job:reviewing,adding:true,index:sceneCount,scene:{}}):null}
       onDuration={canChangeLayout&&reviewing.brief.duration_mode?seconds=>storyboard(reviewing,'duration',{seconds}):null}
+      onVisualReview={reviewing.status==='REVIEW'&&reviewing.video_sha?index=>modal.confirm({
+        title:'AI đánh giá cảnh '+(index+1)+'?',
+        content:'AgentForge sẽ lấy frame mẫu từ video đã xác minh và gọi model Kiểm tra chất lượng hình ảnh đã phân công. Nếu dùng cloud, ảnh và mô tả cảnh sẽ được gửi đến endpoint đã cấu hình và có thể tính phí. Kết quả chỉ là gợi ý.',
+        okText:'Đánh giá bằng AI',cancelText:'Hủy',
+        onOk:()=>run('/'+reviewing.id+'/visual-review',{index,sha256:reviewing.storyboard_sha,
+          video_sha:reviewing.video_sha,allow_cloud:true}),
+      }):null}
       onPreview={(index,sha)=>setScenePreview({id:reviewing.id,index,sha})}/>}
     {sourceDraft&&<Modal open centered width={760} rootClassName="script-reader" title="Nội dung video"
       onCancel={()=>setSourceId(null)} footer={<Button onClick={()=>setSourceId(null)}>Đóng</Button>}>
