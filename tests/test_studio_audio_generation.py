@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+import wave
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -48,6 +49,43 @@ class AudioGenerationTests(unittest.TestCase):
             policy.update(permissions=dict.fromkeys(policy["permissions"], True), tools=["ffmpeg"])
             model_hub.change("SAVE_ORCHESTRATOR", expected_revision=2, db_path=db, policy=policy, route_changes={})
             self.assertEqual(model_hub.audio_generation_binding("film.sound", db_path=db)[1]["id"], "owner_sound")
+
+    def test_generated_audio_decodes_mixes_and_reserves_budget(self):
+        from agentforge.features.film_studio import draft_pipeline
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            mp3 = root / "fixture.mp3"
+            ffmpeg = audio_director.render._ffmpeg()
+            audio_director.render._run_process([ffmpeg, "-nostdin", "-v", "error", "-f", "lavfi",
+                "-i", "sine=frequency=440:sample_rate=44100:duration=1", "-c:a", "libmp3lame",
+                str(mp3)], cwd=root)
+            job = {"brief": {"idea": "Rain"}, "cast": {}, "board": {"scenes": [
+                {"shot_id": "one", "frames": 48, "character_ids": []}]}}
+            cue = {"kind": "sfx", "start_frame": 0, "end_frame": 24, "gain_db": -10,
+                   "speaker": "", "text": "Rain on a roof", "asset": ""}
+            profile = {"id": "owner_sound", "provider": "elevenlabs", "model": "fixture"}
+            def binding(route, **kwargs):
+                return (1, profile, 1) if route == "film.sound" else None
+            with (patch.object(audio_director, "library", return_value={}),
+                  patch.object(model_hub, "audio_generation_binding", side_effect=binding),
+                  patch.object(audio_director.ops_control, "require_active"),
+                  patch.object(draft_pipeline, "_save") as save,
+                  patch.object(generation, "generate", return_value=mp3.read_bytes()) as call):
+                job["audio_plan"] = audio_director.propose(job, "windows", "", {},
+                    lambda *args: {"shots": [{"shot_id": "one", "cues": [cue], "unresolved": ""}]},
+                    generate=True)
+                with audio_director.prepare(job, root, 24) as result:
+                    self.assertEqual(result["evidence"]["samples"], 96000)
+                    self.assertEqual(result["evidence"]["cues"][0]["generated"]["profile_id"], "owner_sound")
+                    with wave.open(str(result["path"]), "rb") as stream:
+                        self.assertEqual(stream.getnframes(), 96000)
+                self.assertEqual(job["cloud_calls"], 1)
+                save.assert_called_once()
+                call.assert_called_once()
+                with self.assertRaisesRegex(ValueError, "ngân sách"):
+                    with audio_director.prepare(job, root, 24):
+                        self.fail("Exhausted budget must stop")
+                call.assert_called_once()
 
     def test_generated_cues_are_opt_in_and_pinned(self):
         job = {"brief": {"idea": "Rain"}, "cast": {}, "board": {"scenes": [
