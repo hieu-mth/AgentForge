@@ -4,29 +4,6 @@ import math
 from agentforge.features.film_studio.draft_timeline import duration_limits
 
 
-def _restore_omitted_actions(scene, shots):
-    """Fill gaps in an ordered subset without accepting duplicate or unknown IDs."""
-    ordered = [f"A{index + 1:02d}" for index in range(len(scene["actions"]))]
-    positions = {action: index for index, action in enumerate(ordered)}
-    starts = []
-    previous = -1
-    for shot in shots:
-        actions = shot.get("actions") if isinstance(shot, dict) else None
-        if not isinstance(actions, list) or not actions:
-            return shots
-        for action in actions:
-            position = positions.get(action, -1) if isinstance(action, str) else -1
-            if position <= previous:
-                return shots
-            previous = position
-        starts.append(positions[actions[0]])
-    if not starts:
-        return shots
-    bounds = [0, *starts[1:], len(ordered)]
-    return [{**shot, "actions": ordered[start:end]}
-            for shot, start, end in zip(shots, bounds, bounds[1:])]
-
-
 def compile_plan(scenes, proposed, output):
     if (not scenes or not isinstance(proposed, list) or len(scenes) != len(proposed)
             or any(type(scene.get("frames")) is not int or scene["frames"] < 1 for scene in scenes)
@@ -135,14 +112,27 @@ def propose_scene(scene, global_constraints, fps, infer):
                 "seconds": {"type": "number", "minimum": 0.1, "maximum": 60},
                 "camera": {"type": "string", "minLength": 1, "maxLength": 240},
                 "intent": {"type": "string", "minLength": 1, "maxLength": 240}}}
-    result = infer(
-        "Direct this scene. Choose creative shots. Group adjacent actions when one angle serves them. "
+    instructions = (
+        "Direct this scene. Group adjacent actions when one camera angle serves them. "
         "Use each supplied action ID exactly once in order. Respect authored camera and constraints. "
-        "Give relative duration, camera and storytelling intent. Do not invent actions.",
-        {"scene": {**scene, "actions": actions}, "global_constraints": global_constraints,
-         "seconds": scene["frames"] / fps},
-        {"type": "object", "additionalProperties": False, "required": ["shots"],
-         "properties": {"shots": {"type": "array", "minItems": 1, "maxItems": 16, "items": shot}}})
-    if not isinstance(result, dict) or result.keys() != {"shots"} or not isinstance(result["shots"], list):
-        raise ValueError("AI trả cấu trúc kế hoạch góc quay không hợp lệ.")
-    return _restore_omitted_actions(scene, result["shots"])
+        "Give relative duration, camera and storytelling intent. Do not invent actions."
+    )
+    payload = {"scene": {**scene, "actions": actions}, "global_constraints": global_constraints,
+               "seconds": scene["frames"] / fps}
+    schema = {"type": "object", "additionalProperties": False, "required": ["shots"],
+              "properties": {"shots": {"type": "array", "minItems": 1, "maxItems": 16, "items": shot}}}
+    for attempt in range(2):
+        result = infer(instructions, payload, schema)
+        if not isinstance(result, dict) or result.keys() != {"shots"} or not isinstance(result["shots"], list):
+            raise ValueError("AI trả cấu trúc kế hoạch góc quay không hợp lệ.")
+        shots = result["shots"]
+        if len(shots) > 16 or any(
+                not isinstance(item, dict) or not isinstance(item.get("actions"), list) for item in shots):
+            raise ValueError("Cấu trúc danh sách hành động không hợp lệ.")
+        sequence = [action for item in shots for action in item["actions"]]
+        if sequence == list(actions) and all(item["actions"] for item in shots):
+            return shots
+        if attempt == 0:
+            instructions += " Revise the previous shots, including framing and pacing, to cover the required sequence."
+            payload = {**payload, "previous_shots": shots, "required_sequence": list(actions)}
+    raise ValueError("AI vẫn chưa giữ đúng thứ tự và đầy đủ hành động sau một lần sửa.")

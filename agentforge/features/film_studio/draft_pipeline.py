@@ -336,6 +336,7 @@ def _script_scene(job, profile, comfy, source, continuity, index, *, proposed_sh
         if "rejected_duplicate_fields" in proposed_shot:
             context["rejected_duplicate_fields"] = proposed_shot["rejected_duplicate_fields"]
             context["already_covered"] = proposed_shot["already_covered"]
+            context["previous_candidate"] = proposed_shot["previous_candidate"]
     if cast:
         fields["character_ids"] = {"type": "array", "items": {**STRING, "enum": list(cast)}, "maxItems": 2}
         context["cast"] = cast
@@ -354,10 +355,16 @@ def _script_scene(job, profile, comfy, source, continuity, index, *, proposed_sh
                        "Apply camera and constraints throughout the scene. If beat.continued_action is true, "
                        "show a later portion of the same action or hold its end state, "
                        "without replaying the previous shot's action or merely changing the camera. "
+                       "When beat.action_phase is prepare or progress, keep the event unfinished in the "
+                       "description, image prompt and motion prompt. Reserve its decisive moment for "
+                       "complete. In complete, start at the previous endpoint and finish once; if the "
+                       "event has already happened, hold its result without a new gesture or event. "
                        "Do not add, omit or reorder actions, characters or dialogue. "
                        "If rejected_duplicate_fields is present, the previous response repeated an earlier shot. "
                        "Use already_covered to avoid replaying any accepted shot in this scene. Rewrite the "
-                       "listed fields around the specific moment assigned to this shot. "
+                       "listed fields around the specific moment assigned to this shot. Preserve the other "
+                       "field from previous_candidate. For a continuation, depict the resulting pose or "
+                       "settling movement after the previous shot's endpoint. "
                        "Return an English motion_prompt for this shot. "
                        if authored else ("Focus on the proposed action, using the source only as context. "
                                          if proposed_shot else ""))
@@ -700,7 +707,11 @@ def _write_planned_board(job, bindings):
                                         frame_offset, layout[index], previous)
             if "creative_shot" in shot:
                 request["camera"] = [shot["creative_camera"], *request["camera"]]
+                following = plan["shots"][index + 1:index + 2]
+                carries_forward = bool(following and following[0].get("continued_action"))
+                phase = ("progress" if shot["continued_action"] else "prepare") if carries_forward else "complete"
                 request["beat"].update(assigned_text=shot["action"][:900],
+                                       action_phase=phase,
                                        continued_action=shot["continued_action"],
                                        creative_shot=shot["creative_shot"],
                                        segment=shot["segment"], segment_count=shot["segment_count"])
@@ -731,7 +742,8 @@ def _write_planned_board(job, bindings):
                 job["storyboard_rejections"] = (job.get("storyboard_rejections", []) + [diagnostic])[-3:]
                 _save(job)
                 matching = [covered[number-1] for number in sorted(set(duplicates.values()))]
-                request = {**request, "rejected_duplicate_fields": list(duplicates), "already_covered": matching}
+                request = {**request, "rejected_duplicate_fields": list(duplicates), "already_covered": matching,
+                           "previous_candidate": {field: data[field] for field in ("description", "motion_prompt")}}
             else:
                 raise ValueError(f"AI vẫn lặp mô tả hoặc chuyển động ở cảnh {shot['content_scene']}, "
                                  f"shot {shot['content_shot']} sau 3 lần thử. Các shot đã kiểm tra được giữ lại.")

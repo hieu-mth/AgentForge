@@ -620,6 +620,8 @@ class DraftTests(unittest.TestCase):
             self.assertEqual(direction.call_count, 2)
             self.assertEqual([c.kwargs["proposed_shot"]["beat"]["continued_action"] for c in script.call_args_list],
                              [False, True, False, True])
+            self.assertEqual([c.kwargs["proposed_shot"]["beat"]["action_phase"] for c in script.call_args_list],
+                             ["prepare", "complete", "prepare", "complete"])
         draft._stamp_storyboard(job)
         draft._save(job)
         old_sha = job["storyboard_sha"]
@@ -713,6 +715,8 @@ class DraftTests(unittest.TestCase):
                          ["description", "motion_prompt"])
         self.assertEqual(write.call_args.kwargs["proposed_shot"]["already_covered"], [
             {"description": output["description"], "motion_prompt": output["motion_prompt"]}])
+        self.assertEqual(write.call_args.kwargs["proposed_shot"]["previous_candidate"],
+                         {"description": output["description"], "motion_prompt": output["motion_prompt"]})
         saved = draft._read(self.ident)
         self.assertNotIn("board", saved)
         self.assertEqual(saved["storyboard_checkpoint"]["shots"], [output])
