@@ -96,7 +96,7 @@ class ModelProfileTests(unittest.TestCase):
                  "api_key_env": "ANTHROPIC_AUTH_TOKEN"}
         saved = self.save(cloud)
         self.assertEqual(saved["profiles"][0]["provider"], "anthropic")
-        self.assertEqual(saved["orchestrator"]["policy"]["primary"], None)
+        self.assertNotIn("primary", saved["orchestrator"]["policy"])
         self.assertTrue(all(row["model_ref"] is None for row in saved["routes"]))
         self.assertFalse(saved["cloud_fallback"])
         self.assertNotIn("api_key", saved["profiles"][0])

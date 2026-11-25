@@ -192,7 +192,7 @@ class ModelHubTests(unittest.TestCase):
             self.assertEqual(result["revision"], 0)
             self.assertFalse(db.exists())
             self.assertEqual(result["profiles"], [])
-            self.assertEqual(result["orchestrator"]["policy"]["primary"], None)
+            self.assertNotIn("primary", result["orchestrator"]["policy"])
             self.assertTrue(all(row["model_ref"] is None for row in result["routes"]))
             self.assertEqual(result["routes"][-1]["status"], "DETERMINISTIC")
             self.assertFalse(result["cloud_fallback"])

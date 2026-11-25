@@ -18,7 +18,7 @@ APPROVALS = ("cloud", "download_or_data_change", "publishing_or_privacy")
 TOOLS = ("local_tts", "ffmpeg", "system_rules")
 
 
-def defaults():
+def _legacy_defaults():
     return {
         "schema_version": 1,
         "primary": None,
@@ -65,12 +65,12 @@ def local_adapter(kind, profile):
         return None
 
 
-def validate(policy, *, id_pattern, extra_routes):
+def _validate_legacy(policy, *, id_pattern, extra_routes):
     def require(condition, message):
         if not condition:
             raise ModelConfigError(message)
 
-    default = defaults()
+    default = _legacy_defaults()
     require(isinstance(policy, dict) and policy.keys() in
             (default.keys(), default.keys() - {"paid_api_daily_limit"}),
             "Cấu trúc chính sách không hợp lệ")
@@ -121,22 +121,41 @@ def validate(policy, *, id_pattern, extra_routes):
     return policy
 
 
-# The stored schema remains readable for Owner databases and rollback snapshots.
-# Only these settings participate in the current Studio execution contract.
-EDITABLE_FIELDS = frozenset({"mode", "mappings", "permissions", "tools"})
+def defaults():
+    """Only controls enforced by the current runtime."""
+    return {"mode": "SUPERVISED", "mappings": {},
+            "permissions": dict.fromkeys(("plan", "assign_local", "call_local", "run_tools"), False),
+            "tools": []}
 
 
-def editable(policy):
-    """Canonicalize on explicit save only, never on catalog reads or rollback."""
-    return {**defaults(), **{key: policy[key] for key in EDITABLE_FIELDS},
-            "mode": "MANUAL" if policy["mode"] == "MANUAL" else "SUPERVISED",
-            "tools": [tool for tool in policy["tools"] if tool == "ffmpeg"]}
+def validate(policy, *, id_pattern, extra_routes):
+    """Validate current policy writes; retired controls are not accepted."""
+    if not isinstance(policy, dict) or policy.keys() != defaults().keys():
+        raise ModelConfigError("Cấu trúc chính sách không hợp lệ")
+    if policy["mode"] not in ("MANUAL", "SUPERVISED"):
+        raise ModelConfigError("Chế độ thực thi không hợp lệ")
+    permissions = policy["permissions"]
+    if (not isinstance(permissions, dict) or permissions.keys() != defaults()["permissions"].keys()
+            or any(type(value) is not bool for value in permissions.values())):
+        raise ModelConfigError("Danh sách quyền không hợp lệ")
+    mappings = policy["mappings"]
+    if (not isinstance(mappings, dict) or not mappings.keys() <= extra_routes
+            or any(not isinstance(ref, str) or not id_pattern.fullmatch(ref) for ref in mappings.values())):
+        raise ModelConfigError("Mapping năng lực không hợp lệ")
+    if policy["tools"] not in ([], ["ffmpeg"]):
+        raise ModelConfigError("Danh sách công cụ không hợp lệ")
+    return policy
 
 
-def validate_save(policy, *, id_pattern, extra_routes):
-    if isinstance(policy, dict) and policy.keys() == EDITABLE_FIELDS:
-        policy = {**defaults(), **policy}
-    return validate(policy, id_pattern=id_pattern, extra_routes=extra_routes)
+def read_policy(policy, *, id_pattern, extra_routes):
+    """Project historical snapshots onto active controls without modifying SQLite."""
+    if isinstance(policy, dict) and policy.keys() == defaults().keys():
+        return validate(policy, id_pattern=id_pattern, extra_routes=extra_routes)
+    legacy = _validate_legacy(policy, id_pattern=id_pattern, extra_routes=extra_routes)
+    active = {key: legacy[key] for key in defaults()}
+    active["mode"] = "MANUAL" if active["mode"] == "MANUAL" else "SUPERVISED"
+    active["tools"] = [tool for tool in active["tools"] if tool == "ffmpeg"]
+    return validate(active, id_pattern=id_pattern, extra_routes=extra_routes)
 
 
 def resolve(capability, available_profiles, primary_ref):

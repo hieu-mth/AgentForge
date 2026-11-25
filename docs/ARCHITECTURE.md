@@ -80,4 +80,4 @@ Incomplete or out-of-order action coverage receives at most one contextual model
 
 Xem [runtime](RUNTIME.md) và [production](PRODUCTION.md) để kiểm tra hành vi thực tế.
 
-Các trường điều phối đã ngừng hỗ trợ trong snapshot lịch sử không tham gia chọn model hoặc chặn xóa profile chưa được phân công. Chúng chỉ được giữ để đọc và rollback dữ liệu Owner.
+Chính sách điều phối hiện hành chỉ lưu mode, mappings, permissions và tools. Các snapshot cũ được đọc qua lớp tương thích và chiếu sang chính sách hiện hành; không tự ghi lại SQLite khi đọc. Khi Owner lưu chính sách mới, các trường đã ngừng hỗ trợ không còn được lưu trong snapshot mới. Lịch sử và rollback vẫn bảo toàn dữ liệu gốc.

@@ -820,7 +820,7 @@ try {
     !persisted.orchestrator.policy.tools.includes('ffmpeg'))
     throw new Error('Hiding the tools allowlist discarded the selection');
   if(persisted.routes.find(row=>row.id==='general.text')?.model_ref!=='local_primary'||
-    persisted.orchestrator.policy.primary!==null||persisted.orchestrator.policy.gpu_concurrency!==1)
+    'primary' in persisted.orchestrator.policy||'gpu_concurrency' in persisted.orchestrator.policy)
     throw new Error('Saved model was not read back from real Model Hub');
   const {csrf}=await (await settings.request.get(policyOrigin+'/api/session')).json();
   const invalid=await settings.request.post(endpoint,{headers:{...postOptions.headers,'X-CSRF-Token':csrf},

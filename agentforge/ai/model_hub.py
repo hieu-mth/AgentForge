@@ -314,7 +314,7 @@ def _validate_state(doc):
     # Read safely without rewriting the Owner database during GET.
     defaults = route_catalog()
     if "orchestrator" in doc:
-        orchestrator_policy.validate(
+        orchestrator_policy.read_policy(
             doc["orchestrator"], id_pattern=ID_RE, extra_routes=_extra_capabilities(defaults))
     for key, ref in doc["routes"].items():
         _required_text(key, TASK_RE, "stored task key")
@@ -356,8 +356,14 @@ def _extra_capabilities(routes):
             if key not in routes and kind != "tool"}
 
 
+def _active_policy(state):
+    return orchestrator_policy.read_policy(
+        state.get("orchestrator", orchestrator_policy.defaults()),
+        id_pattern=ID_RE, extra_routes=_extra_capabilities(route_catalog()))
+
+
 def _orchestrator_catalog(state, profiles, routes):
-    policy = {**orchestrator_policy.defaults(), **state.get("orchestrator", {})}
+    policy = _active_policy(state)
     by_route = {row["id"]: row for row in routes}
     capabilities = []
     for key, label, kind, tool in orchestrator_policy.CAPABILITIES:
@@ -488,7 +494,7 @@ def _preflight_result(observation, contract):
 def image_runtime(*, automated=False, db_path=None):
     revision, state = _read_state(db_path=db_path)
     profiles = _profiles(state=state)
-    policy = state.get("orchestrator", orchestrator_policy.defaults())
+    policy = _active_policy(state)
     ref = state["routes"].get("image.generate")
     decision = orchestrator_policy.resolve("image.generate", profiles, ref)
     profile = profiles.get(decision.get("model_ref"))
@@ -554,7 +560,7 @@ def draft_routes_at(revision, *, db_path=None, moving=None):
 
 
 def _draft_bindings(state, *, moving):
-    policy = state.get("orchestrator", orchestrator_policy.defaults())
+    policy = _active_policy(state)
     permissions = policy["permissions"]
     if (policy["mode"] == "MANUAL" or not all(permissions[key] for key in
             ("plan", "assign_local", "call_local", "run_tools")) or "ffmpeg" not in policy["tools"]):
@@ -728,7 +734,7 @@ def _tables(conn):
 
 def _save_orchestrator(updated, policy, route_changes):
     routes = route_catalog()
-    policy = orchestrator_policy.validate_save(
+    policy = orchestrator_policy.validate(
         policy, id_pattern=ID_RE, extra_routes=_extra_capabilities(routes))
     editable = {key for key in routes if orchestrator_policy.KINDS.get(key)
                 in {"text", "image", "video"}}
@@ -736,34 +742,21 @@ def _save_orchestrator(updated, policy, route_changes):
         raise ModelConfigError("Danh sách tuyến điều phối không hợp lệ")
     profiles = _profiles(state=updated)
 
-    def validate_ref(ref, kind, *, local=False):
+    def validate_ref(ref, kind):
         if not isinstance(ref, str) or not ID_RE.fullmatch(ref):
             raise ModelConfigError("Mã model không hợp lệ")
         profile = profiles.get(ref)
         if not orchestrator_policy.compatible(kind, profile):
             raise ModelConfigError("Model không khả dụng hoặc không tương thích")
-        if local and profile["provider"] != "ollama":
-            raise ModelConfigError("Model dự phòng phải là Ollama local")
-
-    if policy["primary"] is not None:
-        validate_ref(policy["primary"], "text")
-    for ref in policy["allowed_profiles"]:
-        if not profiles.get(ref, {}).get("enabled"):
-            raise ModelConfigError("Danh sách đề xuất chứa model không khả dụng")
     for key, ref in policy["mappings"].items():
         validate_ref(ref, orchestrator_policy.KINDS[key])
-    for key, ref in policy["fallbacks"].items():
-        validate_ref(ref, "text", local=True)
-        primary = route_changes.get(key, updated["routes"].get(key))
-        if ref == primary:
-            raise ModelConfigError("Model dự phòng phải khác model chính")
     for key, ref in route_changes.items():
         if ref is None:
             updated["routes"].pop(key, None)
         else:
             validate_ref(ref, routes[key]["kind"])
             updated["routes"][key] = ref
-    updated["orchestrator"] = orchestrator_policy.editable(policy)
+    updated["orchestrator"] = policy
 
 
 def change(action, *, expected_revision, db_path=None, profile=None, profile_id=None,
@@ -808,7 +801,7 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
                 raise ModelConfigError("Unknown model profile")
             attached = {ref for key, ref in updated["routes"].items()
                         if key in route_catalog()}
-            current_policy = updated.get("orchestrator", orchestrator_policy.defaults())
+            current_policy = _active_policy(updated)
             attached.update(current_policy["mappings"].values())
             if profile_id in attached:
                 raise ModelConfigError("Model is assigned; unassign it before deleting")
