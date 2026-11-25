@@ -8,7 +8,7 @@ import re
 import shutil
 import sqlite3
 import threading
-from contextlib import closing, contextmanager
+from contextlib import closing, contextmanager, nullcontext
 from uuid import uuid4
 
 from agentforge import ops_control
@@ -64,6 +64,12 @@ def _cancellation(ident, *, mark=False):
 def _measured(job, operation, comfy_profile=None):
     if _cancellation(job["id"]):
         raise DraftCancelled
+    if (operation in {"plan", "duration", "creative_direction", "cast", "storyboard"}
+            and job.get("activity", {}).get("provider") in {"openai", "anthropic"}):
+        yield
+        if _cancellation(job["id"]):
+            raise DraftCancelled
+        return
     before = draft_resources.snapshot()
     point = {"operation": operation, "before": before}
     job["resources"] = (job.get("resources", []) + [point])[-24:]
@@ -213,8 +219,22 @@ def _release_idle_image(profile):
     return studio_runtime.image_adapter(profile).release_idle_models(profile)
 
 
-def _ask(profile, instructions, data, schema, comfy_profile, *, cpu_only=False, extended_plan=False):
-    return studio_runtime.text_adapter(profile).infer_structured(
+def _ask(profile, instructions, data, schema, comfy_profile, *, cpu_only=False, extended_plan=False, job=None):
+    adapter = studio_runtime.text_adapter(profile)
+    if profile.get("provider") in {"openai", "anthropic"}:
+        if job is None:
+            raise PermissionError("Cloud inference requires a production context.")
+        if _cancellation(job["id"]):
+            raise DraftCancelled
+        limit = model_hub.cloud_call_limit(profile)
+        # Reserve before sending. Failed or uncertain requests count, including resume.
+        limit = min(limit, job.get("cloud_call_limit", limit))
+        used = job.get("cloud_calls", 0)
+        if used >= limit:
+            raise ValueError("Đã hết ngân sách lượt gọi AI cloud của production.")
+        job.update(cloud_calls=used + 1, cloud_call_limit=limit)
+        _save(job)
+    return adapter.infer_structured(
         profile, instructions, data, schema, cpu_only=cpu_only, extended_plan=extended_plan)
 
 
@@ -312,7 +332,7 @@ def _script_scene(job, profile, comfy, source, continuity, index, *, proposed_sh
                               "Extract the essential character names, actions, setting and key dialogue "
                               "from this consecutive script excerpt. Keep the source language. Do not invent. "
                               "Return at most 240 characters in facts.",
-                              {"excerpt": source[start:end]}, _object(facts=STRING), comfy)
+                              {"excerpt": source[start:end]}, _object(facts=STRING), comfy, job=job)
             facts.append(_text(output["facts"], 240))
             start = end
         if sum(map(len, facts)) > 3200:
@@ -372,7 +392,7 @@ def _script_scene(job, profile, comfy, source, continuity, index, *, proposed_sh
                                          if proposed_shot else ""))
                     + ("Use character_ids only for supplied cast present in this shot." if cast else ""),
                     context,
-                    _object(**fields), comfy)
+                    _object(**fields), comfy, job=job)
 
 
 def _write_script_board(job, bindings, *, outline=None):
@@ -446,7 +466,7 @@ def _authored_plan(job, profile, headings):
                           "Return the estimate only. Do not rewrite the script.",
                           {"scene_count": len(headings), "excerpt": script[:1800],
                            "max_seconds": draft_timeline.MAX_DURATION_SECONDS},
-                          _object(seconds={"type": "integer"}), None, cpu_only=True)
+                          _object(seconds={"type": "integer"}), None, cpu_only=True, job=job)
         target = result.get("seconds") if isinstance(result, dict) else None
     output = studio_runtime.job_output(job)
     fps = output.fps if moving else draft_timeline.STILL_FPS
@@ -494,7 +514,7 @@ def _duration_plan(job, profile):
                 excerpt = _ask(profile, "Summarize essential actions, transitions and dialogue in order, "
                                "without adding events. Use at most 120 characters.",
                                {"excerpt": script[start:start+1000]},
-                               _object(beats={**STRING, "minLength": 1, "maxLength": 120}), None, cpu_only=True)
+                               _object(beats={**STRING, "minLength": 1, "maxLength": 120}), None, cpu_only=True, job=job)
                 source.append(_text(excerpt["beats"], 120, label="Tóm tắt hành động"))
         limits = {seconds: draft_timeline.duration_limits(seconds, moving, output)
                   for seconds in range(4 if moving else 6, max_seconds + 1)}
@@ -511,7 +531,7 @@ def _duration_plan(job, profile):
                       "action. Keep each action and reason brief.",
                       {"source": source, "requested_seconds": target, "allowed_shot_counts": limits,
                        "min_shot_seconds": 1 if moving else 2, "max_shot_seconds": max_shot_seconds,
-                       "max_seconds": max_seconds}, schema, None, cpu_only=True, extended_plan=moving)
+                       "max_seconds": max_seconds}, schema, None, cpu_only=True, extended_plan=moving, job=job)
         try:
             plan = _validate_duration_plan(result, moving, max_shot_seconds, output, target=target)
         except ShotBudgetMismatch as mismatch:
@@ -529,7 +549,7 @@ def _duration_plan(job, profile):
                             "If this cannot be done, report over_budget and explain why in Vietnamese.",
                             {"source": source, "seconds": target, "min_shots": minimum, "max_shots": maximum,
                              "min_shot_seconds": 1 if moving else 2, "max_shot_seconds": max_shot_seconds},
-                            retry_schema, None, cpu_only=True, extended_plan=moving)
+                            retry_schema, None, cpu_only=True, extended_plan=moving, job=job)
             try:
                 plan = _validate_duration_plan(repaired, moving, max_shot_seconds, output, target=target)
             except ShotBudgetMismatch as exc:
@@ -811,7 +831,7 @@ def _direct_authored_plan(job, plan, profile):
         with _measured(job, "creative_direction"):
             proposals.append(creative_plan.propose_scene(scene, context, output.fps,
                 lambda instructions, payload, schema: _ask(
-                    profile, instructions, payload, schema, None, cpu_only=True)))
+                    profile, instructions, payload, schema, None, cpu_only=True, job=job)))
     compiled = creative_plan.compile_plan(scenes, proposals, output)
     segments = creative_plan.compiled_shots(compiled, output)
     return {**plan, "shots": segments, "recommended_shot_count": len(segments), "creative_plan": compiled}
@@ -830,7 +850,7 @@ def _select_cast(job, bindings, outline):
         selection = _ask(selector, "Select up to two relevant registered characters. Return empty if none fit.",
                          {"outline": outline, "candidates": candidates},
                          _object(ids={"type": "array", "items": {**STRING, "enum": list(candidates)},
-                                      "maxItems": 2}), comfy)
+                                      "maxItems": 2}), comfy, job=job)
     ids = selection["ids"]
     if not isinstance(ids, list) or len(ids) > 2 or any(not isinstance(x, str) or x not in candidates for x in ids):
         raise ValueError("Invalid character selection")
@@ -862,7 +882,7 @@ def _write_board(job, bindings):
                     "Keep the story order and important actions. Write an outline of at most 700 characters "
                     "with at least 16 words; prefer distinct action beats over repeated establishing shots.",
                     {"excerpt": brief["idea"][:2000], "explicit_scenes": len(SCRIPT_HEADING.findall(brief["idea"]))},
-                    fields, bindings.get("image.generate"))
+                    fields, bindings.get("image.generate"), job=job)
             count = _number(result.get("scene_count"), minimum, maximum)
             job["plan"] = _text(result.get("outline"), OUTLINE_LIMIT, label="Dàn ý do AI trả về")
             brief["scene_count"] = count
@@ -881,7 +901,7 @@ def _write_board(job, bindings):
                           f"Keep the outline concise, at most {OUTLINE_LIMIT} characters. "
                           "Use the selected duration and scene count from the brief.",
                           job["brief"], _object(outline={**STRING, "minLength": 1, "maxLength": OUTLINE_LIMIT}),
-                          comfy)
+                          comfy, job=job)
         job["plan"] = _text(output.get("outline"), OUTLINE_LIMIT, label="Dàn ý do AI trả về")
         _save(job)
     job["stage"] = "STORYBOARD"
@@ -902,7 +922,7 @@ def _write_board(job, bindings):
                 "Use English visual prompts with stable setting and character appearance. "
                 "Use only supplied cast IDs, or an empty character_ids array if cast is empty. "
                 "Describe any invented characters only in the prompt. Add optional audio notes.",
-                {"brief": job["brief"], "outline": job["plan"], "cast": cast}, schema, comfy)
+                {"brief": job["brief"], "outline": job["plan"], "cast": cast}, schema, comfy, job=job)
     job["board"] = _story(data, count, job["brief"]["seconds"], cast)
     job["cast"] = cast
     _save(job)
@@ -1193,8 +1213,10 @@ def _work(job, slot, retry_motion_job=None):
         ops_control.require_active()
         moving = job["brief"].get("mode") == "motion"
         reviewing = "storyboard_version" in job and not job.get("approved_storyboard_sha")
-        with model_hub.local_inference_slot():
-            revision, bindings, identity_revision = _studio_bindings(job)
+        revision, bindings, identity_revision = _studio_bindings(job)
+        cloud_only = (reviewing and job.get("deferred_media_binding")
+                      and all(profile.get("provider") in {"openai", "anthropic"} for profile in bindings.values()))
+        with (nullcontext() if cloud_only else model_hub.local_inference_slot()):
             if reviewing:
                 if not job.get("deferred_media_binding"):
                     if moving:
@@ -1541,14 +1563,17 @@ def _storyboard_action(job, action, data):
             if scene.get("content_scene") and scene.get("script_range"):
                 start, end = scene["script_range"]
                 shot["original_script_excerpt"] = job["brief"]["idea"][start:min(end, start + 1000)]
-            with model_hub.local_inference_slot(), _measured(job, "storyboard", bindings.get("image.generate")):
+            writer = bindings["film.storyboard"]
+            _activity(job, "STORYBOARD", "storyboard", writer)
+            slot = nullcontext() if writer.get("provider") in {"openai", "anthropic"} else model_hub.local_inference_slot()
+            with slot, _measured(job, "storyboard", bindings.get("image.generate")):
                 data = _ask(bindings["film.storyboard"], "Rewrite only this shot. Preserve the cast and its role "
                             "in the original scene when a script excerpt is provided. "
                             "Return description, English image_prompt and motion_prompt.",
                             {"scene": shot,
                              "feedback": _text(data["feedback"], 350), "continuity": original["continuity"]},
                             _object(description=STRING, image_prompt=STRING, motion_prompt=STRING),
-                            bindings.get("image.generate"))
+                            bindings.get("image.generate"), job=job)
         prompts = {key: _text(data[key], limit) for key, limit in
                    (("description", 350), ("image_prompt", 600), ("motion_prompt", 600))}
         if "shot_description" in scene or scene.get("content_scene"):

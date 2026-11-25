@@ -164,14 +164,16 @@ class ModelHubTests(unittest.TestCase):
                 disabled, cloud = [model_hub.capability_readiness(
                     profile["id"], "general.text", expected_revision=2, db_path=db) for profile in profiles]
             self.assertEqual((disabled["status"], disabled["reason"]), ("NOT_CHECKED", "DISABLED"))
-            self.assertEqual(cloud["status"], "NOT_CHECKED")
-            self.assertEqual(cloud["reason"], "CLOUD_PREFLIGHT_UNSUPPORTED")
+            self.assertEqual(cloud["status"], "UNAVAILABLE")
+            self.assertEqual(cloud["reason"], "AUTH_REQUIRED")
             self.assertTrue(cloud["route_configurable"])
             self.assertFalse(cloud["local_runtime_compatible"])
             self.assertEqual(cloud["route_configurable"],
                              model_hub.orchestrator_policy.compatible("text", profiles[1]))
             self.assertTrue(all(not result["inference_invoked"] and result["runtime_available"] is None
-                                for result in (disabled, cloud)))
+                                for result in (disabled,)))
+            self.assertFalse(cloud["inference_invoked"])
+            self.assertFalse(cloud["runtime_available"])
 
     def test_capability_catalog_is_video_first_without_model_defaults(self):
         routes = model_hub.route_catalog()
@@ -198,7 +200,7 @@ class ModelHubTests(unittest.TestCase):
             self.assertFalse(result["cloud_fallback"])
 
     def test_adapter_catalog_matches_persisted_profile_validation(self):
-        expected = {"ollama": "local", "comfyui": "local", "anthropic": "cloud"}
+        expected = {"ollama": "local", "comfyui": "local", "anthropic": "cloud", "openai": "cloud"}
         with tempfile.TemporaryDirectory() as folder:
             db = Path(folder) / "hub.sqlite3"
             catalog = model_hub.catalog(db_path=db)["adapters"]

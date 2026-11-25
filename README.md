@@ -2,7 +2,7 @@
 
 Nền tảng sản xuất phim AI lấy nhân vật và tài sản tái sử dụng làm trung tâm, với điều phối, dữ liệu và hậu kỳ local-first trên Windows. Chất lượng đầu ra quyết định lựa chọn model, không phải yêu cầu mọi inference đều chạy local.
 
-Source hiện hỗ trợ Ollama, FLUX/ComfyUI, LTX và FFmpeg. Reference-to-Video và cloud production chưa được tích hợp; chỉ mở rộng sau khi kiểm chứng chất lượng, khả năng gọi API và chi phí. Owner đăng ký model, duyệt storyboard và kiểm tra thành phẩm trước khi xuất bản.
+Source hiện hỗ trợ Ollama, FLUX/ComfyUI, LTX và FFmpeg. Cloud text hỗ trợ OpenAI-compatible và Anthropic-compatible; Reference-to-Video và cloud media chưa được tích hợp; chỉ mở rộng sau khi kiểm chứng chất lượng, khả năng gọi API và chi phí. Owner đăng ký model, duyệt storyboard và kiểm tra thành phẩm trước khi xuất bản.
 
 ## Khởi động
 
@@ -22,7 +22,7 @@ Mở http://127.0.0.1:8780/dashboard/ và đăng nhập bằng mã Owner in tạ
 ## Quy trình sử dụng
 
 1. Đăng ký model và kiểm tra metadata tại Cài đặt → Model AI.
-2. Phân công model local theo năng lực, cấp quyền thực thi và FFmpeg tại AI điều phối.
+2. Phân công model local hoặc cloud theo năng lực, cấp quyền thực thi và FFmpeg tại AI điều phối.
 3. Nhập nội dung và thời lượng tại Studio video; AI chọn nhân vật từ hồ sơ đã đăng ký. Hồ sơ hiện là metadata, chưa phải bộ ảnh nhận diện.
 4. Kiểm tra, chỉnh sửa và duyệt storyboard trước khi tạo media.
 5. Xem video, kiểm tra chất lượng và duyệt thành phẩm. Xuất bản là thao tác riêng.

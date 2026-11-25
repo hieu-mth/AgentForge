@@ -63,6 +63,13 @@ def handle(server, path, request, session=None):
             raise PermissionError("Explicit read-only local preflight required")
         return model_hub.check_local_profile(request["profile_id"])
     if path == "/api/model-hub/probe":
+        if request.get("ack") == "RUN_CLOUD_MODEL_PROBE":
+            if set(request) != {"ack", "profile_id", "expected_revision"} or not server.allow_external_actions:
+                raise PermissionError("Explicit cloud inference approval required")
+            from agentforge.ops_control import require_active
+            require_active()
+            return model_hub.probe_cloud_profile(request["profile_id"],
+                                                 expected_revision=request["expected_revision"])
         if request.get("ack") == "RUN_FLUX_MODEL_PROBE":
             fields = {"ack", "profile_id", "expected_revision", "prompt"}
             options = {"width", "height", "steps", "seed"}

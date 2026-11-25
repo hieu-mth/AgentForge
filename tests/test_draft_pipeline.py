@@ -162,7 +162,7 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(draft.draft_timeline.digest(saved), saved["approved_storyboard_sha"])
         self.assertNotIn("studio_plan", saved)
         self.registry_change("SET_MODEL_ROUTE", task_id="general.text", model_ref="cloud_config")
-        with self.assertRaisesRegex(ValueError, "Studio chỉ chạy model local"):
+        with self.assertRaisesRegex(ValueError, "Model Studio đã thay đổi|model gốc"):
             draft._studio_bindings(saved)
         self.registry_change("RESET_MODEL_ROUTE", task_id="general.text")
         self.registry_change("DELETE_MODEL_PROFILE", profile_id="owner_planner")
@@ -396,7 +396,7 @@ class DraftTests(unittest.TestCase):
                 self.assertEqual(draft._ask(profile, "Plan", {}, {}, None), {"ready": True})
                 self.assertEqual(call.call_args.kwargs["payload"]["model"], name)
             with self.assertRaisesRegex(ValueError, "supported local text"):
-                draft._ask({"provider": "anthropic"}, "Plan", {}, {}, None)
+                draft._ask({"provider": "unsupported"}, "Plan", {}, {}, None)
             self.assertEqual(call.call_count, 2)
         self.assertIs(studio_runtime.image_adapter(flux_profile()), studio_flux)
         self.assertIs(studio_runtime.motion_adapter(self.motion_profile()), draft_motion)

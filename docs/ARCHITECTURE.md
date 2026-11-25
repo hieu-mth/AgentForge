@@ -78,7 +78,7 @@ Studio có thể lập storyboard từ nội dung Owner, tạo ảnh và motion 
 - Lưu profile và gán route **không chạy model**. Film/image routes `CONFIG_ONLY`; `ops.monitor` deterministic. Studio lấy route đã phân công từ snapshot Model Hub và kiểm tra fingerprint trước dispatch; trạng thái CONFIG_ONLY không tự cấp quyền thực thi.
 - Owner có thể xóa profile chưa được phân công cho năng lực hiện hành. Muốn xóa profile đang được phân công phải bỏ gán trước. Xóa profile không xóa weights, DB khác hay workspace.
 - Cơ sở dữ liệu đã tồn tại được giữ nguyên, không tự sửa hoặc migrate khi GET. Overlay/profile Owner cũ tiếp tục được đọc. Các ID route lịch sử ngoài catalog chỉ lưu trữ, không xuất hiện hay thực thi. Owner đăng ký hồ sơ cần dùng.
-- Các giá trị `api_key_env`, `base_url_env` của cloud profile là **tên biến môi trường**, không phải token; không có cơ chế tự nạp file `.env` ở ứng dụng. Nếu cần dùng credentials về sau, chúng phải được inject an toàn vào môi trường tiến trình. Cloud call luôn phải được duyệt, không tự fallback.
+- Các giá trị `api_key_env`, `base_url_env` của cloud profile là **tên biến môi trường**, không phải token; không có cơ chế tự nạp file `.env` ở ứng dụng. Nếu cần dùng credentials về sau, chúng phải được inject an toàn vào môi trường tiến trình. Cloud text inference dùng quyền call_cloud đã cấp; mỗi production có giới hạn lượt gọi thực thi, không tự fallback.
 - `.env` không nằm trong Git, bị ignore để ngăn lộ bí mật. Không cần tạo file `.env` để chạy local Video Studio; không xóa `.env` sẵn có trên máy Owner bằng Git cleanup.
 
 Chỉ ComfyUI loopback + workflow/SHA/Owner consent thuộc Film Studio mới được gửi GPU thật. Profile có mặt không chứng minh model đã tải, khả năng sinh hoặc độ phù hợp VRAM.
@@ -89,7 +89,7 @@ Trong **Cài đặt → Model AI**, Owner có thể xem lại và xác thực c�
 
 `GET /api/model-hub` trả `capability_contracts` cho từng profile, gồm adapter tương thích, mã lý do và giới hạn đầu ra. Để kiểm tra runtime, phiên Owner gửi `POST /api/model-hub/readiness` với CSRF và payload gồm `ack: "CHECK_CAPABILITY_READINESS"`, `profile_id`, `capability` và `expected_revision` lấy từ catalog.
 
-`route_configurable` phản ánh chính sách gán route, còn `local_runtime_compatible` phản ánh adapter local. Hồ sơ Anthropic dùng cho cấu hình route văn bản vẫn được giữ và trả `NOT_CHECKED` khi preflight.
+`route_configurable` phản ánh chính sách gán route, còn `local_runtime_compatible` phản ánh adapter local. Hồ sơ OpenAI-compatible và Anthropic-compatible hỗ trợ text inference qua HTTPS. Metadata kiểm tra endpoint model, không xác nhận inference; probe cố định cần Owner xác nhận riêng.
 
 Preflight trả `METADATA_COMPATIBLE`, `UNAVAILABLE`, `UNSUPPORTED`, `MISSING_DEPENDENCY` hoặc `NOT_CHECKED`, cùng mã `reason` cụ thể. `runtime_available` cho biết runtime có trả được metadata cần thiết, còn `endpoint_metadata_compatible` cho biết metadata đó phù hợp với model/workflow. Giá trị `null` là chưa xác định. Kết quả luôn có `inference_verified: false` và `endpoint_ownership: "NOT_CHECKED"`. ComfyUI mở bên ngoài có thể trả metadata tương thích. LTX vẫn cần cấu hình thư mục Portable, công cụ media và weights local theo chính sách dispatch hiện hành. SHA weights và tài nguyên khả dụng vẫn do runtime kiểm tra khi thực thi.
 
@@ -108,4 +108,6 @@ Incomplete or out-of-order action coverage receives at most one contextual model
 
 Xem [runtime](RUNTIME.md) và [production](PRODUCTION.md) để kiểm tra hành vi thực tế.
 
-Chính sách điều phối hiện hành chỉ lưu mode, mappings, permissions và tools. Các snapshot cũ được đọc qua lớp tương thích và chiếu sang chính sách hiện hành; không tự ghi lại SQLite khi đọc. Khi Owner lưu chính sách mới, các trường đã ngừng hỗ trợ không còn được lưu trong snapshot mới. Lịch sử và rollback vẫn bảo toàn dữ liệu gốc.
+Chính sách điều phối lưu mode, mappings, permissions, tools và cloud_call_limit. Các snapshot cũ được đọc qua lớp tương thích và chiếu sang chính sách hiện hành; không tự ghi lại SQLite khi đọc. Khi Owner lưu chính sách mới, các trường đã ngừng hỗ trợ không còn được lưu trong snapshot mới. Lịch sử và rollback vẫn bảo toàn dữ liệu gốc.
+
+Cloud text: endpoint là API base URL (ví dụ `https://provider.example/v1`), không phải URL đầy đủ của `/chat/completions` hoặc `/messages`. Dùng API key nhập trực tiếp được DPAPI bảo vệ hoặc biến môi trường hiện có. Chỉ cấp quyền `call_cloud` nếu đồng ý gửi nội dung và metadata nhân vật đến provider. Lượt gọi được lưu trước khi dispatch và tính cả thất bại; giới hạn số lượt không phải giới hạn tiền. Không tự retry, không chuyển provider. Kiểm tra model metadata có thể không được gateway hỗ trợ; thử inference riêng để xác nhận JSON. Cloud image/video chưa hỗ trợ.

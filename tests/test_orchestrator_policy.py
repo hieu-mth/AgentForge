@@ -195,7 +195,7 @@ class OrchestratorTests(unittest.TestCase):
             **policy._legacy_defaults(), "primary": "local_primary",
             "selection": "SUGGEST", "allowed_profiles": ["fixture_flux", "local_primary"],
             "fallback": "LOCAL", "fallbacks": {"general.text": "local_primary"},
-            "permissions": {**policy.defaults()["permissions"], "assign_local": True, "call_local": True},
+            "permissions": {**policy._legacy_defaults()["permissions"], "assign_local": True, "call_local": True},
         }
         with closing(sqlite3.connect(self.db)) as conn, conn:
             conn.execute("UPDATE hub_state SET payload=?", (json.dumps(state),))
@@ -207,7 +207,7 @@ class OrchestratorTests(unittest.TestCase):
         removed = model_hub.change("DELETE_MODEL_PROFILE", expected_revision=3,
                                    db_path=self.db, profile_id="local_primary")
         self.assertNotIn("local_primary", {row["id"] for row in removed["profiles"]})
-        self.assertEqual(removed["orchestrator"]["policy"]["permissions"], state["orchestrator"]["permissions"])
+        self.assertEqual(removed["orchestrator"]["policy"]["permissions"], {**state["orchestrator"]["permissions"], "call_cloud": False})
         with closing(sqlite3.connect(self.db)) as conn:
             self.assertEqual(json.loads(conn.execute("SELECT payload FROM hub_state").fetchone()[0])["orchestrator"], state["orchestrator"])
         with self.assertRaisesRegex(ValueError, "unassign"):

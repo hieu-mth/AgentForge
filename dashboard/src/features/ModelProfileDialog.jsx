@@ -108,7 +108,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
     setSaveError(null);
   }
 
-  const supported=contracts.filter(item=>item.local_runtime_compatible||item.route_configurable);
+  const supported=contracts.filter(item=>item.runtime_compatible||item.route_configurable);
   return <Modal open width={620} className="model-profile-dialog"
     title={<SectionTitle icon={<ApiOutlined/>}
       title={editing?'Chỉnh sửa hồ sơ model':'Đăng ký model mới'}

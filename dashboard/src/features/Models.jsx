@@ -113,8 +113,8 @@ export function ModelHub({mutate}) {
   'Danh sách model và chính sách điều phối sẽ được khôi phục cùng nhau. Hệ thống sẽ lưu kết quả thành một phiên bản mới.');
 
   const profileActions=row=><Space wrap size={6}>
-    {profileCapability(row)&&byAdapter[row.provider]?.connection==='local'&&
-      <AppTooltip title="Chỉ đọc metadata local">
+    {profileCapability(row)?.runtime_compatible&&
+      <AppTooltip title="Kiểm tra metadata endpoint; không sinh nội dung">
         <Button size="small" loading={checkResult(row)?.pending}
           aria-label={checkResult(row)?.error?'Thử lại':'Kiểm tra'}
           onClick={()=>checkProfile(row)}>{checkResult(row)?.error?'Thử lại':'Kiểm tra'}</Button>
@@ -129,6 +129,11 @@ export function ModelHub({mutate}) {
         Chạy thử
       </Button>
     </>}
+    {byAdapter[row.provider]?.cloud_probe&&<Button size="small" disabled={!row.enabled}
+      onClick={()=>update('/api/model-hub/probe',{
+        ack:'RUN_CLOUD_MODEL_PROBE',profile_id:row.id,expected_revision:hub.revision,
+      },'Chạy thử API cloud?',
+      'Gửi một prompt JSON cố định tới endpoint đã đăng ký. Có thể phát sinh phí; không gửi nội dung production.')}>Chạy thử</Button>}
     <Button size="small" disabled={!byAdapter[row.provider]} onClick={()=>editProfile(row)}>Sửa</Button>
     <Button size="small" danger icon={<DeleteOutlined/>}
       onClick={()=>deleteProfile(row)}>Xóa</Button>
@@ -136,16 +141,14 @@ export function ModelHub({mutate}) {
 
   const readiness=row=>{
     const result=checkResult(row);
-    const local=byAdapter[row.provider]?.connection==='local';
     const contract=profileCapability(row);
     const status=result?.status??'NOT_CHECKED';
-    const reason=result?.reason??(!local?'CLOUD_PREFLIGHT_UNSUPPORTED':!row.enabled?'DISABLED':null);
+    const reason=result?.reason??(!row.enabled?'DISABLED':null);
     return <Space direction="vertical" size={3} className="model-readiness">
       <SettingsStatus tone={status==='METADATA_COMPATIBLE'?'good':status==='NOT_CHECKED'?'neutral':'warn'}>
         {result?.pending?'Đang kiểm tra…':readinessLabels[status]??status}
       </SettingsStatus>
-      {!local&&<Text type="secondary">Chưa xác minh kết nối</Text>}
-      {result?.error?<Text type="danger" role="alert">{result.error}</Text>:reason&&local&&
+      {result?.error?<Text type="danger" role="alert">{result.error}</Text>:reason&&
         <Text type="secondary">{readinessReason(reason)}</Text>}
       {result?.checked_at&&<time dateTime={result.checked_at}>{new Date(result.checked_at).toLocaleString('vi-VN')}</time>}
       {contract?.workflow_sha256&&<details className="model-workflow-details"><summary>Workflow và giới hạn</summary>
@@ -156,7 +159,7 @@ export function ModelHub({mutate}) {
     <div>{byAdapter[row.provider]?.connection==='cloud'?'Cloud':'Local'} · {byAdapter[row.provider]?.label||row.provider}</div>
     <div>{row.model}</div>
     {row.capability_contracts&&<div className="model-capability-meta">
-      <div>Adapter local: {row.capability_contracts.filter(item=>item.local_runtime_compatible)
+      <div>Adapter thực thi: {row.capability_contracts.filter(item=>item.runtime_compatible)
         .map(item=>labels[item.capability]??item.capability).join(', ')||'Không có'}</div>
       <div>Đang gán: {assigned(row).map(item=>item.label).join(', ')||'Chưa gán'}</div>
     </div>}
@@ -211,7 +214,7 @@ export function ModelHub({mutate}) {
           <strong>{route.label}</strong>
           <Select aria-label={'Model cho '+route.label} value={route.model_ref??''}
             options={[{value:'',label:'Chưa gán'},...options.map(profile=>({value:profile.id,
-              label:profile.id+(byAdapter[profile.provider]?.connection==='cloud'?' · Cloud (cấu hình)':'')})),
+              label:profile.id+(byAdapter[profile.provider]?.connection==='cloud'?' · Cloud':'')})),
               ...(route.model_ref&&!options.some(profile=>profile.id===route.model_ref)
                 ?[{value:route.model_ref,label:route.model_ref+' · Không khả dụng',disabled:true}]:[])]}
             onChange={model=>update(model?'/api/model-hub/route':'/api/model-hub/reset',{

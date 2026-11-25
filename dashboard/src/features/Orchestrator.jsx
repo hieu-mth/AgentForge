@@ -1,5 +1,5 @@
 import {useEffect,useState} from 'react';
-import {App as AntApp,Button,Card,Form,Grid,Select,Space,Switch,Table,Typography} from 'antd';
+import {App as AntApp,Button,Card,Form,Grid,InputNumber,Select,Space,Switch,Table,Typography} from 'antd';
 import {ApartmentOutlined,ControlOutlined,RollbackOutlined,SafetyCertificateOutlined,SaveOutlined,TeamOutlined} from '@ant-design/icons';
 import {SectionTitle,SettingsHeading,SettingsStatus} from '../components/settings.jsx';
 import {useResource,ResourceStatus} from '../use_resource.jsx';
@@ -55,7 +55,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
   const profiles=snapshot.profiles;
   const options=profiles.filter(p=>p.enabled).map(p=>({value:p.id,label:p.id+' · '+p.model}));
   const initial={mode:policy.mode,
-    permissions:policy.permissions,tools:policy.tools,
+    permissions:policy.permissions,tools:policy.tools,cloud_call_limit:policy.cloud_call_limit,
     bindings:Object.fromEntries(capabilities.filter(row=>!row.tool&&row.kind!=='vision')
       .map(row=>[row.id,row.model_ref??unset]))};
 
@@ -99,7 +99,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
       }else if(ref)mappings[row.id]=ref;
     }
     const next={mode:values.mode,mappings,permissions:values.permissions,
-      tools:form.getFieldValue('tools')??initial.tools};
+      tools:form.getFieldValue('tools')??initial.tools,cloud_call_limit:values.cloud_call_limit};
     confirm('SAVE_ORCHESTRATOR',{policy:next,route_changes});
   }
 
@@ -130,7 +130,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
     onValuesChange={()=>setDirty(true)} onFinish={save} disabled={saving}>
     <SettingsHeading className="orchestrator-header" title="AI điều phối tác vụ" eyebrow="CHÍNH SÁCH OWNER"
       description={<>
-        Phân công model theo năng lực và cấp quyền thực thi local cho Studio.
+        Phân công model theo năng lực và cấp quyền thực thi local hoặc cloud cho Studio.
         <span className="orchestrator-edit-status" role="status">
           <SettingsStatus tone={dirty?'warn':'neutral'}>
             {dirty?'Có thay đổi chưa lưu':'Không có thay đổi'}
@@ -143,7 +143,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
         <Button type="primary" icon={<SaveOutlined/>} htmlType="submit" disabled={!dirty} loading={saving}>Lưu cấu hình</Button>
       </>}/>
     <Card className="env-panel" title={<SectionTitle icon={<ApartmentOutlined/>}
-      title="Chế độ thực thi" description="Cho phép Studio chạy local hoặc giữ chế độ thủ công"/>}>
+      title="Chế độ thực thi" description="Cho phép Studio chạy theo quyền đã cấp hoặc giữ chế độ thủ công"/>}>
       <div className="orchestrator-meta">
         <span className="env-checked">{owner_override?'Owner tùy chỉnh':'Mặc định'} · Phiên bản {snapshot.revision}</span>
       </div>
@@ -152,7 +152,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
       </div>
     </Card>
     <Card className="env-panel" title={<SectionTitle icon={<TeamOutlined/>}
-      title="Phân công AI theo năng lực" description="Gán model hoặc công cụ phù hợp cho từng việc. Studio dùng các tuyến local tương thích đã gán; không tự chuyển model."/>}>
+      title="Phân công AI theo năng lực" description="Gán model hoặc công cụ phù hợp cho từng việc. Studio dùng các tuyến tương thích đã gán; không tự chuyển model."/>}>
       {desktop?<Table className="hub-table" rowKey="id" pagination={false} dataSource={capabilities}
         columns={[
           {title:'Năng lực',dataIndex:'label',width:'22%'},
@@ -166,7 +166,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
     <Card className="env-panel" title={<SectionTitle icon={<ControlOutlined/>}
       title="An toàn runtime" description="Các điều kiện bắt buộc khi xử lý media local"/>}>
       <p>GPU xử lý lần lượt. Studio dừng hoặc giữ checkpoint khi thiếu tài nguyên.</p>
-      <p className="env-muted orchestrator-rule-note">Không tự chuyển model, không gọi cloud. Luôn đối soát tác vụ ComfyUI chưa rõ kết quả trước khi gửi lại.</p>
+      <p className="env-muted orchestrator-rule-note">Không tự chuyển model; cloud chỉ chạy khi đã cấp quyền. Luôn đối soát tác vụ ComfyUI chưa rõ kết quả trước khi gửi lại.</p>
     </Card>
     <Card className="env-panel" title={<SectionTitle icon={<SafetyCertificateOutlined/>}
       title="Quyền thực thi" description="Các quyền được kiểm tra trước khi Studio chạy"/>}>
@@ -174,10 +174,17 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
         <RuleRow title="AI được tự làm gì" description="Chọn từng bước AI được phép tự thực hiện.">
           <PermissionToggle field="plan" label="Lập kế hoạch"
             description="Cho phép Studio lập kế hoạch."/>
-          <PermissionToggle field="assign_local" label="Giao việc local"
-            description="Cho phép dùng các model local đã được phân công."/>
+          <PermissionToggle field="assign_local" label="Phân công model"
+            description="Cho phép dùng các model đã được phân công."/>
           <PermissionToggle field="call_local" label="Gọi model local"
-            description="Gửi yêu cầu thực thi đến model đã được cấp quyền."/>
+            description="Gửi yêu cầu thực thi đến model local đã được cấp quyền."/>
+          <PermissionToggle field="call_cloud" label="Gọi AI cloud"
+            description="Cho phép gửi nội dung và mô tả nhân vật đến endpoint cloud đã phân công; API có thể tính phí."/>
+          <Form.Item name="cloud_call_limit" label="Giới hạn lượt gọi cloud mỗi production"
+            rules={[{required:true,type:'integer',min:1,max:1000}]}>
+            <InputNumber min={1} max={1000} precision={0}/>
+          </Form.Item>
+          <Text type="secondary">Tính cả lượt lỗi và thử lại. Đây không phải giới hạn số tiền.</Text>
         </RuleRow>
         <RuleRow title="Công cụ local" description="Chọn những công cụ AI được phép chạy trên máy này.">
           <PermissionToggle field="run_tools" label="Chạy công cụ local"
@@ -190,7 +197,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
       <div className="orchestrator-approval-note">
         <SafetyCertificateOutlined aria-hidden="true"/>
         <div><strong>Luôn cần Owner duyệt</strong>
-          <div>Gọi cloud hoặc API trả phí, tải model, thay đổi dữ liệu quan trọng, xuất bản và thay đổi quyền riêng tư.</div>
+          <div>Cấp quyền cloud và giới hạn lượt gọi trước khi tạo production. Chạy thử cloud, tải model, xuất bản và thay đổi quyền riêng tư cần xác nhận riêng.</div>
         </div>
       </div>
     </Card>

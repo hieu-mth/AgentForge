@@ -19,7 +19,7 @@ export const readinessLabels={
 };
 
 const readinessReasons={
-  DISABLED:'Hồ sơ đang tắt.',CLOUD_PREFLIGHT_UNSUPPORTED:'Chưa xác minh kết nối. Kiểm tra chỉ hỗ trợ runtime local.',
+  DISABLED:'Hồ sơ đang tắt.',INVALID_ENDPOINT:'Endpoint HTTPS không hợp lệ.',RATE_OR_QUOTA_LIMIT:'API giới hạn lượt gọi hoặc hết quota.',ACCESS_DENIED:'API từ chối quyền truy cập.',MODEL_OR_ENDPOINT_NOT_FOUND:'Không tìm thấy model hoặc endpoint metadata; có thể thử inference riêng.',PAYMENT_REQUIRED:'API yêu cầu thanh toán.',
   COMFYUI_UNAVAILABLE:'Không kết nối được ComfyUI.',UNAVAILABLE:'Không kết nối được runtime local.',
   MODEL_NOT_INSTALLED:'Ollama chưa có model này.',MODEL_UNAVAILABLE:'ComfyUI thiếu một hoặc nhiều weights.',
   WORKFLOW_NODE_UNAVAILABLE:'ComfyUI thiếu node hoặc input của workflow FLUX.',
@@ -29,7 +29,7 @@ const readinessReasons={
   MOTION_WEIGHTS_UNAVAILABLE:'Thiếu checkpoint hoặc encoder LTX đúng tên và kích thước.',
   MEDIA_TOOLS_UNAVAILABLE:'Thiếu FFmpeg hoặc ffprobe.',FLUX_WORKFLOW_REQUIRED:'Cần workflow FLUX GGUF tương thích.',
   MOTION_PROFILE_INCOMPATIBLE:'Checkpoint hoặc encoder không khớp adapter chuyển động.',
-  LOCAL_TEXT_ADAPTER_REQUIRED:'Tác vụ văn bản local cần adapter Ollama.',
+  TEXT_ADAPTER_REQUIRED:'Chưa có adapter văn bản tương thích.',
   VISION_ADAPTER_UNAVAILABLE:'Chưa có adapter kiểm tra hình ảnh.',
   COMFYUI_TIMEOUT:'ComfyUI phản hồi quá thời gian chờ.',COMFYUI_HTTP_ERROR:'ComfyUI từ chối yêu cầu metadata.',
   AUTH_REQUIRED:'Endpoint yêu cầu xác thực.',HTTP_ERROR:'Endpoint từ chối yêu cầu metadata.',
@@ -40,7 +40,7 @@ const readinessReasons={
 export const readinessReason=code=>readinessReasons[code]??code;
 export function profileCapability(profile) {
   const contracts=profile.capability_contracts??[];
-  return (contracts.find(item=>item.local_runtime_compatible)??contracts.find(item=>item.route_configurable)
+  return (contracts.find(item=>item.runtime_compatible||item.local_runtime_compatible)??contracts.find(item=>item.route_configurable)
     ??contracts.find(item=>item.capability===(profile.provider==='comfyui'?
       (profile.motion_encoder?'film.motion':'image.generate'):'general.text')));
 }
