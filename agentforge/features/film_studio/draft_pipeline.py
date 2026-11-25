@@ -14,7 +14,7 @@ from uuid import uuid4
 from agentforge import ops_control
 from agentforge.ai import model_hub
 from agentforge.features.film_studio import characters, creative_plan
-from agentforge.features.film_studio import draft_audio, draft_resources, draft_timeline, studio_runtime
+from agentforge.features.film_studio import draft_audio, draft_continuity, draft_resources, draft_timeline, studio_runtime
 from agentforge.features.media import render, visual_jobs
 from agentforge.features.film_studio.draft_resources import NeedsReconciliation, ResourceWait
 from agentforge.integrations import comfy_service
@@ -1013,7 +1013,9 @@ def _image(job, index, scene, revision, profile):
         _save(job)
         cast = job["cast"]
         identity = ". ".join(cast[key]["name"] + ": " + cast[key]["appearance"] for key in scene["character_ids"])
+        start_state = scene.get("continuity_plan", {}).get("start_state", "")
         prompt = ". ".join((scene.get("continuity", job["board"]["continuity"]), identity,
+                            *((start_state,) if start_state else ()),
                             scene.get("scene_notes", ""), scene["image_prompt"]))
         request = studio_runtime.ImageRequest(prompt, job["brief"]["ratio"],
                                               f"{job['id']}/episode-01/scene-{index+1:02d}",
@@ -1118,7 +1120,8 @@ def _render(job):
                        "visual_qa": "UNVERIFIED", "owner_qa": "PENDING",
                        "subtitle_sha": _sha(subtitles) if subtitles else None,
                        "shots": [{key: scene.get(key) for key in ("shot_id", "frames", "job_id", "asset",
-                                  "motion_job", "motion_sha")} for scene in job["board"]["scenes"]]}
+                                  "motion_job", "motion_sha")} | ({"motion_source": scene["motion_source"]}
+                                      if scene.get("motion_source") else {}) for scene in job["board"]["scenes"]]}
             if audio_evidence:
                 receipt["audio"] = audio_evidence
             record = ensure_local_root(target.with_suffix(".receipt.json"))
@@ -1254,6 +1257,7 @@ def _work(job, slot, retry_motion_job=None):
                     job["approved_storyboard_sha"] != draft_timeline.digest(job)):
                 raise ValueError("Storyboard đã thay đổi. Cần Owner duyệt lại.")
             _validate_creative_frames(job)
+            draft_continuity.validate(job)
             if moving:
                 motion, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
                 motion_profile = motion.bind(bindings["film.motion"])
@@ -1292,6 +1296,8 @@ def _work(job, slot, retry_motion_job=None):
                 try:
                     retry = ({"retry_motion_job": retry_motion_job}
                              if retry_motion_job is not None and scene.get("motion_job") == retry_motion_job else {})
+                    if scene.get("continuity_plan", {}).get("transition") == "CONTINUE":
+                        retry["previous_motion"] = job["board"]["scenes"][index-1]
                     motion.run_shot(scene, index, prepared, motion_profile,
                                     lambda: _save(job), lambda: _cancellation(job["id"]),
                                     dispatch_guard=lambda: _dispatch_guard(job), **retry)
@@ -1487,6 +1493,7 @@ def _storyboard_action(job, action, data):
             raise ValueError("Storyboard không chờ duyệt.")
         _validate_creative_frames(job)
         draft_audio.validate(job)
+        draft_continuity.validate(job)
         ops_control.require_active()
         moving = job["brief"].get("mode") == "motion"
         deferred = job.get("deferred_media_binding")
@@ -1550,10 +1557,28 @@ def _storyboard_action(job, action, data):
         _, motion_plan = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
     scenes = job["board"]["scenes"]
     checkpoints = [{key: scene.get(key) for key in (
-        "shot_id", "image_key", "job_id", "asset", "motion_job", "motion_sha")} for scene in scenes]
-    if action not in {"storyboard-duration", "storyboard-audio"}:
+        "shot_id", "image_key", "job_id", "asset", "motion_job", "motion_sha")} | (
+        {"motion_source": scene["motion_source"]} if scene.get("motion_source") else {}) for scene in scenes]
+    if action not in {"storyboard-duration", "storyboard-audio", "storyboard-continuity"}:
         index = _number(data["index"], 0, len(scenes) if action == "storyboard-add" else len(scenes)-1)
-    if action == "storyboard-audio":
+    if action == "storyboard-continuity":
+        if job["brief"].get("mode") != "motion":
+            raise ValueError("Chỉ lập nối chuyển động cho phim motion.")
+        _, bindings, _ = _studio_bindings(job)
+        writer = bindings["film.storyboard"]
+        ops_control.require_active()
+        slot = nullcontext() if writer.get("provider") in {"openai", "anthropic"} else model_hub.local_inference_slot()
+        with slot, _measured(job, "storyboard", bindings.get("image.generate")):
+            entries = draft_continuity.propose(job, lambda instructions, payload, schema:
+                _ask(writer, instructions, payload, schema, bindings.get("image.generate"), job=job))
+        if all(scene.get("continuity_plan") == entry for scene, entry in zip(scenes, entries)):
+            return job
+        for scene, entry in zip(scenes, entries):
+            if scene.get("continuity_plan") != entry:
+                scene["continuity_plan"] = entry
+                scene.update(image_key=uuid4().hex, asset=None, job_id=None, attempts=0)
+                draft_continuity.clear_motion(scene)
+    elif action == "storyboard-audio":
         audio = draft_audio.plan(data["engine"], data["voice_name"])
         if audio == job.get("audio_plan"):
             return job
@@ -1587,8 +1612,7 @@ def _storyboard_action(job, action, data):
         if moving:
             # A new deterministic, approval-bound seed per storyboard version.
             scene["motion_seed"] = 42 + index + 1000 * job["storyboard_version"]
-        scene.pop("motion_job", None)
-        scene.pop("motion_sha", None)
+        draft_continuity.clear_motion(scene)
     elif action == "storyboard-remove":
         _storyboard_layout(job, len(scenes)-1)
         scenes.pop(index)
@@ -1640,8 +1664,7 @@ def _storyboard_action(job, action, data):
         if image_changed:
             scene.update(image_key=uuid4().hex, asset=None, job_id=None, attempts=0)
         if motion_changed:
-            scene.pop("motion_job", None)
-            scene.pop("motion_sha", None)
+            draft_continuity.clear_motion(scene)
     job.setdefault("storyboard_history", []).append(
         {"sha256": job["storyboard_sha"], "storyboard": original, "video_sha": job["video_sha"],
          "receipt_sha": job.get("receipt_sha"), "checkpoints": checkpoints, "status": job["status"]})
@@ -1653,7 +1676,10 @@ def _storyboard_action(job, action, data):
     job.pop("approved_motion", None)
     job.pop("receipt_sha", None)
     job.pop("subtitle_sha", None)
+    draft_continuity.clear_stale_boundaries(scenes)
     _stamp_storyboard(job)
+    draft_continuity.invalidate_dependencies(scenes, original["scenes"], checkpoints)
+    draft_continuity.validate(job)
     _save(job)
     return job
 

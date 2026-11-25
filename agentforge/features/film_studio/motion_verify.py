@@ -13,6 +13,7 @@ import json
 import math
 import re
 import subprocess
+import tempfile
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
@@ -200,6 +201,42 @@ def inspect_receipt(job_id, *, film_root=motion.FILMS, db_path=motion.DB, video_
     except (OSError, TypeError, ValueError, UnicodeError, json.JSONDecodeError) as exc:
         raise MotionVerificationError("MP4 receipt or saved clip fails integrity check") from exc
     return value
+
+
+def continuation_marker(source):
+    if (not isinstance(source, dict) or not isinstance(source.get("motion_job"), str)
+            or not re.fullmatch(r"[0-9a-f]{32}", source["motion_job"])
+            or not isinstance(source.get("motion_sha"), str) or not motion.SHA.fullmatch(source["motion_sha"])
+            or type(source.get("frames")) is not int or not 1 <= source["frames"] <= 49):
+        raise MotionVerificationError("Invalid continuation source")
+    return f"motion-frame:{source['motion_job']}:{source['frames']-1}:{source['motion_sha']}"
+
+
+def read_continuation_frame(source, target_slug, *, film_root=motion.FILMS, db_path=motion.DB):
+    """Extract the last displayed (trimmed) frame from a verified same-production clip."""
+    marker = continuation_marker(source)
+    receipt = inspect_receipt(source["motion_job"], film_root=film_root, db_path=db_path)
+    family = re.fullmatch(r"d-([0-9a-f]{32})-v[0-9]+", target_slug)
+    parent = re.fullmatch(r"d-([0-9a-f]{32})-v[0-9]+", receipt["film_slug"])
+    if (not family or not parent or family[1] != parent[1]
+            or receipt["clip_sha256"] != source["motion_sha"]
+            or source["frames"] > receipt["technical"]["frames_decoded"]):
+        raise MotionVerificationError("Continuation must use a verified frame from the same production")
+    clip = ensure_local_root(_dir(_job(source["motion_job"], db_path), film_root) / "clip.mp4")
+    with tempfile.TemporaryDirectory(prefix="af-motion-frame-") as tmp:
+        folder = ensure_local_root(Path(tmp))
+        output = folder / "frame.png"
+        expression = "select=eq(n\\," + str(source["frames"]-1) + ")"
+        render._run_process([render._ffmpeg(), "-nostdin", "-v", "error", "-xerror", "-threads", "1",
+                             "-i", str(clip), "-vf", expression, "-frames:v", "1",
+                             "-threads", "1", str(output)], cwd=folder, timeout=60)
+        if not output.is_file() or not 1 <= output.stat().st_size <= motion.motion_ltx.MAX_INPUT_BYTES:
+            raise MotionVerificationError("Continuation frame unavailable")
+        data = output.read_bytes()
+    inspect_receipt(source["motion_job"], film_root=film_root, db_path=db_path)
+    if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise MotionVerificationError("Continuation frame must be a PNG")
+    return marker, data
 
 
 def list_jobs(*, db_path=motion.DB, film_root=motion.FILMS, limit=12):

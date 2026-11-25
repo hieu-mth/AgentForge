@@ -380,10 +380,14 @@ export function StudioDrafts({mutate,onCharacters}) {
       onRewrite={canEdit?(index,scene)=>setEditor({job:reviewing,index,scene,rewrite:true}):null}
       onRegenerate={canEdit&&reviewing.status==='REVIEW'&&reviewing.video_sha?(index,scope)=>modal.confirm({
         title:'Tạo lại cảnh '+(index+1)+'?',
-        content:scope==='motion'?'Giữ ảnh và các cảnh khác; chỉ làm lại chuyển động cảnh này. Cần duyệt storyboard mới trước khi chạy.':
-          'Tạo lại ảnh và chuyển động phụ thuộc (nếu có). Giữ các cảnh khác và phiên bản cũ. Cần duyệt storyboard mới trước khi chạy.',
+        content:scope==='motion'?'Giữ ảnh; làm lại chuyển động cảnh này và các cảnh tiếp nối phụ thuộc nếu có. Cần duyệt storyboard mới trước khi chạy.':
+          'Tạo lại ảnh, chuyển động và các cảnh tiếp nối phụ thuộc nếu có. Giữ cảnh độc lập và phiên bản cũ. Cần duyệt storyboard mới trước khi chạy.',
         okText:'Tạo phiên bản mới',cancelText:'Để sau',
         onOk:()=>storyboard(reviewing,'regenerate',{index,scope}),
+      }):null}
+      onContinuity={canEdit&&reviewing.brief.mode==='motion'?()=>modal.confirm({
+        title:'AI lập lại liên tục chuyển động?',content:'AI sẽ chọn kiểu nối từng cảnh. Các cảnh thay đổi và cảnh phụ thuộc cần tạo lại; giữ phiên bản cũ. Model cloud có thể tính phí theo ngân sách production.',
+        okText:'Lập kế hoạch',cancelText:'Hủy',onOk:()=>storyboard(reviewing,'continuity'),
       }):null}
       onAudio={canEdit?(engine,voice_name)=>storyboard(reviewing,'audio',{engine,voice_name}):null}
       onMove={canChangeLayout?(index,target)=>storyboard(reviewing,'move',{index,target}):null}

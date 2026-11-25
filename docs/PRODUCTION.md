@@ -83,6 +83,10 @@ Limits: hard cuts, metadata-only continuity, SRT sidecar, optional local TTS, no
 
 Khi video đang chờ duyệt, mở storyboard và chọn cảnh cần tạo lại. Có thể yêu cầu tạo lại ảnh (và clip phụ thuộc nếu là phim chuyển động) hoặc chỉ tạo lại chuyển động từ ảnh đã lưu. Studio tạo phiên bản storyboard mới, giữ checkpoint các cảnh khác và yêu cầu Owner duyệt lại trước khi dispatch. Phiên bản cũ không bị ghi đè. AI viết lại prompt được cung cấp ngữ cảnh cảnh trước/sau nhưng không tự thay đổi chúng. Đây là sửa có giám sát, chưa phải QA thị giác tự động; Owner cần kiểm tra lại tính liên tục sau khi dựng.
 
+## Liên tục chuyển động (pilot)
+
+Trong Nội dung & phiên bản, chọn AI lập liên tục chuyển động. Model storyboard quyết định CUT, CAMERA_CHANGE hoặc CONTINUE và trạng thái đầu/cuối; Owner duyệt SHA mới. Với CONTINUE, adapter LTX đọc clip trước đã kiểm SHA, trích đúng frame cuối được dùng trong timeline (không phải frame cuối của clip thô), ghi nguồn frame và SHA vào motion ledger, gửi PNG đó thay cho ảnh FLUX dự kiến. CUT/CAMERA_CHANGE vẫn dùng ảnh riêng. Các cảnh tiếp nối phụ thuộc bị bỏ checkpoint khi nguồn thay đổi; cảnh độc lập được giữ. Không tự fallback khi frame nguồn thiếu hoặc không hợp lệ. CI kiểm tra trích frame bằng FFmpeg thật và logic dependency; hiệu quả hình ảnh và chuyển động trên LTX cần Owner nghiệm thu. Ảnh FLUX dự kiến vẫn được tạo cho tất cả cảnh trong pilot, kể cả cảnh tiếp nối.
+
 ## AI đánh giá frame mẫu (pilot có giám sát)
 
 Gán model hỗ trợ ảnh qua Ollama, OpenAI-compatible hoặc Anthropic-compatible tại tuyến Kiểm tra chất lượng hình ảnh (vision.qa). Metadata readiness chỉ kiểm tra endpoint, không chứng minh model thực sự hiểu hình ảnh. Bật quyền gọi tương ứng và FFmpeg. Trong storyboard của video đang chờ duyệt, chọn AI đánh giá cảnh; hộp xác nhận thông báo việc gửi ảnh ra cloud và khả năng tính phí. Pipeline kiểm tra SHA video và ảnh, lấy frame đầu/giữa/cuối cảnh và ranh giới trước đó, tạo contact sheet JPEG có giới hạn, gọi đúng model đã gán và lưu kết quả kèm SHA, revision, frame indices. Mỗi lượt cloud được tính vào ngân sách production; không tự fallback hoặc thử lại.

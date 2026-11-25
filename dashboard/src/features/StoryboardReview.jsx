@@ -7,7 +7,7 @@ import {groupDraftScenes} from './studioScenes.js';
 import {MAX_STUDIO_SECONDS} from './studioDuration.js';
 import './storyboard-review.css';
 
-export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewrite,onAdd,onMove,onRemove,onPreview,onDuration,onRegenerate,onVisualReview,onAudio}){
+export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewrite,onAdd,onMove,onRemove,onPreview,onDuration,onRegenerate,onVisualReview,onAudio,onContinuity}){
   const [shot,setShot]=useState(null);
   const [seconds,setSeconds]=useState(null);
   const [view,setView]=useState('scenes');
@@ -53,6 +53,11 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
             precision={0} value={seconds??job.brief.seconds} onChange={setSeconds} suffix="giây"/>
           <Button disabled={busy||seconds===null||seconds===job.brief.seconds} onClick={()=>onDuration(seconds)}>Cập nhật thời lượng</Button>
         </Space>}
+      </div>}
+      {onContinuity&&<div className="storyboard-context">
+        <h3>Liên tục chuyển động</h3>
+        <p>AI chọn chuyển cảnh, đổi góc hoặc tiếp nối từ frame cuối thực tế. Thay đổi kế hoạch sẽ cần duyệt lại.</p>
+        <Button disabled={busy} onClick={onContinuity}>AI lập liên tục chuyển động</Button>
       </div>}
       <h3>Âm thanh</h3>
       <p>{job.audio_plan?'Lời thoại từ phụ đề · '+job.audio_plan.engine:'Không có lời thoại tự động'}</p>
@@ -104,6 +109,11 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
         <p>{scene.shot_description??scene.description}</p>
         {scene.creative_camera&&<p className="env-muted">Góc máy · {scene.creative_camera}</p>}
         {scene.shot_reason&&!authoredScenes&&<p className="env-muted">{scene.shot_reason}</p>}
+        {scene.continuity_plan&&<div className="storyboard-context">
+          <strong>{({CUT:'Chuyển cảnh',CAMERA_CHANGE:'Đổi góc',CONTINUE:'Tiếp nối frame cuối'})[scene.continuity_plan.transition]}</strong>
+          <p>Bắt đầu: {scene.continuity_plan.start_state}</p><p>Kết thúc: {scene.continuity_plan.end_state}</p>
+          {scene.continuity_plan.transition==='CONTINUE'&&<p className="env-muted">Ảnh bên dưới là ảnh dự kiến; clip dùng frame cuối đã xác minh của cảnh trước.</p>}
+        </div>}
         {scene.asset&&<div className="storyboard-image"><Image loading="lazy" alt={'Ảnh cảnh '+(index+1)}
           src={'/api/film/drafts/'+job.id+'/scene-'+index+'?v='+scene.asset}/></div>}
         {activeGroup?.original&&<div className="storyboard-original-scene"><ScriptContent text={activeGroup.original}/></div>}

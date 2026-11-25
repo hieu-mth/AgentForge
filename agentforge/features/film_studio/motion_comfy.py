@@ -329,7 +329,7 @@ def migrate_ledger(path=DB):
 def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
                 workflow_sha, seed, confirmed=False,
                 image_job=None, image_sha=None, ltx_encoder=None, confirm_ltx_gate_b=False,
-                confirm_new_attempt=False,
+                confirm_new_attempt=False, previous_motion=None,
                 film_root: Path = FILMS, db_path: Path = DB, on_reserved=None, dispatch_guard=nullcontext):
     """One-shot owner dispatch, checkpointed BEFORE any GPU/HTTP work.
 
@@ -360,6 +360,8 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
     if is_ltx and (confirm_ltx_gate_b is not True or not isinstance(image_job, str)
                    or not isinstance(image_sha, str) or not SHA.fullmatch(image_sha) or ltx_encoder is None):
         raise PermissionError("LTX requires Gate B confirmation, a reviewed FLUX image ID/SHA and encoder path")
+    if previous_motion is not None and not is_ltx:
+        raise MotionError("This motion adapter does not support frame continuation")
     with model_hub.local_inference_slot():
         with closing(_db(db_path, write=True)) as conn:
             _check_attempt(conn, film_slug, shot_id, plan_sha, confirm_new_attempt)
@@ -376,7 +378,13 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
             if not config or config["port"] != PORT:
                 raise MotionError("Register the Portable launcher on the Motion endpoint")
             motion_ltx.verify_weights(config["install_root"], ltx_encoder)
-            image = motion_ltx.read_source(image_job, image_sha)
+            if previous_motion is not None:
+                from agentforge.features.film_studio import motion_verify
+                image_job, image = motion_verify.read_continuation_frame(
+                    previous_motion, film_slug, film_root=film_root, db_path=db_path)
+                image_sha = _sha(image)
+            else:
+                image = motion_ltx.read_source(image_job, image_sha)
             comfy_service.ensure_running(PORT)
             motion_ltx.check_runtime(PORT, require_models=True, frames=template["profile"]["frames"])
         comfy_service.require_idle_queue(PORT)
