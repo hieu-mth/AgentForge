@@ -14,7 +14,7 @@ STORY_FIELDS = ("description", "image_prompt", "motion_prompt", "character_ids",
                 "audio", "continuity", "script_range", "shot_id", "frames", "caption", "scene_notes", "duration_weight",
                 "suggested_seconds", "shot_reason", "content_scene", "content_shot", "content_shot_count",
                 "script_shot_frames", "shot_description", "creative_shot", "segment", "segment_count",
-                "creative_camera", "motion_seed")
+                "creative_camera", "motion_seed", "continuity_plan")
 
 
 def duration_limits(seconds, moving, output=LEGACY_MOTION_OUTPUT):

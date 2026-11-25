@@ -11,7 +11,7 @@ from urllib.parse import urlencode, urlsplit
 from uuid import UUID
 
 from agentforge.ai import model_hub
-from agentforge.features.film_studio import draft_resources, long_form, motion_comfy, motion_ltx, motion_verify
+from agentforge.features.film_studio import draft_continuity, draft_resources, long_form, motion_comfy, motion_ltx, motion_verify
 from agentforge.features.film_studio.draft_resources import NeedsReconciliation
 from agentforge.features.film_studio.studio_contracts import MotionOutput
 from agentforge.features.media import render
@@ -274,10 +274,14 @@ def retryable_motion_job(job_id):
 
 
 def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard=nullcontext,
-             retry_motion_job=None):
+             retry_motion_job=None, previous_motion=None):
     slug, plan_sha, workflow, digest = prepared
+    if previous_motion is not None:
+        clip_path(previous_motion)
     if scene.get("motion_sha"):
         clip_path(scene)
+        if previous_motion is not None:
+            _record_continuation(scene, previous_motion)
         return
     if retry_motion_job is not None:
         row = retryable_motion_job(retry_motion_job)
@@ -295,13 +299,13 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
                 raise ValueError("Draft cancelled before motion dispatch")
         try:
             motion_comfy.submit_shot(film_slug=slug, shot_id=f"sh-{index+1:05d}", plan_sha=plan_sha,
-                prompt=("Animate this shot with natural movement, preserving character identity. "
-                        + scene.get("motion_prompt", scene["description"]) + " " + scene.get("scene_notes", "")),
+                prompt=draft_continuity.prompt(scene),
                 workflow_path=workflow, workflow_sha=digest, seed=scene.get("motion_seed", 42+index), confirmed=True,
                 image_job=scene["job_id"], image_sha=scene["asset"],
                 ltx_encoder=Path(profile["motion_encoder"]), confirm_ltx_gate_b=True, on_reserved=reserve,
                 confirm_new_attempt=retry_motion_job is not None,
-                db_path=motion_comfy.DB, film_root=motion_comfy.FILMS, dispatch_guard=dispatch_guard)
+                db_path=motion_comfy.DB, film_root=motion_comfy.FILMS, dispatch_guard=dispatch_guard,
+                **({"previous_motion": previous_motion} if previous_motion is not None else {}))
         except (OSError, ValueError, RuntimeError, http.client.HTTPException) as exc:
             if scene.get("motion_job") and motion_verify._job(scene["motion_job"], motion_comfy.DB)["state"] == "SUBMITTING":
                 raise NeedsReconciliation("Motion submission requires reconciliation") from exc
@@ -321,5 +325,20 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
             if len(entries) != 1 or entries[0]["type"] != "output" or entries[0]["subfolder"] != "":
                 raise ValueError("Motion output metadata is invalid")
             receipt = _collect_clip(job_id, entries[0]["filename"], workflow.parent)
+        if previous_motion is not None:
+            _record_continuation(scene, previous_motion)
         scene["motion_sha"] = receipt["clip_sha256"]
         save()
+
+
+def _record_continuation(scene, previous_motion):
+    marker = motion_verify.continuation_marker(previous_motion)
+    with closing(motion_comfy._db(motion_comfy.DB)) as conn:
+        row = conn.execute("SELECT image_job,image_sha FROM motion_sources WHERE job_id=?",
+                           (scene["motion_job"],)).fetchone()
+    if row is None or row["image_job"] != marker or not motion_comfy.SHA.fullmatch(row["image_sha"]):
+        raise ValueError("Motion checkpoint does not match the approved continuation source")
+    evidence = {"source": marker, "image_sha256": row["image_sha"]}
+    if scene.get("motion_source") not in (None, evidence):
+        raise ValueError("Continuation frame provenance changed")
+    scene["motion_source"] = evidence
