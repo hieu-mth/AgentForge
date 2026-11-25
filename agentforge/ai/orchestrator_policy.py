@@ -139,7 +139,7 @@ def validate_save(policy, *, id_pattern, extra_routes):
     return validate(policy, id_pattern=id_pattern, extra_routes=extra_routes)
 
 
-def resolve(capability, policy, available_profiles, primary_ref):
+def resolve(capability, available_profiles, primary_ref):
     """Resolve a configured candidate using an available-profile snapshot."""
     kind = KINDS.get(capability)
     if kind is None:
@@ -147,15 +147,8 @@ def resolve(capability, policy, available_profiles, primary_ref):
                 "execution_allowed": False}
     if kind == "tool":
         return {"status": ("CONFIG_ONLY" if capability == "film.tts" else "DETERMINISTIC"),
-                "tool": policy["tts_engine"] if capability == "film.tts" else
-                "ffmpeg" if capability == "film.assemble" else "system_rules",
                 "execution_allowed": False}
     primary = available_profiles.get(primary_ref)
-    candidates = [ref for ref in policy["allowed_profiles"]
-                  if compatible(kind, available_profiles.get(ref))]
-    if policy["selection"] == "SUGGEST" and candidates:
-        return {"status": "CONFIG_ONLY", "candidates": candidates,
-                "reason": "OWNER_SELECTION_REQUIRED", "execution_allowed": False}
     if not compatible(kind, primary):
         return {"status": "UNAVAILABLE", "reason": "NO_COMPATIBLE_PROFILE",
                 "execution_allowed": False}

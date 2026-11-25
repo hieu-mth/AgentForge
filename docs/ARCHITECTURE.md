@@ -50,7 +50,7 @@ Studio có thể lập storyboard từ nội dung Owner, tạo ảnh và motion 
 - Nguồn dữ liệu duy nhất của model profile, các model được gán cho tác vụ và chính sách điều phối: `data/company/model_hub.sqlite3` (ignored), revision/CAS, rollback transaction và Owner confirmation.
 - Danh mục capability (`general.text`, `film.storyboard`, `film.motion`, `image.generate`, `ops.monitor`) được khai báo từ `agentforge/ai/orchestrator_policy.py` và `model_hub.route_catalog()` — chỉ metadata thuộc source, **không chứa model ID mặc định**.
 - Lưu profile và gán route **không chạy model**. Film/image routes `CONFIG_ONLY`; `ops.monitor` deterministic. Studio lấy route đã phân công từ snapshot Model Hub và kiểm tra fingerprint trước dispatch; trạng thái CONFIG_ONLY không tự cấp quyền thực thi.
-- Owner có thể xóa profile chưa được tham chiếu. Muốn xóa profile đang được phân công phải bỏ gán trước. Xóa profile không xóa weights, DB khác hay workspace.
+- Owner có thể xóa profile chưa được phân công cho năng lực hiện hành. Muốn xóa profile đang được phân công phải bỏ gán trước. Xóa profile không xóa weights, DB khác hay workspace.
 - Cơ sở dữ liệu đã tồn tại được giữ nguyên, không tự sửa hoặc migrate khi GET. Overlay/profile Owner cũ tiếp tục được đọc. Các ID route lịch sử ngoài catalog chỉ lưu trữ, không xuất hiện hay thực thi. Model trước đây chỉ tồn tại trong TOML **không tự đăng ký lại**; Owner chọn thêm khi muốn dùng.
 - Các giá trị `api_key_env`, `base_url_env` của cloud profile là **tên biến môi trường**, không phải token; không có cơ chế tự nạp file `.env` ở ứng dụng. Nếu cần dùng credentials về sau, chúng phải được inject an toàn vào môi trường tiến trình. Cloud call luôn phải được duyệt, không tự fallback.
 - `.env` không nằm trong Git, bị ignore để ngăn lộ bí mật. Không cần tạo file `.env` để chạy local Video Studio; không xóa `.env` sẵn có trên máy Owner bằng Git cleanup.
@@ -79,3 +79,5 @@ The approval digest includes the compiled plan, the segment storyboard and the e
 Incomplete or out-of-order action coverage receives at most one contextual model revision; invalid coverage after that stops planning. Segment prompts distinguish prepare, progress and complete for continued actions. Exact duplicate descriptions or motion prompts receive bounded repair. These controls do not establish semantic or visual continuity.
 
 Xem [runtime](RUNTIME.md) và [production](PRODUCTION.md) để kiểm tra hành vi thực tế.
+
+Các trường điều phối đã ngừng hỗ trợ trong snapshot lịch sử không tham gia chọn model hoặc chặn xóa profile chưa được phân công. Chúng chỉ được giữ để đọc và rollback dữ liệu Owner.

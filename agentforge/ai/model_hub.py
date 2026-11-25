@@ -42,7 +42,6 @@ ID_RE = re.compile(r"[a-z][a-z0-9_]{2,39}\Z")
 TASK_RE = re.compile(r"[a-z][a-z0-9_.]{2,59}\Z")
 MODEL_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/+-]{0,159}\Z")
 KINDS = {"text", "image", "video", "rules"}
-EXECUTIONS = {"config_only", "rules"}
 MAX_PROFILE_COUNT = 32
 MAX_STATE_BYTES = 65536
 _LOCAL_INFERENCE = Lock()
@@ -364,7 +363,7 @@ def _orchestrator_catalog(state, profiles, routes):
     for key, label, kind, tool in orchestrator_policy.CAPABILITIES:
         route = by_route.get(key)
         ref = route["model_ref"] if route else policy["mappings"].get(key)
-        decision = orchestrator_policy.resolve(key, policy, profiles, ref)
+        decision = orchestrator_policy.resolve(key, profiles, ref)
         options = [ident for ident, profile in profiles.items()
                    if orchestrator_policy.compatible(kind, profile)]
         capabilities.append({
@@ -376,7 +375,6 @@ def _orchestrator_catalog(state, profiles, routes):
             "status": ("LOCAL_RUNTIME" if key == "image.generate"
                        and "flux" in profiles.get(decision.get("model_ref"), {}) else decision["status"]),
             "existing_route": route is not None and kind != "tool",
-            "default_ref": None,
         })
     return {"policy": policy, "capabilities": capabilities,
             "status": "CONFIG_ONLY", "owner_override": "orchestrator" in state}
@@ -492,7 +490,7 @@ def image_runtime(*, automated=False, db_path=None):
     profiles = _profiles(state=state)
     policy = state.get("orchestrator", orchestrator_policy.defaults())
     ref = state["routes"].get("image.generate")
-    decision = orchestrator_policy.resolve("image.generate", policy, profiles, ref)
+    decision = orchestrator_policy.resolve("image.generate", profiles, ref)
     profile = profiles.get(decision.get("model_ref"))
     if not profile or "flux" not in profile:
         raise ModelConfigError("Assign an enabled FLUX profile to image.generate")
@@ -811,10 +809,7 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
             attached = {ref for key, ref in updated["routes"].items()
                         if key in route_catalog()}
             current_policy = updated.get("orchestrator", orchestrator_policy.defaults())
-            attached.update([current_policy["primary"]])
-            attached.update(current_policy["allowed_profiles"])
             attached.update(current_policy["mappings"].values())
-            attached.update(current_policy["fallbacks"].values())
             if profile_id in attached:
                 raise ModelConfigError("Model is assigned; unassign it before deleting")
             del updated["profiles"][profile_id]

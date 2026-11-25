@@ -175,17 +175,36 @@ class OrchestratorTests(unittest.TestCase):
     def test_resolver_is_pure_and_does_not_fallback(self):
         profiles = {"local": {"provider": "ollama", "enabled": True},
                     "cloud": {"provider": "anthropic", "enabled": True}}
-        config = {**policy.defaults(), "fallback": "LOCAL",
-                  "fallbacks": {"general.text": "cloud"}}
         with patch("urllib.request.urlopen", side_effect=AssertionError("network")):
-            self.assertEqual(policy.resolve("general.text", config, profiles, None)["status"], "UNAVAILABLE")
-            selected = policy.resolve("general.text", config, profiles, "cloud")
+            self.assertEqual(policy.resolve("general.text", profiles, None)["status"], "UNAVAILABLE")
+            selected = policy.resolve("general.text", profiles, "cloud")
             self.assertTrue(selected["requires_owner_approval"])
             self.assertFalse(selected["execution_allowed"])
-            config["fallbacks"]["general.text"] = "local"
-            self.assertEqual(policy.resolve("general.text", config, profiles, None)["status"], "UNAVAILABLE")
-            config.update(selection="SUGGEST", allowed_profiles=["local", "cloud"])
-            suggested = policy.resolve("general.text", config, profiles, None)
-            self.assertEqual(suggested["candidates"], ["local", "cloud"])
-            self.assertFalse(suggested["execution_allowed"])
+            self.assertEqual(policy.resolve("general.text", profiles, "local")["model_ref"], "local")
 
+    def test_retired_policy_cannot_override_active_image_route_or_block_unused_profile_delete(self):
+        self.seed()
+        model_hub.change("SAVE_MODEL_PROFILE", expected_revision=2, db_path=self.db,
+                         profile=flux_profile())
+        _, state = model_hub._read_state(db_path=self.db)
+        state["routes"]["image.generate"] = "fixture_flux"
+        state["orchestrator"] = {
+            **policy.defaults(), "primary": "local_primary",
+            "selection": "SUGGEST", "allowed_profiles": ["fixture_flux", "local_primary"],
+            "fallback": "LOCAL", "fallbacks": {"general.text": "local_primary"},
+            "permissions": {**policy.defaults()["permissions"], "assign_local": True, "call_local": True},
+        }
+        with closing(sqlite3.connect(self.db)) as conn, conn:
+            conn.execute("UPDATE hub_state SET payload=?", (json.dumps(state),))
+        revision, selected = model_hub.image_runtime(automated=True, db_path=self.db)
+        self.assertEqual(revision, 3)
+        self.assertEqual(selected["id"], "fixture_flux")
+        with closing(sqlite3.connect(self.db)) as conn:
+            self.assertEqual(json.loads(conn.execute("SELECT payload FROM hub_state").fetchone()[0]), state)
+        removed = model_hub.change("DELETE_MODEL_PROFILE", expected_revision=3,
+                                   db_path=self.db, profile_id="local_primary")
+        self.assertNotIn("local_primary", {row["id"] for row in removed["profiles"]})
+        self.assertEqual(removed["orchestrator"]["policy"], state["orchestrator"])
+        with self.assertRaisesRegex(ValueError, "unassign"):
+            model_hub.change("DELETE_MODEL_PROFILE", expected_revision=4,
+                             db_path=self.db, profile_id="fixture_flux")
