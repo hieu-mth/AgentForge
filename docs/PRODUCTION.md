@@ -113,6 +113,10 @@ Record action coverage, count purposeful angles, and compare each adjacent segme
 
 Trong storyboard, mở Nội dung & phiên bản → Âm thanh, chọn Windows SAPI hoặc Piper đã cài local. Piper cần tên file voice .onnx hợp lệ và JSON đi kèm; Windows có thể dùng voice mặc định hoặc tên đã cài. Không tải voice tự động. Sau khi Owner duyệt phiên bản mới, Studio dùng phụ đề từng cảnh làm lời thoại, tạo PCM WAV tạm, kiểm tra độ dài, pad khoảng im lặng đúng timeline, ghép AAC và kiểm tra decode. Nếu lời thoại dài hơn cảnh, production giữ ảnh/clip và báo cảnh cần rút ngắn; không tự cắt lời. Thay cấu hình âm thanh giữ checkpoint hình ảnh/chuyển động và tạo phiên bản mới. Receipt ghi nguồn, SHA, số mẫu và trạng thái decode; không khẳng định giọng đọc đúng ngôn ngữ hoặc chất lượng nghệ thuật. Không hỗ trợ tạo nhạc hoặc hiệu ứng âm thanh bằng model ở pilot này.
 
+## AI Audio Director (pilot)
+
+Trong Nội dung & phiên bản → Âm thanh, chọn engine local hoặc speech cloud, nhập voice mặc định và tùy chọn voice riêng cho nhân vật; chọn AI lập kế hoạch âm thanh. AI tạo cue lời thoại/thuyết minh độc lập với phụ đề, chọn vị trí frame, gain, và chọn WAV đã có trong thư viện local cho hiệu ứng, môi trường, nhạc. Đặt WAV PCM 16-bit mono/stereo hợp lệ trong workspace/audio-library, tên file ASCII dễ hiểu, tối đa 24 tài sản được đưa vào catalog. Không tự sinh nhạc/hiệu ứng mới, không tải tài sản; ý định thiếu tài sản hiển thị riêng. Các WAV phải do Owner có quyền sử dụng. Cue được gắn SHA và timeline; file thay đổi hoặc timeline đổi cần lập lại kế hoạch. FFmpeg mix cue chồng nhau, có limiter, giữ chính xác số mẫu. Speech cloud dùng tuyến film.tts với profile OpenAI-compatible do Owner gán, voice ID do Owner nhập, tính ngân sách mỗi lượt trước dispatch, không tự fallback. Kiểm thử fixture không chứng minh API speech thật, giọng đọc hay mix nghệ thuật.
+
 ## Xuất bản
 
 **Status:** local release ledger, explicit Owner review, optional private-only YouTube OAuth CLI, signed video handoff, manual schedule intent and owner-recorded metrics **implemented in code/CI**. Real OAuth account, real private upload, platform analytics, and public scheduling are not verified.

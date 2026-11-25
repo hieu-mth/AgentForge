@@ -30,6 +30,9 @@ def validate(job):
     audio = job.get("audio_plan")
     if audio is None:
         return None
+    if isinstance(audio, dict) and audio.get("format") == "directed.v1":
+        from agentforge.features.film_studio import audio_director
+        return audio_director.validate(job, audio)
     if not isinstance(audio, dict) or audio.keys() != {"engine", "voice_name"}:
         raise ValueError("Invalid narration plan")
     checked = plan(audio["engine"], audio["voice_name"])
@@ -67,6 +70,11 @@ def prepare(job, folder, fps):
     audio = validate(job)
     if audio is None:
         yield None
+        return
+    if audio.get("format") == "directed.v1":
+        from agentforge.features.film_studio import audio_director
+        with audio_director.prepare(job, folder, fps) as result:
+            yield result
         return
     with tempfile.TemporaryDirectory(dir=folder, prefix="narration-") as tmp:
         root = ensure_local_root(Path(tmp))

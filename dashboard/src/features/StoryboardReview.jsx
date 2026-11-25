@@ -7,12 +7,13 @@ import {groupDraftScenes} from './studioScenes.js';
 import {MAX_STUDIO_SECONDS} from './studioDuration.js';
 import './storyboard-review.css';
 
-export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewrite,onAdd,onMove,onRemove,onPreview,onDuration,onRegenerate,onVisualReview,onAudio,onContinuity}){
+export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewrite,onAdd,onMove,onRemove,onPreview,onDuration,onRegenerate,onVisualReview,onAudio,onContinuity,onAudioDirect}){
   const [shot,setShot]=useState(null);
   const [seconds,setSeconds]=useState(null);
   const [view,setView]=useState('scenes');
   const [engine,setEngine]=useState(job.audio_plan?.engine??'none');
   const [voice,setVoice]=useState(job.audio_plan?.voice_name??'');
+  const [voices,setVoices]=useState(job.audio_plan?.voices??{});
   const scenes=job.board.scenes;
   const index=Math.max(0,scenes.findIndex((s,i)=>(s.shot_id??i)===shot));
   const scene=scenes[index];
@@ -60,18 +61,32 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
         <Button disabled={busy} onClick={onContinuity}>AI lập liên tục chuyển động</Button>
       </div>}
       <h3>Âm thanh</h3>
-      <p>{job.audio_plan?'Lời thoại từ phụ đề · '+job.audio_plan.engine:'Không có lời thoại tự động'}</p>
+      <p>{job.audio_plan?.format==='directed.v1'?'AI Audio Director · '+job.audio_plan.cues.length+' cue':
+        job.audio_plan?'Lời thoại từ phụ đề · '+job.audio_plan.engine:'Không có lời thoại tự động'}</p>
+      {job.audio_plan?.format==='directed.v1'&&<div className="storyboard-context">
+        {job.audio_plan.cues.map((cue,i)=><p key={i}>{cue.kind} · Cảnh {scenes.findIndex(s=>s.shot_id===cue.shot_id)+1}
+          {' · frame '+cue.start_frame+'–'+cue.end_frame+' · '+cue.gain_db+' dB · '+(cue.text||cue.asset)}
+          {cue.voice?' · '+cue.voice:''}</p>)}
+        {job.audio_plan.unresolved.map((item,i)=><Alert key={i} type="warning" showIcon message={item.detail}/>)}
+      </div>}
       {onAudio&&<div className="storyboard-context">
-        <p className="env-muted">Tùy chọn TTS local từ phụ đề từng cảnh. Chỉ tạo lời thoại sau khi duyệt storyboard; không tự tải voice. Phụ đề phải đủ ngắn để đọc trong cảnh.</p>
+        <p className="env-muted">AI lập lời thoại, thuyết minh, nhạc, môi trường và hiệu ứng từ thư viện WAV local. Chỉ thực thi sau khi duyệt. Không tự tải model hoặc tài sản.</p>
         <Space wrap>
           <Select aria-label="Nguồn lời thoại" value={engine} onChange={setEngine} options={[
             {value:'none',label:'Không lời thoại'},{value:'windows',label:'Windows SAPI'},
-            {value:'piper',label:'Piper local'},
+            {value:'piper',label:'Piper local'},{value:'cloud',label:'Speech cloud (Model Hub)'},
           ]}/>
           {engine!=='none'&&<Input aria-label="Tên voice local" value={voice} maxLength={100}
-            onChange={e=>setVoice(e.target.value)} placeholder={engine==='piper'?'voice.onnx':'Voice mặc định nếu để trống'}/>}
-          <Button disabled={busy||engine==='piper'&&!voice} onClick={()=>onAudio(engine,engine==='none'?'':voice)}>Lưu cấu hình lời thoại</Button>
+            onChange={e=>setVoice(e.target.value)} placeholder={engine==='piper'?'voice.onnx':engine==='cloud'?'Mã voice cloud':'Voice mặc định nếu để trống'}/>}
+          <Button disabled={busy||engine==='cloud'||engine==='piper'&&!voice}
+            onClick={()=>onAudio(engine,engine==='none'?'':voice)}>{engine==='none'?'Tắt âm thanh':'Chỉ đọc phụ đề'}</Button>
+          {onAudioDirect&&<Button type="primary" disabled={busy||engine==='none'||['cloud','piper'].includes(engine)&&!voice}
+            onClick={()=>onAudioDirect(engine,voice,voices)}>AI lập kế hoạch âm thanh</Button>}
         </Space>
+        {engine!=='none'&&Object.entries(job.cast??{}).map(([id,character])=><p key={id}>
+          <label>{character.name} · voice riêng <Input value={voices[id]??''} maxLength={100}
+            onChange={e=>setVoices(old=>({...old,[id]:e.target.value}))} placeholder="Để trống dùng voice mặc định"/></label>
+        </p>)}
       </div>}
       <h3>Nội dung video</h3>
       <ScriptContent text={job.brief.idea}/>

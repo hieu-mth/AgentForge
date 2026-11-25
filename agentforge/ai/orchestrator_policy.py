@@ -9,7 +9,7 @@ CAPABILITIES = (
     ("image.generate", "Tạo ảnh", "image", None),
     ("film.motion", "Tạo chuyển động", "video", None),
     ("vision.qa", "Kiểm tra chất lượng hình ảnh", "vision", None),
-    ("film.tts", "Tạo thoại", "tool", "Local TTS"),
+    ("film.tts", "Tạo thoại cloud", "audio", None),
     ("film.assemble", "Dựng video", "tool", "FFmpeg"),
     ("ops.monitor", "Giám sát hệ thống", "tool", "Python rules"),
 )
@@ -54,6 +54,9 @@ def runtime_adapter(kind, profile):
     """Resolve against the same adapter predicates used by the runtime."""
     from agentforge.features.film_studio import studio_runtime
 
+    if kind == "audio":
+        from agentforge.features.film_studio import studio_speech
+        return studio_speech if studio_speech.supports(profile) else None
     if kind == "vision":
         from agentforge.features.film_studio import studio_vision
         return studio_vision if studio_vision.supports(profile) else None
