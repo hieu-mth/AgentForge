@@ -1,6 +1,6 @@
-# Film Production — continuity and 60–90s pilot
+# Film Production — manual assembly and verification
 
-**Status:** Code/Windows CI fixtures. Real ComfyUI GPU clips, assembled 60–90s movie, Owner visual/audio review: **PENDING**. This pipeline never auto-generates GPU footage, downloads models, clones voices or publishes.
+This document covers the manual assembly workflow for existing motion receipts. For automatic storyboard-to-video drafts, use Studio video in the Dashboard. CI fixtures validate the contract; visual and audio quality require review of real output. Manual assembly does not dispatch GPU work, download models, clone voices or publish.
 
 ## Contract
 
@@ -18,11 +18,11 @@ cd D:\AgentForge
 git status --short
 git pull --ff-only origin main
 
-# Three-shot pilot
+# Three-shot example
 .\.venv\Scripts\python.exe -m agentforge.features.film_studio.long_form plan --spec .\examples\film_studio\continuity_3shot.json --output-root .\workspace\films --slug fox-preview
 
-# Separate 15-shot (~61s) pilot
-.\.venv\Scripts\python.exe -m agentforge.features.film_studio.long_form plan --spec .\examples\film_studio\film_60s.json --output-root .\workspace\films --slug fox-pilot
+# Separate 15-shot example
+.\.venv\Scripts\python.exe -m agentforge.features.film_studio.long_form plan --spec .\examples\film_studio\film_60s.json --output-root .\workspace\films --slug fox-production
 ~~~
 
 These commands create a SHA-bound film-plan.json once per slug. Use the [Motion checklist](MOTION.md) to individually submit, reconcile, import and verify a real MP4 for EVERY shot in the same plan. Do not proceed until all source receipts exist.
@@ -32,16 +32,16 @@ These commands create a SHA-bound film-plan.json once per slug. Use the [Motion 
 ~~~powershell
 mkdir D:\FilmWorkflows
 
-.\.venv\Scripts\python.exe -m agentforge.features.film_studio.production draft --film-slug fox-preview --episode-id preview-v1 --shot-count 3 --output D:\FilmWorkflows\preview-edit.json
+.\.venv\Scripts\python.exe -m agentforge.features.film_studio.production draft --film-slug fox-preview --episode-id preview-01 --shot-count 3 --output D:\FilmWorkflows\preview-edit.json
 ~~~
 
-For 60s, use --film-slug fox-pilot --episode-id pilot-v1 --shot-count 15 --output D:\FilmWorkflows\pilot-edit.json, only after 15 real receipts.
+For 60s, use --film-slug fox-production --episode-id episode-01 --shot-count 15 --output D:\FilmWorkflows\episode-edit.json, only after 15 real receipts.
 
 The draft includes real job/clip/receipt SHA but Owner must fill ALL pending-owner-* tags and OWNER REVIEW REQUIRED: action/camera/caption fields. Keep visual bible, costume, reference, location and props consistent, or write a meaningful change_note. reference_sha256 may remain null when not available; never imply this is a validated identity pack.
 
 ~~~powershell
 .\.venv\Scripts\python.exe -m agentforge.features.film_studio.production prepare --spec D:\FilmWorkflows\preview-edit.json
-.\.venv\Scripts\python.exe -m agentforge.features.film_studio.production inspect --film-slug fox-preview --episode-id preview-v1
+.\.venv\Scripts\python.exe -m agentforge.features.film_studio.production inspect --film-slug fox-preview --episode-id preview-01
 ~~~
 
 Save exact episode_sha256. Prepare does not call FFmpeg, model or GPU and refuses overwrite. For a new version, change episode_id, alter shot decisions and set source_episode_id plus prior source_sha256. No re-generation of unchanged source clips occurs.
@@ -55,18 +55,18 @@ where.exe ffmpeg
 where.exe ffprobe
 
 # Optional TTS. Without this, video uses a silent AAC soundtrack.
-.\.venv\Scripts\python.exe -m agentforge.features.film_studio.production voice --film-slug fox-preview --episode-id preview-v1 --episode-sha YOUR_EPISODE_SHA --engine windows --confirm-tts
+.\.venv\Scripts\python.exe -m agentforge.features.film_studio.production voice --film-slug fox-preview --episode-id preview-01 --episode-sha YOUR_EPISODE_SHA --engine windows --confirm-tts
 
 # Or use --engine piper --voice-name your-voice.onnx
-.\.venv\Scripts\python.exe -m agentforge.features.film_studio.production render --film-slug fox-preview --episode-id preview-v1 --episode-sha YOUR_EPISODE_SHA --confirm-ffmpeg
-.\.venv\Scripts\python.exe -m agentforge.features.film_studio.production receipt --film-slug fox-preview --episode-id preview-v1
+.\.venv\Scripts\python.exe -m agentforge.features.film_studio.production render --film-slug fox-preview --episode-id preview-01 --episode-sha YOUR_EPISODE_SHA --confirm-ffmpeg
+.\.venv\Scripts\python.exe -m agentforge.features.film_studio.production receipt --film-slug fox-preview --episode-id preview-01
 ~~~
 
-Files: workspace/films/fox-preview/productions/preview-v1/episode.mp4, captions.srt, render-receipt.json (and voiceover.wav if used). FFmpeg execution itself needs an explicit Owner action. Inspect output locally rather than auto-streaming/public upload.
+Files: workspace/films/fox-preview/productions/preview-01/episode.mp4, captions.srt, render-receipt.json (and voiceover.wav if used). FFmpeg execution itself needs an explicit Owner action. Inspect output locally rather than auto-streaming/public upload.
 
 ## Dashboard
 
-Start AgentForge with --allow-external-tools and log in as Owner. In AI Models & Routing → Film Studio, inspect episode ID/SHA/shot metadata, then choose voice or assemble. These actions require authenticated Owner session, CSRF, active Ops and an external-capable mode. No GPU generation or publishing is attached to the buttons.
+Start AgentForge with --allow-external-tools and log in as Owner. In Studio video → Công cụ nâng cao, inspect episode ID/SHA/shot metadata, then choose voice or assemble. These actions require authenticated Owner session, CSRF, active Ops and an external-capable mode. No GPU generation or publishing is attached to the buttons.
 
 ## Owner acceptance
 
@@ -75,4 +75,4 @@ Start AgentForge with --allow-external-tools and log in as Owner. In AI Models &
 - Reopen MP4, verify SHA receipt, and inspect full video/audio playback. Test one shot change via a new episode version, confirm other source clips are not regenerated.
 - CI mocks do NOT establish real GPU throughput, film coherence, copyright/licensing, visual identity or production readiness.
 
-Limits: hard cuts, metadata-only continuity, SRT sidecar, optional local TTS, no auto voice alignment, no long-form resume or YouTube OAuth.
+Limits: hard cuts, metadata-only continuity, SRT sidecar, optional local TTS, no auto voice alignment, no automated continuity certification in manual assembly.

@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any, BinaryIO, Callable, Protocol
 
 from agentforge.features.film_studio import draft_motion, studio_ollama
-from agentforge.features.film_studio.draft_resources import NeedsReconciliation
 from agentforge.features.film_studio.studio_contracts import DispatchGuard, ImageRequest, MotionOutput
 from agentforge.features.media import studio_flux
 

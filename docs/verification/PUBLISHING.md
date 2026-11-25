@@ -1,6 +1,6 @@
 # Film Publishing — Owner-reviewed local handoff
 
-**Status:** local release ledger, explicit Owner review, optional private-only YouTube OAuth CLI, signed video handoff, manual schedule intent and owner-recorded metrics **implemented in code/CI**. Real OAuth account, real private upload, platform analytics, public scheduling, ad spend, bank reconciliation and revenue **NOT VERIFIED**.
+**Status:** local release ledger, explicit Owner review, optional private-only YouTube OAuth CLI, signed video handoff, manual schedule intent and owner-recorded metrics **implemented in code/CI**. Real OAuth account, real private upload, platform analytics, and public scheduling are not verified.
 
 ## Safety contract
 
@@ -28,7 +28,7 @@ npm.cmd run build --prefix dashboard
 .\.venv\Scripts\python.exe -m agentforge --port 8780
 ~~~
 
-Open `http://127.0.0.1:8780/dashboard/`, navigate to **Kênh xuất bản**. First generate real Motion motion shots and complete Film Production assembled MP4. Then select the assembled episode: Dashboard reads exact source and render SHA. Enter YouTube title/description, rights and watched confirmation, synthetic/kids disclosures and optional future ISO8601 timestamp (planning only). Click **Chuẩn bị handoff local (Private)**; inspect the new SHA receipt and local MP4/SRT paths. Nothing leaves your computer.
+Open `http://127.0.0.1:8780/dashboard/`, navigate to **Kênh xuất bản**. First generate real motion shots and complete Film Production assembled MP4. Then select the assembled episode: Dashboard reads exact source and render SHA. Enter YouTube title/description, rights and watched confirmation, synthetic/kids disclosures and optional future ISO8601 timestamp (planning only). Click **Chuẩn bị handoff local (Private)**; inspect the new SHA receipt and local MP4/SRT paths. Nothing leaves your computer.
 
 For manual upload, open YouTube Studio yourself and choose `episode.mp4`, attach `captions.srt` if appropriate, review disclosures, and set `Private`. After checking Studio, enter its **11-character video ID** and Owner-observed privacy state in Dashboard; statistics may be entered as manual snapshots. Do not interpret Owner-reported public/scheduled as platform verified.
 

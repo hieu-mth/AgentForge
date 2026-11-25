@@ -13,11 +13,11 @@ agentforge/
   ops_control.py # pause/resume owner-gated actions
 dashboard/       # React/Ant Design
 examples/film_studio/
-scripts/         # Windows setup, preflight and source/docs hygiene
+scripts/         # Windows setup, preflight, verification and source/docs hygiene
 tests/           # only current video/security tests
 ```
 
-Film Studio giữ SHA-bound receipts và explicit Owner approval. GPU tasks, external subprocess/YouTube upload không tự chạy khi truy cập GET/UI. Không giữ alias của sản phẩm đã nghỉ chỉ để tương thích ngược.
+Film Studio giữ SHA-bound receipts và explicit Owner approval. GPU tasks, external subprocess/YouTube upload không tự chạy khi truy cập GET/UI. Schema và receipt cần thiết để đọc dữ liệu Owner đã lưu vẫn được bảo toàn.
 
 Model profiles, model-route assignments và chính sách AI điều phối được lưu ở `data/company/model_hub.sqlite3` (Owner-managed). Một checkout mới không có model mặc định. Catalog capability chỉ nằm trong Python; `config/` đã bị loại bỏ.
 

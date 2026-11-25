@@ -16,7 +16,7 @@ from agentforge.ai import model_hub
 from agentforge.features.film_studio import characters, creative_plan
 from agentforge.features.film_studio import draft_resources, draft_timeline, studio_runtime
 from agentforge.features.media import render, visual_jobs
-from agentforge.features.film_studio.draft_resources import ResourceWait
+from agentforge.features.film_studio.draft_resources import NeedsReconciliation, ResourceWait
 from agentforge.integrations import comfy_service
 from agentforge.paths import COMPANY_DATA_DIR, WORKSPACE_DIR, ensure_local_root
 
@@ -1250,7 +1250,7 @@ def _work(job, slot, retry_motion_job=None):
                     motion.run_shot(scene, index, prepared, motion_profile,
                                     lambda: _save(job), lambda: _cancellation(job["id"]),
                                     dispatch_guard=lambda: _dispatch_guard(job), **retry)
-                except studio_runtime.NeedsReconciliation:
+                except NeedsReconciliation:
                     raise
                 except Exception:
                     if _cancellation(job["id"]):
@@ -1269,7 +1269,7 @@ def _work(job, slot, retry_motion_job=None):
         job.update(status="WAITING_RESOURCES", error=str(exc))
     except DraftCancelled:
         job.update(status="CANCELLED", error=None, video_sha=None)
-    except studio_runtime.NeedsReconciliation as exc:
+    except NeedsReconciliation as exc:
         job.update(status="NEEDS_RECONCILIATION", error=str(exc))
     except (ValueError, PermissionError) as exc:
         if str(exc) == "LOCAL_INFERENCE_BUSY":
