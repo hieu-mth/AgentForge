@@ -32,6 +32,9 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
       </Space>
     </div>}>
     {error&&<Alert type="error" showIcon message={error}/>}
+    {reviewing&&job.deferred_media_binding&&<Alert type="info" showIcon
+      message="Storyboard chưa khóa model media"
+      description="Bạn có thể xem và chỉnh nội dung trước khi đăng ký model ảnh hoặc video. Khi duyệt sản xuất, hệ thống kiểm tra và khóa các model media đang được phân công. Timeline hiện vẫn theo giới hạn I2V."/>}
     <div className="storyboard-toolbar">
       <Segmented aria-label="Chế độ xem storyboard" value={view} onChange={setView}
         options={[{label:'Các cảnh',value:'scenes'},{label:'Nội dung & phiên bản',value:'source'}]}/>

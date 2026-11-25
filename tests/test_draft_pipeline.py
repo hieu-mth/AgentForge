@@ -63,6 +63,86 @@ class DraftTests(unittest.TestCase):
             "general.text": text["id"], "film.storyboard": writer["id"],
             "image.generate": image["id"], "film.motion": motion["id"]})["revision"]
 
+    def test_new_storyboard_without_media_routes_or_image_gpu_and_late_binding(self):
+        text = {"id": "owner_writer", "provider": "ollama", "enabled": True,
+                "model": "writer:8b", "base_url": "http://127.0.0.1:11434"}
+        self.registry_change("SAVE_MODEL_PROFILE", profile=text)
+        policy = draft.model_hub.orchestrator_policy.defaults()
+        policy["permissions"].update(plan=True, assign_local=True, call_local=True)
+        self.registry_change("SAVE_ORCHESTRATOR", policy=policy,
+                             route_changes={"general.text": text["id"], "film.storyboard": text["id"]})
+        def storyboard(job, bindings):
+            self.assertEqual(set(bindings), {"general.text", "film.storyboard"})
+            with draft._measured(job, "storyboard"):
+                job.update(board=draft._story(self.board(), 2, 6, {"cat": {}}), cast={})
+        with (patch.object(draft, "_dispatch"),
+              patch.object(draft, "_write_board", side_effect=storyboard),
+              patch.object(draft.draft_resources, "require_gpu", side_effect=AssertionError("image GPU gate")),
+              patch.object(studio_runtime, "image_adapter", side_effect=AssertionError("image adapter")),
+              patch.object(studio_runtime, "motion_artifacts", side_effect=AssertionError("motion adapter")),
+              patch.dict(self.capacity, {"vram_free_mib": 0})):
+            job = draft.submit({"id": self.ident, **self.brief})
+            draft._work(job, nullcontext())
+        saved = draft._read(self.ident)
+        self.assertEqual(saved["status"], "STORYBOARD_REVIEW", saved.get("error"))
+        self.assertTrue(saved["deferred_media_binding"])
+        self.assertNotIn("image.generate", saved["studio_plan"])
+        sha = saved["storyboard_sha"]
+        with self.assertRaises(PermissionError):
+            draft.act(self.ident, "storyboard-approve", {"sha256": sha})
+        self.assertEqual(draft._read(self.ident), saved)
+        policy["permissions"]["run_tools"] = True
+        policy["tools"] = ["ffmpeg"]
+        self.registry_change("SAVE_ORCHESTRATOR", policy=policy, route_changes={})
+        with self.assertRaisesRegex(ValueError, "image.generate"):
+            draft.act(self.ident, "storyboard-approve", {"sha256": sha})
+        image = flux_profile()
+        self.registry_change("SAVE_MODEL_PROFILE", profile=image)
+        self.registry_change("SET_MODEL_ROUTE", task_id="image.generate", model_ref=image["id"])
+        with patch.object(draft.render, "_ffmpeg"):
+            approved = draft.act(self.ident, "storyboard-approve", {"sha256": sha})
+        self.assertEqual(approved["status"], "QUEUED")
+        self.assertNotIn("deferred_media_binding", approved)
+        self.assertEqual(approved["board"], saved["board"])
+        self.assertIn("image.generate", approved["studio_plan"])
+        self.assertEqual(approved["approved_storyboard_sha"], draft.draft_timeline.digest(approved))
+        self.assertNotEqual(approved["approved_storyboard_sha"], sha)
+
+    def test_new_motion_storyboard_does_not_require_motion_profile_before_review(self):
+        text = {"id": "owner_writer", "provider": "ollama", "enabled": True,
+                "model": "writer:8b", "base_url": "http://127.0.0.1:11434"}
+        self.registry_change("SAVE_MODEL_PROFILE", profile=text)
+        policy = draft.model_hub.orchestrator_policy.defaults()
+        policy["permissions"] = dict.fromkeys(policy["permissions"], True)
+        policy["tools"] = ["ffmpeg"]
+        self.registry_change("SAVE_ORCHESTRATOR", policy=policy,
+                             route_changes={"general.text": text["id"], "film.storyboard": text["id"]})
+        def storyboard(job, bindings):
+            self.assertNotIn("film.motion", bindings)
+            job.update(board=draft._story(self.board(), 2, 4, {"cat": {}}), cast={})
+        with (patch.object(draft, "_dispatch"), patch.object(draft, "_write_board", side_effect=storyboard),
+              patch.object(studio_runtime, "motion_adapter", side_effect=AssertionError("motion before review"))):
+            job = draft.submit({"id": self.ident, **self.brief, "mode": "motion", "seconds": 4})
+            draft._work(job, nullcontext())
+        saved = draft._read(self.ident)
+        self.assertEqual(saved["status"], "STORYBOARD_REVIEW", saved.get("error"))
+        self.assertNotIn("motion_plan", saved)
+        image = flux_profile()
+        motion = {**self.motion_profile(), "enabled": True}
+        self.registry_change("SAVE_MODEL_PROFILE", profile=image)
+        self.registry_change("SET_MODEL_ROUTE", task_id="image.generate", model_ref=image["id"])
+        sha = saved["storyboard_sha"]
+        with self.assertRaisesRegex(ValueError, "film.motion"):
+            draft.act(self.ident, "storyboard-approve", {"sha256": sha})
+        self.registry_change("SAVE_MODEL_PROFILE", profile=motion)
+        self.registry_change("SET_MODEL_ROUTE", task_id="film.motion", model_ref=motion["id"])
+        with patch.object(draft_motion, "bind", return_value=motion):
+            approved = draft.act(self.ident, "storyboard-approve", {"sha256": sha})
+        self.assertEqual(approved["approved_motion"], approved["motion_plan"])
+        self.assertEqual(approved["approved_storyboard_sha"], draft.draft_timeline.digest(approved))
+        self.assertEqual(approved["board"], saved["board"])
+        self.assertEqual(approved["status"], "QUEUED")
+
     def test_legacy_approval_uses_historical_bindings_without_changing_digest(self):
         original = {**self.motion_profile(), "enabled": True}
         revision = self.seed_registry(flux_profile(), original)

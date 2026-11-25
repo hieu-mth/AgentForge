@@ -507,10 +507,13 @@ def image_runtime(*, automated=False, db_path=None):
     return revision, profile
 
 
-def draft_routes(*, db_path=None, moving=None):
-    """Resolve local production capabilities from one Owner policy snapshot."""
+PLANNING_CAPABILITIES = ("general.text", "film.storyboard", "character.select")
+
+
+def draft_routes(*, db_path=None, moving=None, planning=False):
+    """Resolve text-only planning or full production from one Owner policy snapshot."""
     revision, state = _read_state(db_path=db_path)
-    return revision, _draft_bindings(state, moving=moving)
+    return revision, _draft_bindings(state, moving=moving, planning=planning)
 
 
 @contextmanager
@@ -559,15 +562,18 @@ def draft_routes_at(revision, *, db_path=None, moving=None):
     return _draft_bindings(state, moving=moving)
 
 
-def _draft_bindings(state, *, moving):
+def _draft_bindings(state, *, moving, planning=False):
     policy = _active_policy(state)
     permissions = policy["permissions"]
     if (policy["mode"] == "MANUAL" or not all(permissions[key] for key in
-            ("plan", "assign_local", "call_local", "run_tools")) or "ffmpeg" not in policy["tools"]):
-        raise PermissionError("Hãy bật lập kế hoạch, phân công, gọi model local và FFmpeg trong AI điều phối.")
+            ("plan", "assign_local", "call_local"))):
+        raise PermissionError("Hãy bật lập kế hoạch, phân công và gọi model local trong AI điều phối.")
+    if not planning and (not permissions["run_tools"] or "ffmpeg" not in policy["tools"]):
+        raise PermissionError("Hãy bật chạy công cụ local và FFmpeg trong AI điều phối.")
     profiles = _profiles(state=state)
     bindings = {}
-    for capability in ("general.text", "film.storyboard", "character.select", "image.generate", "film.motion"):
+    capabilities = PLANNING_CAPABILITIES if planning else (*PLANNING_CAPABILITIES, "image.generate", "film.motion")
+    for capability in capabilities:
         if capability == "film.motion" and moving is False:
             continue
         ref = state["routes"].get(capability, policy["mappings"].get(capability))

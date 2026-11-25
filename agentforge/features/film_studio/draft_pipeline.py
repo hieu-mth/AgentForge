@@ -70,14 +70,16 @@ def _measured(job, operation, comfy_profile=None):
     _save(job)
     try:
         admission_sample = before
-        reason = draft_resources.pressure(admission_sample, operation)
+        text_only = job.get("deferred_media_binding") and operation in {
+            "plan", "duration", "creative_direction", "cast", "storyboard"}
+        reason = draft_resources.pressure(admission_sample, "text" if text_only else operation)
         if reason == "VRAM_LOW" and comfy_profile and comfy_profile.get("base_url"):
             if _release_idle_image(comfy_profile):
                 admission_sample = point["after_release"] = draft_resources.snapshot()
                 reason = draft_resources.pressure(admission_sample, operation)
         if reason:
             raise ResourceWait(reason)
-        if operation in {"plan", "cast", "storyboard"}:
+        if not text_only and operation in {"plan", "cast", "storyboard"}:
             draft_resources.require_gpu("image", admission_sample)
         yield
     finally:
@@ -381,7 +383,7 @@ def _write_script_board(job, bindings, *, outline=None):
     visual_continuity = []
     title = continuity = ""
     for index, (start, end) in enumerate(ranges):
-        data = _script_scene(job, bindings["film.storyboard"], bindings["image.generate"],
+        data = _script_scene(job, bindings["film.storyboard"], bindings.get("image.generate"),
                              script[start:end], continuity, index)
         scene_title = _text(data.pop("title"), 100)
         title = title or scene_title
@@ -722,7 +724,7 @@ def _write_planned_board(job, bindings):
             data = dict(accepted[index])
         else:
             for attempt in range(3 if authored else 1):
-                data = _script_scene(job, bindings["film.storyboard"], bindings["image.generate"],
+                data = _script_scene(job, bindings["film.storyboard"], bindings.get("image.generate"),
                                      source, continuity, index, cast=cast, proposed_shot=request)
                 if not authored:
                     break
@@ -822,7 +824,7 @@ def _select_cast(job, bindings, outline):
                   for row in rows}
     if not candidates:
         return {}
-    comfy = bindings["image.generate"]
+    comfy = bindings.get("image.generate")
     _activity(job, "STORYBOARD", "cast", selector)
     with _measured(job, "cast", comfy):
         selection = _ask(selector, "Select up to two relevant registered characters. Return empty if none fit.",
@@ -854,13 +856,13 @@ def _write_board(job, bindings):
             _activity(job, "PLANNING", "plan", bindings["general.text"])
             fields = _object(outline={**STRING, "minLength": 1, "maxLength": OUTLINE_LIMIT},
                              scene_count={"type": "integer", "minimum": minimum, "maximum": maximum})
-            with _measured(job, "plan", bindings["image.generate"]):
+            with _measured(job, "plan", bindings.get("image.generate")):
                 result = _ask(bindings["general.text"],
                     f"Choose {minimum} to {maximum} distinct short shots based on the action. "
                     "Keep the story order and important actions. Write an outline of at most 700 characters "
                     "with at least 16 words; prefer distinct action beats over repeated establishing shots.",
                     {"excerpt": brief["idea"][:2000], "explicit_scenes": len(SCRIPT_HEADING.findall(brief["idea"]))},
-                    fields, bindings["image.generate"])
+                    fields, bindings.get("image.generate"))
             count = _number(result.get("scene_count"), minimum, maximum)
             job["plan"] = _text(result.get("outline"), OUTLINE_LIMIT, label="Dàn ý do AI trả về")
             brief["scene_count"] = count
@@ -868,7 +870,7 @@ def _write_board(job, bindings):
         return _write_script_board(job, bindings, outline=None if scripted else job["plan"])
     if job["brief"].get("input_type") == "script" or _needs_scene_analysis(job["brief"]["idea"]):
         return _write_script_board(job, bindings)
-    comfy = bindings["image.generate"]
+    comfy = bindings.get("image.generate")
     if not job.get("plan"):
         _activity(job, "PLANNING", "plan", bindings["general.text"])
         with _measured(job, "plan", comfy):
@@ -1156,7 +1158,8 @@ def _check_studio_routing(job, revision, bindings):
 
 
 def _studio_bindings(job):
-    revision, bindings = model_hub.draft_routes(moving=job["brief"].get("mode") == "motion")
+    kwargs = {"planning": True} if job.get("deferred_media_binding") else {}
+    revision, bindings = model_hub.draft_routes(moving=job["brief"].get("mode") == "motion", **kwargs)
     return revision, bindings, _check_studio_routing(job, revision, bindings)
 
 
@@ -1193,12 +1196,13 @@ def _work(job, slot, retry_motion_job=None):
         with model_hub.local_inference_slot():
             revision, bindings, identity_revision = _studio_bindings(job)
             if reviewing:
-                if moving:
-                    _resolve_job_motion(job, bindings.get("film.motion"), planning=True, revision=identity_revision)
-                studio_runtime.motion_artifacts(job).require_resolved_ledger(job)
-                if bindings["image.generate"].get("base_url"):
-                    profile = bindings["image.generate"]
-                    studio_runtime.image_adapter(profile).preflight(profile, include_profiles=True)
+                if not job.get("deferred_media_binding"):
+                    if moving:
+                        _resolve_job_motion(job, bindings.get("film.motion"), planning=True, revision=identity_revision)
+                    studio_runtime.motion_artifacts(job).require_resolved_ledger(job)
+                    if bindings["image.generate"].get("base_url"):
+                        profile = bindings["image.generate"]
+                        studio_runtime.image_adapter(profile).preflight(profile, include_profiles=True)
                 if not job.get("board"):
                     _write_board(job, bindings)
                 if _cancellation(job["id"]):
@@ -1404,7 +1408,7 @@ def submit(data):
             raise ValueError("Production ID already belongs to another brief")
         return prior
     ops_control.require_active()
-    _, bindings = model_hub.draft_routes(moving=motion_mode)
+    _, bindings = model_hub.draft_routes(moving=motion_mode, planning=True)
     created_at = visual_jobs._now()
     job = {"id": ident, "brief": brief, "stage": "QUEUED", "status": "QUEUED",
            "video_sha": None, "created_at": created_at, "updated_at": created_at}
@@ -1412,6 +1416,7 @@ def submit(data):
     if motion_mode and duration_mode is not None and AUTHORED_HEADING.search(idea):
         job["creative_director_version"] = 1
     job["studio_plan"] = studio_runtime.routing_identity(bindings, moving=motion_mode)
+    job["deferred_media_binding"] = True
     job["submitted_brief"] = dict(brief)
     with comfy_service.LOCK, _db(True) as conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -1441,15 +1446,37 @@ def _storyboard_action(job, action, data):
             raise ValueError("Storyboard không chờ duyệt.")
         _validate_creative_frames(job)
         ops_control.require_active()
-        revision, bindings, identity_revision = _studio_bindings(job)
-        if job["brief"].get("mode") == "motion":
-            adapter, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
+        moving = job["brief"].get("mode") == "motion"
+        deferred = job.get("deferred_media_binding")
+        if deferred:
+            # Owner approves the reviewed text and the currently assigned media routes.
+            # Preserve the text profile pins; bind media once from the same registry snapshot.
+            revision, bindings = model_hub.draft_routes(moving=moving)
+            text_bindings = {key: value for key, value in bindings.items()
+                             if key in model_hub.PLANNING_CAPABILITIES}
+            identity_revision = _check_studio_routing(job, revision, text_bindings)
+        else:
+            revision, bindings, identity_revision = _studio_bindings(job)
+        if moving:
+            if deferred:
+                adapter = studio_runtime.motion_adapter(bindings.get("film.motion"))
+                if adapter.output_profile() != studio_runtime.job_output(job):
+                    raise ValueError("Model chuyển động không khớp timeline I2V đã xem. Hãy lập lại storyboard.")
+                identity = studio_runtime.motion_identity(adapter, bindings["film.motion"])
+                job["motion_plan"] = identity
+            else:
+                adapter, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
             environment = _motion_environment()
             adapter.bind(bindings["film.motion"])
             job["approved_motion"] = identity
             job["approved_motion_environment"] = environment
         else:
             render._ffmpeg()
+        if deferred:
+            job["studio_plan"] = studio_runtime.routing_identity(bindings, moving=moving)
+            job.pop("deferred_media_binding")
+            # The reviewed content is unchanged; the receipt now also binds actual media.
+            job["storyboard_sha"] = draft_timeline.digest(job)
         job.update(approved_storyboard_sha=job["storyboard_sha"], motion_revision=revision, status="QUEUED")
         with comfy_service.LOCK, _db(True) as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -1466,13 +1493,15 @@ def _storyboard_action(job, action, data):
     if (job.get("duration_plan", {}).get("content_scene_count") and action in
             {"storyboard-duration", "storyboard-add", "storyboard-remove", "storyboard-move"}):
         raise ValueError("Storyboard giữ thứ tự và thời lượng của các cảnh gốc. Hãy tạo bản nháp mới để đổi cấu trúc.")
-    studio_runtime.motion_artifacts(job).require_resolved_ledger({})  # A possible dispatch must be reconciled before edit.
+    if not job.get("deferred_media_binding"):
+        studio_runtime.motion_artifacts(job).require_resolved_ledger({})  # Reconcile possible dispatch before edit.
     if job["storyboard_version"] >= draft_timeline.MAX_VERSIONS:
         raise ValueError("Đã đạt giới hạn phiên bản. Tạo phim mới để tiếp tục.")
     original = draft_timeline.snapshot(job)
     # Capture the identity before clearing approval. Edits keep the original runtime.
     motion_plan = job.get("motion_plan")
-    if job["brief"].get("mode") == "motion" and (not motion_plan or "encoder_path_sha" not in motion_plan):
+    if (not job.get("deferred_media_binding") and job["brief"].get("mode") == "motion"
+            and (not motion_plan or "encoder_path_sha" not in motion_plan)):
         _, bindings, identity_revision = _studio_bindings(job)
         _, motion_plan = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
     scenes = job["board"]["scenes"]
@@ -1512,14 +1541,14 @@ def _storyboard_action(job, action, data):
             if scene.get("content_scene") and scene.get("script_range"):
                 start, end = scene["script_range"]
                 shot["original_script_excerpt"] = job["brief"]["idea"][start:min(end, start + 1000)]
-            with model_hub.local_inference_slot(), _measured(job, "storyboard", bindings["image.generate"]):
+            with model_hub.local_inference_slot(), _measured(job, "storyboard", bindings.get("image.generate")):
                 data = _ask(bindings["film.storyboard"], "Rewrite only this shot. Preserve the cast and its role "
                             "in the original scene when a script excerpt is provided. "
                             "Return description, English image_prompt and motion_prompt.",
                             {"scene": shot,
                              "feedback": _text(data["feedback"], 350), "continuity": original["continuity"]},
                             _object(description=STRING, image_prompt=STRING, motion_prompt=STRING),
-                            bindings["image.generate"])
+                            bindings.get("image.generate"))
         prompts = {key: _text(data[key], limit) for key, limit in
                    (("description", 350), ("image_prompt", 600), ("motion_prompt", 600))}
         if "shot_description" in scene or scene.get("content_scene"):
