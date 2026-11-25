@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from agentforge.features.film_studio.long_form import (
-    FilmPlanError, build_plan, estimate_attempts, load_plan, save_plan,
+    FilmPlanError, build_plan, load_plan, save_plan,
     verify_plan,
 )
 
@@ -31,7 +31,6 @@ class FilmPlanTests(unittest.TestCase):
                                  chapter("act-three", 2400)], shot_seconds=8)
         self.assertEqual(p["runtime_seconds"], 7200)
         self.assertEqual(len(p["shots"]), 900)
-        self.assertEqual(estimate_attempts(p)["estimated_generation_attempts"], 1800)
         self.assertEqual(p["status"], "PLANNED_NOT_RENDERED")
         self.assertFalse(p["runtime_verified"])
         self.assertFalse(p["youtube_uploaded"])
@@ -82,12 +81,6 @@ class FilmPlanTests(unittest.TestCase):
             path.write_text("{}", encoding="utf-8")
             with self.assertRaises(FilmPlanError):
                 load_plan(Path(temp), "original-film")
-
-    def test_attempt_estimate_marks_cost_unknown(self):
-        a = estimate_attempts(plan(), attempts_per_shot=3)
-        self.assertEqual(a["estimated_generation_attempts"], 9)
-        self.assertIsNone(a["estimated_money"])
-        self.assertFalse(a["quality_verified"])
 
 
 if __name__ == "__main__":

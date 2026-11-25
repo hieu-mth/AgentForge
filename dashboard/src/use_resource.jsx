@@ -1,6 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {api} from './api.js';
-import {requestError} from './api.js';
+import {api, requestError} from './api.js';
 import {Alert, Button, Spin} from 'antd';
 
 // Guard existing multi-resource screens without remounting their forms.

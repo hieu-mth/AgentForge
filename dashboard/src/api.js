@@ -5,7 +5,6 @@ export const onAuthExpired = listener => {
   authListeners.add(listener);
   return () => authListeners.delete(listener);
 };
-export const sessionRevision = () => authRevision;
 export function requestError(error) {
   if (error?.message === 'MODEL_HUB_REVISION_CONFLICT')
     return 'Cấu hình đã thay đổi ở phiên khác. Hãy hủy bản nháp và làm mới trang trước khi lưu lại.';

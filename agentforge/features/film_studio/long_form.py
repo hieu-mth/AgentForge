@@ -147,17 +147,6 @@ def verify_plan(document: dict) -> dict:
     return document
 
 
-def estimate_attempts(plan: dict, *, attempts_per_shot: int = 2) -> dict:
-    """An effort estimate, not a cost/performance promise."""
-    verify_plan(plan)
-    attempts = _int(attempts_per_shot, "attempts_per_shot", 1, 20)
-    return {"shots": len(plan["shots"]),
-            "estimated_generation_attempts": len(plan["shots"]) * attempts,
-            "total_output_seconds": plan["runtime_seconds"],
-            "estimated_money": None, "estimated_gpu_hours": None,
-            "quality_verified": False}
-
-
 def save_plan(root: Path, slug: str, plan: dict) -> Path:
     """Exclusive local save. Never overwrite an existing production or plan."""
     verify_plan(plan)

@@ -25,7 +25,6 @@ from uuid import uuid4
 from agentforge.paths import WORKSPACE_DIR
 
 REPORT_FORMAT = "agentforge.owner-runtime-evidence.v1"
-SHA = re.compile(r"[0-9a-f]{64}\Z")
 LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 MAX_TAGS_BYTES = 262_144
 MAX_INFERENCE_BYTES = 65_536
