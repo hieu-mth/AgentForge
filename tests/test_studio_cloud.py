@@ -88,8 +88,6 @@ class CloudTextTests(unittest.TestCase):
                   patch.object(draft, "_dispatch"),
                   patch.object(model_hub, "local_inference_slot", side_effect=AssertionError("local inference")),
                   patch.object(draft.draft_resources, "snapshot", side_effect=AssertionError("local resource check")),
-                  patch.object(draft.studio_runtime, "image_adapter", side_effect=AssertionError("image adapter")),
-                  patch.object(draft.studio_runtime, "motion_adapter", side_effect=AssertionError("motion adapter")),
                   patch.object(draft.characters, "list_characters", return_value={"characters": []}),
                   patch.dict(os.environ, {"TEST_API_BASE": "https://example.test/v1", "TEST_API_KEY": "fixture-key"}),
                   patch("http.client.HTTPSConnection") as connection):
@@ -127,7 +125,9 @@ class CloudTextTests(unittest.TestCase):
                         raise PermissionError("OPERATIONS_PAUSED: Owner must resume before new dispatch")
 
                 response.read.side_effect = read
-                with patch.object(draft.ops_control, "require_active", side_effect=require_active):
+                with (patch.object(draft.ops_control, "require_active", side_effect=require_active),
+                      patch.object(draft.studio_runtime, "image_adapter", side_effect=AssertionError("image adapter")),
+                      patch.object(draft.studio_runtime, "motion_adapter", side_effect=AssertionError("motion adapter"))):
                     draft._work(job, nullcontext())
                 saved = draft._read(job["id"])
                 if pause:
