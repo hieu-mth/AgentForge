@@ -1518,6 +1518,8 @@ def _storyboard_action(job, action, data):
         return job
     if job["status"] not in {"STORYBOARD_REVIEW", "REVIEW", "FAILED"}:
         raise ValueError("Storyboard chưa thể chỉnh ở trạng thái này.")
+    if action == "storyboard-regenerate" and (job["status"] != "REVIEW" or not job.get("video_sha")):
+        raise ValueError("Chỉ tạo lại cảnh từ video đã dựng và đang chờ duyệt.")
     if (job.get("duration_plan", {}).get("content_scene_count") and action in
             {"storyboard-duration", "storyboard-add", "storyboard-remove", "storyboard-move"}):
         raise ValueError("Storyboard giữ thứ tự và thời lượng của các cảnh gốc. Hãy tạo bản nháp mới để đổi cấu trúc.")
@@ -1548,6 +1550,19 @@ def _storyboard_action(job, action, data):
             return job
         job["brief"]["seconds"] = seconds
         job["brief"]["duration_source"] = "storyboard_edit"
+    elif action == "storyboard-regenerate":
+        scene = scenes[index]
+        scope = data.get("scope")
+        moving = job["brief"].get("mode") == "motion"
+        if scope not in ("image", "motion") or (scope == "motion" and not moving):
+            raise ValueError("Phạm vi tạo lại cảnh không hợp lệ.")
+        if not scene.get("asset") or (moving and not scene.get("motion_sha")):
+            raise ValueError("Cảnh chưa có tài sản hoàn chỉnh để tạo phiên bản mới.")
+        # Keep historical files; a replaced image also invalidates its dependent clip.
+        if scope == "image":
+            scene.update(image_key=uuid4().hex, asset=None, job_id=None, attempts=0)
+        scene.pop("motion_job", None)
+        scene.pop("motion_sha", None)
     elif action == "storyboard-remove":
         _storyboard_layout(job, len(scenes)-1)
         scenes.pop(index)
@@ -1575,9 +1590,13 @@ def _storyboard_action(job, action, data):
             with slot, _measured(job, "storyboard", bindings.get("image.generate")):
                 data = _ask(bindings["film.storyboard"], "Rewrite only this shot. Preserve the cast and its role "
                             "in the original scene when a script excerpt is provided. "
+                            "Use neighboring shots for character, setting, action and prop continuity. "
+                            "Respect intentional cuts; do not rewrite neighboring shots. "
                             "Return description, English image_prompt and motion_prompt.",
                             {"scene": shot,
-                             "feedback": _text(data["feedback"], 350), "continuity": original["continuity"]},
+                             "feedback": _text(data["feedback"], 350), "continuity": original["continuity"],
+                             "previous_shot": original["scenes"][index-1] if index else None,
+                             "next_shot": original["scenes"][index+1] if index+1 < len(scenes) else None},
                             _object(description=STRING, image_prompt=STRING, motion_prompt=STRING),
                             bindings.get("image.generate"), job=job)
         prompts = {key: _text(data[key], limit) for key, limit in

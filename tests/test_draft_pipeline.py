@@ -438,6 +438,40 @@ class DraftTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 draft.render.find_media_tool("python")
 
+    def test_regenerate_completed_still_shot_preserves_other_checkpoint_and_history(self):
+        board = self.board()
+        board["scenes"] = [dict(scene, asset=str(i)*64, job_id=str(i)*32, attempts=1)
+                           for i, scene in enumerate(board["scenes"], 1)]
+        job = {"id": self.ident, "brief": self.brief.copy(), "board": board, "cast": {},
+               "storyboard_version": 1, "video_sha": None}
+        draft._stamp_storyboard(job)
+        old_sha = job["storyboard_sha"]
+        job.update(status="REVIEW", video_sha="f"*64, approved_storyboard_sha=old_sha)
+        draft._save(job)
+        other = dict(job["board"]["scenes"][1])
+        request = {"sha256": old_sha, "index": 0, "scope": "image"}
+        with patch.object(draft_motion, "require_resolved_ledger"):
+            with self.assertRaisesRegex(ValueError, "Phạm vi"):
+                draft.act(self.ident, "storyboard-regenerate", dict(request, scope="motion"))
+            result = draft.act(self.ident, "storyboard-regenerate", request)
+            first, second = result["board"]["scenes"]
+            self.assertIsNone(first["asset"])
+            self.assertIsNone(first["job_id"])
+            self.assertEqual(first["attempts"], 0)
+            self.assertEqual(second, other)
+            self.assertEqual(result["storyboard_version"], 2)
+            self.assertEqual(result["status"], "STORYBOARD_REVIEW")
+            self.assertNotIn("approved_storyboard_sha", result)
+            self.assertIsNone(result["video_sha"])
+            self.assertEqual(result["storyboard_history"][0]["video_sha"], "f"*64)
+            self.assertEqual(result["storyboard_history"][0]["checkpoints"][0]["asset"], "1"*64)
+            self.assertEqual(result["storyboard_sha"], draft.draft_timeline.digest(result))
+            with self.assertRaisesRegex(ValueError, "Storyboard đã thay đổi"):
+                draft.act(self.ident, "storyboard-regenerate", request)
+            with self.assertRaisesRegex(ValueError, "Chỉ tạo lại cảnh"):
+                draft.act(self.ident, "storyboard-regenerate",
+                          dict(request, sha256=result["storyboard_sha"]))
+
     def test_finished_drafts_are_read_only_for_scene_edits(self):
         for status in ("APPROVED", "REJECTED", "CANCELLED"):
             with self.subTest(status=status):

@@ -79,6 +79,10 @@ Start AgentForge with --allow-external-tools and log in as Owner. In Studio vide
 
 Limits: hard cuts, metadata-only continuity, SRT sidecar, optional local TTS, no auto voice alignment, no automated continuity certification in manual assembly.
 
+## Tạo lại một cảnh trong Studio
+
+Khi video đang chờ duyệt, mở storyboard và chọn cảnh cần tạo lại. Có thể yêu cầu tạo lại ảnh (và clip phụ thuộc nếu là phim chuyển động) hoặc chỉ tạo lại chuyển động từ ảnh đã lưu. Studio tạo phiên bản storyboard mới, giữ checkpoint các cảnh khác và yêu cầu Owner duyệt lại trước khi dispatch. Phiên bản cũ không bị ghi đè. AI viết lại prompt được cung cấp ngữ cảnh cảnh trước/sau nhưng không tự thay đổi chúng. Đây là sửa có giám sát, chưa phải QA thị giác tự động; Owner cần kiểm tra lại tính liên tục sau khi dựng.
+
 ## Kiểm tra chất lượng và so sánh video
 
 On an executable rollback, leave drafts using the creative plan paused until the compatible build is restored. Older builds do not understand this layout or its approval digest. Registry rollback to the exact pinned profile remains supported by the existing dispatch guard.
