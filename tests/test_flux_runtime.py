@@ -232,17 +232,23 @@ class FluxRuntimeTests(unittest.TestCase):
 
             with (patch.object(flux_runtime, "WORKSPACE_DIR", root / "workspace"),
                   patch.object(flux_runtime, "readiness", return_value="READY"),
+                  patch.object(flux_runtime.comfy_service, "require_idle_queue") as alternate_queue,
                   patch.object(flux_runtime, "_json", side_effect=provider),
                   patch.object(flux_runtime, "_collect", side_effect=flux_runtime.JobError("OUTPUT_MISSING")),
                   ThreadPoolExecutor(max_workers=2) as pool):
                 future = pool.submit(flux_runtime.generate, "first", automated=True, hub_db=hub, db_path=db)
                 try:
-                    self.assertTrue(dispatched.wait(3))
+                    if not dispatched.wait(3):
+                        if future.done():
+                            future.result()
+                        self.fail("First visual job did not reach provider dispatch")
                     with self.assertRaisesRegex(PermissionError, "outstanding"):
                         flux_runtime.generate("second", automated=True, hub_db=hub, db_path=db)
                 finally:
                     release.set()
                 result = future.result(5)
+                self.assertEqual(alternate_queue.call_count, 2)
+                alternate_queue.assert_called_with(8188, allow_offline=True)
             self.assertEqual(calls, ["/queue", "/prompt"])
             self.assertEqual(result["status"], "OUTPUT_MISSING")
             self.assertEqual(visual_jobs.report(db_path=db)["jobs"][0]["prompt"], "first")
