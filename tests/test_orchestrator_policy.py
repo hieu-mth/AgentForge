@@ -46,7 +46,7 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual(config["status"], "CONFIG_ONLY")
         self.assertEqual(config["policy"]["mode"], "SUPERVISED")
         self.assertEqual(config["policy"], policy.defaults())
-        self.assertEqual(len(config["capabilities"]), 9)
+        self.assertEqual(len(config["capabilities"]), 11)
         self.assertFalse(config["owner_override"])
 
     def test_draft_routes_use_configured_motion_profile_by_registry_id(self):

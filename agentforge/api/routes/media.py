@@ -37,6 +37,8 @@ def handle(server, path, request, session=None):
         if action == "visual-review":
             required = {"sha256", "video_sha", "index", "allow_cloud"}
         optional = {"caption", "scene_notes"} if action in {"storyboard-edit", "storyboard-add"} else set()
+        if action == "storyboard-audio-direct":
+            optional = {"generate_audio"}
         if action == "resume":
             optional = {"retry_motion_job"}
         if not required <= request.keys() <= required | optional:

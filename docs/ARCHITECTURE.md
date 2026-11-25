@@ -9,7 +9,7 @@ Tách ba trách nhiệm:
 - Execution: lập kế hoạch kỹ thuật từ ý đồ đã kiểm tra và khả năng adapter thật; khóa đầu vào, route, tài nguyên, approval và receipt. Nếu không khả thi thì báo rõ, không tự đổi model hoặc thay đổi nội dung.
 - Quality/post-production: kiểm tra kỹ thuật, chất lượng trực quan và duyệt Owner; FFmpeg xử lý hậu kỳ. CI kỹ thuật không xác nhận chất lượng điện ảnh.
 
-Pipeline chạy được hiện tại vẫn là tạo ảnh local rồi tạo chuyển động từ ảnh (hoặc ghép ảnh tĩnh). Không công bố Reference-to-Video, Text-to-Video, cloud media inference hoặc visual QA tự động là tính năng hiện có. Vision QA có luồng thử nghiệm có giám sát riêng: Owner gán tuyến vision.qa và yêu cầu đánh giá frame mẫu từ MP4 đã xác minh; không tự duyệt hoặc sửa video. Chỉ thêm adapter, route và UI cho phương pháp đã qua benchmark. Không dùng một model cụ thể làm hợp đồng chung của Studio.
+Pipeline hình ảnh hiện tại tạo ảnh local rồi chuyển động từ ảnh (hoặc ghép ảnh tĩnh). Khi AI chọn CONTINUE và Owner duyệt, adapter LTX dùng frame cuối đã xác minh của clip trước. Không công bố Reference-to-Video, Text-to-Video, cloud tạo ảnh/video hoặc visual QA tự động là tính năng hiện có. Audio Director có cue timeline, TTS local/cloud và tùy chọn sinh nhạc/hiệu ứng cloud; FFmpeg phối âm local. Vision QA có luồng thử nghiệm có giám sát riêng: Owner gán tuyến vision.qa và yêu cầu đánh giá frame mẫu từ MP4 đã xác minh; không tự duyệt hoặc sửa video. Chỉ thêm adapter, route và UI cho phương pháp đã qua benchmark. Không dùng một model cụ thể làm hợp đồng chung của Studio.
 
 ## Hợp đồng tài sản nhân vật
 
@@ -74,7 +74,7 @@ Studio có thể lập storyboard từ nội dung Owner, tạo ảnh và motion 
 **Model Hub dùng SQLite, không có model mặc định trong Git.** Owner đăng ký, chỉnh sửa và xóa profile từ **Cài đặt → Model AI**. Một máy mới có **0 model đã đăng ký**. Ollama hoặc ComfyUI được phát hiện bởi trang Môi trường không đồng nghĩa được tự thêm vào Model Hub.
 
 - Nguồn dữ liệu duy nhất của model profile, các model được gán cho tác vụ và chính sách điều phối: `data/company/model_hub.sqlite3` (ignored), revision/CAS, rollback transaction và Owner confirmation.
-- Danh mục capability (`general.text`, `film.storyboard`, `film.motion`, `image.generate`, `vision.qa`, `ops.monitor`) được khai báo từ `agentforge/ai/orchestrator_policy.py` và `model_hub.route_catalog()` — chỉ metadata thuộc source, **không chứa model ID mặc định**.
+- Danh mục capability (`general.text`, `film.storyboard`, `film.motion`, `image.generate`, `vision.qa`, `film.tts`, `film.sound`, `film.music`, `ops.monitor`) được khai báo từ `agentforge/ai/orchestrator_policy.py` và `model_hub.route_catalog()` — chỉ metadata thuộc source, **không chứa model ID mặc định**.
 - Lưu profile và gán route **không chạy model**. Film/image routes `CONFIG_ONLY`; `ops.monitor` deterministic. Studio lấy route đã phân công từ snapshot Model Hub và kiểm tra fingerprint trước dispatch; trạng thái CONFIG_ONLY không tự cấp quyền thực thi.
 - Owner có thể xóa profile chưa được phân công cho năng lực hiện hành. Muốn xóa profile đang được phân công phải bỏ gán trước. Xóa profile không xóa weights, DB khác hay workspace.
 - Cơ sở dữ liệu đã tồn tại được giữ nguyên, không tự sửa hoặc migrate khi GET. Overlay/profile Owner cũ tiếp tục được đọc. Các ID route lịch sử ngoài catalog chỉ lưu trữ, không xuất hiện hay thực thi. Owner đăng ký hồ sơ cần dùng.
@@ -89,7 +89,7 @@ Trong **Cài đặt → Model AI**, Owner có thể xem lại và xác thực c�
 
 `GET /api/model-hub` trả `capability_contracts` cho từng profile, gồm adapter tương thích, mã lý do và giới hạn đầu ra. Để kiểm tra runtime, phiên Owner gửi `POST /api/model-hub/readiness` với CSRF và payload gồm `ack: "CHECK_CAPABILITY_READINESS"`, `profile_id`, `capability` và `expected_revision` lấy từ catalog.
 
-`route_configurable` phản ánh chính sách gán route; `runtime_compatible` phản ánh adapter thực thi, `local_runtime_compatible` chỉ phản ánh adapter local. Hồ sơ OpenAI-compatible và Anthropic-compatible hỗ trợ text inference qua HTTPS. Metadata kiểm tra endpoint model, không xác nhận inference; probe cố định cần Owner xác nhận riêng.
+`route_configurable` phản ánh chính sách gán route; `runtime_compatible` phản ánh adapter thực thi, `local_runtime_compatible` chỉ phản ánh adapter local. Hồ sơ OpenAI-compatible và Anthropic-compatible hỗ trợ text/vision qua HTTPS. OpenAI-compatible speech và ElevenLabs-compatible sound/music có tuyến riêng và không tham gia text planning; chỉ gọi sau khi Owner chọn kế hoạch âm thanh và duyệt SHA. Metadata không xác nhận inference; đối với sound/music readiness hiện chỉ là cấu hình chưa probe.
 
 Preflight trả `METADATA_COMPATIBLE`, `UNAVAILABLE`, `UNSUPPORTED`, `MISSING_DEPENDENCY` hoặc `NOT_CHECKED`, cùng mã `reason` cụ thể. `runtime_available` cho biết runtime có trả được metadata cần thiết, còn `endpoint_metadata_compatible` cho biết metadata đó phù hợp với model/workflow. Giá trị `null` là chưa xác định. Kết quả luôn có `inference_verified: false` và `endpoint_ownership: "NOT_CHECKED"`. ComfyUI mở bên ngoài có thể trả metadata tương thích. LTX vẫn cần cấu hình thư mục Portable, công cụ media và weights local theo chính sách dispatch hiện hành. SHA weights và tài nguyên khả dụng vẫn do runtime kiểm tra khi thực thi.
 

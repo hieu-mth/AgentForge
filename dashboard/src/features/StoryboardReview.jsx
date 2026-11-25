@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {Alert,Button,Image,Input,Modal,Segmented,Select,Space,Tag} from 'antd';
+import {Alert,Button,Checkbox,Image,Input,Modal,Segmented,Select,Space,Tag} from 'antd';
 import {NumberField} from '../components/NumberField.jsx';
 import {ScriptContent} from './ScriptContent.jsx';
 import {draftTitle} from './scriptPresentation.js';
@@ -14,6 +14,7 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
   const [engine,setEngine]=useState(job.audio_plan?.engine??'none');
   const [voice,setVoice]=useState(job.audio_plan?.voice_name??'');
   const [voices,setVoices]=useState(job.audio_plan?.voices??{});
+  const [generateAudio,setGenerateAudio]=useState(Boolean(job.audio_plan?.generated_profiles));
   const scenes=job.board.scenes;
   const index=Math.max(0,scenes.findIndex((s,i)=>(s.shot_id??i)===shot));
   const scene=scenes[index];
@@ -66,11 +67,11 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
       {job.audio_plan?.format==='directed.v1'&&<div className="storyboard-context">
         {job.audio_plan.cues.map((cue,i)=><p key={i}>{cue.kind} · Cảnh {scenes.findIndex(s=>s.shot_id===cue.shot_id)+1}
           {' · frame '+cue.start_frame+'–'+cue.end_frame+' · '+cue.gain_db+' dB · '+(cue.text||cue.asset)}
-          {cue.voice?' · '+cue.voice:''}</p>)}
+          {cue.voice?' · '+cue.voice:''}{cue.generate_route?' · sinh cloud':''}</p>)}
         {job.audio_plan.unresolved.map((item,i)=><Alert key={i} type="warning" showIcon message={item.detail}/>)}
       </div>}
       {onAudio&&<div className="storyboard-context">
-        <p className="env-muted">AI lập lời thoại, thuyết minh, nhạc, môi trường và hiệu ứng từ thư viện WAV local. Chỉ thực thi sau khi duyệt. Không tự tải model hoặc tài sản.</p>
+        <p className="env-muted">AI lập lời thoại, thuyết minh, nhạc, môi trường và hiệu ứng. Ưu tiên WAV trong workspace/audio-library. Có thể cho phép sinh cloud riêng; chỉ chạy sau duyệt. Không tự tải model.</p>
         <Space wrap>
           <Select aria-label="Nguồn lời thoại" value={engine} onChange={setEngine} options={[
             {value:'none',label:'Không lời thoại'},{value:'windows',label:'Windows SAPI'},
@@ -81,8 +82,9 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
           <Button disabled={busy||engine==='cloud'||engine==='piper'&&!voice}
             onClick={()=>onAudio(engine,engine==='none'?'':voice)}>{engine==='none'?'Tắt âm thanh':'Chỉ đọc phụ đề'}</Button>
           {onAudioDirect&&<Button type="primary" disabled={busy||engine==='none'||['cloud','piper'].includes(engine)&&!voice}
-            onClick={()=>onAudioDirect(engine,voice,voices)}>AI lập kế hoạch âm thanh</Button>}
+            onClick={()=>onAudioDirect(engine,voice,voices,generateAudio)}>AI lập kế hoạch âm thanh</Button>}
         </Space>
+        {onAudioDirect&&engine!=='none'&&<p><Checkbox checked={generateAudio} onChange={event=>setGenerateAudio(event.target.checked)}>Cho phép AI sinh hiệu ứng/nhạc cloud khi thiếu WAV phù hợp</Checkbox></p>}
         {engine!=='none'&&Object.entries(job.cast??{}).map(([id,character])=><p key={id}>
           <label>{character.name} · voice riêng <Input value={voices[id]??''} maxLength={100}
             onChange={e=>setVoices(old=>({...old,[id]:e.target.value}))} placeholder="Để trống dùng voice mặc định"/></label>

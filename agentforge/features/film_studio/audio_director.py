@@ -9,7 +9,7 @@ from pathlib import Path
 
 from agentforge import ops_control
 from agentforge.ai import model_hub
-from agentforge.features.film_studio import studio_speech
+from agentforge.features.film_studio import studio_speech, studio_audio_generation
 from agentforge.features.media import render
 from agentforge.paths import WORKSPACE_DIR, ensure_local_root
 
@@ -95,18 +95,34 @@ def _cue(row, scene, config, assets):
             raise ValueError("Invalid speech cue or character")
         result["voice"] = config["voices"].get(speaker, config["voice_name"])
     else:
-        if speaker or text or asset not in assets:
-            raise ValueError("Audio cue must use an existing local library WAV")
-        result["asset_sha256"] = assets[asset]["sha256"]
+        route = studio_audio_generation.ROUTES[kind]
+        if not speaker and not asset and 1 <= len(text.strip()) <= 180 and route in config.get("generated_profiles", {}):
+            result["generate_route"] = route
+        elif not speaker and not text and asset in assets:
+            result["asset_sha256"] = assets[asset]["sha256"]
+        else:
+            raise ValueError("Audio cue requires local WAV or explicitly authorized generation")
     return result
 
 
-def propose(job, engine, voice_name, voices, infer):
+def propose(job, engine, voice_name, voices, infer, *, generate=False):
     config = _config(engine, voice_name, voices, job.get("cast", {}))
     if engine == "cloud":
         _, profile, _ = model_hub.speech_binding()
         config["cloud_profile_sha"] = _profile_hash(profile)
         config["cloud_model_id"] = profile["id"]
+    if type(generate) is not bool:
+        raise ValueError("Explicit audio generation option must be boolean")
+    if generate:
+        profiles = {}
+        for route in ("film.sound", "film.music"):
+            binding = model_hub.audio_generation_binding(route, optional=True)
+            if binding:
+                _, profile, _ = binding
+                profiles[route] = {"id": profile["id"], "sha256": _profile_hash(profile)}
+        if not profiles:
+            raise ValueError("Hãy phân công ít nhất một model sinh âm thanh trong Model Hub.")
+        config["generated_profiles"] = profiles
     assets = library()
     scenes = job["board"]["scenes"]
     cues, unresolved = [], []
@@ -131,6 +147,8 @@ def propose(job, engine, voice_name, voices, infer):
         from agentforge.features.film_studio import draft_pipeline as draft
         data = {"fps": draft._job_fps(job), "cast": job.get("cast", {}),
                 "local_library": {name: {"seconds": item["seconds"]} for name, item in assets.items()},
+                "generatable_kinds": [kind for kind, route in studio_audio_generation.ROUTES.items()
+                                     if route in config.get("generated_profiles", {})],
                 "shots": [{**{key: scene[key] for key in ("shot_id", "description", "audio", "caption",
                           "character_ids", "frames", "motion_prompt", "continuity_plan") if key in scene},
                           "source": job["brief"]["idea"][slice(*scene["script_range"])][:800]
@@ -139,8 +157,9 @@ def propose(job, engine, voice_name, voices, infer):
             "Direct sound for these existing shots; preserve authored dialogue and events. Subtitles are not automatically "
             "speech. Use dialogue for spoken words, narration only when helpful, or silence. Use narrator, unregistered, "
             "or a registered character ID present in the shot as speaker for speech; asset must be empty. "
-            "For sfx/ambience/music choose an exact listed WAV asset or omit it and describe missing sound in unresolved; "
-            "do not invent a filename. Empty speaker and text for non-speech. Frame positions are relative to each shot; "
+            "For sfx/ambience/music prefer an exact listed WAV asset (empty text). If none fits and kind is in generatable_kinds, "
+            "use an English sound generation prompt in text and empty asset; otherwise omit and describe missing sound in unresolved. "
+            "Never invent a filename. Empty speaker for non-speech. Frame positions are relative to each shot; "
             "end_frame is exclusive. Keep speech very short, allow natural reading time, use lower gains for background. "
             "Maximum three cues per shot; prefer purposeful sound. Return every shot in order, including silent shots. "
             "Do not add dialogue that contradicts the original story.", data, schema)
@@ -167,9 +186,20 @@ def validate(job, audio):
     keys = {"format", "engine", "voice_name", "voices", "cues", "unresolved"}
     if audio.get("engine") == "cloud":
         keys |= {"cloud_profile_sha", "cloud_model_id"}
+    if "generated_profiles" in audio:
+        keys.add("generated_profiles")
     if set(audio) != keys:
         raise ValueError("Invalid directed audio plan fields")
     config = _config(audio["engine"], audio["voice_name"], audio["voices"], job.get("cast", {}))
+    if "generated_profiles" in audio:
+        profiles = audio["generated_profiles"]
+        if not isinstance(profiles, dict) or not profiles or not profiles.keys() <= {"film.sound", "film.music"}:
+            raise ValueError("Invalid generated audio profile bindings")
+        for route, pin in profiles.items():
+            _, profile, _ = model_hub.audio_generation_binding(route)
+            if pin != {"id": profile["id"], "sha256": _profile_hash(profile)}:
+                raise ValueError("Generated audio model changed; rebuild the audio plan")
+        config["generated_profiles"] = profiles
     scenes = {scene["shot_id"]: scene for scene in job["board"]["scenes"]}
     cues = audio["cues"]
     if not isinstance(cues, list) or len(cues) > MAX_CUES:
@@ -228,6 +258,30 @@ def _speech(job, audio, cue, folder):
     return wav
 
 
+def _generate(job, audio, cue, folder, seconds):
+    from agentforge.features.film_studio import draft_pipeline as draft
+    route = cue["generate_route"]
+    _, profile, limit = model_hub.audio_generation_binding(route)
+    if audio["generated_profiles"][route] != {"id": profile["id"], "sha256": _profile_hash(profile)}:
+        raise ValueError("Generated audio model changed; rebuild the audio plan")
+    limit = min(limit, job.get("cloud_call_limit", limit))
+    used = job.get("cloud_calls", 0)
+    if used >= limit:
+        raise ValueError("Đã hết ngân sách lượt gọi AI cloud của production.")
+    job.update(cloud_calls=used+1, cloud_call_limit=limit)
+    draft._save(job)
+    raw = studio_audio_generation.generate(profile, cue["kind"], cue["text"], seconds)
+    mp3 = folder / "generated.mp3"
+    mp3.write_bytes(raw)
+    wav = folder / "generated.wav"
+    render._run_process([render._ffmpeg(), "-nostdin", "-n", "-v", "error", "-xerror",
+                         "-f", "mp3", "-i", str(mp3), "-map", "0:a:0", "-t", "60",
+                         "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "1", str(wav)],
+                        cwd=folder, timeout=60)
+    return wav, {"profile_id": profile["id"], "model": profile["model"],
+                 "response_sha256": hashlib.sha256(raw).hexdigest()}
+
+
 @contextmanager
 def prepare(job, folder, fps):
     from agentforge.features.film_studio import draft_audio
@@ -251,10 +305,14 @@ def prepare(job, folder, fps):
             start = round((absolute+cue["start_frame"])*rate/fps)
             end = round((absolute+cue["end_frame"])*rate/fps)
             samples = end-start
+            generated = None
             if cue["kind"] in SPEECH:
                 wav = _speech(job, audio, cue, path)
                 if draft_audio._pcm_duration(wav) > samples/rate:
                     raise ValueError(f"Lời thoại cue {i+1} dài hơn timeline; hãy lập lại kế hoạch âm thanh.")
+            elif cue.get("generate_route"):
+                wav, generated = _generate(job, audio, cue, path, samples/rate)
+                draft_audio._pcm_duration(wav)
             else:
                 wav = path / "asset.wav"
                 with _asset_path(cue["asset"]).open("rb") as source, wav.open("xb") as target:
@@ -265,8 +323,8 @@ def prepare(job, folder, fps):
                 if _hash(wav) != cue["asset_sha256"]:
                     raise ValueError("Local audio asset changed during render")
                 draft_audio._pcm_duration(wav)
-                if cue["kind"] in {"ambience", "music"}:
-                    args += ["-stream_loop", "-1"]
+            if cue["kind"] in {"ambience", "music"}:
+                args += ["-stream_loop", "-1"]
             args += ["-i", str(wav)]
             filters.append(f"[{i}:a]aresample={rate},aformat=sample_fmts=fltp:channel_layouts=mono,"
                            f"atrim=end_sample={samples},asetpts=PTS-STARTPTS,"
@@ -275,7 +333,8 @@ def prepare(job, folder, fps):
             streams.append(f"[a{i}]")
             receipts.append({"shot_id": cue["shot_id"], "kind": cue["kind"],
                              "start_sample": start, "end_sample": end, "source_sha256": _hash(wav),
-                             "gain_db": cue["gain_db"]})
+                             "gain_db": cue["gain_db"],
+                             **({"generated": generated} if generated else {})})
         filters.append("".join(streams) + f"amix=inputs={len(streams)}:duration=first:normalize=0,"
                        f"alimiter=limit=0.95:level=false:latency=true,apad=whole_len={total},"
                        f"atrim=end_sample={total}[out]")

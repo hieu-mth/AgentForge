@@ -389,9 +389,9 @@ export function StudioDrafts({mutate,onCharacters}) {
         title:'AI lập lại liên tục chuyển động?',content:'AI sẽ chọn kiểu nối từng cảnh. Các cảnh thay đổi và cảnh phụ thuộc cần tạo lại; giữ phiên bản cũ. Model cloud có thể tính phí theo ngân sách production.',
         okText:'Lập kế hoạch',cancelText:'Hủy',onOk:()=>storyboard(reviewing,'continuity'),
       }):null}
-      onAudioDirect={canEdit?(engine,voice_name,voices)=>modal.confirm({
-        title:'AI lập kế hoạch âm thanh?',content:'Model storyboard lập các cue. Nếu chọn speech cloud, khi sản xuất lời thoại sẽ gửi đến endpoint đã gán và tính vào ngân sách production. Nhạc/hiệu ứng chỉ dùng WAV local đã có.',
-        okText:'Lập kế hoạch',cancelText:'Hủy',onOk:()=>storyboard(reviewing,'audio-direct',{engine,voice_name,voices}),
+      onAudioDirect={canEdit?(engine,voice_name,voices,generate_audio)=>modal.confirm({
+        title:'AI lập kế hoạch âm thanh?',content:'Model storyboard lập các cue. Nếu chọn speech cloud, khi sản xuất lời thoại sẽ gửi đến endpoint đã gán và tính vào ngân sách production. Nhạc/hiệu ứng ưu tiên WAV local; nếu bật sinh cloud, prompt âm thanh sẽ được gửi đến model đã gán và có thể tính phí.',
+        okText:'Lập kế hoạch',cancelText:'Hủy',onOk:()=>storyboard(reviewing,'audio-direct',{engine,voice_name,voices,generate_audio}),
       }):null}
       onAudio={canEdit?(engine,voice_name)=>storyboard(reviewing,'audio',{engine,voice_name}):null}
       onMove={canChangeLayout?(index,target)=>storyboard(reviewing,'move',{index,target}):null}

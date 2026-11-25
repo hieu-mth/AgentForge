@@ -181,7 +181,7 @@ class ModelHubTests(unittest.TestCase):
         routes = model_hub.route_catalog()
         self.assertEqual(set(routes), {
             "general.text", "film.storyboard", "film.motion",
-            "image.generate", "vision.qa", "film.tts", "ops.monitor"})
+            "image.generate", "vision.qa", "film.tts", "film.sound", "film.music", "ops.monitor"})
         self.assertTrue(all("worker" not in item and
                             "default_model" not in item for item in routes.values()))
         self.assertTrue(all(item["execution"] in {"config_only", "rules"}
@@ -202,7 +202,7 @@ class ModelHubTests(unittest.TestCase):
             self.assertFalse(result["cloud_fallback"])
 
     def test_adapter_catalog_matches_persisted_profile_validation(self):
-        expected = {"ollama": "local", "comfyui": "local", "anthropic": "cloud", "openai": "cloud"}
+        expected = {"ollama": "local", "comfyui": "local", "anthropic": "cloud", "openai": "cloud", "elevenlabs": "cloud"}
         with tempfile.TemporaryDirectory() as folder:
             db = Path(folder) / "hub.sqlite3"
             catalog = model_hub.catalog(db_path=db)["adapters"]
@@ -217,7 +217,7 @@ class ModelHubTests(unittest.TestCase):
                                      db_path=db, profile=profile)
                     with self.assertRaises(model_hub.ModelConfigError):
                         model_hub.validate_profile({**profile, "api_key": "secret"})
-            self.assertEqual(len(model_hub.catalog(db_path=db)["profiles"]), 4)
+            self.assertEqual(len(model_hub.catalog(db_path=db)["profiles"]), 5)
             with self.assertRaises(model_hub.ModelConfigError):
                 model_hub.validate_profile({**profile, "api_key_env": "Bearer actual-key"})
 
