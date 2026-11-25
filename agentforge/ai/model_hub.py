@@ -1,4 +1,4 @@
-"""Versioned, local-only Owner Model Hub; no model invocation at configuration time.
+"""Versioned Owner Model Hub; no model invocation at configuration time.
 
 Owner-added model profiles and route assignments have one source of truth:
 versioned SQLite. The capability catalog stays in reviewed Python source.
@@ -119,10 +119,19 @@ ADAPTERS = {
     "anthropic": {
         "label": "Anthropic-compatible", "connection": "cloud", "model_label": "Model ID",
         "model_example": "model-id-da-cap",
-        "description": "Lưu cấu hình endpoint tương thích Anthropic. Dashboard chưa hỗ trợ chạy thử cloud.",
+        "description": "API HTTPS tương thích Anthropic Messages; nhập API base URL và model ID.",
         "defaults": {"base_url": ""},
         "legacy_defaults": {"base_url_env": "ANTHROPIC_BASE_URL",
                             "api_key_env": "ANTHROPIC_AUTH_TOKEN"}, "local_probe": False,
+        "cloud_probe": True,
+    },
+    "openai": {
+        "label": "OpenAI-compatible", "connection": "cloud", "model_label": "Model ID",
+        "model_example": "model-id-da-cap",
+        "description": "API HTTPS tương thích Chat Completions; nhập API base URL và model ID.",
+        "defaults": {"base_url": ""},
+        "legacy_defaults": {"base_url_env": "OPENAI_BASE_URL", "api_key_env": "OPENAI_API_KEY"},
+        "local_probe": False, "cloud_probe": True,
     },
 }
 
@@ -228,7 +237,7 @@ def validate_profile(value, *, profile_id=None, preview=False):
 def _save_profile(value, api_key, profiles):
     if not isinstance(value, dict) or "api_key_protected" in value:
         raise ModelConfigError("Invalid model profile")
-    if value.get("provider") != "anthropic" or "base_url" not in value:
+    if value.get("provider") not in {"anthropic", "openai"} or "base_url" not in value:
         if api_key is not None:
             raise ModelConfigError("API key chỉ dùng với endpoint Cloud nhập trực tiếp")
         return validate_profile(value)
@@ -348,7 +357,7 @@ def effective_models(*, db_path=None):
     state = _read_state(db_path=db_path)[1]
     return {key: {k: v for k, v in value.items() if k != "id"}
             for key, value in _profiles(state=state).items()
-            if value["provider"] in {"ollama", "anthropic"}}
+            if value["provider"] in {"ollama", "anthropic", "openai"}}
 
 
 def _extra_capabilities(routes):
@@ -394,12 +403,13 @@ def catalog(*, db_path=None):
 def capability_contract(capability, profile):
     """Describe adapter compatibility independently of runtime observations."""
     kind = orchestrator_policy.KINDS.get(capability)
-    adapter = orchestrator_policy.local_adapter(kind, profile)
+    adapter = orchestrator_policy.runtime_adapter(kind, profile)
+    local = ADAPTERS[profile["provider"]]["connection"] == "local"
     output = None
     adapter_id = None
     workflow_sha = None
     if adapter and kind == "text":
-        adapter_id = "ollama"
+        adapter_id = profile["provider"]
         output = {"format": "structured_json"}
     elif adapter and kind == "image":
         adapter_id = "comfyui_flux_gguf"
@@ -418,14 +428,13 @@ def capability_contract(capability, profile):
     reason = None
     if kind not in {"text", "image", "video", "vision"}:
         reason = "UNSUPPORTED_CAPABILITY"
-    elif kind == "text" and profile["provider"] == "anthropic":
-        reason = "CLOUD_PREFLIGHT_UNSUPPORTED"
     elif not adapter:
         reason = {"image": "FLUX_WORKFLOW_REQUIRED", "video": "MOTION_PROFILE_INCOMPATIBLE",
-                  "text": "LOCAL_TEXT_ADAPTER_REQUIRED", "vision": "VISION_ADAPTER_UNAVAILABLE"}[kind]
+                  "text": "TEXT_ADAPTER_REQUIRED", "vision": "VISION_ADAPTER_UNAVAILABLE"}[kind]
     return {"capability": capability,
             "route_configurable": orchestrator_policy.compatible(kind, profile),
-            "local_runtime_compatible": adapter is not None, "adapter": adapter_id,
+            "runtime_compatible": adapter is not None, "local_runtime_compatible": local and adapter is not None,
+            "adapter": adapter_id,
             "reason": reason, "output_limits": output, "workflow_sha256": workflow_sha,
             "configuration_status": "CONFIGURED", "readiness": "NOT_CHECKED"}
 
@@ -457,10 +466,14 @@ def capability_readiness(profile_id, capability, *, expected_revision, db_path=N
     kind = orchestrator_policy.KINDS.get(capability)
     if not profile["enabled"]:
         observation = "DISABLED"
-    elif not contract["local_runtime_compatible"]:
+    elif not contract["runtime_compatible"]:
         observation = contract["reason"]
     elif kind == "text":
-        observation = _check_ollama(profile)["status"]
+        if profile["provider"] == "ollama":
+            observation = _check_ollama(profile)["status"]
+        else:
+            from agentforge.features.film_studio import studio_cloud
+            observation = studio_cloud.readiness(profile)
     elif kind == "image":
         from agentforge.features.media.flux_runtime import readiness
         observation = readiness(profile["flux"], urlsplit(profile["base_url"]).port, inspect_all_nodes=True)
@@ -477,9 +490,9 @@ def capability_readiness(profile_id, capability, *, expected_revision, db_path=N
 
 
 def _preflight_result(observation, contract):
-    if observation in {"DISABLED", "CLOUD_PREFLIGHT_UNSUPPORTED"}:
+    if observation == "DISABLED":
         return "NOT_CHECKED", None, None
-    if not contract["local_runtime_compatible"] or observation == "MOTION_ENDPOINT_MISMATCH":
+    if not contract["runtime_compatible"] or observation == "MOTION_ENDPOINT_MISMATCH":
         return "UNSUPPORTED", None, None
     if observation in {"READY", "LOCAL_MODEL_FOUND"}:
         return "METADATA_COMPATIBLE", True, True
@@ -566,8 +579,8 @@ def _draft_bindings(state, *, moving, planning=False):
     policy = _active_policy(state)
     permissions = policy["permissions"]
     if (policy["mode"] == "MANUAL" or not all(permissions[key] for key in
-            ("plan", "assign_local", "call_local"))):
-        raise PermissionError("Hãy bật lập kế hoạch, phân công và gọi model local trong AI điều phối.")
+            ("plan", "assign_local"))):
+        raise PermissionError("Hãy bật lập kế hoạch và phân công model trong AI điều phối.")
     if not planning and (not permissions["run_tools"] or "ffmpeg" not in policy["tools"]):
         raise PermissionError("Hãy bật chạy công cụ local và FFmpeg trong AI điều phối.")
     profiles = _profiles(state=state)
@@ -584,9 +597,10 @@ def _draft_bindings(state, *, moving, planning=False):
             raise ModelConfigError(f"{capability}: chưa phân công model cho Studio.")
         if not profile or not profile["enabled"]:
             raise ModelConfigError(f"{capability}: hồ sơ {ref} đã bị xóa hoặc đang tắt.")
-        if profile["provider"] == "anthropic":
-            raise ModelConfigError(f"{capability}: Studio chỉ chạy model local. Hãy chọn hồ sơ local.")
-        if not orchestrator_policy.local_adapter(orchestrator_policy.KINDS[capability], profile):
+        permission = "call_cloud" if ADAPTERS[profile["provider"]]["connection"] == "cloud" else "call_local"
+        if not permissions[permission]:
+            raise PermissionError(f"{capability}: chưa cấp quyền {permission} trong AI điều phối.")
+        if not orchestrator_policy.runtime_adapter(orchestrator_policy.KINDS[capability], profile):
             raise ModelConfigError(f"{capability}: hồ sơ {ref} không tương thích với adapter Studio.")
         bindings[capability] = profile
     return bindings
@@ -620,7 +634,7 @@ def _catalog(revision, state):
             "has_api_key": "api_key_protected" in v, "source": (
             "owner"),
             "health": "UNVERIFIED",
-            "runtime_supported": v["provider"] in {"ollama", "anthropic"} or "flux" in v
+            "runtime_supported": v["provider"] in {"ollama", "anthropic", "openai"} or "flux" in v
                 or orchestrator_policy.local_adapter("video", v) is not None,
             "capability_contracts": [capability_contract(key, v) for key, kind in orchestrator_policy.KINDS.items()
                                      if kind != "tool"]}
@@ -630,8 +644,37 @@ def _catalog(revision, state):
         "cloud_fallback": False,
         "gpu_auto_start": False,
         "provider_billing_verified": False,
-        "configuration_only_warning": "A configured route does not establish local runtime readiness",
+        "configuration_only_warning": "A configured route does not establish runtime readiness",
     }
+
+
+def probe_cloud_profile(profile_id, *, expected_revision, db_path=None):
+    """Explicit one-call structured inference probe; no project data sent."""
+    from agentforge.features.film_studio import studio_cloud
+    _required_text(profile_id, ID_RE, "model ID")
+    revision, state = _read_state(db_path=db_path)
+    if type(expected_revision) is not int or revision != expected_revision:
+        raise ModelConfigError("MODEL_HUB_REVISION_CONFLICT")
+    profile = _profiles(state=state).get(profile_id)
+    if not profile or not profile["enabled"] or profile["provider"] not in studio_cloud.PROVIDERS:
+        raise ModelConfigError("Probe requires an enabled cloud text profile")
+    return {**studio_cloud.probe(profile), "model": profile["model"], "revision": revision,
+            "checked_at": datetime.now(timezone.utc).isoformat()}
+
+
+def cloud_call_limit(profile, *, db_path=None):
+    """Recheck current permission and selected profile before each cloud dispatch."""
+    _, state = _read_state(db_path=db_path)
+    policy = _active_policy(state)
+    permissions = policy["permissions"]
+    if policy["mode"] == "MANUAL" or not all(permissions[key] for key in ("plan", "assign_local", "call_cloud")):
+        raise PermissionError("Chưa cấp quyền gọi AI cloud.")
+    if _profiles(state=state).get(profile["id"]) != profile:
+        raise ModelConfigError("Hồ sơ cloud đã thay đổi.")
+    assigned = {state["routes"].get(key, policy["mappings"].get(key)) for key in PLANNING_CAPABILITIES}
+    if profile["id"] not in assigned:
+        raise ModelConfigError("Hồ sơ cloud chưa được phân công.")
+    return policy["cloud_call_limit"]
 
 
 def probe_local_profile(profile_id, *, expected_revision, db_path=None):

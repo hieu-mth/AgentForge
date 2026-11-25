@@ -47,11 +47,10 @@ def _legacy_defaults():
 
 def compatible(kind, profile):
     return bool(profile and profile.get("enabled") is True and (
-        local_adapter(kind, profile) or
-        (kind == "text" and profile.get("provider") == "anthropic")))
+        runtime_adapter(kind, profile)))
 
 
-def local_adapter(kind, profile):
+def runtime_adapter(kind, profile):
     """Resolve against the same adapter predicates used by the runtime."""
     from agentforge.features.film_studio import studio_runtime
 
@@ -63,6 +62,12 @@ def local_adapter(kind, profile):
         return resolve(profile)
     except ValueError:
         return None
+
+
+def local_adapter(kind, profile):
+    if (profile or {}).get("provider") in {"openai", "anthropic"}:
+        return None
+    return runtime_adapter(kind, profile)
 
 
 def _validate_legacy(policy, *, id_pattern, extra_routes):
@@ -124,17 +129,24 @@ def _validate_legacy(policy, *, id_pattern, extra_routes):
 def defaults():
     """Only controls enforced by the current runtime."""
     return {"mode": "SUPERVISED", "mappings": {},
-            "permissions": dict.fromkeys(("plan", "assign_local", "call_local", "run_tools"), False),
-            "tools": []}
+            "permissions": dict.fromkeys(("plan", "assign_local", "call_local", "call_cloud", "run_tools"), False),
+            "tools": [], "cloud_call_limit": 64}
 
 
 def validate(policy, *, id_pattern, extra_routes):
     """Validate current policy writes; retired controls are not accepted."""
+    if isinstance(policy, dict) and policy.keys() == defaults().keys() - {"cloud_call_limit"}:
+        policy = {**policy, "cloud_call_limit": defaults()["cloud_call_limit"]}
     if not isinstance(policy, dict) or policy.keys() != defaults().keys():
         raise ModelConfigError("Cấu trúc chính sách không hợp lệ")
     if policy["mode"] not in ("MANUAL", "SUPERVISED"):
         raise ModelConfigError("Chế độ thực thi không hợp lệ")
     permissions = policy["permissions"]
+    if isinstance(permissions, dict) and permissions.keys() == defaults()["permissions"].keys() - {"call_cloud"}:
+        permissions = {**permissions, "call_cloud": False}
+        policy = {**policy, "permissions": permissions}
+    if type(policy["cloud_call_limit"]) is not int or not 1 <= policy["cloud_call_limit"] <= 1000:
+        raise ModelConfigError("Ngân sách lượt gọi cloud phải từ 1 đến 1000.")
     if (not isinstance(permissions, dict) or permissions.keys() != defaults()["permissions"].keys()
             or any(type(value) is not bool for value in permissions.values())):
         raise ModelConfigError("Danh sách quyền không hợp lệ")
@@ -149,10 +161,10 @@ def validate(policy, *, id_pattern, extra_routes):
 
 def read_policy(policy, *, id_pattern, extra_routes):
     """Project historical snapshots onto active controls without modifying SQLite."""
-    if isinstance(policy, dict) and policy.keys() == defaults().keys():
+    if isinstance(policy, dict) and policy.keys() in (defaults().keys(), defaults().keys() - {"cloud_call_limit"}):
         return validate(policy, id_pattern=id_pattern, extra_routes=extra_routes)
     legacy = _validate_legacy(policy, id_pattern=id_pattern, extra_routes=extra_routes)
-    active = {key: legacy[key] for key in defaults()}
+    active = {**defaults(), **{key: legacy[key] for key in ("mode", "mappings", "permissions", "tools")}}
     active["mode"] = "MANUAL" if active["mode"] == "MANUAL" else "SUPERVISED"
     active["tools"] = [tool for tool in active["tools"] if tool == "ffmpeg"]
     return validate(active, id_pattern=id_pattern, extra_routes=extra_routes)
@@ -173,5 +185,5 @@ def resolve(capability, available_profiles, primary_ref):
                 "execution_allowed": False}
     selected, source = primary_ref, "PRIMARY"
     return {"status": "CONFIG_ONLY", "model_ref": selected, "source": source,
-            "requires_owner_approval": available_profiles[selected]["provider"] == "anthropic",
+            "requires_owner_approval": available_profiles[selected]["provider"] in {"openai", "anthropic"},
             "execution_allowed": False}

@@ -6,7 +6,7 @@ import os.path
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, Protocol
 
-from agentforge.features.film_studio import draft_motion, studio_ollama
+from agentforge.features.film_studio import draft_motion, studio_ollama, studio_cloud
 from agentforge.features.film_studio.studio_contracts import DispatchGuard, ImageRequest, MotionOutput
 from agentforge.features.media import studio_flux
 
@@ -56,9 +56,12 @@ class VideoMotion(Protocol):
 
 
 def text_adapter(profile: Profile | None) -> TextInference:
-    if not profile or profile.get("provider") != "ollama":
-        raise ValueError("Studio requires a supported local text profile.")
-    return studio_ollama
+    provider = (profile or {}).get("provider")
+    if provider == "ollama":
+        return studio_ollama
+    if provider in studio_cloud.PROVIDERS:
+        return studio_cloud
+    raise ValueError("Studio requires a supported text API or local runtime.")
 
 
 def image_adapter(profile: Profile | None) -> ImageGeneration:
