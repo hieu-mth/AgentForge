@@ -31,16 +31,18 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
   return <Modal open centered width={1080} rootClassName="storyboard-review" title={draftTitle(job)}
     onCancel={onClose} footer={<div className="storyboard-footer">
       <div><strong>{job.brief.seconds} giây · {countLabel}{job.storyboard_version&&' · Phiên bản '+job.storyboard_version}</strong>
-        {reviewing&&<div className="env-muted">Duyệt phiên bản này để tạo ảnh{job.brief.mode==='motion'?' và chuyển động':''} tuần tự cho {scenes.length} {authoredScenes?'shot':'cảnh'}.</div>}
+        {reviewing&&<div className="env-muted">Duyệt phiên bản này để {job.production_plan?.method==='cloud'?'tạo video cloud trực tiếp':'tạo ảnh'+(job.brief.mode==='motion'?' và chuyển động':'')} tuần tự cho {scenes.length} {authoredScenes?'shot':'cảnh'}.</div>}
       </div>
       <Space wrap><Button onClick={onClose}>{reviewing?'Xem sau':'Đóng'}</Button>
         {reviewing&&<Button type="primary" disabled={busy} onClick={onApprove}>Duyệt và bắt đầu sản xuất</Button>}
       </Space>
     </div>}>
     {error&&<Alert type="error" showIcon message={error}/>}
+    {job.production_plan&&<Alert showIcon type="info" message={"Tuyến sản xuất: "+job.production_plan.method+" · "+job.production_plan.motion_ref}
+      description={<><p>{job.production_plan.reason}</p>{job.production_plan.method!=="local"&&<p>Giây đã giữ ngân sách: {job.cloud_motion_seconds??0}/{job.production_plan.max_cloud_seconds}. Cần thêm dự kiến {scenes.filter(s=>!s.motion_job).reduce((n,s)=>n+([6,8,10].find(t=>t*24>=s.frames)??10),0)} giây. Có âm thanh native nếu chưa có Audio Director.</p>}</>}/>}
     {reviewing&&job.deferred_media_binding&&<Alert type="info" showIcon
       message="Storyboard chưa khóa model media"
-      description="Bạn có thể xem và chỉnh nội dung trước khi đăng ký model ảnh hoặc video. Khi duyệt sản xuất, hệ thống kiểm tra và khóa các model media đang được phân công. Timeline hiện vẫn theo giới hạn I2V."/>}
+      description="Bạn có thể xem và chỉnh nội dung trước khi duyệt. Khi duyệt sản xuất, hệ thống kiểm tra và khóa các model media theo tuyến đã chọn."/>}
     {onVisualReviewBatch&&<div className="storyboard-context">
       <Space wrap>
         <Button disabled={busy} onClick={onVisualReviewBatch}>AI đánh giá tối đa 8 cảnh chưa kiểm tra</Button>

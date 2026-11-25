@@ -17,7 +17,7 @@ import './studio-draft-progress.css';
 
 const API='/api/film/drafts';
 const editorKey='agentforge.studio.video-brief.v1';
-const briefDefaults={idea:'',durationMode:'auto',targetSeconds:12,ratio:'9:16',mode:'motion'};
+const briefDefaults={idea:'',durationMode:'auto',targetSeconds:12,ratio:'9:16',mode:'motion',routeStrategy:'assigned',cloudSeconds:0};
 const motionShots={4:2,6:3,15:8,30:15};
 const videoModes={motion:'Có chuyển động',still:'Ảnh tĩnh (lia và thu phóng)'};
 const motionMaxShots={4:2,6:3,15:9,30:16};
@@ -239,6 +239,7 @@ export function StudioDrafts({mutate,onCharacters}) {
     const payload={idea:values.idea,mode:values.mode,duration_mode:values.durationMode,
       seconds:values.durationMode==='manual'?values.targetSeconds:null,scene_count:null,
       ratio:motion?'16:9':values.ratio};
+    if(motion&&values.routeStrategy!=='assigned')Object.assign(payload,{route_strategy:values.routeStrategy,max_cloud_seconds:values.cloudSeconds??0});
     const brief=JSON.stringify(payload);
     if(request.current?.brief!==brief)request.current={brief,id:crypto.randomUUID().replaceAll('-','')};
     return run('/start',{...payload,id:request.current.id},result=>{
@@ -296,6 +297,22 @@ export function StudioDrafts({mutate,onCharacters}) {
         <Button className="draft-submit" type="primary" htmlType="submit"
           loading={pending} disabled={waiting>0||characterCount>limit}>Tạo storyboard</Button>
       </div>
+      {moving&&<details className="draft-resource-details">
+        <summary>Tuyến sản xuất V5 · {values.routeStrategy==='assigned'?'Model đã phân công':'Tùy chọn production'}</summary>
+        <Space wrap align="start">
+          <Form.Item name="routeStrategy" label="Phương pháp"><Select style={{width:230}} options={[
+            {value:'assigned',label:'Giữ pipeline V4 / model đã gán'},
+            {value:'auto',label:'AI chọn tuyến'},
+            {value:'local',label:'Local'},
+            {value:'hybrid',label:'Hybrid · ảnh local, video cloud'},
+            {value:'cloud',label:'Cloud video trực tiếp'},
+          ]}/></Form.Item>
+          {['auto','hybrid','cloud'].includes(values.routeStrategy)&&<Form.Item name="cloudSeconds" label="Tối đa giây video trả phí" rules={[{required:true,type:'integer',min:values.routeStrategy==='auto'?0:6,max:240}]}>
+            <NumberField min={values.routeStrategy==='auto'?0:6} max={240} precision={0} suffix="giây"/>
+          </Form.Item>}
+        </Space>
+        <p className="env-muted">Model cloud tối thiểu 6 giây mỗi shot, kể cả đoạn bị cắt ngắn. 0 giây chỉ cho phép local. Chưa gọi video API cho đến khi bạn duyệt storyboard.</p>
+      </details>}
       <details className="draft-resource-details">
         <summary>Thời lượng · {manual?(values.targetSeconds??'—')+' giây':'AI tự đề xuất'}</summary>
         <Space wrap align="start">

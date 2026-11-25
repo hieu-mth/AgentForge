@@ -54,7 +54,9 @@ def build_sheet(job, index):
     video = draft.video_path(job)
     with video.open("rb") as stream:
         draft.verify_video(job, stream)
-    items = [(draft.image(job, index), "GENERATED IMAGE")]
+    items = []
+    if scenes[index].get("asset"):
+        items.append((draft.image(job, index), "GENERATED IMAGE"))
     expression = "+".join("eq(n\\," + str(frame) + ")" for frame, _ in points)
     with tempfile.TemporaryDirectory(dir=draft._folder(job["id"]), prefix="qa-") as tmp:
         folder = ensure_local_root(Path(tmp))

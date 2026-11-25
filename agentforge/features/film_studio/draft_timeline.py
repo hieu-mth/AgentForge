@@ -119,6 +119,8 @@ def snapshot(job):
         value["motion_plan"] = job["motion_plan"]
     if "studio_plan" in job:
         value["studio_plan"] = job["studio_plan"]
+    if "production_plan" in job:
+        value["production_plan"] = job["production_plan"]
     creative = job.get("duration_plan", {}).get("creative_plan")
     if creative is not None:
         value["creative_plan"] = creative

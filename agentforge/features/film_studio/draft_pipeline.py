@@ -76,7 +76,7 @@ def _measured(job, operation, comfy_profile=None):
     _save(job)
     try:
         admission_sample = before
-        text_only = job.get("deferred_media_binding") and operation in {
+        text_only = (job.get("deferred_media_binding") or job.get("production_plan", {}).get("method") == "cloud") and operation in {
             "plan", "duration", "creative_direction", "cast", "storyboard"}
         reason = draft_resources.pressure(admission_sample, "text" if text_only else operation)
         if reason == "VRAM_LOW" and comfy_profile and comfy_profile.get("base_url"):
@@ -219,6 +219,39 @@ def _release_idle_image(profile):
     return studio_runtime.image_adapter(profile).release_idle_models(profile)
 
 
+def _route_kwargs(job):
+    plan = job.get("production_plan")
+    if not plan:
+        return {}
+    return {"motion_ref": plan["motion_ref"], "direct_cloud": plan["method"] == "cloud"}
+
+
+def _plan_production(job, bindings):
+    from agentforge.features.film_studio import production_router
+    if job.get("production_plan") or not job["brief"].get("route_strategy"):
+        return
+    strategy = job["brief"]["route_strategy"]
+    cap = job["brief"]["max_cloud_seconds"]
+    _, candidates = model_hub.production_candidates(strategy)
+    candidates = [c for c in candidates if c["method"] == "local" or cap >= 6]
+    if not candidates:
+        raise ValueError("Không có model video phù hợp quyền và ngân sách. Đăng ký model hoặc chọn tuyến đã gán.")
+    planner = bindings["general.text"]
+    _activity(job, "PLANNING", "plan", planner)
+    with _measured(job, "plan", bindings.get("image.generate")):
+        choice = production_router.choose(job["brief"], candidates, lambda instructions, data, schema:
+            _ask(planner, instructions, data, schema, bindings.get("image.generate"), job=job))
+    _, selected = model_hub.draft_routes(moving=True, motion_ref=choice["motion_ref"],
+                                         direct_cloud=choice["method"] == "cloud")
+    profile = selected["film.motion"]
+    if (choice["method"] == "local") != (profile["provider"] != "ltx_cloud"):
+        raise ValueError("Model video thay đổi khi AI đang lập kế hoạch.")
+    choice["motion_profile_sha"] = studio_runtime.routing_identity({"film.motion": profile}, moving=True)["film.motion"]
+    job["production_plan"] = choice
+    job["motion_plan"] = studio_runtime.motion_identity(studio_runtime.motion_adapter(profile), profile)
+    _save(job)
+
+
 def _ask(profile, instructions, data, schema, comfy_profile, *, cpu_only=False, extended_plan=False, job=None):
     adapter = studio_runtime.text_adapter(profile)
     if profile.get("provider") in {"openai", "anthropic", "chatgpt"}:
@@ -230,7 +263,7 @@ def _ask(profile, instructions, data, schema, comfy_profile, *, cpu_only=False, 
         limit = model_hub.cloud_call_limit(
             profile, moving=job["brief"].get("mode") == "motion",
             planning=bool(job.get("deferred_media_binding")),
-            validate=lambda revision, bindings: _check_studio_routing(job, revision, bindings))
+            validate=lambda revision, bindings: _check_studio_routing(job, revision, bindings), **_route_kwargs(job))
         # Reserve before sending. Failed or uncertain requests count, including resume.
         limit = min(limit, job.get("cloud_call_limit", limit))
         used = job.get("cloud_calls", 0)
@@ -1060,7 +1093,8 @@ def _render(job):
     width, height = studio_runtime.job_output(job).resolution if moving else SIZES[job["brief"]["ratio"]]
     ffmpeg = render._ffmpeg()
     command = [ffmpeg, "-nostdin", "-n", "-v", "error"]
-    filters, streams = [], []
+    filters, streams, audio_streams = [], [], []
+    native_audio = moving and job.get("production_plan", {}).get("method") in {"cloud", "hybrid"} and not job.get("audio_plan")
     input_bytes = 0
     for index, scene in enumerate(job["board"]["scenes"]):
         if moving:
@@ -1072,6 +1106,11 @@ def _render(job):
             frames = scene.get("frames", int(scene["seconds"] * fps))
             filters.append(f"[{index}:v]trim=end_frame={frames},setpts=PTS-STARTPTS,setsar=1[v{index}]")
             streams.append(f"[v{index}]")
+            if native_audio:
+                samples = frames * 48000 // fps
+                filters.append(f"[{index}:a:0]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
+                               f"apad=whole_len={samples},atrim=end_sample={samples},asetpts=N/SR/TB[a{index}]")
+                audio_streams.append(f"[a{index}]")
             continue
         command += ["-i", str(_scene_path(job, index))]
         frames = scene.get("frames", int(scene["seconds"] * fps))
@@ -1081,6 +1120,8 @@ def _render(job):
                        f"fade=t=in:st=0:d=0.2,fade=t=out:st={frames/fps-0.2}:d=0.2[v{index}]")
         streams.append(f"[v{index}]")
     filters.append("".join(streams) + f"concat=n={len(streams)}:v=1:a=0[out]")
+    if native_audio:
+        filters.append("".join(audio_streams) + f"concat=n={len(audio_streams)}:v=0:a=1[native_audio]")
     target = _video_file(job)
     temporary = ensure_local_root(folder / (uuid4().hex + ".mp4"))
     try:
@@ -1091,11 +1132,14 @@ def _render(job):
                 command += ["-i", str(audio["path"])]
                 sound_args = ["-map", f"{len(streams)}:a:0", "-c:a", "aac", "-b:a", "96k"]
                 audio_evidence = audio["evidence"]
+            elif native_audio:
+                sound_args = ["-map", "[native_audio]", "-c:a", "aac", "-b:a", "128k"]
+                audio_evidence = {"mode": "CLOUD_NATIVE", "scope": "TECHNICAL_ONLY", "audio_decoded": False}
             render._run_process(command + ["-filter_complex_threads", "1", "-filter_complex", ";".join(filters),
                                            "-map", "[out]", *sound_args, "-c:v", "libx264", "-threads", "2",
                                            "-preset", "fast", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
                                            str(temporary)], cwd=folder, timeout=150)
-            if audio:
+            if audio_evidence:
                 render._run_process([ffmpeg, "-nostdin", "-v", "error", "-xerror", "-i", str(temporary),
                                      "-map", "0:a:0", "-f", "null", "-"], cwd=folder, timeout=60)
                 audio_evidence["audio_decoded"] = True
@@ -1199,7 +1243,7 @@ def _check_studio_routing(job, revision, bindings):
 
 def _studio_bindings(job):
     kwargs = {"planning": True} if job.get("deferred_media_binding") else {}
-    revision, bindings = model_hub.draft_routes(moving=job["brief"].get("mode") == "motion", **kwargs)
+    revision, bindings = model_hub.draft_routes(moving=job["brief"].get("mode") == "motion", **kwargs, **_route_kwargs(job))
     return revision, bindings, _check_studio_routing(job, revision, bindings)
 
 
@@ -1213,7 +1257,7 @@ def _dispatch_guard(job):
         if moving:
             _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
 
-    return model_hub.studio_dispatch(moving=moving, validate=validate)
+    return model_hub.studio_dispatch(moving=moving, validate=validate, **_route_kwargs(job))
 
 
 def _validate_creative_frames(job):
@@ -1248,6 +1292,7 @@ def _work(job, slot, retry_motion_job=None):
                         profile = bindings["image.generate"]
                         studio_runtime.image_adapter(profile).preflight(profile, include_profiles=True)
                 if not job.get("board"):
+                    _plan_production(job, bindings)
                     _write_board(job, bindings)
                 if _cancellation(job["id"]):
                     raise DraftCancelled
@@ -1262,9 +1307,9 @@ def _work(job, slot, retry_motion_job=None):
                 motion, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
                 motion_profile = motion.bind(bindings["film.motion"])
                 motion.require_resolved_ledger(job)
-            image_profile = bindings["image.generate"]
+            image_profile = bindings.get("image.generate")
             board = job.get("board")
-            needs_gpu = not board or any(not scene["asset"] for scene in board["scenes"])
+            needs_gpu = image_profile is not None and (not board or any(not scene["asset"] for scene in board["scenes"]))
             if needs_gpu and image_profile.get("base_url"):
                 studio_runtime.image_adapter(image_profile).preflight(image_profile)
             folder = _folder(job["id"])
@@ -1273,6 +1318,8 @@ def _work(job, slot, retry_motion_job=None):
                 _write_board(job, bindings)
             for index, scene in enumerate(job["board"]["scenes"]):
                 ops_control.require_active()
+                if image_profile is None:
+                    continue
                 if scene["asset"]:
                     _image(job, index, scene, revision, bindings["image.generate"])
                 else:
@@ -1446,6 +1493,13 @@ def submit(data):
         brief["mode"] = mode
     if duration_mode is not None:
         brief["duration_mode"] = duration_mode
+    if "route_strategy" in data or "max_cloud_seconds" in data:
+        if not motion_mode or duration_mode is None or data.get("route_strategy") not in {"auto", "local", "hybrid", "cloud"}:
+            raise ValueError("Chọn tuyến sản xuất chỉ áp dụng storyboard motion mới.")
+        cap = _number(data.get("max_cloud_seconds"), 0, 240)
+        if data["route_strategy"] in {"hybrid", "cloud"} and cap < 6:
+            raise ValueError("Cloud video cần ngân sách ít nhất 6 giây.")
+        brief.update(route_strategy=data["route_strategy"], max_cloud_seconds=cap)
     try:
         prior = _read(ident)
     except KeyError:
@@ -1500,7 +1554,7 @@ def _storyboard_action(job, action, data):
         if deferred:
             # Owner approves the reviewed text and the currently assigned media routes.
             # Preserve the text profile pins; bind media once from the same registry snapshot.
-            revision, bindings = model_hub.draft_routes(moving=moving)
+            revision, bindings = model_hub.draft_routes(moving=moving, **_route_kwargs(job))
             text_bindings = {key: value for key, value in bindings.items()
                              if key in model_hub.PLANNING_CAPABILITIES}
             identity_revision = _check_studio_routing(job, revision, text_bindings)
@@ -1512,13 +1566,27 @@ def _storyboard_action(job, action, data):
                 if adapter.output_profile() != studio_runtime.job_output(job):
                     raise ValueError("Model chuyển động không khớp timeline I2V đã xem. Hãy lập lại storyboard.")
                 identity = studio_runtime.motion_identity(adapter, bindings["film.motion"])
+                if job.get("production_plan"):
+                    pinned = studio_runtime.routing_identity({"film.motion": bindings["film.motion"]}, moving=True)["film.motion"]
+                    if pinned != job["production_plan"]["motion_profile_sha"] or identity != job["motion_plan"]:
+                        raise ValueError("Model video đã thay đổi; lập production mới để chọn lại.")
                 job["motion_plan"] = identity
             else:
                 adapter, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
-            environment = _motion_environment()
+            if bindings["film.motion"]["provider"] == "ltx_cloud":
+                from agentforge.features.film_studio import draft_motion_cloud
+                plan = job.get("production_plan")
+                if not plan or plan["method"] not in {"hybrid", "cloud"}:
+                    raise ValueError("Cloud video requires the V5 route and explicit budget.")
+                missing = sum(draft_motion_cloud.billed_seconds(scene["frames"]) for scene in job["board"]["scenes"]
+                              if not scene.get("motion_job"))
+                if job.get("cloud_motion_seconds", 0) + missing > plan["max_cloud_seconds"]:
+                    raise ValueError("Ngân sách giây cloud không đủ cho timeline đã duyệt.")
+                job.pop("approved_motion_environment", None)
+            else:
+                job["approved_motion_environment"] = _motion_environment()
             adapter.bind(bindings["film.motion"])
             job["approved_motion"] = identity
-            job["approved_motion_environment"] = environment
         else:
             render._ffmpeg()
         if deferred:
@@ -1574,6 +1642,7 @@ def _storyboard_action(job, action, data):
         ops_control.require_active()
         proposals = []
         slot = nullcontext() if cloud else model_hub.local_inference_slot()
+        _activity(job, "STORYBOARD", "storyboard", writer)
         with slot, _measured(job, "storyboard", bindings.get("image.generate")):
             for i, report in targets:
                 scene = scenes[i]
@@ -1654,7 +1723,8 @@ def _storyboard_action(job, action, data):
         moving = job["brief"].get("mode") == "motion"
         if scope not in ("image", "motion") or (scope == "motion" and not moving):
             raise ValueError("Phạm vi tạo lại cảnh không hợp lệ.")
-        if not scene.get("asset") or (moving and not scene.get("motion_sha")):
+        direct = job.get("production_plan", {}).get("method") == "cloud"
+        if (not direct and not scene.get("asset")) or (moving and not scene.get("motion_sha")):
             raise ValueError("Cảnh chưa có tài sản hoàn chỉnh để tạo phiên bản mới.")
         # Keep historical files; a replaced image also invalidates its dependent clip.
         if scope == "image":

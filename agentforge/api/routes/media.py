@@ -7,7 +7,8 @@ def handle(server, path, request, session=None):
         required = {"id", "idea", "seconds", "ratio", "scene_count"}
         if not server.allow_external_actions or request.keys() not in (
                 required, required | {"mode"}, required | {"mode", "motion_approved"},
-                required | {"mode", "duration_mode"}):
+                required | {"mode", "duration_mode"},
+                required | {"mode", "duration_mode", "route_strategy", "max_cloud_seconds"}):
             raise PermissionError("Draft production requires external-tools mode and a complete brief")
         from agentforge.features.film_studio import draft_pipeline
         return draft_pipeline.submit(request)

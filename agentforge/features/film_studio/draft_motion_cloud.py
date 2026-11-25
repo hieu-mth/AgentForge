@@ -89,8 +89,11 @@ def _db(create=False):
 
 def _row(ident):
     ltx._id(ident)
-    with closing(_db()) as conn:
-        row = conn.execute("SELECT * FROM jobs WHERE id=?", (ident,)).fetchone() if conn else None
+    conn = _db()
+    row = None
+    if conn is not None:
+        with closing(conn):
+            row = conn.execute("SELECT * FROM jobs WHERE id=?", (ident,)).fetchone()
     if not row:
         raise NeedsReconciliation("Cloud motion ledger is missing; do not submit again.")
     return dict(row)
@@ -220,7 +223,8 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
         with dispatch_guard():
             ops_control.require_active()
             if cancelled():
-                raise NeedsReconciliation("Cloud motion cancelled before submission.")
+                from agentforge.features.film_studio.draft_pipeline import DraftCancelled
+                raise DraftCancelled
             _reserve(job, profile, seconds, save)
             scene["motion_job"] = ident
             if source:
