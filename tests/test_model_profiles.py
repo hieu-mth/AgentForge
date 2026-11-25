@@ -58,7 +58,7 @@ class ModelProfileTests(unittest.TestCase):
     def test_orchestrator_reference_prevents_orphan_and_failed_delete_is_atomic(self):
         self.save(self.local())
         from agentforge.ai.orchestrator_policy import defaults
-        config = {**defaults(), "primary": "studio_local"}
+        config = {**defaults(), "mappings": {"character.select": "studio_local"}}
         model_hub.change("SAVE_ORCHESTRATOR", db_path=self.db, expected_revision=1,
                          policy=config, route_changes={})
         with self.assertRaisesRegex(ValueError, "unassign"):
