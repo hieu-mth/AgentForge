@@ -47,7 +47,9 @@ class ContinuityTests(unittest.TestCase):
             clip = folder / "clip.mp4"
             ffmpeg = motion_verify.render._ffmpeg()
             motion_verify.render._run_process([ffmpeg, "-v", "error", "-f", "lavfi", "-i",
-                "color=red:s=64x64:r=24:d=1", "-c:v", "libx264", "-threads", "1",
+                "color=red:s=64x64:r=24:d=0.5", "-f", "lavfi", "-i",
+                "color=blue:s=64x64:r=24:d=0.5", "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0",
+                "-c:v", "libx264", "-threads", "1",
                 "-pix_fmt", "yuv420p", str(clip)], cwd=folder)
             sha = hashlib.sha256(clip.read_bytes()).hexdigest()
             source = {"motion_job": "a"*32, "motion_sha": sha, "frames": 12}
@@ -58,6 +60,12 @@ class ContinuityTests(unittest.TestCase):
                 marker, png = motion_verify.read_continuation_frame(source, "d-"+"b"*32+"-v2")
                 self.assertEqual(marker, "motion-frame:"+"a"*32+":11:"+sha)
                 self.assertTrue(png.startswith(b"\x89PNG\r\n\x1a\n"))
+                import io
+                from PIL import Image
+                with Image.open(io.BytesIO(png)) as frame:
+                    red, green, blue = frame.convert("RGB").getpixel((16, 16))
+                    self.assertGreater(red, 200)
+                    self.assertLess(blue, 30)
                 with self.assertRaises(ValueError):
                     motion_verify.read_continuation_frame(dict(source, frames=25), "d-"+"b"*32+"-v2")
                 with self.assertRaises(ValueError):

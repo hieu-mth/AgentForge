@@ -2,7 +2,6 @@
 import hashlib
 import json
 import re
-import shutil
 import tempfile
 import wave
 from contextlib import contextmanager
@@ -71,7 +70,8 @@ def _voice(engine, name):
 
 def _config(engine, voice_name, voices, cast):
     default = _voice(engine, voice_name)
-    if not isinstance(voices, dict) or not voices.keys() <= cast.keys():
+    if (not isinstance(voices, dict) or not voices.keys() <= cast.keys()
+            or any(not isinstance(value, str) for value in voices.values())):
         raise ValueError("Invalid character voice assignment")
     mapping = {key: _voice(engine, value) for key, value in voices.items() if value}
     return {"engine": engine, "voice_name": default, "voices": mapping}
@@ -134,7 +134,7 @@ def propose(job, engine, voice_name, voices, infer):
                 "shots": [{**{key: scene[key] for key in ("shot_id", "description", "audio", "caption",
                           "character_ids", "frames", "motion_prompt", "continuity_plan") if key in scene},
                           "source": job["brief"]["idea"][slice(*scene["script_range"])][:800]
-                          if scene.get("script_range") else ""} for scene in batch]}
+                          if scene.get("script_range") else job["brief"]["idea"][:1200]} for scene in batch]}
         result = infer(
             "Direct sound for these existing shots; preserve authored dialogue and events. Subtitles are not automatically "
             "speech. Use dialogue for spoken words, narration only when helpful, or silence. Use narrator, unregistered, "
@@ -187,9 +187,13 @@ def validate(job, audio):
         row = {key: cue.get(key) for key in ("kind", "start_frame", "end_frame", "gain_db", "speaker", "text", "asset")}
         if _cue(row, scene, config, assets) != cue:
             raise ValueError("Audio plan needs to be rebuilt after editing shots")
-        if asset and (not re.fullmatch(r"[0-9a-f]{64}", cue.get("asset_sha256") or "")
-                      or not _asset_path(asset).is_file() or _hash(_asset_path(asset)) != cue["asset_sha256"]):
-            raise ValueError("Local audio asset changed; rebuild the audio plan")
+        if asset:
+            path = _asset_path(asset)
+            digest = cue.get("asset_sha256")
+            if (not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)
+                    or not path.is_file() or not 44 <= path.stat().st_size <= 32_000_000
+                    or _hash(path) != digest):
+                raise ValueError("Local audio asset changed; rebuild the audio plan")
     unresolved = audio["unresolved"]
     if (not isinstance(unresolved, list) or len(unresolved) > len(scenes)
             or any(not isinstance(item, dict) or set(item) != {"shot_id", "detail"}
@@ -253,7 +257,11 @@ def prepare(job, folder, fps):
                     raise ValueError(f"Lời thoại cue {i+1} dài hơn timeline; hãy lập lại kế hoạch âm thanh.")
             else:
                 wav = path / "asset.wav"
-                shutil.copyfile(_asset_path(cue["asset"]), wav)
+                with _asset_path(cue["asset"]).open("rb") as source, wav.open("xb") as target:
+                    data = source.read(32_000_001)
+                    if len(data) > 32_000_000:
+                        raise ValueError("Local audio asset exceeds byte budget")
+                    target.write(data)
                 if _hash(wav) != cue["asset_sha256"]:
                     raise ValueError("Local audio asset changed during render")
                 draft_audio._pcm_duration(wav)

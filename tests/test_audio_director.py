@@ -25,6 +25,25 @@ class AudioDirectorTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             audio.validate(job, plan)
 
+    def test_cloud_speech_transport_sends_explicit_model_voice_and_wav_format(self):
+        from types import SimpleNamespace
+        from agentforge.features.film_studio import studio_speech
+        import json
+        profile = {"provider": "openai", "model": "owner-speech"}
+        payload = b"RIFF" + b"1234" + b"WAVE" + b"x"*40
+        with (patch.object(studio_speech.studio_cloud, "_connection", return_value=(
+                SimpleNamespace(hostname="example.test", port=443), "/v1", {})),
+              patch.object(studio_speech.http.client, "HTTPSConnection") as connection):
+            client = connection.return_value
+            client.getresponse.return_value.status = 200
+            client.getresponse.return_value.read.return_value = payload
+            self.assertEqual(studio_speech.synthesize(profile, "Hello", "owner-voice"), payload)
+            args, kwargs = client.request.call_args
+            self.assertEqual(args, ("POST", "/v1/audio/speech"))
+            self.assertEqual(json.loads(kwargs["body"]), {"model": "owner-speech", "input": "Hello",
+                "voice": "owner-voice", "response_format": "wav"})
+            client.close.assert_called_once()
+
     def test_real_mix_with_overlapping_cues_and_local_asset(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(audio, "WORKSPACE_DIR", Path(tmp)):
             root = Path(tmp)

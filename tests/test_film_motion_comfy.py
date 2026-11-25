@@ -189,6 +189,39 @@ class MotionAdapterTests(unittest.TestCase):
                                (result["job_id"],)).fetchone()
         self.assertEqual(tuple(row), (ltx.MODEL_ID, "b" * 64, 49))
 
+    def test_ltx_continuation_binds_extracted_png_and_ledger(self):
+        import hashlib
+        from contextlib import ExitStack, closing
+        from agentforge.features.film_studio import motion_verify
+
+        ltx = motion.motion_ltx
+        self.workflow.write_text(json.dumps(ltx.workflow(49)), encoding="utf-8")
+        source = {"motion_job": "a"*32, "motion_sha": "b"*64, "frames": 24}
+        marker = motion_verify.continuation_marker(source)
+        png = b"fixture continuation PNG"
+        with ExitStack() as mocks:
+            for target, name, value in (
+                (motion.comfy_service, "_settings", {"port": motion.PORT, "install_root": self.root}),
+                (motion.comfy_service, "ensure_running", True),
+                (ltx, "verify_weights", None),
+                (ltx, "check_runtime", []),
+            ):
+                mocks.enter_context(patch.object(target, name, return_value=value))
+            mocks.enter_context(patch.object(ltx, "read_source", side_effect=AssertionError("FLUX source used")))
+            extract = mocks.enter_context(patch.object(motion_verify, "read_continuation_frame",
+                                                       return_value=(marker, png)))
+            upload = mocks.enter_context(patch.object(ltx, "upload_source", return_value="frame.png"))
+            result, transport = self.submit(confirm_ltx_gate_b=True, image_job="c"*32,
+                                            image_sha="d"*64, ltx_encoder=self.root / ltx.ENCODER,
+                                            previous_motion=source)
+            extract.assert_called_once()
+            self.assertEqual(upload.call_args.args[2], png)
+            self.assertEqual(transport.call_args.kwargs["body"]["prompt"]["5"]["inputs"]["image"], "frame.png")
+        with closing(motion._db(self.db)) as conn:
+            row = conn.execute("SELECT image_job,image_sha FROM motion_sources WHERE job_id=?",
+                               (result["job_id"],)).fetchone()
+        self.assertEqual(tuple(row), (marker, hashlib.sha256(png).hexdigest()))
+
     def test_ltx_upload_response_contract(self):
         ltx = motion.motion_ltx
         job_id = "c" * 32
