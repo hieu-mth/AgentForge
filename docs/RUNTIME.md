@@ -27,7 +27,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\agentforge_runtime
 
 Trước tiên, đăng ký profile Ollama có ID `my_local_model` (hoặc ID khác) qua Dashboard, rồi thay `-ModelRef` đúng với ID đã đăng ký. Không còn `local_primary` mặc định. Script dùng một prompt cố định, không truyền dữ liệu riêng tư, không pull model và không fallback cloud. PASS_RUNTIME chỉ cho kiểm tra text inference.
 
-## 4. ComfyUI, shot thật và Film Studio
+## 4. Kiểm tra AI cloud và sản xuất media
+
+Đăng ký hồ sơ OpenAI-compatible hoặc Anthropic-compatible tại Model AI. Endpoint là API base URL (ví dụ `https://provider.example/v1`), model ID và API key do Owner cung cấp. **Kiểm tra** chỉ gọi metadata model; **Chạy thử** gửi một yêu cầu JSON cố định tối đa 64 token đầu ra, có thể phát sinh phí. Một số gateway không hỗ trợ metadata, khi đó dùng Chạy thử để xác nhận inference. Không cần Ollama hoặc ComfyUI.
+
+Trong AI điều phối, bật lập kế hoạch, phân công model, gọi AI cloud và đặt giới hạn lượt gọi phù hợp; gán model cho Lập kế hoạch và Sáng tạo kịch bản, có thể gán thêm Chọn nhân vật. Không cần quyền gọi AI local hay FFmpeg khi chỉ tạo storyboard cloud. Backend cần `--allow-external-tools`. Dừng khẩn cấp chặn lượt gọi cloud mới; request đang xử lý có thể hoàn tất. Giới hạn lượt gọi không thay cho ngân sách tiền.
+
+### ComfyUI, shot thật và Film Studio
 
 Xem cấu hình motion bên dưới và [kiến trúc Studio](ARCHITECTURE.md).
 
@@ -104,7 +110,7 @@ Sau khi Owner duyệt một lần thử mới cho shot đã lỗi, thêm `--conf
 
 ## Tạo video trên Dashboard
 
-Để tạo phim chuyển động từ Dashboard, đăng ký checkpoint LTX 2B FP8 và đường dẫn tuyệt đối của encoder đã xác minh trong Model Hub, rồi gán hồ sơ đó cho **Tạo chuyển động**. Cấu hình launcher và endpoint ComfyUI. Đặt `ffmpeg` và `ffprobe` trong `data/company/runtime_tools/ffmpeg` hoặc trên PATH của backend. Trong Studio video, nhập nội dung rồi bấm **Tạo storyboard**. Mặc định Ollama lập kế hoạch thời lượng trên CPU. Bạn cũng có thể nhập số giây trong phần tùy chỉnh. Backend hỗ trợ 4–60 giây cho phim chuyển động và 6–60 giây cho ảnh tĩnh, với tối đa 32 cảnh chuyển động và 49 frame mỗi clip LTX. Xem thời lượng đề xuất và timeline đã kiểm tra, chỉnh storyboard nếu cần rồi duyệt đúng phiên bản trước khi tạo ảnh FLUX hoặc clip LTX.
+Để tạo phim chuyển động từ Dashboard, đăng ký checkpoint LTX 2B FP8 và đường dẫn tuyệt đối của encoder đã xác minh trong Model Hub, rồi gán hồ sơ đó cho **Tạo chuyển động**. Cấu hình launcher và endpoint ComfyUI. Đặt `ffmpeg` và `ffprobe` trong `data/company/runtime_tools/ffmpeg` hoặc trên PATH của backend. Trong Studio video, nhập nội dung rồi bấm **Tạo storyboard**. Model văn bản đã phân công lập kế hoạch thời lượng (Ollama local hoặc API cloud tương thích). Với cloud, không yêu cầu Ollama, ComfyUI hay GPU để tạo storyboard. Bạn cũng có thể nhập số giây trong phần tùy chỉnh. Backend hỗ trợ 4–60 giây cho phim chuyển động và 6–60 giây cho ảnh tĩnh, với tối đa 32 cảnh chuyển động và 49 frame mỗi clip LTX. Xem thời lượng đề xuất và timeline đã kiểm tra, chỉnh storyboard nếu cần rồi duyệt đúng phiên bản trước khi tạo ảnh FLUX hoặc clip LTX.
 
 Video 30 giây ở 24 FPS cần đúng 720 frame; 60 giây cần 1.440 frame. Số segment phụ thuộc timeline và giới hạn runtime. Studio cắt mỗi clip LTX theo timeline rồi ghép MP4 16:9. Giới hạn là 240 giây theo dõi mỗi job LTX và 256 MiB clip đầu vào khi ghép. Nếu mất kết nối, dùng **Tiếp tục từ checkpoint** để đối soát job cũ qua lịch sử ComfyUI. Một phiên bản sửa giữ clip và ảnh đã xác minh nếu đầu vào tương ứng giữ nguyên. Khi xuất video, có thể tải biên nhận và phụ đề SRT đã nhập. Visual QA và Owner QA là các bước riêng.
 

@@ -224,6 +224,7 @@ def _ask(profile, instructions, data, schema, comfy_profile, *, cpu_only=False, 
     if profile.get("provider") in {"openai", "anthropic"}:
         if job is None:
             raise PermissionError("Cloud inference requires a production context.")
+        ops_control.require_active()
         if _cancellation(job["id"]):
             raise DraftCancelled
         limit = model_hub.cloud_call_limit(

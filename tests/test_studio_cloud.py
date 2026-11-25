@@ -80,6 +80,71 @@ class CloudTextTests(unittest.TestCase):
                 with self.assertRaises(PermissionError):
                     draft._ask(profile, "Test", {}, {}, None, job=saved)
 
+    def test_dashboard_auto_motion_with_cloud_and_pause_between_requests(self):
+        for pause in (False, True):
+            with (self.subTest(pause=pause), tempfile.TemporaryDirectory() as tmp,
+                  patch.object(model_hub, "DB_PATH", Path(tmp)/"hub.db"),
+                  patch.object(draft, "DB", Path(tmp)/"draft.db"),
+                  patch.object(draft, "_dispatch"),
+                  patch.object(model_hub, "local_inference_slot", side_effect=AssertionError("local inference")),
+                  patch.object(draft.draft_resources, "snapshot", side_effect=AssertionError("local resource check")),
+                  patch.object(draft.studio_runtime, "image_adapter", side_effect=AssertionError("image adapter")),
+                  patch.object(draft.studio_runtime, "motion_adapter", side_effect=AssertionError("motion adapter")),
+                  patch.object(draft.characters, "list_characters", return_value={"characters": []}),
+                  patch.dict(os.environ, {"TEST_API_BASE": "https://example.test/v1", "TEST_API_KEY": "fixture-key"}),
+                  patch("http.client.HTTPSConnection") as connection):
+                profile = self.profile("anthropic")
+                model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0, profile=profile)
+                policy = orchestrator_policy.defaults()
+                policy["permissions"].update(plan=True, assign_local=True, call_cloud=True)
+                model_hub.change("SAVE_ORCHESTRATOR", expected_revision=1, policy=policy,
+                                 route_changes={"general.text": profile["id"], "film.storyboard": profile["id"]})
+                job = draft.submit({"id": "b"*32, "idea": "Mèo nhìn cửa rồi bước đi.",
+                                    "seconds": None, "scene_count": None, "ratio": "16:9",
+                                    "mode": "motion", "duration_mode": "auto"})
+                plan = {"estimated_duration_seconds": 4, "production_feasibility": "feasible",
+                        "duration_reasoning": "Hai hành động ngắn.", "shots": [
+                            {"action": "Mèo nhìn cửa.", "reason": "Mở đầu", "suggested_seconds": 2},
+                            {"action": "Mèo bước đi.", "reason": "Tiếp nối", "suggested_seconds": 2}]}
+                shots = [{"title": "Mèo", "continuity": "Cùng căn phòng", "description": desc,
+                          "image_prompt": prompt, "audio": "Quiet"}
+                         for desc, prompt in (("Mèo nhìn cửa", "Cat looks at door"),
+                                              ("Mèo bước đi", "Cat walks away"))]
+                results = iter([plan, *shots])
+                response = connection.return_value.getresponse.return_value
+                response.status = 200
+                paused = False
+
+                def read(_size):
+                    nonlocal paused
+                    result = next(results)
+                    paused = pause
+                    return json.dumps({"stop_reason": "end_turn",
+                                       "content": [{"type": "text", "text": json.dumps(result)}]}).encode()
+
+                def require_active():
+                    if paused:
+                        raise PermissionError("OPERATIONS_PAUSED: Owner must resume before new dispatch")
+
+                response.read.side_effect = read
+                with patch.object(draft.ops_control, "require_active", side_effect=require_active):
+                    draft._work(job, nullcontext())
+                saved = draft._read(job["id"])
+                if pause:
+                    self.assertEqual(saved["status"], "FAILED")
+                    self.assertIn("OPERATIONS_PAUSED", saved["error"])
+                    self.assertEqual(saved["cloud_calls"], 1)
+                    self.assertEqual(connection.return_value.request.call_count, 1)
+                else:
+                    self.assertEqual(saved["status"], "STORYBOARD_REVIEW", saved.get("error"))
+                    self.assertEqual(saved["brief"]["seconds"], 4)
+                    self.assertEqual(len(saved["board"]["scenes"]), 2)
+                    self.assertEqual(saved["cloud_calls"], 3)
+                    self.assertEqual(connection.return_value.request.call_count, 3)
+                    self.assertEqual(connection.return_value.request.call_args.args[:2], ("POST", "/v1/messages"))
+                    self.assertTrue(saved["deferred_media_binding"])
+                    self.assertNotIn("motion_plan", saved)
+
     def test_cloud_metadata_uses_https_without_post_or_redirect(self):
         with (patch.dict(os.environ, {"TEST_API_BASE": "https://example.test/v1", "TEST_API_KEY": "fixture-key"}),
               patch("http.client.HTTPSConnection") as connection):
