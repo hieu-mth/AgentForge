@@ -14,7 +14,7 @@ FLUX và LTX kiểm tra lại route đã duyệt sau bước chuẩn bị runtim
 
 Pipeline hiện có trong source: lập immutable film plan và shot slots → Owner review → ComfyUI motion job một lượt đã duyệt → nhận clip MP4, verify SHA/frames/FFmpeg → versioned production + optional local TTS → render episode có receipt → Owner review → publishing handoff local/optional private-only YouTube CLI.
 
-Quy trình **không** tự tạo đầy đủ phim từ một prompt, không tự kiểm visual identity/continuity và không bảo đảm chất lượng media. Mỗi shot cần workflow, weights, nguồn nội dung và quyền được kiểm chứng. Tooling cho phép one-shot pilot; hiệu suất và khả năng dựng phim dài chưa được thử trên PC Owner.
+Studio có thể lập storyboard từ nội dung Owner, tạo ảnh và motion theo timeline đã duyệt, rồi ghép MP4. Chất lượng visual identity, continuity và hiệu suất phim dài cần nghiệm thu riêng. Mỗi lượt dispatch cần workflow, weights và quyền phù hợp.
 
 - [Motion](../verification/MOTION.md)
 - [Production](../verification/PRODUCTION.md)

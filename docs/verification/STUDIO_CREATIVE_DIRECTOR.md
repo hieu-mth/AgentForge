@@ -1,6 +1,6 @@
 # Studio Creative Director
 
-New motion drafts with authored scene headings and the current duration mode use Creative Director version 1. Existing drafts, free-form ideas and still productions retain their existing planner. SQLite requires no migration. The storyboard model proposes ordered groups of action IDs, camera direction and relative duration. Python validates coverage and compiles runtime-sized segments within the existing production frame and segment budget.
+New motion drafts with authored scene headings and the current duration mode use Creative Director. Existing drafts, free-form ideas and still productions retain their existing planner. SQLite requires no migration. The storyboard model proposes ordered groups of action IDs, camera direction and relative duration. Python validates coverage and compiles runtime-sized segments within the existing production frame and segment budget.
 
 The approval digest includes the compiled plan, the segment storyboard and the existing model and motion identity. On resume the stored plan is recompiled against the pinned output profile and the storyboard frame counts are rechecked. Editing segment text updates the storyboard digest and uses the existing asset invalidation rules. Authored scene boundaries and the creative segment layout stay fixed during segment edits. A new production is required to propose a different layout.
 
@@ -10,7 +10,7 @@ Incomplete or out-of-order action coverage receives at most one contextual model
 
 ## Video comparison
 
-On an executable rollback, leave version 1 drafts paused until the compatible build is restored. Older builds do not understand this layout or its approval digest. Registry rollback to the exact pinned profile remains supported by the existing dispatch guard.
+On an executable rollback, leave drafts using the creative plan paused until the compatible build is restored. Older builds do not understand this layout or its approval digest. Registry rollback to the exact pinned profile remains supported by the existing dispatch guard.
 
 Use separate draft, visual and motion ledgers and workspace paths for the baseline and candidate. Hold the script, enabled Model Hub assignments, workflow, encoder and rendering settings constant. Approve each storyboard through the existing Owner gate before media dispatch.
 
