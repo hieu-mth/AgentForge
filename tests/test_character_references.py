@@ -5,6 +5,7 @@ import io
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from agentforge.features.film_studio import character_references as refs, characters
@@ -33,7 +34,7 @@ class ReferenceTests(unittest.TestCase):
 
     def test_read_does_not_create_reference_table(self):
         self.assertEqual(refs.list_packs(self.ident, self.db)["packs"], [])
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             self.assertFalse(refs._table_exists(conn))
 
     def test_immutable_revisions_and_hash_checked_previews(self):
@@ -48,7 +49,7 @@ class ReferenceTests(unittest.TestCase):
         second = refs.save_pack(self.request(1), self.db)
         self.assertEqual([p["revision"] for p in second["packs"]], [2, 1])
         self.assertEqual(second["packs"][1], first["packs"][0])
-        with sqlite3.connect(self.db) as conn:
+        with closing(sqlite3.connect(self.db)) as conn, conn:
             conn.execute("UPDATE character_references SET payload=? WHERE revision=1", (b"tampered",))
         with self.assertRaisesRegex(ValueError, "integrity"):
             refs.image_bytes(self.ident, 1, "primary", self.db)
