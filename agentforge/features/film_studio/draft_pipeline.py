@@ -14,7 +14,7 @@ from uuid import uuid4
 
 from agentforge import ops_control
 from agentforge.ai import model_hub
-from agentforge.features.film_studio import characters, creative_plan
+from agentforge.features.film_studio import characters, creative_plan, script_analysis
 from agentforge.features.film_studio import draft_audio, draft_continuity, draft_resources, draft_timeline, studio_runtime
 from agentforge.features.media import render, visual_jobs
 from agentforge.features.film_studio.draft_resources import NeedsReconciliation, ResourceWait
@@ -31,11 +31,6 @@ LOG = logging.getLogger(__name__)
 IMG_RETRIES = 3
 BRIEF_LIMIT = 20_000
 OUTLINE_LIMIT = 700
-SCRIPT_HEADING = re.compile(r"(?im)^[ \t]*(?:cảnh|scene)\s+[0-9]+\b")
-AUTHORED_HEADING = re.compile(r"(?im)^[ \t]*(?:#{1,6}[ \t]+)?(?:\*\*)?(?:cảnh|scene)[ \t]+[0-9]+\b[^\r\n]*")
-SCENE_TIME = re.compile(r"\((?:(\d+(?:[.,]\d+)?)\s*[–-]\s*)?(\d+(?:[.,]\d+)?)\s*(?:giây|s)\)", re.I)
-TOTAL_TIME = re.compile(r"(?:thời lượng|video|phim)(?:\s+dài)?\s*[:=]?\s*(\d+)\s*(?:giây|s\b)", re.I)
-SCRIPT_DIALOGUE = re.compile(r"(?m)^[ \t]*([^\W\d][^:\n]{0,27}):[ \t]*(\S[^\n]*)")
 _QUEUE_STATES = {"QUEUED", "RUNNING", "WAITING_RESOURCES"}
 
 
@@ -315,41 +310,6 @@ def _activity(job, stage, operation, profile=None, **details):
     _save(job)
 
 
-def _needs_scene_analysis(text):
-    return (len(text) > 500 or SCRIPT_HEADING.search(text) is not None
-            or SCRIPT_DIALOGUE.search(text) is not None or "\n\n" in text.strip())
-
-
-def _script_ranges(script, count, seconds):
-    headings = [match.start() for match in SCRIPT_HEADING.finditer(script)]
-    if len(headings) > count:
-        raise ValueError(f"Kịch bản có {len(headings)} cảnh đánh số. Hãy tăng số cảnh hoặc chia thành nhiều bản nháp.")
-    dialogue = sum(len(match[2].split()) for match in SCRIPT_DIALOGUE.finditer(script)
-                   if not SCRIPT_HEADING.match(match[1]))
-    if dialogue > seconds * 3:
-        raise ValueError("Thời lượng có thể không đủ cho các dòng lời thoại. Hãy tăng thời lượng hoặc chia kịch bản.")
-    points = [0, *headings[1:], len(script)]
-    while len(points) <= count:
-        # Preserve explicit scene boundaries and prefer paragraph, then line, then word breaks.
-        candidates = []
-        for start, end in zip(points, points[1:]):
-            section = script[start:end]
-            first = len(section) - len(section.lstrip())
-            last = len(section.rstrip())
-            for separator in (r"\n[ \t]*\n", r"\n", r"\s+"):
-                breaks = [match.end() for match in re.finditer(separator, section)
-                          if match.start() > first and match.end() < last]
-                if breaks:
-                    middle = min(breaks, key=lambda at: abs(at - len(section) / 2))
-                    candidates.append((end-start, start+middle))
-                    break
-        if not candidates:
-            raise ValueError("Kịch bản không có đủ đoạn để chia theo số cảnh đã chọn.")
-        points.append(max(candidates)[1])
-        points.sort()
-    return list(zip(points, points[1:]))
-
-
 def _script_scene(job, profile, comfy, source, continuity, index, *, proposed_shot=None, cast=None):
     _activity(job, "STORYBOARD", "script", profile, scene=index + 1)
     seconds, extra = divmod(job["brief"]["seconds"], job["brief"]["scene_count"])
@@ -434,7 +394,7 @@ def _script_scene(job, profile, comfy, source, continuity, index, *, proposed_sh
 def _write_script_board(job, bindings, *, outline=None):
     brief = job["brief"]
     script = outline if outline is not None else brief["idea"]
-    ranges = _script_ranges(script, brief["scene_count"], brief["seconds"])
+    ranges = script_analysis.script_ranges(script, brief["scene_count"], brief["seconds"])
     scenes = []
     visual_continuity = []
     title = continuity = ""
@@ -462,25 +422,16 @@ class ShotBudgetMismatch(ValueError):
         super().__init__(f"AI trả {count} cảnh. Video {seconds} giây cần {minimum}–{maximum} cảnh.")
 
 
-def _duration_preference(brief, text):
-    if brief["duration_mode"] == "manual":
-        return brief["seconds"], "manual"
-    declarations = {int(match[1]) for match in TOTAL_TIME.finditer(text)}
-    if len(declarations) > 1:
-        raise ValueError("Nội dung khai báo nhiều thời lượng khác nhau. Hãy giữ một mốc hoặc chọn thời lượng thủ công.")
-    return (declarations.pop(), "script") if declarations else (None, "ai")
-
-
 def _authored_plan(job, profile, headings):
     brief = job["brief"]
     script = brief["idea"]
     moving = brief.get("mode") == "motion"
     prefix = script[:headings[0].start()]
-    target, duration_source = _duration_preference(brief, prefix)
+    target, duration_source = script_analysis.duration_preference(brief, prefix)
     durations, ranges = [], []
     previous_end = 0
     for index, heading in enumerate(headings):
-        timing = SCENE_TIME.search(heading[0])
+        timing = script_analysis.SCENE_TIME.search(heading[0])
         start = float(timing[1].replace(",", ".")) if timing and timing[1] is not None else None
         end = float(timing[2].replace(",", ".")) if timing else None
         if start is not None and (start != previous_end or end <= start):
@@ -523,10 +474,10 @@ def _duration_plan(job, profile):
     brief = job["brief"]
     moving = brief.get("mode") == "motion"
     script = brief["idea"]
-    headings = list(AUTHORED_HEADING.finditer(script))
+    headings = list(script_analysis.AUTHORED_HEADING.finditer(script))
     if headings:
         return _authored_plan(job, profile, headings)
-    target, duration_source = _duration_preference(brief, script)
+    target, duration_source = script_analysis.duration_preference(brief, script)
     if target is not None:
         draft_timeline.duration_limits(target, moving, studio_runtime.job_output(job))
     cap = draft_timeline.MOTION_PRODUCTION_SHOT_BUDGET if moving else 6
@@ -629,62 +580,6 @@ def _validate_duration_plan(result, moving, max_shot_seconds, output, *, target=
             "initial_accepted_seconds": accepted}
 
 
-_CAMERA = re.compile(r"(?:camera|máy quay|góc máy|khung hình|framing)\b", re.I)
-_GLOBAL_CONSTRAINT = re.compile(
-    r"(?:phong cách|ánh sáng|màu sắc|style|lighting|negative prompt|ràng buộc chung|"
-    r"yêu cầu chung|không|ưu tiên|giữ nguyên|no)\b", re.I)
-_SCENE_CONSTRAINT = re.compile(
-    r"(?:bối cảnh\s*:|(?:ràng buộc cảnh|yêu cầu cảnh|không đổi góc|scene constraints|"
-    r"ánh nắng(?:\s+(?:buổi sáng|buổi chiều|ban mai))?\s+chiếu)\b)", re.I)
-_GLOBAL_HEADING = re.compile(
-    r"(?<!\w)\**(?:yêu cầu xuyên suốt|ràng buộc xuyên suốt|yêu cầu chung|"
-    r"ràng buộc chung|global constraints|global requirements)\**\s*:\**\s*", re.I)
-_SEQUENCE = re.compile(r",?\s+(?:sau đó|rồi|tiếp đó|sau đấy|then|and then)\s+", re.I)
-_SCRIPT_CLAUSE = re.compile(
-    rf"(?<=[.!?…;])\s+|\n+|,\s+(?=(?:{_CAMERA.pattern}|{_GLOBAL_CONSTRAINT.pattern}|"
-    rf"{_SCENE_CONSTRAINT.pattern}))", re.I)
-
-
-def _scene_beats(source, *, last):
-    heading, _, body = source.strip().partition("\n")
-    timing = SCENE_TIME.search(heading)
-    inline = heading[timing.end():].lstrip("* :—–-") if timing else heading.partition(":")[2].strip()
-    actions, camera, constraints, global_constraints = [], [], [], []
-    content = "\n".join(part for part in (inline, body) if part)
-    if last and (header := _GLOBAL_HEADING.search(content)):
-        global_constraints.extend(line.strip(" *-\t") for line in content[header.end():].splitlines()
-                                  if line.strip(" *-\t"))
-        content = content[:header.start()]
-    for paragraph in re.split(r"\n\s*\n", content):
-        for part in _SCRIPT_CLAUSE.split(paragraph):
-            part = part.strip(" *")
-            if not part:
-                continue
-            if _CAMERA.match(part):
-                camera.append(part)
-            elif _SCENE_CONSTRAINT.match(part):
-                constraints.append(part)
-            elif _GLOBAL_CONSTRAINT.match(part):
-                (global_constraints if last else constraints).append(part)
-            else:
-                actions.extend(beat.strip(" ,;") for beat in _SEQUENCE.split(part) if beat.strip(" ,;"))
-    return {"actions": actions, "camera": camera, "constraints": constraints,
-            "global_constraints": global_constraints}
-
-
-def _shot_beat(actions, sequence, count, start_frame, frames, previous):
-    if not actions:
-        raise ValueError("Không tìm thấy hành động rõ trong cảnh. Hãy mô tả điều xảy ra trước khi tạo storyboard.")
-    first = (sequence - 1) * len(actions) // count
-    end = max(first + 1, sequence * len(actions) // count)
-    assigned = actions[first:end]
-    # When a scene has fewer actions than shots, allocate successive portions
-    # of the same action. A static observation is valid; a new event is not.
-    return {"assigned_text": " ".join(assigned)[:360], "start_frame_in_scene": start_frame,
-            "end_frame_exclusive": start_frame + frames, "previous_shot": previous,
-            "continued_action": sequence > 1 and (sequence - 2) * len(actions) // count == first}
-
-
 def _write_planned_board(job, bindings):
     if job.get("board"):
         raise ValueError("Storyboard đã hoàn chỉnh. Hãy dùng thao tác sửa storyboard để tạo phiên bản mới.")
@@ -710,14 +605,14 @@ def _write_planned_board(job, bindings):
             _select_cast(job, bindings, script[:1600] if authored else " ".join(shot["action"] for shot in plan["shots"])))
     accepted = list(checkpoint["shots"]) if checkpoint is not None else []
     ranges = ([shot["script_range"] for shot in plan["shots"]] if authored else
-              _script_ranges(script, brief["scene_count"], brief["seconds"]) if _needs_scene_analysis(script) else [])
+              script_analysis.script_ranges(script, brief["scene_count"], brief["seconds"]) if script_analysis.needs_scene_analysis(script) else [])
     scene_keys, scene_inputs = {}, {}
     global_context = ""
     if authored:
         for shot in plan["shots"]:
             scene_number = shot["content_scene"]
             if scene_number not in scene_inputs:
-                scene_inputs[scene_number] = _scene_beats(
+                scene_inputs[scene_number] = script_analysis.scene_beats(
                     script[slice(*shot["script_range"])], last=scene_number == plan["content_scene_count"])
         global_context = "\n".join([script[:ranges[0][0]].strip(), *(
             constraint for scene in scene_inputs.values() for constraint in scene["global_constraints"])])[:2400]
@@ -761,7 +656,7 @@ def _write_planned_board(job, bindings):
             request["script_context"] = global_context
             request["camera"] = [direction[:240] for direction in inputs["camera"][:8]]
             request["scene_constraints"] = [constraint[:240] for constraint in inputs["constraints"][:8]]
-            request["beat"] = _shot_beat(inputs["actions"], shot["content_shot"], shot["content_shot_count"],
+            request["beat"] = script_analysis.shot_beat(inputs["actions"], shot["content_shot"], shot["content_shot_count"],
                                         frame_offset, layout[index], previous)
             if "creative_shot" in shot:
                 request["camera"] = [shot["creative_camera"], *request["camera"]]
@@ -847,7 +742,7 @@ def _direct_authored_plan(job, plan, profile):
         if shot["content_shot"] == 1:
             start, end = shot["script_range"]
             scenes.append({"scene": number, "source_range": [start, end], "frames": 0,
-                           **_scene_beats(script[start:end], last=number == plan["content_scene_count"])})
+                           **script_analysis.scene_beats(script[start:end], last=number == plan["content_scene_count"])})
         scenes[-1]["frames"] += shot["script_shot_frames"]
     context = [script[:scenes[0]["source_range"][0]][:1600],
                *(item for scene in scenes for item in scene["global_constraints"])]
@@ -900,13 +795,13 @@ def _write_board(job, bindings):
         return _write_planned_board(job, bindings)
     if job["brief"]["seconds"] == 30 and job["brief"].get("mode") == "motion":
         brief = job["brief"]
-        scripted = _needs_scene_analysis(brief["idea"])
+        scripted = script_analysis.needs_scene_analysis(brief["idea"])
         if not job.get("plan"):
             minimum, maximum = draft_timeline.shot_limits(30)
-            minimum = max(minimum, len(SCRIPT_HEADING.findall(brief["idea"])))
+            minimum = max(minimum, len(script_analysis.SCRIPT_HEADING.findall(brief["idea"])))
             if scripted and maximum > minimum:
                 try:
-                    _script_ranges(brief["idea"], maximum, 30)
+                    script_analysis.script_ranges(brief["idea"], maximum, 30)
                 except ValueError:
                     maximum = minimum
             _activity(job, "PLANNING", "plan", bindings["general.text"])
@@ -917,14 +812,14 @@ def _write_board(job, bindings):
                     f"Choose {minimum} to {maximum} distinct short shots based on the action. "
                     "Keep the story order and important actions. Write an outline of at most 700 characters "
                     "with at least 16 words; prefer distinct action beats over repeated establishing shots.",
-                    {"excerpt": brief["idea"][:2000], "explicit_scenes": len(SCRIPT_HEADING.findall(brief["idea"]))},
+                    {"excerpt": brief["idea"][:2000], "explicit_scenes": len(script_analysis.SCRIPT_HEADING.findall(brief["idea"]))},
                     fields, bindings.get("image.generate"), job=job)
             count = _number(result.get("scene_count"), minimum, maximum)
             job["plan"] = _text(result.get("outline"), OUTLINE_LIMIT, label="Dàn ý do AI trả về")
             brief["scene_count"] = count
             _save(job)
         return _write_script_board(job, bindings, outline=None if scripted else job["plan"])
-    if job["brief"].get("input_type") == "script" or _needs_scene_analysis(job["brief"]["idea"]):
+    if job["brief"].get("input_type") == "script" or script_analysis.needs_scene_analysis(job["brief"]["idea"]):
         return _write_script_board(job, bindings)
     comfy = bindings.get("image.generate")
     if not job.get("plan"):
@@ -1478,13 +1373,13 @@ def submit(data):
         idea.encode("utf-8")
     except UnicodeError:
         raise ValueError("Nội dung có ký tự Unicode không hợp lệ.") from None
-    if duration_mode is None and _needs_scene_analysis(idea):
+    if duration_mode is None and script_analysis.needs_scene_analysis(idea):
         if motion_mode and seconds == 30:
             minimum, maximum = draft_timeline.shot_limits(seconds)
-            count_for_script = min(maximum, max(minimum, len(SCRIPT_HEADING.findall(idea))))
+            count_for_script = min(maximum, max(minimum, len(script_analysis.SCRIPT_HEADING.findall(idea))))
         else:
             count_for_script = count
-        _script_ranges(idea, count_for_script, seconds)
+        script_analysis.script_ranges(idea, count_for_script, seconds)
     brief = {"idea": idea, "seconds": seconds,
              "scene_count": count, "ratio": data["ratio"]}
     mode = data.get("mode", "still")
@@ -1520,7 +1415,7 @@ def submit(data):
     job = {"id": ident, "brief": brief, "stage": "QUEUED", "status": "QUEUED",
            "video_sha": None, "created_at": created_at, "updated_at": created_at}
     job["storyboard_version"] = 1
-    if motion_mode and duration_mode is not None and AUTHORED_HEADING.search(idea):
+    if motion_mode and duration_mode is not None and script_analysis.AUTHORED_HEADING.search(idea):
         job["creative_director_version"] = 1
     job["studio_plan"] = studio_runtime.routing_identity(bindings, moving=motion_mode)
     job["deferred_media_binding"] = True

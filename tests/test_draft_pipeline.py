@@ -10,7 +10,7 @@ from contextlib import ExitStack, closing, nullcontext
 from types import SimpleNamespace
 from uuid import uuid4
 
-from agentforge.features.film_studio import draft_motion, draft_pipeline as draft, studio_ollama, studio_runtime
+from agentforge.features.film_studio import draft_motion, draft_pipeline as draft, studio_ollama, studio_runtime, script_analysis
 from agentforge.features.media import flux_runtime, studio_flux
 from tests import owner_http_fixture
 from tests.test_flux_runtime import profile as flux_profile
@@ -578,11 +578,12 @@ class DraftTests(unittest.TestCase):
             with patch.object(draft, "_dispatch"):
                 draft.act(self.ident, "cancel", {})
             self.assertTrue(draft._cancellation(self.ident))
-            conn = sqlite3.connect(ledger)
+            conn = motion._db(ledger, write=True)
             try:
                 with conn:
-                    conn.execute("CREATE TABLE motion_jobs (film_slug TEXT, state TEXT)")
-                    conn.execute("INSERT INTO motion_jobs VALUES (?, 'SUBMITTED')", (f"d-{self.ident}-v2",))
+                    conn.execute("INSERT INTO motion_jobs VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                                 ("c"*32, f"d-{self.ident}-v2", "shot", "a"*64, "b"*64,
+                                  "d"*64, 1, None, "SUBMITTED", "created", "updated"))
                 with self.assertRaises(ValueError):
                     draft.act(self.ident, "delete", {})
                 self.assertTrue(folder.is_dir())
@@ -776,7 +777,7 @@ class DraftTests(unittest.TestCase):
             draft._duration_plan({"brief": {**manual, "seconds": 7}}, {})
 
     def test_global_requirements_after_an_authored_action_are_not_action_beats(self):
-        result = draft._scene_beats(
+        result = script_analysis.scene_beats(
             "Cảnh 3 (10–15 giây): Mèo nhìn ra cửa sổ, sau đó vẫy đuôi. "
             "**Yêu cầu xuyên suốt:**\n- Giữ nhất quán căn phòng.\n"
             "- AI tự quyết định góc máy.\n- Không chữ.", last=True)
@@ -784,7 +785,7 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(result["camera"], [])
         self.assertEqual(result["global_constraints"],
                          ["Giữ nhất quán căn phòng.", "AI tự quyết định góc máy.", "Không chữ."])
-        scene = draft._scene_beats(
+        scene = script_analysis.scene_beats(
             "Cảnh 1 (0–5 giây): Mèo nằm bên cửa sổ. Ánh nắng buổi sáng chiếu nhẹ vào căn phòng. "
             "Bướm bay qua trước mặt mèo.", last=False)
         self.assertEqual(scene["actions"], ["Mèo nằm bên cửa sổ.", "Bướm bay qua trước mặt mèo."])
@@ -879,7 +880,7 @@ class DraftTests(unittest.TestCase):
         self.assertIn("Không lời thoại", contexts[0]["script_context"])
         self.assertEqual([x["description"] for x in draft._read(self.ident)["board"]["scenes"]],
                          [x["description"] for x in original])
-        fewer = draft._shot_beat(["Mèo bước tới hộp."], 2, 3, 40, 40, None)
+        fewer = script_analysis.shot_beat(["Mèo bước tới hộp."], 2, 3, 40, 40, None)
         self.assertTrue(fewer["continued_action"])
         self.assertEqual(fewer["assigned_text"], "Mèo bước tới hộp.")
         complete = draft._read(self.ident)
@@ -976,16 +977,16 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(draft._read(self.ident)["storyboard_history"][0]["sha256"], old_sha)
 
     def test_script_ranges_keep_exact_text_and_reject_insufficient_capacity(self):
-        self.assertFalse(draft._needs_scene_analysis("Một chú mèo đi tìm bạn."))
+        self.assertFalse(script_analysis.needs_scene_analysis("Một chú mèo đi tìm bạn."))
         text = "Cảnh 1 — Miu nhìn ra cửa sổ 🐱\nMiu: Chào bạn!\n\nCảnh 2 — Miu chạy ra vườn."
-        self.assertTrue(draft._needs_scene_analysis(text))
-        ranges = draft._script_ranges(text, 2, 12)
+        self.assertTrue(script_analysis.needs_scene_analysis(text))
+        ranges = script_analysis.script_ranges(text, 2, 12)
         self.assertEqual("".join(text[start:end] for start,end in ranges), text)
         self.assertTrue(text[ranges[1][0]:].startswith("Cảnh 2"))
         with self.assertRaisesRegex(ValueError, "3 cảnh"):
-            draft._script_ranges(text+"\nCảnh 3 — Trời tối.", 2, 12)
+            script_analysis.script_ranges(text+"\nCảnh 3 — Trời tối.", 2, 12)
         with self.assertRaisesRegex(ValueError, "Thời lượng"):
-            draft._script_ranges(text+"\nMiu: "+"chào "*50, 2, 6)
+            script_analysis.script_ranges(text+"\nMiu: "+"chào "*50, 2, 6)
 
     def test_long_script_analysis_uses_bounded_excerpts_before_storyboard(self):
         source = "Cảnh 1 — Miu\n" + "Miu nhìn ra cửa sổ. 🐱\n" * 140 + "\nCảnh 2 — Miu chạy ra vườn."

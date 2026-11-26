@@ -235,19 +235,15 @@ class MotionRuntimeTests(unittest.TestCase):
                     with self.assertRaises(verify.MotionVerificationError):
                         verify._probe(path, ltx_frames=other)
 
-    def test_ltx_source_profile_migrates_and_import_uses_ledger(self):
+    def test_ltx_source_profile_import_uses_exact_current_ledger_frames(self):
         info, filename = self.completed()
         path = self.outputs / filename
         filename = filename.replace(".mp4", "_.mp4")
         path.rename(self.outputs / filename)
         job_id = info["job_id"]
         with closing(motion._db(self.db)) as conn, conn:
-            conn.execute("ALTER TABLE motion_sources DROP COLUMN frames")
-            conn.execute("PRAGMA user_version=1")
-            conn.execute("INSERT INTO motion_sources VALUES (?,?,?,?)",
-                         (job_id, motion.motion_ltx.MODEL_ID, "b"*32, "d"*64))
-        self.assertEqual(verify._job(job_id, self.db)["ltx_frames"], 33)
-        self.assertEqual(motion.migrate_ledger(self.db), {"migrated": True, "version": 2})
+            conn.execute("INSERT INTO motion_sources VALUES (?,?,?,?,?)",
+                         (job_id, motion.motion_ltx.MODEL_ID, "b"*32, "d"*64, 33))
         self.assertEqual(verify._job(job_id, self.db)["ltx_frames"], 33)
         with closing(motion._db(self.db)) as conn, conn:
             conn.execute("UPDATE motion_sources SET frames=49 WHERE job_id=?", (job_id,))

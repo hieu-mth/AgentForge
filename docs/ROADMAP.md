@@ -8,8 +8,8 @@ Baseline main: `9db60df28f242abf9ed199c409409f422d4f89db`. Mục tiêu: một St
 | F02 character references | BLOCKED_RUNTIME | POC conditioning với ảnh đã duyệt, benchmark A/B |
 | F03 giới hạn shot local | BLOCKED_RUNTIME | Clip dài hơn được xác nhận trên GPU hoặc adapter khác |
 | F04 mất provider ID | PARTIAL (Owner-attested GET-only recovery) | Đối soát có chứng cứ, không retry mù |
-| F05 compatibility production | OPEN | Một schema mới, archive DB cũ có chủ đích |
-| F06 draft_pipeline | OPEN | Tách theo trách nhiệm, giữ checkpoint/approval |
+| F05 compatibility production | PARTIAL (motion ledger schema strict) | Một schema mới, archive DB cũ có chủ đích |
+| F06 draft_pipeline | PARTIAL (pure script analysis extracted) | Tách theo trách nhiệm, giữ checkpoint/approval |
 | F07 readiness quá sớm | IMPLEMENTED | Storyboard theo phương pháp cụ thể không cần quyền media/FFmpeg; approval vẫn chặn |
 | F08 OAuth Dashboard | IMPLEMENTED (runtime pending) | Đăng nhập, danh sách model và logout có consent |
 | F09 chẩn đoán lỗi | PARTIAL | Mã lỗi an toàn cho exception bất ngờ, CLI OAuth rõ hơn; chưa có logging toàn hệ thống |
