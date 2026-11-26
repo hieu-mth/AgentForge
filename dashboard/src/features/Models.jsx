@@ -232,6 +232,7 @@ export function ModelHub({mutate}) {
     {editor&&<ModelProfileDialog adapters={adapters} profile={editor.profile}
       profiles={profiles} revision={editor.revision} labels={labels} onCancel={()=>setEditor(null)} onSave={saveProfile}
       onReload={reloadEditor}
+      onChatGPTAction={(ack,account_ref)=>mutate('/api/model-hub/chatgpt',{ack,account_ref},{inlineError:true})}
       onUseRevision={revision=>setEditor(old=>({...old,revision}))}
       onPreview={(profile,revision)=>mutate('/api/model-hub/profile/preview',{
         ack:'PREVIEW_MODEL_PROFILE',expected_revision:revision,profile,

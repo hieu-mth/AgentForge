@@ -171,7 +171,7 @@ def _callback(query, state, old_client):
 
 
 def sign_in(ref):
-    """Explicit CLI POC: local browser, one pending attempt, no tokens printed."""
+    """Explicit local browser sign-in, one pending attempt, no tokens printed."""
     _ref(ref)
     _require_windows()
     try:
@@ -205,7 +205,7 @@ def sign_in(ref):
                     raise AuthError("Invalid OAuth state.")
                 outcome["query"] = query
                 self.send_response(200)
-                message = b"AgentForge received the sign-in callback. Return to the terminal."
+                message = b"AgentForge received the sign-in callback. Return to AgentForge."
             except (ValueError, AuthError):
                 self.send_response(400)
                 message = b"Invalid sign-in callback."

@@ -1,9 +1,58 @@
 """Owner-authenticated Model Hub configuration and explicit probes."""
+import re
+import threading
+import sqlite3
+
 from agentforge.ai import model_hub
 from agentforge.api.routes._shared import UNHANDLED
 
 
+_CHATGPT_ACTION = threading.Lock()
+
+
+def _chatgpt_action(server, request, session):
+    from agentforge.ai import chatgpt_auth
+    from agentforge.ops_control import require_active
+    if (session is None or not server.allow_external_actions
+            or set(request) != {"ack", "account_ref"}
+            or request["ack"] not in {"CONNECT_CHATGPT", "LIST_CHATGPT_MODELS", "DISCONNECT_CHATGPT"}):
+        raise PermissionError("ChatGPT account actions require explicit Owner confirmation and external-tools mode.")
+    ref = chatgpt_auth._ref(request["account_ref"])
+    require_active()
+    if not _CHATGPT_ACTION.acquire(blocking=False):
+        raise ValueError("ChatGPT account action in progress.")
+    try:
+        if request["ack"] == "CONNECT_CHATGPT":
+            chatgpt_auth.sign_in(ref)
+            return {"account_ref": ref, "connected": True}
+        if request["ack"] == "DISCONNECT_CHATGPT":
+            result = chatgpt_auth.sign_out(ref)
+            return {"account_ref": ref, "connected": False,
+                    "remote_revocation": result["remote_revocation"]}
+        models = []
+        seen = set()
+        for item in chatgpt_auth.models(ref):
+            slug = item.get("slug")
+            label = item.get("display_name")
+            if (not isinstance(slug, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/+-]{0,159}", slug)
+                    or slug in seen):
+                continue
+            seen.add(slug)
+            models.append({"slug": slug, "display_name": label[:160] if isinstance(label, str) else slug})
+            if len(models) == 200:
+                break
+        return {"account_ref": ref, "connected": True, "models": models}
+    except chatgpt_auth.AuthError:
+        raise
+    except (ValueError, TypeError, KeyError, OSError, sqlite3.Error):
+        raise ValueError("CHATGPT_ACCOUNT_ACTION_FAILED; check local connection or credentials.") from None
+    finally:
+        _CHATGPT_ACTION.release()
+
+
 def handle(server, path, request, session=None):
+    if path == "/api/model-hub/chatgpt":
+        return _chatgpt_action(server, request, session)
     if path == "/api/model-hub/orchestrator":
         action = request.get("ack")
         if action == "SAVE_ORCHESTRATOR" and set(request) == {

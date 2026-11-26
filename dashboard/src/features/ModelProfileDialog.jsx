@@ -23,7 +23,7 @@ const comparisonFields=['id','provider','model','enabled','base_url','base_url_e
 const comparisonData=profile=>Object.fromEntries(comparisonFields.filter(key=>key in profile)
   .map(key=>[key,profile[key]]));
 
-export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,onSave,onPreview,onReload,onUseRevision,labels}){
+export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,onSave,onPreview,onReload,onUseRevision,labels,onChatGPTAction}){
   const [form]=Form.useForm();
   const limitsPanel=useRef(null);
   const initialAdapter=adapters.find(item=>item.id===profile?.provider)??adapters[0];
@@ -36,6 +36,10 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
   const connection=Form.useWatch('connection',form)??initial.connection;
   const provider=Form.useWatch('provider',form)??initial.provider;
   const fluxEnabled=Form.useWatch('flux_enabled',form)??initial.flux_enabled;
+  const accountRef=Form.useWatch('account_ref',form)??initial.account_ref;
+  const [chatgpt,setChatgpt]=useState(null);
+  const [chatgptError,setChatgptError]=useState(null);
+  const currentChatGPT=chatgpt?.account_ref===accountRef?chatgpt:null;
   const adapter=adapters.find(item=>item.id===provider);
   const [useEnv,setUseEnv]=useState(Boolean(profile?.api_key_env));
   const directCloud=connection==='cloud'&&!useEnv&&provider!=='chatgpt';
@@ -62,7 +66,29 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
     if(!next)return;
     form.resetFields(['model','api_key',...Object.keys(fieldLabels)]);
     setUseEnv(false);
+    setChatgpt(null);
+    setChatgptError(null);
     form.setFieldsValue({provider:next.id,...next.defaults});
+  }
+
+  async function chatgptAction(ack){
+    setChatgptError(null);
+    try{
+      const {account_ref}=await form.validateFields(['account_ref']);
+      setSaving(true);
+      const result=await onChatGPTAction(ack,account_ref);
+      setChatgpt(result);
+      if(ack==='CONNECT_CHATGPT'){
+        // Authentication can succeed even if the catalog request fails.
+        const catalog=await onChatGPTAction('LIST_CHATGPT_MODELS',account_ref);
+        setChatgpt(catalog);
+      }
+      if(ack==='DISCONNECT_CHATGPT'){
+        form.setFieldValue('model',undefined);
+      }
+    }catch(error){
+      setChatgptError(requestError(error));
+    }finally{setSaving(false);}
   }
 
   async function save(checkAfterSave=false){
@@ -145,11 +171,11 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         </Form.Item>
       </div>
       <p className="model-dialog-help">{adapter.description}</p>
-      <Form.Item name="model" label={adapter.model_label}
+      {provider!=='chatgpt'&&<Form.Item name="model" label={adapter.model_label}
         rules={[{required:true,max:160,pattern:/^[A-Za-z0-9][A-Za-z0-9._:/+-]*$/,
           message:'Nhập tên model hoặc mã checkpoint hợp lệ.'}]}>
         <Input placeholder={adapter.model_example}/>
-      </Form.Item>
+      </Form.Item>}
       <div className="model-dialog-divider"/>
       {connection==='cloud'&&provider!=='chatgpt'&&<Button type="link" className="model-dialog-mode" onClick={()=>{
         form.setFieldsValue({...(useEnv?adapter.defaults:adapter.environment_defaults),api_key:undefined});
@@ -168,11 +194,33 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         }}]}>
         <Input placeholder={directCloud?'https://api.example.com':example} spellCheck={false}/>
       </Form.Item>)}
-      {provider==='chatgpt'&&<Alert type="info" showIcon message="Kết nối ChatGPT Plan qua OAuth"
-        description={<><p>Trên máy chạy AgentForge, cài gói chatgpt và dùng CLI đăng nhập, lấy model slug. Không nhập mật khẩu, cookie hoặc token tại đây.</p>
-          <code>python -m agentforge.ai.chatgpt_auth login {form.getFieldValue('account_ref')||'owner'}</code><br/>
-          <code>python -m agentforge.ai.chatgpt_auth models {form.getFieldValue('account_ref')||'owner'}</code><br/>
-          <a href="https://chatgpt.com/#settings/Usage" target="_blank" rel="noreferrer">Quản lý hạn mức ChatGPT</a></>}/>}
+      {provider==='chatgpt'&&<>
+        <Alert type="info" showIcon message="Kết nối ChatGPT Plan qua OAuth"
+          description={<>
+            <p>Liên kết mở trình duyệt OpenAI trên máy chạy AgentForge. Không nhập mật khẩu, cookie hoặc token tại đây.</p>
+            <Space wrap>
+              <Button type="primary" onClick={()=>chatgptAction('CONNECT_CHATGPT')}>Liên kết ChatGPT</Button>
+              <Button onClick={()=>chatgptAction('LIST_CHATGPT_MODELS')}>Lấy danh sách model</Button>
+              <Button danger onClick={()=>Modal.confirm({
+                title:'Ngắt kết nối tài khoản ChatGPT?',
+                content:'Phiên OAuth local sẽ bị xóa; các hồ sơ dùng tài khoản này cần kết nối lại để chạy.',
+                onOk:()=>chatgptAction('DISCONNECT_CHATGPT'),
+              })}>Ngắt kết nối</Button>
+            </Space>
+            {currentChatGPT&&<p>{currentChatGPT.connected?'Đã kết nối tài khoản':'Đã ngắt kết nối local'}
+              {currentChatGPT.remote_revocation==='NOT_CONFIRMED'?' · Chưa xác nhận thu hồi quyền từ xa':''}</p>}
+            {chatgptError&&<Alert type="error" showIcon message={chatgptError}/>}
+            <a href="https://chatgpt.com/#settings/Usage" target="_blank" rel="noreferrer">Quản lý hạn mức ChatGPT</a>
+          </>}/>
+        <Form.Item name="model" label="Model ChatGPT" rules={[{required:true,message:'Lấy danh sách rồi chọn model.'}]}>
+          <Select showSearch optionFilterProp="label" placeholder="Liên kết hoặc lấy danh sách model"
+            options={[
+              ...(profile?.model&&!currentChatGPT?.models?.some(item=>item.slug===profile.model)&&profile.account_ref===accountRef
+                ?[{value:profile.model,label:profile.model+' · Đã lưu'}]:[]),
+              ...(currentChatGPT?.models||[]).map(item=>({value:item.slug,label:item.display_name+' · '+item.slug})),
+            ]}/>
+        </Form.Item>
+      </>}
       {directCloud&&<Form.Item name="api_key" label="API key" dependencies={['base_url']}
         extra={profile?.has_api_key?'Để trống để giữ API key đã lưu cho endpoint hiện tại.':'API key được mã hóa theo tài khoản Windows.'}
         rules={[({getFieldValue})=>({validator:(_,value)=>

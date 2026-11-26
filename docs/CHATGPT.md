@@ -14,3 +14,7 @@ AgentForge implements a Windows-only opt-in OAuth CLI and model profile. CI veri
 DPAPI encrypted account records are outside the repository at ~/.agentforge/chatgpt.sqlite3. Account reference is configuration, not a token. No credentials in the UI or production receipts. The CLI is a POC, not a fully integrated browser sign-in UI. The ID token must verify against official JWKS. The Responses endpoint requires store=false, stream=true; incomplete streams fail, quota failures do not fall back. No model is hardcoded. No real account has been used in CI.
 
 Official docs: https://developers.openai.com/siwc/token-sharing-open-source/sign-in ; https://developers.openai.com/siwc/token-sharing-open-source/models-and-inference ; https://openai.com/policies/sign-in-with-chatgpt-terms/ .
+
+## Dashboard
+
+Khởi động backend bằng `--allow-external-tools`, đăng nhập Owner, vào Model AI → đăng ký model Cloud → ChatGPT Plan. Chọn mã tài khoản, bấm Liên kết ChatGPT (trình duyệt OpenAI), sau đó chọn model từ danh sách. Nếu đã đăng nhập bằng CLI, chỉ cần Lấy danh sách model. Nút Ngắt kết nối yêu cầu xác nhận và xóa credential local; không tự xóa các profile. Catalog không trả email, token hoặc secret về Dashboard. OAuth và inference thật vẫn cần Owner nghiệm thu, CI chỉ mock giao thức/provider.
