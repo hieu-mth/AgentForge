@@ -106,7 +106,7 @@ export function StudioDrafts({mutate,onCharacters}) {
   const {data,reload,setData,...resource}=useResource(API);
   const {data:capacity,reload:refreshCapacity}=useResource(API+'/resources');
   const hub=useResource('/api/model-hub');
-  useScreenRefresh(()=>{reload();hub.reload();});
+  useScreenRefresh(()=>Promise.all([reload(),hub.reload()]));
   const method=values.routeStrategy??'assigned';
   const methodOptions=productionMethodOptions(hub.data);
   const cloudBounds=cloudSecondsBounds(hub.data,method);

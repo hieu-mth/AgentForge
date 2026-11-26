@@ -89,7 +89,7 @@ Trong Nội dung & phiên bản, chọn AI lập liên tục chuyển động. M
 
 ## AI đánh giá frame mẫu (pilot có giám sát)
 
-Gán model hỗ trợ ảnh qua Ollama, OpenAI-compatible hoặc Anthropic-compatible tại tuyến Kiểm tra chất lượng hình ảnh (vision.qa). Metadata readiness chỉ kiểm tra endpoint, không chứng minh model thực sự hiểu hình ảnh. Bật quyền gọi tương ứng và FFmpeg. Trong storyboard của video đang chờ duyệt, chọn AI đánh giá cảnh; hộp xác nhận thông báo việc gửi ảnh ra cloud và khả năng tính phí. Pipeline kiểm tra SHA video và ảnh, lấy frame đầu/giữa/cuối cảnh và ranh giới trước đó, tạo contact sheet JPEG có giới hạn, gọi đúng model đã gán và lưu kết quả kèm SHA, revision, frame indices. Mỗi lượt cloud được tính vào ngân sách production; không tự fallback hoặc thử lại.
+Tại Model AI, gán model hỗ trợ ảnh qua ChatGPT Plan, Ollama, OpenAI-compatible hoặc Anthropic-compatible tại tuyến Kiểm tra chất lượng hình ảnh (vision.qa). Metadata readiness chỉ kiểm tra endpoint, không chứng minh model thực sự hiểu hình ảnh. Bật quyền gọi tương ứng và FFmpeg. Trong storyboard của video đang chờ duyệt, chọn AI đánh giá cảnh; hộp xác nhận thông báo việc gửi ảnh ra cloud và khả năng tính phí. Pipeline kiểm tra SHA video và ảnh, lấy frame đầu/giữa/cuối cảnh và ranh giới trước đó, tạo contact sheet JPEG có giới hạn, gọi đúng model đã gán và lưu kết quả kèm SHA, revision, frame indices. Mỗi lượt cloud được tính vào ngân sách production; không tự fallback hoặc thử lại.
 
 Kết quả PASS/FAIL/UNCERTAIN chỉ đánh giá các frame mẫu, không xác nhận toàn bộ chuyển động, âm thanh hoặc chất lượng điện ảnh. Chưa chạy QA tự động, chưa tự tạo lại và không thay thế Owner review. Cần benchmark model thị giác thực tế trước khi bật tự động.
 
@@ -111,7 +111,7 @@ Record action coverage, count purposeful angles, and compare each adjacent segme
 
 ## Lời thoại trong Studio (tùy chọn)
 
-Trong storyboard, mở Nội dung & phiên bản → Âm thanh, chọn Windows SAPI hoặc Piper đã cài local. Piper cần tên file voice .onnx hợp lệ và JSON đi kèm; Windows có thể dùng voice mặc định hoặc tên đã cài. Không tải voice tự động. Sau khi Owner duyệt phiên bản mới, Studio dùng phụ đề từng cảnh làm lời thoại, tạo PCM WAV tạm, kiểm tra độ dài, pad khoảng im lặng đúng timeline, ghép AAC và kiểm tra decode. Nếu lời thoại dài hơn cảnh, production giữ ảnh/clip và báo cảnh cần rút ngắn; không tự cắt lời. Thay cấu hình âm thanh giữ checkpoint hình ảnh/chuyển động và tạo phiên bản mới. Receipt ghi nguồn, SHA, số mẫu và trạng thái decode; không khẳng định giọng đọc đúng ngôn ngữ hoặc chất lượng nghệ thuật. Không hỗ trợ tạo nhạc hoặc hiệu ứng âm thanh bằng model ở pilot này.
+Trong storyboard, mở Nội dung & phiên bản → Âm thanh, chọn Windows SAPI hoặc Piper đã cài local. Piper cần tên file voice .onnx hợp lệ và JSON đi kèm; Windows có thể dùng voice mặc định hoặc tên đã cài. Không tải voice tự động. Sau khi Owner duyệt phiên bản mới, Studio dùng phụ đề từng cảnh làm lời thoại, tạo PCM WAV tạm, kiểm tra độ dài, pad khoảng im lặng đúng timeline, ghép AAC và kiểm tra decode. Nếu lời thoại dài hơn cảnh, production giữ ảnh/clip và báo cảnh cần rút ngắn; không tự cắt lời. Thay cấu hình âm thanh giữ checkpoint hình ảnh/chuyển động và tạo phiên bản mới. Receipt ghi nguồn, SHA, số mẫu và trạng thái decode; không khẳng định giọng đọc đúng ngôn ngữ hoặc chất lượng nghệ thuật. Chế độ đọc phụ đề không tự sinh nhạc hoặc hiệu ứng; dùng Audio Director khi cần lập cue và sinh âm thanh.
 
 ## AI Audio Director (pilot)
 
