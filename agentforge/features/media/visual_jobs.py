@@ -89,7 +89,7 @@ def approve(job_id, sha256, *, db_path=None):
     image_for_job(job_id, db_path=db_path)
     with closing(_db(db_path, create=True)) as db, db:
         if db.execute("UPDATE visual_runtime SET reviewed=1 WHERE job_id=?", (job_id,)).rowcount != 1:
-            raise ValueError("No FLUX visual to approve")
+            raise ValueError("No generated visual to approve")
     return {"job_id": job_id, "approved": True}
 
 
@@ -245,7 +245,7 @@ def open_image_for_job(job_id, *, db_path=None, output_root=None):
     if row["status"] != "ASSET_READY" or not row["asset_sha"]:
         raise PermissionError("AI visual image is not ready")
     runtime = runtime_details(job_id, db_path=db_path)
-    if runtime is not None:
+    if runtime is not None and runtime.get("output_dir"):
         from agentforge.features.media.flux_runtime import output_directory
         root = output_directory(runtime["output_dir"])
     else:
@@ -289,7 +289,7 @@ def report(*, db_path=None):
             runtime = json.loads(stored["metadata"])
             row.update({key: runtime[key] for key in (
                 "prompt", "seed", "width", "height", "steps", "scene", "workflow_sha256",
-                "duration_seconds")})
+                "duration_seconds") if key in runtime})
             row["approved"] = bool(stored["reviewed"])
             row["probe"] = runtime.get("probe", False)
     return {"jobs": rows, "no_auto_publication": True, "auto_retry": False}

@@ -1,28 +1,44 @@
-"""Approved Studio LTX V2 adapter. Durable ledger; unknown POST never retried."""
+"""Shared cloud video lifecycle. Provider transports own request and output formats."""
 import hashlib
 import json
-import os
-import re
 import sqlite3
 import time
 from contextlib import closing, nullcontext
 from uuid import uuid4
 
 from agentforge import ops_control
-from agentforge.ai import cloud_credentials, model_hub
-from agentforge.features.film_studio import draft_continuity, studio_ltx_cloud as ltx
+from agentforge.ai import model_hub
+from agentforge.features.film_studio import draft_continuity, studio_ltx_cloud as ltx, studio_agnes as agnes
 from agentforge.features.film_studio.draft_resources import NeedsReconciliation, ResourceBlocked
 from agentforge.features.film_studio.studio_contracts import MotionOutput
 from agentforge.features.media import render
 from agentforge.paths import COMPANY_DATA_DIR, ensure_local_root
 
-ADAPTER_ID = "ltx-cloud-v2-720p"
+ADAPTER_ID = "cloud-motion-720p"
 MAX_CLIP_BYTES = ltx.MAX_MP4
 DB = COMPANY_DATA_DIR / "cloud_motion.sqlite3"
 
 
+TRANSPORTS = (ltx, agnes)
+
+
+def _transport(profile):
+    matches = [transport for transport in TRANSPORTS if transport.supports_video(profile)]
+    if len(matches) != 1:
+        raise ValueError("Unsupported cloud video model.")
+    return matches[0]
+
+
 def supports(profile):
-    return profile.get("provider") == "ltx_cloud" and profile.get("model") in ltx.MODELS
+    return bool(profile.get("provider")) and any(transport.supports_video(profile) for transport in TRANSPORTS)
+
+
+def billable_durations(profile):
+    return _transport(profile).DURATIONS
+
+
+def native_audio(profile):
+    return _transport(profile).NATIVE_AUDIO
 
 
 def output_profile():
@@ -30,7 +46,7 @@ def output_profile():
 
 
 def workflow_sha():
-    return hashlib.sha256(b"ltx-cloud-v2:720p:24fps:6-8-10:native-audio:1").hexdigest()
+    return hashlib.sha256(b"cloud-motion:720p:24fps:provider-duration-v1").hexdigest()
 
 
 def weights_identity():
@@ -46,29 +62,22 @@ def registry_readiness(profile):
 
 
 def _key(profile):
-    endpoint = profile.get("base_url") or os.environ.get(profile.get("base_url_env", ""), "")
-    if endpoint.rstrip("/") not in {"https://api.ltx.io", "https://api.ltx.io/v2"}:
-        raise ValueError("LTX cloud endpoint must be the official HTTPS endpoint.")
-    key = (cloud_credentials.unprotect_api_key(profile["api_key_protected"])
-           if "api_key_protected" in profile else os.environ.get(profile.get("api_key_env", ""), ""))
-    if not re.fullmatch(r"[!-~]{1,4096}", key):
-        raise ValueError("LTX cloud API key is not configured.")
-    return key
+    return _transport(profile).credential(profile)
 
 
 def bind(profile):
     if not supports(profile):
-        raise ValueError("Unsupported LTX cloud model.")
+        raise ValueError("Unsupported cloud video model.")
     _key(profile)
     if not all(render.find_media_tool(tool) for tool in ("ffmpeg", "ffprobe")):
         raise ValueError("Cloud video needs local FFmpeg and ffprobe for verification.")
     return profile
 
 
-def billed_seconds(frames):
+def billed_seconds(frames, durations=ltx.DURATIONS):
     if type(frames) is not int or not 1 <= frames <= 240:
         raise ValueError("Cloud shot exceeds 10 seconds.")
-    return next(s for s in ltx.DURATIONS if s * 24 >= frames)
+    return next(s for s in durations if s * 24 >= frames)
 
 
 def _db(create=False):
@@ -113,7 +122,7 @@ def reconciliation_jobs(job):
 def recover_provider_id(job, data, profile):
     """Owner-attested mapping, checked with provider GET only. Never sends another POST."""
     ident = ltx._id(data["motion_job"])
-    remote = ltx._id(data["provider_id"])
+    remote = _transport(profile)._id(data["provider_id"])
     if (data.get("owner_matched") is not True or job.get("status") != "NEEDS_RECONCILIATION"
             or not any(scene.get("motion_job") == ident and not scene.get("motion_sha")
                        for scene in job.get("board", {}).get("scenes", []))):
@@ -146,7 +155,7 @@ def require_resolved_ledger(job):
     if conn is not None:
         with closing(conn):
             if any(row[0] not in owned for row in conn.execute(
-                    "SELECT id FROM jobs WHERE state IN ('SUBMITTING','SUBMITTED')")):
+                    "SELECT id FROM jobs WHERE production NOT LIKE 'probe:%' AND state IN ('SUBMITTING','SUBMITTED')")):
                 raise ResourceBlocked("CLOUD_MOTION_RECONCILIATION_REQUIRED")
 
 
@@ -161,7 +170,11 @@ def require_draft_removable(ident):
 
 def _path(row):
     from agentforge.features.film_studio import draft_pipeline as draft
-    return ensure_local_root(draft._folder(row["production"]) / ("cloud-" + ltx._id(row["id"]) + ".mp4"))
+    ident = ltx._id(row["id"])
+    if row["production"].startswith("probe:"):
+        from agentforge.paths import WORKSPACE_DIR
+        return ensure_local_root(WORKSPACE_DIR / "model-probes" / (ident + ".mp4"))
+    return ensure_local_root(draft._folder(row["production"]) / ("cloud-" + ident + ".mp4"))
 
 
 def verify_clip(scene, stream):
@@ -187,7 +200,8 @@ def clip_path(scene):
 
 
 def remaining_seconds(job):
-    return sum(billed_seconds(scene["frames"]) for scene in job["board"]["scenes"]
+    durations = job.get("production_plan", {}).get("billable_durations_seconds", ltx.DURATIONS)
+    return sum(billed_seconds(scene["frames"], durations) for scene in job["board"]["scenes"]
                if not scene.get("motion_job"))
 
 
@@ -238,14 +252,12 @@ def _reserve(job, profile, seconds, save):
 def _poll(row, profile):
     if row["endpoint"] not in {"image-to-video", "text-to-video"}:
         raise NeedsReconciliation("Unknown cloud motion endpoint.")
-    response = ltx._request("GET", "/v2/" + row["endpoint"] + "/" + ltx._id(row["provider_id"]), _key(profile))
-    if (not isinstance(response, dict) or response.get("id") != row["provider_id"]
-            or response.get("status") not in {"pending", "processing", "completed", "failed"}):
-        raise NeedsReconciliation("Unknown cloud motion response.")
-    if ("model" in response and response["model"] != row["model"]) or (
-            "duration" in response and response["duration"] != row["seconds"]):
-        raise NeedsReconciliation("Provider job model or duration does not match.")
-    return response
+    if row["model"] != profile.get("model"):
+        raise NeedsReconciliation("Cloud job does not match the assigned model.")
+    try:
+        return _transport(profile).poll_video(row, _key(profile))
+    except ValueError:
+        raise NeedsReconciliation("Cloud job status could not be verified.") from None
 
 
 def _state(ident, state, *, provider_id=None, digest=None):
@@ -270,7 +282,7 @@ def _state(ident, state, *, provider_id=None, digest=None):
 def _shot_row(production, scene, profile):
     row = _row(scene["motion_job"])
     if (row["production"] != production or row["model"] != profile["model"]
-            or row["seconds"] != billed_seconds(scene["frames"])):
+            or row["seconds"] != billed_seconds(scene["frames"], billable_durations(profile))):
         raise NeedsReconciliation("Cloud motion ledger does not match this approved shot.")
     return row
 
@@ -289,13 +301,14 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
         _shot_row(production, scene, profile)
         clip_path(scene)
         return
-    seconds = billed_seconds(scene["frames"])
+    transport = _transport(profile)
+    seconds = billed_seconds(scene["frames"], billable_durations(profile))
     if not scene.get("motion_job"):
         image, source = _source(job, scene, index, previous_motion, folder)
         prompt = (scene["image_prompt"] + ". " + draft_continuity.prompt(scene) +
                   "\nAudio direction: " + scene.get("audio", "") +
                   ". Keep the original actions; do not invent dialogue.")[:5000]
-        body = ltx.payload(profile["model"], prompt, seconds, image=image, audio=True)
+        body = transport.payload(profile["model"], prompt, seconds, image=image, audio=native_audio(profile))
         endpoint = "image-to-video" if image is not None else "text-to-video"
         request_sha = hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
         ident = uuid4().hex
@@ -314,8 +327,8 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
                 conn.execute("INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?,?)",
                              (ident, production, endpoint, profile["model"], seconds, request_sha, "SUBMITTING", None, None))
             try:
-                response = ltx._request("POST", "/v2/" + endpoint, key, body)
-                _state(ident, "SUBMITTED", provider_id=ltx._id(response.get("id")))
+                remote = transport.submit_video(body, key, endpoint)
+                _state(ident, "SUBMITTED", provider_id=remote)
             except (ValueError, OSError, TypeError, sqlite3.Error):
                 raise NeedsReconciliation("Cloud POST outcome uncertain; inspect provider dashboard, never resubmit.") from None
     row = _shot_row(production, scene, profile)
@@ -345,10 +358,10 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
             try:
                 if output.exists():
                     # Recover an interrupted finalization only after technical re-verification.
-                    digest = ltx._verify(output, seconds, require_audio=True)
+                    digest = ltx._verify(output, seconds, require_audio=native_audio(profile))
                 else:
-                    ltx._download(response["result"]["video_url"], temp)
-                    digest = ltx._verify(temp, seconds, require_audio=True)
+                    transport.download_video(response, temp, seconds)
+                    digest = ltx._verify(temp, seconds, require_audio=native_audio(profile))
                     temp.replace(output)
                 _state(row["id"], "VERIFIED", digest=digest)
                 scene["motion_sha"] = digest

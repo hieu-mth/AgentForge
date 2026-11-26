@@ -57,7 +57,7 @@ jobs:
           }
           python -c "from agentforge.features.media.render import find_media_tool; assert all(find_media_tool(t) for t in ('ffmpeg','ffprobe')), 'Missing FFmpeg/ffprobe'"
       - name: Run cloud video integration with real media tools
-        run: python -m unittest tests.test_v5_cloud_motion -v
+        run: python -m unittest tests.test_v5_cloud_motion tests.test_studio_agnes -v
       - name: Run no-inference Owner preflight wrapper
         shell: powershell
         run: .\scripts\agentforge_runtime_certify_windows.ps1

@@ -211,7 +211,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
           description={<div style={{display:'grid',gridTemplateColumns:'minmax(0, 1fr)',gap:8}}>
             {!currentChatGPT?.connected&&<p style={{margin:0}}>Liên kết mở trình duyệt OpenAI trên máy chạy AgentForge. Không nhập mật khẩu, cookie hoặc token tại đây.</p>}
             <Space wrap>
-              <Button type="primary" loading={oauthAction==='CHATGPT_STATUS'}
+              <Button type="primary" aria-label="Kiểm tra" loading={oauthAction==='CHATGPT_STATUS'}
                 onClick={()=>chatgptAction('CHATGPT_STATUS')}>Kiểm tra</Button>
               {currentChatGPT?.connected===false&&<Button loading={oauthAction==='CONNECT_CHATGPT'}
                 onClick={()=>chatgptAction('CONNECT_CHATGPT')}>Liên kết ChatGPT</Button>}

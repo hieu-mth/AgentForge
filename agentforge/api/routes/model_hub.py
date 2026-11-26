@@ -115,6 +115,11 @@ def handle(server, path, request, session=None):
             raise PermissionError("Explicit read-only local preflight required")
         return model_hub.check_local_profile(request["profile_id"])
     if path == "/api/model-hub/probe":
+        if request.get("ack") in {"RUN_MEDIA_MODEL_PROBE", "POLL_MEDIA_MODEL_PROBE"}:
+            if not server.allow_external_actions or session is None:
+                raise PermissionError("Explicit Owner cloud media approval required")
+            from agentforge.features.film_studio import media_probe
+            return media_probe.handle(request)
         if request.get("ack") == "RUN_CLOUD_MODEL_PROBE":
             if set(request) != {"ack", "profile_id", "expected_revision"} or not server.allow_external_actions:
                 raise PermissionError("Explicit cloud inference approval required")

@@ -8,7 +8,7 @@ from typing import Any, BinaryIO, Callable, Protocol
 
 from agentforge.features.film_studio import draft_motion, studio_ollama, studio_cloud, draft_motion_cloud
 from agentforge.features.film_studio.studio_contracts import DispatchGuard, ImageRequest, MotionOutput
-from agentforge.features.media import studio_flux
+from agentforge.features.media import studio_flux, studio_agnes_image
 
 Profile = dict[str, Any]
 PreparedMotion = tuple[str, Any, Path, str]
@@ -27,6 +27,10 @@ class TextInference(Protocol):
 
 
 class ImageGeneration(Protocol):
+    ADAPTER_ID: str
+
+    def output_limits(self, profile: Profile) -> dict: ...
+    def workflow_sha(self, profile: Profile) -> str | None: ...
     def supports(self, profile: Profile) -> bool: ...
     def preflight(self, profile: Profile, *, include_profiles: bool = False) -> None: ...
     def release_idle_models(self, profile: Profile) -> bool: ...
@@ -68,10 +72,14 @@ def text_adapter(profile: Profile | None) -> TextInference:
     raise ValueError("Studio requires a supported text API or local runtime.")
 
 
+IMAGE_ADAPTERS: tuple[ImageGeneration, ...] = (studio_flux, studio_agnes_image)
+
+
 def image_adapter(profile: Profile | None) -> ImageGeneration:
-    if not profile or not studio_flux.supports(profile):
-        raise ValueError("Studio requires a compatible local image checkpoint and workflow.")
-    return studio_flux
+    matches = [adapter for adapter in IMAGE_ADAPTERS if profile and adapter.supports(profile)]
+    if len(matches) != 1:
+        raise ValueError("Studio requires a compatible image adapter and profile.")
+    return matches[0]
 
 
 MOTION_ADAPTERS: tuple[VideoMotion, ...] = (draft_motion, draft_motion_cloud)

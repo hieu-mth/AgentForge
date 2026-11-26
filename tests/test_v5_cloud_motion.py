@@ -244,7 +244,7 @@ class CloudMotionIntegrationTests(unittest.TestCase):
                 motion._poll(row, {})
             request.assert_not_called()
             with self.assertRaises(NeedsReconciliation):
-                motion._poll({**row, "endpoint": "text-to-video"}, {})
+                motion._poll({**row, "endpoint": "text-to-video"}, {"provider": "ltx_cloud", "model": row["model"]})
             request.assert_called_once()
 
     def test_cloud_ledger_read_connection_cannot_write(self):

@@ -746,7 +746,7 @@ try {
   });
   await registerDialog.getByText('Cloud',{exact:true}).click();
   await registerDialog.getByText('Kết nối ChatGPT qua OAuth',{exact:true}).waitFor();
-  const checkOAuth=registerDialog.getByRole('button',{name:'Kiểm tra',exact:true});
+  const checkOAuth=registerDialog.locator('button[aria-label="Kiểm tra"]');
   const listOAuth=registerDialog.getByRole('button',{name:'Lấy danh sách model',exact:true});
   await checkOAuth.waitFor();
   if(oauthChecks||oauthLists||await listOAuth.count())
@@ -756,16 +756,18 @@ try {
   if(oauthChecks!==1||oauthLists||await listOAuth.count())
     throw new Error('Disconnected account must not expose the model catalog');
   oauthConnected=true;
+  await settings.waitForFunction(()=>{const b=document.querySelector('.model-profile-dialog button[aria-label="Kiểm tra"]');return b&&!b.disabled&&!b.classList.contains("ant-btn-loading");});
   await checkOAuth.click();
   await registerDialog.getByText('Đã kết nối tài khoản ChatGPT',{exact:true}).waitFor();
   await listOAuth.waitFor();
   if(oauthChecks!==2||oauthLists)throw new Error('Checking OAuth must not fetch models automatically');
   await listOAuth.click();
   await registerDialog.getByRole('combobox',{name:'Model ChatGPT',exact:true}).waitFor();
+  await settings.waitForFunction(()=>{const b=document.querySelector('.model-profile-dialog button[aria-label="Kiểm tra"]');return b&&!b.disabled&&!b.classList.contains("ant-btn-loading");});
   if(oauthLists!==1)throw new Error('Explicit catalog request missing');
   const cloudAdapter=registerDialog.getByRole('combobox',{name:'Chuẩn kết nối'});
   await cloudAdapter.click();
-  const cloudLabels=['ChatGPT','OpenAI API','Anthropic API','LTX Video API','ElevenLabs API'];
+  const cloudLabels=['ChatGPT','OpenAI API','Anthropic API','LTX Video API','Agnes AI','ElevenLabs API'];
   await settings.waitForFunction(expected=>{
     const combo=document.querySelector('.model-profile-dialog [aria-expanded="true"][role="combobox"]');
     if(!combo)return false;
@@ -1110,6 +1112,36 @@ try {
   if(probes!==2)throw new Error('Unexpected number of FLUX submissions');
   await fluxPage.close();
   console.log('FLUX Model Hub dialog loading, error, retry and preview UI: PASS');
+
+  const agnesPage=await browser.newPage({viewport:{width:1280,height:850}});
+  await agnesPage.route('**/api/session',route=>route.fulfill({json:{csrf:'fixture'}}));
+  await agnesPage.route('**/api/model-hub',route=>route.fulfill({json:{
+    revision:7,adapters:[{id:'agnes',label:'Agnes AI',connection:'cloud',media_probe:true}],
+    profiles:[{id:'agnes_test',provider:'agnes',model:'agnes-image-2.5-flash',enabled:true,
+      capability_contracts:[{capability:'image.generate',runtime_compatible:true}]}],
+  }}));
+  let agnesCalls=0;
+  await agnesPage.route('**/api/model-hub/probe',route=>{
+    const data=route.request().postDataJSON();
+    if(data.ack!=='RUN_MEDIA_MODEL_PROBE'||data.profile_id!=='agnes_test'||data.expected_revision!==7||
+      !/^[a-f0-9]{32}$/.test(data.probe_id)||data.prompt!=='Cat fixture')
+      throw new Error('Invalid Agnes probe payload');
+    agnesCalls++;
+    return route.fulfill({json:{probe_id:data.probe_id,status:'ASSET_READY',preview_url:'/api/visuals/agnes-fixture/preview'}});
+  });
+  await agnesPage.route('**/api/visuals/agnes-fixture/preview',route=>route.fulfill({
+    contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aL4sAAAAASUVORK5CYII=','base64'),
+  }));
+  await agnesPage.goto(origin+'/dashboard/#/models');
+  await agnesPage.getByRole('button',{name:'Chạy thử',exact:true}).click();
+  const agnesDialog=agnesPage.getByRole('dialog',{name:'Chạy thử · agnes_test'});
+  await agnesDialog.getByLabel('Prompt',{exact:true}).fill('Cat fixture');
+  if(agnesCalls)throw new Error('Agnes invoked before Owner confirmation');
+  await agnesDialog.getByRole('button',{name:'Tạo ảnh',exact:true}).click();
+  await agnesDialog.getByRole('img',{name:'Ảnh chạy thử Cloud'}).waitFor();
+  if(agnesCalls!==1)throw new Error('Agnes probe was not exactly one explicit submission');
+  await agnesPage.close();
+  console.log('Agnes Model Hub explicit probe and verified preview UI: PASS');
 } finally {
   if (browser) await browser.close();
   vite.kill();
