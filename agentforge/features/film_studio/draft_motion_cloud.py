@@ -244,8 +244,21 @@ def _poll(row, profile):
 
 def _state(ident, state, *, provider_id=None, digest=None):
     with closing(_db(True)) as conn, conn:
-        conn.execute("UPDATE jobs SET state=?,provider_id=COALESCE(?,provider_id),output_sha=COALESCE(?,output_sha) WHERE id=?",
-                     (state, provider_id, digest, ident))
+        if provider_id is not None:
+            # The same remote output must never be associated with two local shots.
+            # Serialize this check with Owner-attested recovery.
+            conn.execute("BEGIN IMMEDIATE")
+            if conn.execute("SELECT 1 FROM jobs WHERE provider_id=? AND id<>?",
+                            (provider_id, ident)).fetchone():
+                raise ValueError("Provider job is already bound to another shot.")
+            changed = conn.execute("UPDATE jobs SET state=?,provider_id=? "
+                                   "WHERE id=? AND state='SUBMITTING' AND provider_id IS NULL",
+                                   (state, provider_id, ident))
+            if changed.rowcount != 1:
+                raise ValueError("Cloud submission checkpoint changed.")
+            return
+        conn.execute("UPDATE jobs SET state=?,output_sha=COALESCE(?,output_sha) WHERE id=?",
+                     (state, digest, ident))
 
 
 def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard=nullcontext,
