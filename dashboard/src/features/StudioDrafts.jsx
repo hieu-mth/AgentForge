@@ -1,5 +1,5 @@
 import {AppTooltip} from '../components/AppTooltip.jsx';
-﻿import {useEffect,useRef,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {Alert,App as AntApp,Button,Card,Collapse,Empty,Form,Input,Modal,Select,Space,Tabs,Tag} from 'antd';
 import {NumberField} from '../components/NumberField.jsx';
 import {CaretRightFilled,CloseOutlined,DeleteOutlined,FileTextOutlined,PlayCircleOutlined,ReloadOutlined} from '@ant-design/icons';
@@ -12,7 +12,7 @@ import {StoryboardReview} from './StoryboardReview.jsx';
 import {ProductionProgress} from './ProductionProgress.jsx';
 import {ScriptContent} from './ScriptContent.jsx';
 import {draftTitle} from './scriptPresentation.js';
-import {MAX_STUDIO_SECONDS,storyboardShotLimits,productionMethodOptions,productionMethodLabels,cloudSecondsBounds} from './studioDuration.js';
+import {durationBounds,storyboardShotLimits,productionMethodOptions,productionMethodLabels,cloudSecondsBounds} from './studioDuration.js';
 import './studio-draft-progress.css';
 
 const API='/api/film/drafts';
@@ -110,6 +110,7 @@ export function StudioDrafts({mutate,onCharacters}) {
   const method=values.routeStrategy??'assigned';
   const methodOptions=productionMethodOptions(hub.data);
   const cloudBounds=cloudSecondsBounds(hub.data,method);
+  const targetBounds=durationBounds(hub.data,moving?'motion':'still');
   const needsCloudBudget=['auto','hybrid','cloud'].includes(method);
   const busy=useRef(false);
   const request=useRef(null);
@@ -144,7 +145,7 @@ export function StudioDrafts({mutate,onCharacters}) {
   const reviewing=drafts.find(job=>job.id===storyboardId&&job.board);
   const sourceDraft=drafts.find(job=>job.id===sourceId);
   const canEdit=reviewing?.storyboard_version&&['STORYBOARD_REVIEW','FAILED','REVIEW'].includes(reviewing.status);
-  const canChangeLayout=canEdit&&!reviewing.duration_plan?.content_scene_count;
+  const canChangeLayout=canEdit&&reviewing.editor_constraints?.layout_editable===true;
   const sceneCount=reviewing?.board.scenes.length;
   const [minScenes,maxScenes]=storyboardShotLimits(reviewing);
   const running=!listError&&Boolean(active);
@@ -302,7 +303,7 @@ export function StudioDrafts({mutate,onCharacters}) {
           <Select options={['9:16','16:9'].map(value=>({value,label:value}))}/>
         </Form.Item>}
         <Button className="draft-submit" type="primary" htmlType="submit"
-          loading={pending} disabled={waiting>0||characterCount>limit}>Tạo storyboard</Button>
+          loading={pending} disabled={waiting>0||characterCount>limit||(manual&&!targetBounds)||(moving&&needsCloudBudget&&!cloudBounds)}>Tạo storyboard</Button>
       </div>
       {moving&&<details className="draft-resource-details">
         <summary>Phương pháp sản xuất · {productionMethodLabels[method]??'Chưa chọn'}</summary>
@@ -313,7 +314,7 @@ export function StudioDrafts({mutate,onCharacters}) {
             <Select style={{width:280,maxWidth:'100%'}} loading={hub.loading} options={methodOptions}/>
           </Form.Item>
           {needsCloudBudget&&<Form.Item name="cloudSeconds" label="Tối đa giây video cloud" rules={[{required:true,type:'integer',...cloudBounds}]}>
-            <NumberField min={cloudBounds.min} max={cloudBounds.max} precision={0} suffix="giây"/>
+            <NumberField min={cloudBounds?.min} max={cloudBounds?.max} precision={0} suffix="giây"/>
           </Form.Item>}
         </Space>
         {hub.error&&<Alert type="warning" showIcon message="Chưa đọc được phương pháp sản xuất" action={<Button onClick={hub.reload}>Thử lại</Button>}/>}
@@ -326,8 +327,8 @@ export function StudioDrafts({mutate,onCharacters}) {
             <Select style={{width:180}} options={[{value:'auto',label:'AI tự đề xuất'},{value:'manual',label:'Nhập thủ công'}]}/>
           </Form.Item>
           {manual&&<Form.Item name="targetSeconds" label="Thời lượng"
-            rules={[{required:true,type:'integer',min:moving?4:6,max:MAX_STUDIO_SECONDS}]}>
-            <NumberField min={moving?4:6} max={MAX_STUDIO_SECONDS} precision={0} suffix="giây"/>
+            rules={[{required:true,type:'integer',...targetBounds}]}>
+            <NumberField min={targetBounds?.min} max={targetBounds?.max} precision={0} suffix="giây"/>
           </Form.Item>}
         </Space>
       </details>
@@ -420,7 +421,7 @@ export function StudioDrafts({mutate,onCharacters}) {
       onMove={canChangeLayout?(index,target)=>storyboard(reviewing,'move',{index,target}):null}
       onRemove={canChangeLayout&&sceneCount>minScenes?index=>storyboard(reviewing,'remove',{index}):null}
       onAdd={canChangeLayout&&sceneCount<maxScenes?()=>setEditor({job:reviewing,adding:true,index:sceneCount,scene:{}}):null}
-      onDuration={canChangeLayout&&reviewing.brief.duration_mode?seconds=>storyboard(reviewing,'duration',{seconds}):null}
+      onDuration={canChangeLayout&&reviewing.editor_constraints?.duration_editable?seconds=>storyboard(reviewing,'duration',{seconds}):null}
       onVisualReviewBatch={reviewing.status==='REVIEW'&&reviewing.video_sha?()=>modal.confirm({
         title:'Đánh giá các cảnh chưa kiểm tra?',content:'Tối đa 8 lượt AI. Nếu dùng cloud, frame mẫu sẽ được gửi đến provider đã chọn và tính vào ngân sách.',
         okText:'Đánh giá',cancelText:'Hủy',onOk:()=>run('/'+reviewing.id+'/visual-review-batch',{sha256:reviewing.storyboard_sha,video_sha:reviewing.video_sha,max_reviews:8,allow_cloud:true}),
