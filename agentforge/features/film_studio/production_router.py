@@ -19,7 +19,10 @@ def choose(brief, candidates, infer):
                        "continuous motion, native audio or lower GPU load. Never assume an unverified provider is better. "
                        "Hybrid uses a local reference image for each shot; cloud generates from prompt and may use the "
                        "previous actual frame for continuity. Cloud bills at least 6 seconds per shot. "
-                       "Choose based on narrative, reference consistency and explicit seconds cap. Explain in Vietnamese.",
+                       "Choose based on narrative, reference consistency and explicit seconds cap. "
+                       "execution_ready is configuration admission only, not a quality benchmark. "
+                       "Prefer ready routes when equally suitable; missing media permission does not prevent planning. "
+                       "Explain in Vietnamese.",
                        {"brief": brief, "options": options}, schema)
         if not isinstance(answer, dict) or set(answer) != {"choice", "reason"}:
             raise ValueError("Invalid AI route decision.")

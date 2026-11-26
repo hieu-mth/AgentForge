@@ -956,7 +956,7 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
 
 
 def production_candidates(strategy, *, db_path=None):
-    """Owner-enabled profiles and permission-checked methods; no runtime/network probe."""
+    """Planning candidates: compatible profiles, with separate execution-admission metadata."""
     if strategy not in {"auto", "local", "hybrid", "cloud"}:
         raise ModelConfigError("Unknown production strategy.")
     revision, state = _read_state(db_path=db_path)
@@ -975,16 +975,31 @@ def _production_candidates(state, strategy):
             try:
                 _draft_bindings(state, moving=True, motion_ref=ident, direct_cloud=method == "cloud")
             except (ValueError, PermissionError):
-                continue
+                execution_ready = False
+            else:
+                execution_ready = True
             adapter = orchestrator_policy.runtime_adapter("video", profile)
             item = {"id": ident, "method": method, "model": profile["model"],
                     "max_frames": adapter.output_profile().max_frames,
-                    "fps": adapter.output_profile().fps, "min_billable_seconds": 0}
+                    "fps": adapter.output_profile().fps, "min_billable_seconds": 0,
+                    "execution_ready": execution_ready}
             if method != "local":
                 from agentforge.features.film_studio.studio_ltx_cloud import DURATIONS
                 item.update(billable_durations_seconds=list(DURATIONS), min_billable_seconds=min(DURATIONS))
             candidates.append(item)
     return candidates
+
+
+def production_profile(profile_id, method, *, db_path=None):
+    """Select a configured video profile for timeline planning, never for dispatch."""
+    if method not in {"local", "hybrid", "cloud"}:
+        raise ModelConfigError("Unknown production method.")
+    _, state = _read_state(db_path=db_path)
+    profile = _profiles(state=state).get(profile_id)
+    if (not orchestrator_policy.compatible("video", profile)
+            or (method == "local") != (profile["provider"] != "ltx_cloud")):
+        raise ModelConfigError("Model video đã thay đổi khi lập kế hoạch.")
+    return profile
 
 
 def _production_options(state):
@@ -993,12 +1008,20 @@ def _production_options(state):
     candidates = _production_candidates(state, "auto")
     by_method = {method: sum(c["method"] == method for c in candidates)
                  for method in ("local", "hybrid", "cloud")}
+    ready = {method: any(c["method"] == method and c["execution_ready"] for c in candidates)
+             for method in by_method}
     motion = state["profiles"].get(state["routes"].get("film.motion"), {})
+    try:
+        _draft_bindings(state, moving=True)
+    except (ValueError, PermissionError):
+        assigned_ready = False
+    else:
+        assigned_ready = motion.get("provider") != "ltx_cloud"
     assigned_cloud = motion.get("provider") == "ltx_cloud"
     return {"methods": [
-        {"id": "assigned", "available": not assigned_cloud},
-        {"id": "auto", "available": bool(candidates)},
-        *({"id": method, "available": bool(count)} for method, count in by_method.items()),
+        {"id": "assigned", "available": not assigned_cloud, "execution_ready": assigned_ready},
+        {"id": "auto", "available": bool(candidates), "execution_ready": any(ready.values())},
+        *({"id": method, "available": bool(count), "execution_ready": ready[method]} for method, count in by_method.items()),
     ], "min_cloud_seconds": production_router.MIN_CLOUD_SECONDS,
         "max_cloud_seconds": production_router.MAX_CLOUD_SECONDS,
         "auto_min_cloud_seconds": 0 if by_method["local"] else production_router.MIN_CLOUD_SECONDS}

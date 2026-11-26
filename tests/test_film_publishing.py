@@ -307,3 +307,53 @@ class FilmPublishingHttpTests(unittest.TestCase):
 
 if __name__=="__main__":
     unittest.main()
+
+
+class ApprovedDraftReleaseTests(unittest.TestCase):
+    def test_approved_studio_video_enters_same_release_ledger(self):
+        from agentforge.features.film_studio import draft_pipeline as draft, draft_timeline
+        from agentforge.api.routes import publishing as api
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            ident = "a"*32
+            with (patch.object(draft, "DB", root/"drafts.sqlite3"),
+                  patch.object(draft, "WORKSPACE_DIR", root)):
+                job = {"id": ident, "status": "REVIEW", "storyboard_version": 1,
+                       "brief": {"seconds": 4, "ratio": "16:9"},
+                       "board": {"title": "Mèo", "continuity": "Same cat",
+                                 "scenes": [{"frames": 96, "description": "Cat"}]}}
+                job["storyboard_sha"] = job["approved_storyboard_sha"] = draft_timeline.digest(job)
+                path = draft._video_file(job)
+                path.parent.mkdir(parents=True)
+                path.write_bytes(b"MP4 fixture" * 150)
+                job["video_sha"] = draft._sha(path.read_bytes())
+                receipt = {"production_id": ident, "version": 1, "storyboard_sha": job["storyboard_sha"],
+                           "video_sha": job["video_sha"], "subtitle_sha": None}
+                record = path.with_suffix(".receipt.json")
+                record.write_text(json.dumps(receipt), encoding="utf-8")
+                job["receipt_sha"] = draft._sha(record.read_bytes())
+                draft._save(job)
+                with self.assertRaises(PermissionError):
+                    publishing.draft_source(ident)
+                draft.act(ident, "approve", {"sha256": job["video_sha"]})
+                source = publishing.draft_source(ident)
+                payload = {"ack": "PREPARE_DRAFT_RELEASE", "draft_id": ident,
+                           "episode_sha": source["episode_sha256"], "render_sha": source["receipt_sha256"],
+                           "metadata": METADATA}
+                with self.assertRaises(PermissionError):
+                    api.handle(None, "/api/publishing/prepare-draft", payload, {})
+                db = root/"releases.sqlite3"
+                with self.assertRaises(PermissionError):
+                    publishing.prepare_draft(draft_id=ident, episode_sha="f"*64,
+                                             render_sha=source["receipt_sha256"], metadata=METADATA,
+                                             confirmed=True, db_path=db)
+                result = publishing.prepare_draft(draft_id=ident, episode_sha=source["episode_sha256"],
+                    render_sha=source["receipt_sha256"], metadata=METADATA, confirmed=True, db_path=db)
+                self.assertEqual(result["status"], "READY_FOR_MANUAL_HANDOFF")
+                self.assertEqual(result["video_sha256"], job["video_sha"])
+                handed = publishing.handoff(result["release_id"], db_path=db)
+                self.assertEqual(Path(handed["video_file"]), path)
+                self.assertFalse(handed["automatic_upload"])
+                path.write_bytes(b"tampered")
+                with self.assertRaises(publishing.PublishingError):
+                    publishing.inspect(result["release_id"], db_path=db)

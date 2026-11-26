@@ -79,3 +79,9 @@ test('production options follow backend capability snapshot rather than version 
   assert.equal(cloudSecondsRemainingEstimate({production_plan:{method:'cloud',billable_durations_seconds:[6,8,10]},
     motion_plan:{output:{fps:24}},board:{scenes:[{frames:145},{frames:240,motion_job:'done'},{frames:48}]}}),14);
 });
+
+test('planning-only method stays selectable and is distinguished from execution readiness',()=>{
+  const [option]=productionMethodOptions({production_options:{methods:[{id:'cloud',available:true,execution_ready:false}]}});
+  assert.equal(option.disabled,false);
+  assert.match(option.label,/Chỉ lập storyboard/);
+});

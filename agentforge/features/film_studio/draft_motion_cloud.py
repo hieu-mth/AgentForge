@@ -99,6 +99,51 @@ def _row(ident):
     return dict(row)
 
 
+def reconciliation_jobs(job):
+    """Read-only evidence for the exact production; never poll or submit on GET."""
+    conn = _db()
+    if conn is None:
+        return []
+    with closing(conn):
+        return [dict(row) for row in conn.execute(
+            "SELECT id, endpoint, model, seconds, request_sha, state, provider_id "
+            "FROM jobs WHERE production=? AND state IN ('SUBMITTING','SUBMITTED') ORDER BY rowid",
+            (job["id"],))]
+
+
+def recover_provider_id(job, data, profile):
+    """Owner-attested mapping, checked with provider GET only. Never sends another POST."""
+    ident = ltx._id(data["motion_job"])
+    remote = ltx._id(data["provider_id"])
+    if (data.get("owner_matched") is not True or job.get("status") != "NEEDS_RECONCILIATION"
+            or not any(scene.get("motion_job") == ident and not scene.get("motion_sha")
+                       for scene in job.get("board", {}).get("scenes", []))):
+        raise PermissionError("Confirm the matching provider job for this unresolved shot.")
+    row = _row(ident)
+    if (row["production"] != job["id"] or row["state"] != "SUBMITTING"
+            or row["provider_id"] is not None or row["model"] != profile["model"]
+            or data.get("request_sha") != row["request_sha"]):
+        raise ValueError("Cloud reconciliation checkpoint changed.")
+    ops_control.require_active()
+    # The API confirms existence/status, not provenance when the original POST was lost.
+    response = _poll({**row, "provider_id": remote}, profile)
+    if ("model" in response and response["model"] != row["model"]) or (
+            "duration" in response and response["duration"] != row["seconds"]):
+        raise ValueError("Provider job model or duration does not match.")
+    with closing(_db(True)) as conn, conn:
+        conn.execute("BEGIN IMMEDIATE")
+        if conn.execute("SELECT 1 FROM jobs WHERE provider_id=? AND id<>?", (remote, ident)).fetchone():
+            raise ValueError("Provider job is already bound to another shot.")
+        changed = conn.execute("UPDATE jobs SET state='SUBMITTED',provider_id=? "
+                               "WHERE id=? AND production=? AND state='SUBMITTING' "
+                               "AND provider_id IS NULL AND request_sha=?",
+                               (remote, ident, job["id"], row["request_sha"]))
+        if changed.rowcount != 1:
+            raise ValueError("Cloud reconciliation checkpoint changed.")
+    return {"motion_job": ident, "provider_id": remote, "provider_status": response["status"],
+            "association": "OWNER_ATTESTED", "provider_status_verified": True}
+
+
 def require_resolved_ledger(job):
     owned = {s.get("motion_job") for s in (job.get("board") or {}).get("scenes", [])}
     conn = _db()

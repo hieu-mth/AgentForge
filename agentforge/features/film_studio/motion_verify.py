@@ -52,13 +52,12 @@ def _job(job_id, db_path):
         raise KeyError("Motion job not found")
     with closing(conn):
         row = conn.execute("SELECT * FROM motion_jobs WHERE job_id=?", (job_id,)).fetchone()
-        has_sources = conn.execute("SELECT 1 FROM sqlite_master WHERE name='motion_sources'").fetchone()
-        source = conn.execute("SELECT * FROM motion_sources WHERE job_id=?", (job_id,)).fetchone() if has_sources else None
+        source = conn.execute("SELECT * FROM motion_sources WHERE job_id=?", (job_id,)).fetchone()
     if row is None:
         raise KeyError("Motion job not found")
     source = dict(source) if source else {}
     model_id = source.get("model_id", MODEL_ID)
-    frames = source.get("frames", 33) if model_id == motion.motion_ltx.MODEL_ID else None
+    frames = source["frames"] if model_id == motion.motion_ltx.MODEL_ID else None
     return {**row, "model_id": model_id, "ltx_frames": frames}
 
 

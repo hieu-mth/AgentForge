@@ -54,3 +54,27 @@ class ChatGPTTests(unittest.TestCase):
             model_hub.validate_profile({**p, "base_url": "https://evil.example"})
         with patch.object(studio_chatgpt, "request", return_value='{"ready":true}'):
             self.assertTrue(studio_chatgpt.probe(p)["inference_verified"])
+
+    def test_dashboard_account_actions_are_owner_gated_and_never_return_tokens(self):
+        from types import SimpleNamespace
+        from agentforge.api.routes import model_hub as api
+        server = SimpleNamespace(allow_external_actions=True)
+        req = {"ack": "CONNECT_CHATGPT", "account_ref": "owner"}
+        with (patch("agentforge.ops_control.require_active"),
+              patch.object(chatgpt_auth, "sign_in", return_value={"email": "private", "token": "secret"}) as login,
+              patch.object(chatgpt_auth, "models", return_value=[{"slug": "model", "display_name": "Model", "token": "secret"}]) as models,
+              patch.object(chatgpt_auth, "sign_out", return_value={"remote_revocation": "CONFIRMED"}) as logout):
+            with self.assertRaises(PermissionError):
+                api.handle(server, "/api/model-hub/chatgpt", req, None)
+            with self.assertRaises(PermissionError):
+                api.handle(SimpleNamespace(allow_external_actions=False), "/api/model-hub/chatgpt", req, {})
+            login.assert_not_called()
+            result = api.handle(server, "/api/model-hub/chatgpt", req, {})
+            self.assertEqual(result, {"account_ref": "owner", "connected": True})
+            result = api.handle(server, "/api/model-hub/chatgpt", {**req, "ack": "LIST_CHATGPT_MODELS"}, {})
+            self.assertEqual(result["models"], [{"slug": "model", "display_name": "Model"}])
+            result = api.handle(server, "/api/model-hub/chatgpt", {**req, "ack": "DISCONNECT_CHATGPT"}, {})
+            self.assertFalse(result["connected"])
+            login.assert_called_once_with("owner")
+            models.assert_called_once_with("owner")
+            logout.assert_called_once_with("owner")

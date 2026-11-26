@@ -252,47 +252,34 @@ class MotionAdapterTests(unittest.TestCase):
                 response.read.assert_called_once_with(4097)
                 connection.close.assert_called_once()
 
-    def test_legacy_failed_upload_migrates_and_allows_explicit_new_attempt(self):
-        ltx = motion.motion_ltx
-        old_id = "c" * 32
-        plan_sha = self.plan["plan_sha256"]
+    def test_old_ledger_refuses_reads_and_writes_without_migration(self):
         self.db.parent.mkdir()
         with closing(sqlite3.connect(self.db)) as conn, conn:
-            conn.execute("PRAGMA journal_mode=WAL")
-            conn.execute("""CREATE TABLE motion_jobs(
-                job_id TEXT PRIMARY KEY, film_slug TEXT NOT NULL, shot_id TEXT NOT NULL,
-                plan_sha TEXT NOT NULL, workflow_sha TEXT NOT NULL, prompt_sha TEXT NOT NULL,
-                seed INTEGER NOT NULL, provider_id TEXT, state TEXT NOT NULL,
-                created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-                UNIQUE(film_slug, shot_id, plan_sha))""")
-            conn.execute("""CREATE TABLE motion_sources(
-                job_id TEXT PRIMARY KEY, model_id TEXT NOT NULL, image_job TEXT NOT NULL,
-                image_sha TEXT NOT NULL)""")
-            old = (old_id, "pilot", "sh-00001", plan_sha, "b"*64, "a"*64,
-                   7, None, "FAILED", "old-created", "old-updated")
-            conn.execute("INSERT INTO motion_jobs VALUES (?,?,?,?,?,?,?,?,?,?,?)", old)
-            source = (old_id, ltx.MODEL_ID, "d"*32, "e"*64)
-            conn.execute("INSERT INTO motion_sources VALUES (?,?,?,?)", source)
-            conn.commit()
-            migration = motion.migrate_ledger(self.db)
-        self.assertTrue(migration["migrated"])
-        self.assertEqual(migration["before"], migration["after"])
-        self.assertEqual(migration["after"], {"motion_jobs": 1, "motion_sources": 1})
-        with closing(sqlite3.connect(migration["backup"])) as backup:
-            self.assertEqual(backup.execute("SELECT * FROM motion_jobs").fetchone(), old)
-            self.assertEqual(backup.execute("SELECT * FROM motion_sources").fetchone(), source)
-        self.assertEqual(motion.migrate_ledger(self.db), {"migrated": False})
+            conn.execute("CREATE TABLE motion_jobs(job_id TEXT PRIMARY KEY, state TEXT)")
+            conn.execute("INSERT INTO motion_jobs VALUES (?,?)", ("c"*32, "SUBMITTED"))
+        before = self.db.read_bytes()
+        for write in (False, True):
+            with self.assertRaisesRegex(motion.MotionError, "Unsupported motion ledger schema"):
+                motion._db(self.db, write=write)
+        self.assertEqual(self.db.read_bytes(), before)
+
+    def test_current_ledger_retains_failed_attempt_and_requires_confirmation(self):
+        old_id = "c"*32
+        plan_sha = self.plan["plan_sha256"]
+        with closing(motion._db(self.db, write=True)) as conn, conn:
+            conn.execute("INSERT INTO motion_jobs VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                         (old_id, "pilot", "sh-00001", plan_sha, "b"*64, "a"*64,
+                          7, None, "FAILED", "old-created", "old-updated"))
+            conn.execute("INSERT INTO motion_sources VALUES (?,?,?,?,?)",
+                         (old_id, motion.motion_ltx.MODEL_ID, "d"*32, "e"*64, 33))
         with self.assertRaisesRegex(PermissionError, "explicitly confirm"):
             self.submit()
         newer, request = self.submit(confirm_new_attempt=True)
         request.assert_called_once()
         self.assertNotEqual(newer["job_id"], old_id)
         with closing(motion._db(self.db)) as conn:
-            self.assertEqual(tuple(conn.execute("SELECT * FROM motion_jobs WHERE job_id=?", (old_id,)).fetchone()), old)
-            self.assertEqual(tuple(conn.execute("SELECT * FROM motion_sources WHERE job_id=?", (old_id,)).fetchone()),
-                             (*source, 33))
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM motion_jobs").fetchone()[0], 2)
-        self.assertEqual(motion.job_status(old_id, db_path=self.db)["status"], "PROVIDER_FAILED")
+            self.assertEqual(conn.execute("SELECT state FROM motion_jobs WHERE job_id=?", (old_id,)).fetchone()[0], "FAILED")
         with self.assertRaisesRegex(PermissionError, "reconcile"):
             self.submit(confirm_new_attempt=True)
 

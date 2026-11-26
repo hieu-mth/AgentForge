@@ -25,6 +25,9 @@ def dispatch(self, route):
         job = draft_pipeline._read(parts[4])
         if len(parts) == 5:
             return self._reply(200, job)
+        if parts[5] == "cloud-jobs":
+            from agentforge.features.film_studio import draft_motion_cloud
+            return self._reply(200, {"jobs": draft_motion_cloud.reconciliation_jobs(job)})
         if parts[5] == "preview":
             def verify(stream):
                 draft_pipeline.verify_video(job, stream)
@@ -36,7 +39,7 @@ def dispatch(self, route):
         if parts[5] == "captions" and job.get("subtitle_sha"):
             from agentforge.features.film_studio import draft_timeline
             draft_pipeline.verified_receipt(job)
-            captions = draft_timeline.captions(job["board"]["scenes"])
+            captions = draft_timeline.captions(job["board"]["scenes"], draft_pipeline._job_fps(job))
             if draft_pipeline._sha(captions) != job["subtitle_sha"]:
                 raise ValueError("Draft subtitle hash mismatch")
             return self._reply(200, captions, mime="application/x-subrip",
@@ -74,6 +77,15 @@ def dispatch(self, route):
     if route == "/api/publishing":
         from agentforge.features.film_studio.publishing import summary
         return self._reply(200, summary())
+    if route.startswith("/api/publishing/draft/"):
+        from agentforge.features.film_studio import publishing
+        parts = route.split("/")
+        if len(parts) != 5:
+            raise ValueError("Invalid Studio publishing source")
+        source = publishing.draft_source(parts[4])
+        self._session().setdefault("reviewed_draft_releases", {})[parts[4]] = (
+            source["episode_sha256"], source["receipt_sha256"])
+        return self._reply(200, {key: value for key, value in source.items() if key != "video_file"})
     if route.startswith("/api/publishing/"):
         from agentforge.features.film_studio import publishing
         parts = route.split("/")

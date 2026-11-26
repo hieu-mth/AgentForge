@@ -1,4 +1,4 @@
-"""Local, Owner-controlled Sign in with ChatGPT POC. No browser session scraping."""
+"""Local, Owner-controlled Sign in with ChatGPT. No browser session scraping."""
 import argparse
 import base64
 from contextlib import contextmanager
@@ -34,7 +34,7 @@ class AuthError(ValueError):
 
 def _require_windows():
     if sys.platform != "win32":
-        raise AuthError("ChatGPT sign-in POC requires Windows DPAPI.")
+        raise AuthError("ChatGPT sign-in requires Windows DPAPI.")
 
 
 @contextmanager
@@ -171,7 +171,7 @@ def _callback(query, state, old_client):
 
 
 def sign_in(ref):
-    """Explicit CLI POC: local browser, one pending attempt, no tokens printed."""
+    """Explicit local browser sign-in, one pending attempt, no tokens printed."""
     _ref(ref)
     _require_windows()
     try:
@@ -205,7 +205,7 @@ def sign_in(ref):
                     raise AuthError("Invalid OAuth state.")
                 outcome["query"] = query
                 self.send_response(200)
-                message = b"AgentForge received the sign-in callback. Return to the terminal."
+                message = b"AgentForge received the sign-in callback. Return to AgentForge."
             except (ValueError, AuthError):
                 self.send_response(400)
                 message = b"Invalid sign-in callback."
@@ -303,7 +303,7 @@ def sign_out(ref):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="AgentForge local ChatGPT connection POC")
+    parser = argparse.ArgumentParser(description="AgentForge local ChatGPT connection")
     parser.add_argument("action", choices=["login", "models", "probe", "logout"])
     parser.add_argument("account")
     parser.add_argument("--model")
@@ -321,8 +321,14 @@ def main():
             from agentforge.features.film_studio import studio_chatgpt
             result = studio_chatgpt.probe({"provider": "chatgpt", "account_ref": args.account, "model": args.model})
         print(json.dumps(result, ensure_ascii=True))
-    except (AuthError, ValueError, sqlite3.Error, OSError):
-        parser.exit(1, "ChatGPT action failed. Check connection, consent, model and quota; no tokens printed.\n")
+    except AuthError as exc:
+        # AuthError is constructed only from local fixed messages and HTTP status integers.
+        parser.exit(1, "ChatGPT authentication: " + str(exc) + "\n")
+    except (ValueError, sqlite3.Error, OSError, KeyError, TypeError) as exc:
+        from agentforge.features.film_studio.studio_cloud import CloudRequestError
+        if isinstance(exc, CloudRequestError) and re.fullmatch(r"[A-Z_0-9]{1,64}", exc.code):
+            parser.exit(1, "ChatGPT inference: " + exc.code + "\n")
+        parser.exit(1, "ChatGPT action failed (" + type(exc).__name__ + "); no tokens printed.\n")
 
 
 if __name__ == "__main__":

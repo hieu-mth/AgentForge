@@ -56,73 +56,33 @@ class MotionError(ValueError):
     """Invalid or unsupported motion request (no GPU inference started)."""
 
 
-_JOB_COLUMNS = ("job_id, film_slug, shot_id, plan_sha, workflow_sha, prompt_sha, "
-                "seed, provider_id, state, created_at, updated_at")
 _LEDGER_VERSION = 2
 
 
-def _add_source_frames(conn):
-    conn.execute("ALTER TABLE motion_sources ADD COLUMN frames INTEGER NOT NULL DEFAULT 33 "
-                 "CHECK (frames IN (33, 49))")
-    conn.execute(f"PRAGMA user_version={_LEDGER_VERSION}")
+def _require_current_ledger(conn):
+    if conn.execute("PRAGMA user_version").fetchone()[0] != _LEDGER_VERSION:
+        raise MotionError("Unsupported motion ledger schema; reconcile and archive the old ledger explicitly.")
 
 
-def _create_jobs(conn, table):
-    conn.execute(f"""CREATE TABLE {table}(
-        job_id TEXT PRIMARY KEY, film_slug TEXT NOT NULL, shot_id TEXT NOT NULL,
-        plan_sha TEXT NOT NULL, workflow_sha TEXT NOT NULL, prompt_sha TEXT NOT NULL,
-        seed INTEGER NOT NULL, provider_id TEXT, state TEXT NOT NULL,
-        created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""")
-
-
-def _ledger_counts(conn):
-    return {table: conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-            for table in ("motion_jobs", "motion_sources")}
-
-
-def _init_ledger(conn, path):
+def _init_ledger(conn):
     with conn:
         conn.execute("BEGIN IMMEDIATE")
         version = conn.execute("PRAGMA user_version").fetchone()[0]
         if version == _LEDGER_VERSION:
-            return {"migrated": False}
-        if version == 1:
-            _add_source_frames(conn)
-            return {"migrated": True, "version": _LEDGER_VERSION}
-        if version != 0:
-            raise MotionError("Unsupported Motion ledger version")
-        existing = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
-                                "AND name='motion_jobs'").fetchone()
-        if existing:
-            before = _ledger_counts(conn)
-            backup = path.with_name(f"{path.name}.before-attempts-{uuid4().hex}.bak")
-            # The reserved write lock prevents concurrent commits while a second,
-            # read-only connection snapshots the original database, including its WAL.
-            with backup.open("xb"):
-                pass
-            with (closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as source,
-                  closing(sqlite3.connect(backup)) as target):
-                source.backup(target)
-                if (target.execute("PRAGMA integrity_check").fetchone()[0] != "ok"
-                        or _ledger_counts(target) != before):
-                    raise MotionError("Motion ledger backup verification failed")
-            _create_jobs(conn, "motion_jobs_next")
-            conn.execute(f"INSERT INTO motion_jobs_next ({_JOB_COLUMNS}) "
-                         f"SELECT {_JOB_COLUMNS} FROM motion_jobs")
-            conn.execute("DROP TABLE motion_jobs")
-            conn.execute("ALTER TABLE motion_jobs_next RENAME TO motion_jobs")
-            after = _ledger_counts(conn)
-            if after != before:
-                raise MotionError("Motion ledger record counts changed during migration")
-        else:
-            _create_jobs(conn, "motion_jobs")
-            conn.execute("""CREATE TABLE motion_sources(
-                job_id TEXT PRIMARY KEY, model_id TEXT NOT NULL, image_job TEXT NOT NULL,
-                image_sha TEXT NOT NULL)""")
+            return
+        if version != 0 or conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone():
+            _require_current_ledger(conn)
+        conn.execute("""CREATE TABLE motion_jobs(
+            job_id TEXT PRIMARY KEY, film_slug TEXT NOT NULL, shot_id TEXT NOT NULL,
+            plan_sha TEXT NOT NULL, workflow_sha TEXT NOT NULL, prompt_sha TEXT NOT NULL,
+            seed INTEGER NOT NULL, provider_id TEXT, state TEXT NOT NULL,
+            created_at TEXT NOT NULL, updated_at TEXT NOT NULL)""")
+        conn.execute("""CREATE TABLE motion_sources(
+            job_id TEXT PRIMARY KEY, model_id TEXT NOT NULL, image_job TEXT NOT NULL,
+            image_sha TEXT NOT NULL, frames INTEGER NOT NULL DEFAULT 33
+            CHECK (frames IN (33, 49)))""")
         conn.execute("CREATE INDEX motion_jobs_shot ON motion_jobs(film_slug, shot_id, plan_sha)")
-        _add_source_frames(conn)
-        return ({"migrated": True, "backup": str(backup), "before": before, "after": after}
-                if existing else {"migrated": False})
+        conn.execute(f"PRAGMA user_version={_LEDGER_VERSION}")
 
 
 def _check_attempt(conn, film_slug, shot_id, plan_sha, confirmed):
@@ -134,7 +94,7 @@ def _check_attempt(conn, film_slug, shot_id, plan_sha, confirmed):
         state, provider_id, model_id = row
         if state == "COMPLETE_UNVERIFIED":
             raise PermissionError("A completed motion attempt already exists for this shot")
-        # In the legacy and current ledger, only the LTX pre-dispatch error
+        # Only the LTX pre-dispatch error
         # path sets FAILED without a provider ID. An ambiguous POST remains SUBMITTING.
         if state == "FAILED" and provider_id is None and model_id == motion_ltx.MODEL_ID:
             continue
@@ -309,21 +269,15 @@ def _db(path: Path, *, write=False):
         path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path, timeout=15)
     conn.row_factory = sqlite3.Row
-    if write:
-        try:
-            _init_ledger(conn, path)
-        except Exception:
-            conn.close()
-            raise
+    try:
+        if write:
+            _init_ledger(conn)
+        else:
+            _require_current_ledger(conn)
+    except Exception:
+        conn.close()
+        raise
     return conn
-
-
-def migrate_ledger(path=DB):
-    conn = _db(path)
-    if conn is None:
-        raise MotionError("Motion ledger does not exist")
-    with closing(conn):
-        return _init_ledger(conn, Path(path))
 
 
 def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
@@ -543,7 +497,6 @@ def main(argv=None):
     for action in ("ltx-workflow", "ltx-readiness"):
         command = choices.add_parser(action)
         command.add_argument("--frames", type=int, choices=motion_ltx.FRAME_PRESETS, default=33)
-    choices.add_parser("migrate-ledger")
     submit = choices.add_parser("submit")
     for name in ("film-slug", "shot-id", "plan-sha", "workflow-sha"):
         submit.add_argument("--" + name, required=True)
@@ -574,8 +527,6 @@ def main(argv=None):
         result = health()
     elif args.action == "ltx-workflow":
         result = motion_ltx.workflow(args.frames)
-    elif args.action == "migrate-ledger":
-        result = migrate_ledger()
     elif args.action == "ltx-readiness":
         result = {"nodes": motion_ltx.check_runtime(PORT, frames=args.frames), "inference_verified": False,
                   "model_weights_verified": False}

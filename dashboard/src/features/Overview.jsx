@@ -6,6 +6,7 @@ import {useResource,ResourceStatus} from '../use_resource.jsx';
 import {useScreenRefresh} from '../refresh_scope.jsx';
 import {StudioPreview} from './StudioPreview.jsx';
 import {draftTitle} from './scriptPresentation.js';
+import {productionUsage} from './productionUsage.js';
 
 const prepared='PREPARED_NOT_RENDERED';
 const needsReview='RENDER_RECEIPT_PRESENT_UNINSPECTED';
@@ -32,9 +33,10 @@ export function Overview({onNavigate}){
   const [preview,setPreview]=useState(null);
   useScreenRefresh(resource.reload);
   useScreenRefresh(draftsResource.reload);
-  const episodes=resource.data?.projects;
+  const episodes=resource.data?.projects?.filter(row=>row.source!=='studio_draft');
   const drafts=draftsResource.data?.drafts;
   const videos=drafts?.filter(row=>row.video_sha);
+  const usage=drafts?productionUsage(drafts):null;
   const empty=episodes?.length===0&&videos?.length===0;
   const openStudio=()=>onNavigate('media-studio');
   const studioButton=<Button type="primary" icon={<PlayCircleOutlined/>} onClick={openStudio}>
@@ -56,6 +58,15 @@ export function Overview({onNavigate}){
           value={videos&&episodes? videos.filter(row=>row.status==='REVIEW').length+
             episodes.filter(row=>row.state===needsReview).length:'—'}/>
       </div>}
+    {usage&&usage.count>0&&<Card className="env-panel" title="Số liệu vận hành Studio">
+      <div className="env-stat-grid overview-stats">
+        <Stat label="Production đã duyệt" value={usage.approved+'/'+usage.count}/>
+        <Stat label="Lượt cloud đã giữ ngân sách" value={usage.cloudCalls}/>
+        <Stat label="Giây video cloud đã giữ ngân sách" value={usage.cloudSeconds}/>
+        <Stat label="Thời gian attempt gần nhất (trung vị)" value={usage.medianAttemptSeconds===null?'—':usage.medianAttemptSeconds+' giây'}/>
+      </div>
+      <p className="env-muted">Tối đa 30 bản nháp gần nhất. Lượt/giây đặt chỗ gồm cả lỗi; không phải hóa đơn. Thời gian chỉ tính attempt đã kết thúc, không phải tổng thời gian sản xuất.</p>
+    </Card>}
     {empty&&<Card className="env-panel">
       <Empty description="Chưa có video đã dựng hoặc tập phim trong workspace">{studioButton}</Empty>
     </Card>}

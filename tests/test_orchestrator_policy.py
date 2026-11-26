@@ -177,5 +177,25 @@ class OrchestratorTests(unittest.TestCase):
         self.assign("film.motion", "cloud_video", revision=5)
         snapshot = self.save(p, revision=6)
         self.assertEqual({row["id"]: row["available"] for row in snapshot["production_options"]["methods"]},
-                         {"assigned": False, "auto": True, "local": False, "hybrid": False, "cloud": True})
+                         {"assigned": False, "auto": True, "local": False, "hybrid": True, "cloud": True})
         self.assertEqual(snapshot["production_options"]["auto_min_cloud_seconds"], 12)
+
+    def test_planning_candidates_do_not_require_media_permissions(self):
+        self.seed()
+        video = {"id": "cloud_video", "provider": "ltx_cloud", "model": "ltx-2-3-fast",
+                 "enabled": True, **model_hub.ADAPTERS["ltx_cloud"]["environment_defaults"]}
+        model_hub.change("SAVE_MODEL_PROFILE", expected_revision=2, db_path=self.db, profile=video)
+        self.assign("general.text", "local_primary", revision=3)
+        self.assign("film.storyboard", "local_primary", revision=4)
+        p = policy.defaults()
+        p["permissions"].update(plan=True, assign_models=True, call_local=True)
+        snapshot = self.save(p, revision=5)
+        cloud = next(row for row in snapshot["production_options"]["methods"] if row["id"] == "cloud")
+        self.assertTrue(cloud["available"])
+        self.assertFalse(cloud["execution_ready"])
+        _, candidates = model_hub.production_candidates("cloud", db_path=self.db)
+        self.assertEqual([c["id"] for c in candidates], ["cloud_video"])
+        self.assertFalse(candidates[0]["execution_ready"])
+        self.assertEqual(model_hub.production_profile("cloud_video", "cloud", db_path=self.db)["model"], video["model"])
+        with self.assertRaises(PermissionError):
+            model_hub.draft_routes(db_path=self.db, moving=True, motion_ref="cloud_video", direct_cloud=True)

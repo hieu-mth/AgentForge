@@ -10,7 +10,7 @@ from contextlib import ExitStack, closing, nullcontext
 from types import SimpleNamespace
 from uuid import uuid4
 
-from agentforge.features.film_studio import draft_motion, draft_pipeline as draft, studio_ollama, studio_runtime
+from agentforge.features.film_studio import draft_motion, draft_pipeline as draft, studio_ollama, studio_runtime, script_analysis
 from agentforge.features.media import flux_runtime, studio_flux
 from tests import owner_http_fixture
 from tests.test_flux_runtime import profile as flux_profile
@@ -145,6 +145,50 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(approved["approved_storyboard_sha"], draft.draft_timeline.digest(approved))
         self.assertEqual(approved["board"], saved["board"])
         self.assertEqual(approved["status"], "QUEUED")
+
+    def test_explicit_cloud_storyboard_without_media_permission_or_tools(self):
+        writer = {"id": "owner_writer", "provider": "ollama", "enabled": True,
+                  "model": "writer:8b", "base_url": "http://127.0.0.1:11434"}
+        video = {"id": "cloud_video", "provider": "ltx_cloud", "enabled": True,
+                 "model": "ltx-2-3-fast", "base_url_env": "LTX_BASE_URL", "api_key_env": "LTX_API_KEY"}
+        for profile in (writer, video):
+            self.registry_change("SAVE_MODEL_PROFILE", profile=profile)
+        for task in ("general.text", "film.storyboard"):
+            self.registry_change("SET_MODEL_ROUTE", task_id=task, model_ref=writer["id"])
+        policy = draft.model_hub.orchestrator_policy.defaults()
+        policy["permissions"].update(plan=True, assign_models=True, call_local=True)
+        self.registry_change("SAVE_ORCHESTRATOR", policy=policy)
+        from agentforge.features.film_studio import draft_motion_cloud
+        def storyboard(job, bindings):
+            self.assertEqual(set(bindings), {"general.text", "film.storyboard"})
+            job.update(board=draft._story(self.board(), 2, 4, {"cat": {}}), cast={})
+        with (patch.object(draft, "_dispatch"),
+              patch.object(draft, "_write_board", side_effect=storyboard),
+              patch.object(draft, "_image", side_effect=AssertionError("image generation")),
+              patch.object(draft_motion_cloud, "bind", side_effect=AssertionError("video readiness")),
+              patch.object(draft_motion_cloud.ltx, "_request", side_effect=AssertionError("cloud video API")),
+              patch.object(draft.render, "_ffmpeg", side_effect=AssertionError("FFmpeg"))):
+            job = draft.submit({"id": self.ident, **self.brief, "mode": "motion", "seconds": 4,
+                                "scene_count": None, "duration_mode": "manual",
+                                "route_strategy": "cloud", "max_cloud_seconds": 12})
+            draft._work(job, nullcontext())
+            saved = draft._read(self.ident)
+            self.assertEqual(saved["status"], "STORYBOARD_REVIEW", saved.get("error"))
+            self.assertEqual(saved["production_plan"]["motion_ref"], video["id"])
+            self.assertNotIn("cloud_motion_seconds", saved)
+            with self.assertRaises(PermissionError):
+                draft.act(self.ident, "storyboard-approve", {"sha256": saved["storyboard_sha"]})
+
+    def test_unexpected_error_has_safe_diagnostic_code(self):
+        job = {"id": self.ident, "stage": "PLANNING", "status": "RUNNING", "brief": {}}
+        with (patch.object(draft, "_dispatch"),
+              patch.object(draft, "_studio_bindings", side_effect=RuntimeError("secret-provider-payload")),
+              self.assertLogs(draft.LOG, level="ERROR") as logs):
+            draft._work(job, nullcontext())
+        saved = draft._read(self.ident)
+        self.assertEqual(saved["error_code"], "STUDIO_UNEXPECTED_RUNTIMEERROR")
+        self.assertNotIn("secret-provider-payload", str(saved))
+        self.assertNotIn("secret-provider-payload", str(logs.output))
 
     def test_legacy_approval_uses_historical_bindings_without_changing_digest(self):
         original = {**self.motion_profile(), "enabled": True}
@@ -534,11 +578,12 @@ class DraftTests(unittest.TestCase):
             with patch.object(draft, "_dispatch"):
                 draft.act(self.ident, "cancel", {})
             self.assertTrue(draft._cancellation(self.ident))
-            conn = sqlite3.connect(ledger)
+            conn = motion._db(ledger, write=True)
             try:
                 with conn:
-                    conn.execute("CREATE TABLE motion_jobs (film_slug TEXT, state TEXT)")
-                    conn.execute("INSERT INTO motion_jobs VALUES (?, 'SUBMITTED')", (f"d-{self.ident}-v2",))
+                    conn.execute("INSERT INTO motion_jobs VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                                 ("c"*32, f"d-{self.ident}-v2", "shot", "a"*64, "b"*64,
+                                  "d"*64, 1, None, "SUBMITTED", "created", "updated"))
                 with self.assertRaises(ValueError):
                     draft.act(self.ident, "delete", {})
                 self.assertTrue(folder.is_dir())
@@ -732,7 +777,7 @@ class DraftTests(unittest.TestCase):
             draft._duration_plan({"brief": {**manual, "seconds": 7}}, {})
 
     def test_global_requirements_after_an_authored_action_are_not_action_beats(self):
-        result = draft._scene_beats(
+        result = script_analysis.scene_beats(
             "Cảnh 3 (10–15 giây): Mèo nhìn ra cửa sổ, sau đó vẫy đuôi. "
             "**Yêu cầu xuyên suốt:**\n- Giữ nhất quán căn phòng.\n"
             "- AI tự quyết định góc máy.\n- Không chữ.", last=True)
@@ -740,7 +785,7 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(result["camera"], [])
         self.assertEqual(result["global_constraints"],
                          ["Giữ nhất quán căn phòng.", "AI tự quyết định góc máy.", "Không chữ."])
-        scene = draft._scene_beats(
+        scene = script_analysis.scene_beats(
             "Cảnh 1 (0–5 giây): Mèo nằm bên cửa sổ. Ánh nắng buổi sáng chiếu nhẹ vào căn phòng. "
             "Bướm bay qua trước mặt mèo.", last=False)
         self.assertEqual(scene["actions"], ["Mèo nằm bên cửa sổ.", "Bướm bay qua trước mặt mèo."])
@@ -835,7 +880,7 @@ class DraftTests(unittest.TestCase):
         self.assertIn("Không lời thoại", contexts[0]["script_context"])
         self.assertEqual([x["description"] for x in draft._read(self.ident)["board"]["scenes"]],
                          [x["description"] for x in original])
-        fewer = draft._shot_beat(["Mèo bước tới hộp."], 2, 3, 40, 40, None)
+        fewer = script_analysis.shot_beat(["Mèo bước tới hộp."], 2, 3, 40, 40, None)
         self.assertTrue(fewer["continued_action"])
         self.assertEqual(fewer["assigned_text"], "Mèo bước tới hộp.")
         complete = draft._read(self.ident)
@@ -932,16 +977,16 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(draft._read(self.ident)["storyboard_history"][0]["sha256"], old_sha)
 
     def test_script_ranges_keep_exact_text_and_reject_insufficient_capacity(self):
-        self.assertFalse(draft._needs_scene_analysis("Một chú mèo đi tìm bạn."))
+        self.assertFalse(script_analysis.needs_scene_analysis("Một chú mèo đi tìm bạn."))
         text = "Cảnh 1 — Miu nhìn ra cửa sổ 🐱\nMiu: Chào bạn!\n\nCảnh 2 — Miu chạy ra vườn."
-        self.assertTrue(draft._needs_scene_analysis(text))
-        ranges = draft._script_ranges(text, 2, 12)
+        self.assertTrue(script_analysis.needs_scene_analysis(text))
+        ranges = script_analysis.script_ranges(text, 2, 12)
         self.assertEqual("".join(text[start:end] for start,end in ranges), text)
         self.assertTrue(text[ranges[1][0]:].startswith("Cảnh 2"))
         with self.assertRaisesRegex(ValueError, "3 cảnh"):
-            draft._script_ranges(text+"\nCảnh 3 — Trời tối.", 2, 12)
+            script_analysis.script_ranges(text+"\nCảnh 3 — Trời tối.", 2, 12)
         with self.assertRaisesRegex(ValueError, "Thời lượng"):
-            draft._script_ranges(text+"\nMiu: "+"chào "*50, 2, 6)
+            script_analysis.script_ranges(text+"\nMiu: "+"chào "*50, 2, 6)
 
     def test_long_script_analysis_uses_bounded_excerpts_before_storyboard(self):
         source = "Cảnh 1 — Miu\n" + "Miu nhìn ra cửa sổ. 🐱\n" * 140 + "\nCảnh 2 — Miu chạy ra vườn."

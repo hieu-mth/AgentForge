@@ -134,3 +134,30 @@ class CloudMotionIntegrationTests(unittest.TestCase):
                         motion.run_shot(scene, 0, prepared, profile, lambda: None, lambda: False)
                 self.assertEqual(request.call_count, 1)
                 self.assertEqual(motion._row(scene["motion_job"])["state"], "SUBMITTING")
+
+    def test_recover_missing_provider_id_is_get_only_and_owner_attested(self):
+        import tempfile
+        from pathlib import Path
+        from contextlib import closing
+        from unittest.mock import patch
+        ident, remote = "a"*32, "b"*32
+        job = {"id": "c"*32, "status": "NEEDS_RECONCILIATION",
+               "board": {"scenes": [{"motion_job": ident}]}}
+        data = {"motion_job": ident, "provider_id": remote, "request_sha": "d"*64, "owner_matched": True}
+        with tempfile.TemporaryDirectory() as tmp, patch.object(motion, "DB", Path(tmp)/"ledger.db"):
+            with closing(motion._db(True)) as conn, conn:
+                conn.execute("INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?,?)",
+                    (ident, job["id"], "text-to-video", "ltx-2-3-fast", 6, data["request_sha"], "SUBMITTING", None, None))
+            with (patch.object(motion.ops_control, "require_active"),
+                  patch.object(motion, "_key", return_value="fixture"),
+                  patch.object(motion.ltx, "_request", return_value={"id": remote, "status": "processing"}) as request):
+                with self.assertRaises(PermissionError):
+                    motion.recover_provider_id(job, {**data, "owner_matched": False}, {"model": "ltx-2-3-fast"})
+                result = motion.recover_provider_id(job, data, {"model": "ltx-2-3-fast"})
+                self.assertEqual(result["association"], "OWNER_ATTESTED")
+                self.assertEqual(motion._row(ident)["state"], "SUBMITTED")
+                self.assertEqual(motion._row(ident)["provider_id"], remote)
+                self.assertEqual(request.call_args.args[0], "GET")
+                with self.assertRaises(ValueError):
+                    motion.recover_provider_id(job, data, {"model": "ltx-2-3-fast"})
+                request.assert_called_once()

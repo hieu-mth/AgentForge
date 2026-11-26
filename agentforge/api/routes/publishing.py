@@ -4,6 +4,16 @@ from agentforge.features.film_studio import publishing
 
 
 def handle(server, path, request, session=None):
+    if path == "/api/publishing/prepare-draft":
+        if set(request) != {"ack", "draft_id", "episode_sha", "render_sha", "metadata"} or request["ack"] != "PREPARE_DRAFT_RELEASE":
+            raise PermissionError("Explicit approved Studio release preparation required")
+        ident = publishing._id(request["draft_id"], "draft ID")
+        if (session is None or session.get("reviewed_draft_releases", {}).get(ident)
+                != (request["episode_sha"], request["render_sha"])):
+            raise PermissionError("Inspect exact approved Studio source first")
+        return publishing.prepare_draft(draft_id=ident, episode_sha=request["episode_sha"],
+                                        render_sha=request["render_sha"], metadata=request["metadata"],
+                                        confirmed=True)
     if path == "/api/publishing/prepare":
         expected = {"ack", "film_slug", "episode_id", "episode_sha",
                     "render_sha", "metadata"}

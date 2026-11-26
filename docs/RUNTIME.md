@@ -105,7 +105,7 @@ Owner chủ động đặt [checkpoint chính thức](https://huggingface.co/Lig
 
 Graph một pass dùng ảnh làm điều kiện đầu, 512×288, 33 frame, 24 fps, CFG 1 và các mốc đầu của [cấu hình distilled](https://github.com/Lightricks/LTX-Video/blob/main/configs/ltxv-2b-0.9.8-distilled-fp8.yaml). Không upscale. Theo dõi RAM khả dụng, Windows commit và VRAM từ trước khi gửi cho tới nạp model, sampling và VAE decode. Dừng lần thử nếu thiếu tài nguyên và giữ log, không gửi lại job. Dùng `status` rồi `collect` với tên file `af_motion_<job_id>_00001_.mp4` thực tế từ ComfyUI. Collect kiểm tra đủ 33 frame và giải mã qua FFmpeg. Owner vẫn cần đối chiếu các frame về chuyển động thực và ngoại hình nhân vật.
 
-Sau khi Owner duyệt một lần thử mới cho shot đã lỗi, thêm `--confirm-new-attempt` vào lệnh `submit`. Ledger giữ lịch sử theo từng job ID. Job đang chạy hoặc chưa xác định được kết quả phải được đối soát trước. Lệnh `migrate-ledger` có thể cập nhật ledger hiện có và xuất đường dẫn backup cùng số bản ghi trước/sau mà không gửi job.
+Sau khi Owner duyệt một lần thử mới cho shot đã lỗi, thêm `--confirm-new-attempt` vào lệnh `submit`. Ledger giữ lịch sử theo từng job ID. Job đang chạy hoặc chưa xác định được kết quả phải được đối soát trước. Ledger chỉ hỗ trợ schema hiện hành (user_version=2); schema cũ bị từ chối, không tự migrate. Dừng worker, đối soát toàn bộ tác vụ cũ và archive DB cùng sidecar trước khi khởi tạo ledger mới. Không xóa ledger còn job chưa rõ kết quả.
 
 
 ## Tạo video trên Dashboard

@@ -85,7 +85,7 @@ export function ProductionProgress({job,starting,labels,warnings}){
         :<Progress percent={p.percent} format={value=>value+'%'}
           status={status==='FAILED'?'exception':p.verified?'success':'normal'}/>}
       {job?.stage==='MOTION'&&!authored&&<small>{p.clips}/{p.total} clip đã xác minh</small>}
-      {job?.error&&<p className="production-error"><ExclamationCircleOutlined/> {warnings[job.error]??job.error}</p>}
+      {job?.error&&<p className="production-error"><ExclamationCircleOutlined/> {warnings[job.error]??job.error}{job.error_code&&<> · <code>{job.error_code}</code></>}</p>}
       {a?.model&&<div className="production-meta">{a.provider==='ollama'?'Ollama':a.provider==='comfyui'?'ComfyUI':a.provider==='chatgpt'?'ChatGPT':a.provider==='ltx_cloud'?'LTX Cloud':a.provider} · {a.model}</div>}
     </div>
     <ol className="production-steps">{p.stages.map(({key,label,state})=>{
