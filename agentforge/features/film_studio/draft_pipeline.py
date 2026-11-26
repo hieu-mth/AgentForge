@@ -30,7 +30,6 @@ ACTIVE = None
 LOG = logging.getLogger(__name__)
 IMG_RETRIES = 3
 BRIEF_LIMIT = 20_000
-OUTLINE_LIMIT = 700
 _QUEUE_STATES = {"QUEUED", "RUNNING", "WAITING_RESOURCES"}
 
 
@@ -336,11 +335,6 @@ def _script_scene(job, profile, comfy, source, continuity, index, *, proposed_sh
         source = facts
     fields = {key: {**STRING, "minLength": 1, "maxLength": limit} for key, limit in
               (("title", 100), ("continuity", 240), ("description", 350), ("image_prompt", 600), ("audio", 160))}
-    # Historical 30-second presets used weights; current plans already own timing.
-    weighted = (proposed_shot is None and "duration_mode" not in job["brief"]
-                and job["brief"]["seconds"] == 30 and job["brief"].get("mode") == "motion")
-    if weighted:
-        fields["duration_weight"] = {"type": "integer", "minimum": 1, "maximum": 3}
     context = {"source": source, "prior_continuity": continuity, "scene": index + 1,
                "seconds": seconds + (index < extra)}
     if proposed_shot:
@@ -368,8 +362,6 @@ def _script_scene(job, profile, comfy, source, continuity, index, *, proposed_sh
                     "the preview is silent and the original dialogue is stored separately. "
                     "Use a title up to 100 characters, continuity up to 240, description up to 350, "
                     "image_prompt up to 600 and audio up to 160. "
-                    + ("Set duration_weight to 1 for a quick beat, 2 for normal motion or 3 for sustained action. "
-                       if weighted else "")
                     + ("The authored source is binding. Use beat.assigned_text for this shot and its frame window "
                        "to choose the moment. The previous shot is context for its end state only. "
                        "Apply camera and constraints throughout the scene. If beat.continued_action is true, "
@@ -391,31 +383,6 @@ def _script_scene(job, profile, comfy, source, continuity, index, *, proposed_sh
                     + ("Use character_ids only for supplied cast present in this shot." if cast else ""),
                     context,
                     _object(**fields), comfy, job=job)
-
-
-def _write_script_board(job, bindings, *, outline=None):
-    brief = job["brief"]
-    script = outline if outline is not None else brief["idea"]
-    ranges = script_analysis.script_ranges(script, brief["scene_count"], brief["seconds"])
-    scenes = []
-    visual_continuity = []
-    title = continuity = ""
-    for index, (start, end) in enumerate(ranges):
-        data = _script_scene(job, bindings["film.storyboard"], bindings.get("image.generate"),
-                             script[start:end], continuity, index)
-        scene_title = _text(data.pop("title"), 100)
-        title = title or scene_title
-        continuity = _text(data.pop("continuity"), 240)
-        visual_continuity.append(continuity)
-        scenes.append({**data, "character_ids": []})
-    board = _story({"title": title, "continuity": continuity, "scenes": scenes},
-                   brief["scene_count"], brief["seconds"], {})
-    for scene, (start, end), notes in zip(board["scenes"], ranges, visual_continuity):
-        if outline is None:
-            scene["script_range"] = [start, end]
-        scene["continuity"] = notes
-    job.update(board=board, cast={})
-    _save(job)
 
 
 class ShotBudgetMismatch(ValueError):
@@ -793,72 +760,13 @@ def _select_cast(job, bindings, outline):
 
 
 def _write_board(job, bindings):
-    if "duration_mode" in job["brief"]:
-        return _write_planned_board(job, bindings)
-    if job["brief"]["seconds"] == 30 and job["brief"].get("mode") == "motion":
-        brief = job["brief"]
-        scripted = script_analysis.needs_scene_analysis(brief["idea"])
-        if not job.get("plan"):
-            minimum, maximum = draft_timeline.shot_limits(30)
-            minimum = max(minimum, len(script_analysis.SCRIPT_HEADING.findall(brief["idea"])))
-            if scripted and maximum > minimum:
-                try:
-                    script_analysis.script_ranges(brief["idea"], maximum, 30)
-                except ValueError:
-                    maximum = minimum
-            _activity(job, "PLANNING", "plan", bindings["general.text"])
-            fields = _object(outline={**STRING, "minLength": 1, "maxLength": OUTLINE_LIMIT},
-                             scene_count={"type": "integer", "minimum": minimum, "maximum": maximum})
-            with _measured(job, "plan", bindings.get("image.generate")):
-                result = _ask(bindings["general.text"],
-                    f"Choose {minimum} to {maximum} distinct short shots based on the action. "
-                    "Keep the story order and important actions. Write an outline of at most 700 characters "
-                    "with at least 16 words; prefer distinct action beats over repeated establishing shots.",
-                    {"excerpt": brief["idea"][:2000], "explicit_scenes": len(script_analysis.SCRIPT_HEADING.findall(brief["idea"]))},
-                    fields, bindings.get("image.generate"), job=job)
-            count = _number(result.get("scene_count"), minimum, maximum)
-            job["plan"] = _text(result.get("outline"), OUTLINE_LIMIT, label="Dàn ý do AI trả về")
-            brief["scene_count"] = count
-            _save(job)
-        return _write_script_board(job, bindings, outline=None if scripted else job["plan"])
-    if job["brief"].get("input_type") == "script" or script_analysis.needs_scene_analysis(job["brief"]["idea"]):
-        return _write_script_board(job, bindings)
-    comfy = bindings.get("image.generate")
-    if not job.get("plan"):
-        _activity(job, "PLANNING", "plan", bindings["general.text"])
-        with _measured(job, "plan", comfy):
-            output = _ask(bindings["general.text"],
-                          "Plan a coherent video and return a Vietnamese outline. Develop a short premise. "
-                          "When the input supplies story details, preserve its events, people and dialogue "
-                          "and fill only missing details. "
-                          f"Keep the outline concise, at most {OUTLINE_LIMIT} characters. "
-                          "Use the selected duration and scene count from the brief.",
-                          job["brief"], _object(outline={**STRING, "minLength": 1, "maxLength": OUTLINE_LIMIT}),
-                          comfy, job=job)
-        job["plan"] = _text(output.get("outline"), OUTLINE_LIMIT, label="Dàn ý do AI trả về")
-        _save(job)
-    job["stage"] = "STORYBOARD"
-    _save(job)
-    cast = _select_cast(job, bindings, job["plan"])
-    count = job["brief"]["scene_count"]
-    references = {"type": "array", "items": {**STRING, "enum": list(cast)} if cast else STRING,
-                  "maxItems": min(2, len(cast))}
-    schema = _object(title=STRING, continuity=STRING, scenes={
-        "type": "array", "minItems": count, "maxItems": count, "items": _object(
-            description=STRING, image_prompt=STRING, character_ids=references,
-            audio=STRING)})
-    _activity(job, "STORYBOARD", "storyboard", bindings["film.storyboard"])
-    with _measured(job, "storyboard", comfy):
-        data = _ask(bindings["film.storyboard"],
-                "Write a coherent Vietnamese storyboard for a silent video. Describe a concrete "
-                "visible movement in each scene description. "
-                "Use English visual prompts with stable setting and character appearance. "
-                "Use only supplied cast IDs, or an empty character_ids array if cast is empty. "
-                "Describe any invented characters only in the prompt. Add optional audio notes.",
-                {"brief": job["brief"], "outline": job["plan"], "cast": cast}, schema, comfy, job=job)
-    job["board"] = _story(data, count, job["brief"]["seconds"], cast)
-    job["cast"] = cast
-    _save(job)
+    _require_current_planner(job)
+    return _write_planned_board(job, bindings)
+
+
+def _require_current_planner(job):
+    if not job.get("board") and job["brief"].get("duration_mode") not in ("auto", "manual"):
+        raise ValueError("Bản nháp dùng planner cũ và chưa có storyboard. Hãy tạo production mới từ nội dung gốc.")
 
 
 def _sha(data):
@@ -1141,6 +1049,7 @@ def _work(job, slot, retry_motion_job=None):
         if _cancellation(job["id"]):
             raise DraftCancelled
         ops_control.require_active()
+        _require_current_planner(job)
         moving = job["brief"].get("mode") == "motion"
         reviewing = "storyboard_version" in job and not job.get("approved_storyboard_sha")
         revision, bindings, identity_revision = _studio_bindings(job)
@@ -1758,6 +1667,7 @@ def act(ident, action, data):
                             "'WAITING_RESOURCES' LIMIT 1", (ident,)).fetchone():
                 raise ValueError("Resume the draft that is waiting for resources first")
         ops_control.require_active()
+        _require_current_planner(job)
         _studio_bindings(job)
         retry_motion_job = None
         if "retry_motion_job" in data:
