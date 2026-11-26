@@ -1,11 +1,10 @@
 import {useState} from 'react';
 import {Alert,Button,Card,Form,Input,Select,Space} from 'antd';
 import {NumberField} from '../components/NumberField.jsx';
-import {durationBounds,productionMethodOptions,productionMethodLabels,cloudSecondsBounds} from './studioDuration.js';
+import {videoModes,durationBounds,productionMethodOptions,productionMethodLabels,cloudSecondsBounds} from './studioDuration.js';
 
 const editorKey='agentforge.studio.video-brief.v1';
 const briefDefaults={idea:'',durationMode:'auto',targetSeconds:12,ratio:'9:16',mode:'motion',routeStrategy:'assigned',cloudSeconds:0};
-const videoModes={motion:'Có chuyển động',still:'Ảnh tĩnh (lia và thu phóng)'};
 function savedBrief(){
   try {
     const saved=JSON.parse(localStorage.getItem(editorKey));
