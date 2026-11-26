@@ -4,14 +4,10 @@ from agentforge.api.routes._shared import UNHANDLED
 
 def handle(server, path, request, session=None):
     if path == "/api/film/drafts/start":
-        required = {"id", "idea", "seconds", "ratio", "scene_count", "mode", "duration_mode"}
         if not server.allow_external_actions:
             raise PermissionError("Draft production requires external-tools mode")
-        if (request.keys() not in (required, required | {"route_strategy", "max_cloud_seconds"})
-                or request["duration_mode"] not in ("auto", "manual")
-                or request["scene_count"] is not None):
-            raise ValueError("Use the current Studio brief: auto or manual duration, with AI-planned scenes.")
         from agentforge.features.film_studio import draft_pipeline
+        draft_pipeline.validate_submission_shape(request)
         return draft_pipeline.submit(request)
     if path.startswith("/api/film/drafts/"):
         parts = path.split("/")
