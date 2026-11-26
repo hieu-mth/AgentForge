@@ -1602,6 +1602,23 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(restored["status"], "CANCELLED")
         self.assertEqual(restored["board"]["scenes"][0]["asset"], "committed")
 
+    def test_canonical_storyboard_layout_preserves_still_and_motion_budgets(self):
+        timeline = draft.draft_timeline
+        still = {"brief": {"seconds": 7}}
+        self.assertEqual(timeline.job_fps(still), 24)
+        self.assertEqual(timeline.storyboard_layout(still, 2), [96, 72])
+
+        moving = {"brief": {"mode": "motion", "seconds": 4, "duration_mode": "manual"},
+                  "motion_plan": {"output": {"fps": 25, "max_frames": 60, "resolution": [512, 288]}}}
+        self.assertEqual(timeline.job_fps(moving), 25)
+        self.assertEqual(timeline.storyboard_layout(moving, 2), [50, 50])
+        moving["duration_plan"] = {"content_scene_count": 1, "shots": [
+            {"script_shot_frames": 60}, {"script_shot_frames": 40}]}
+        self.assertEqual(timeline.storyboard_layout(moving, 2), [60, 40])
+        moving["duration_plan"]["shots"][0]["script_shot_frames"] = 61
+        with self.assertRaises(ValueError):
+            timeline.storyboard_layout(moving, 2)
+
     def test_cleanup_failure_preserves_cancelled_checkpoint_and_dispatch(self):
         job = {"id": self.ident, "brief": self.brief, "status": "RUNNING", "stage": "IMAGES",
                "board": draft._story(self.board(), 2, 6, {"cat": {}}), "cast": {},
