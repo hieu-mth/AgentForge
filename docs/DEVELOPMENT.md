@@ -35,3 +35,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\agentforge_runtime
 Các luồng có tác động yêu cầu xét quyền/SHA, không tự upload. Cấm `git clean -fdx` và `reset --hard` để cleanup, vì sẽ đụng dữ liệu local. Owner có thể test GPU và continuity theo [runtime checklist](RUNTIME.md). CI không thay thế Owner runtime QA.
 
 Frontend Edge smoke: `npm.cmd run test:browser --prefix dashboard` sau khi build và cài Microsoft Edge. Kết quả nghiệm thu dùng CI cùng commit; fixture không gọi model thật.
+
+## Kiểm tra source và build
+
+CI cài Ruff riêng trên runner, không phải runtime dependency. Gate F821/F822/F823 chặn tên không xác định; inventory F401/F841 chưa chặn CI để review re-export và test seam. Knip dùng entry production/build/test trong `dashboard/knip.json`, báo các file, export và dependency nghi dư thừa; không tự xóa theo kết quả scan. Review từng finding trước khi chốt.
+
+```powershell
+python -m pip install ruff==0.11.13
+python -m ruff check agentforge scripts tests --select F821,F822,F823
+python -m ruff check agentforge scripts tests --select F401,F841
+cd dashboard
+npm exec --yes --package=knip@5.46.0 -- knip
+npm run build
+node tests/build-layout.mjs
+```
+
+Gate build kiểm tra 8 màn hình tải theo nhu cầu và tổng JS thuộc initial graph nhỏ hơn baseline 1.355.410 bytes. Manifest là build artifact, không được serve bởi API static. Chưa suy ra tốc độ runtime thực tế từ kích thước bundle.
