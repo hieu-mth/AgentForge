@@ -181,7 +181,8 @@ class DraftTests(unittest.TestCase):
                 draft.act(self.ident, "storyboard-approve", {"sha256": saved["storyboard_sha"]})
 
     def test_unexpected_error_has_safe_diagnostic_code(self):
-        job = {"id": self.ident, "stage": "PLANNING", "status": "RUNNING", "brief": {}}
+        job = {"id": self.ident, "stage": "PLANNING", "status": "RUNNING",
+               "brief": {"duration_mode": "auto"}}
         with (patch.object(draft, "_dispatch"),
               patch.object(draft, "_studio_bindings", side_effect=RuntimeError("secret-provider-payload")),
               self.assertLogs(draft.LOG, level="ERROR") as logs):
@@ -990,27 +991,27 @@ class DraftTests(unittest.TestCase):
             script_analysis.script_ranges(text+"\nMiu: "+"chào "*50, 2, 6)
 
     def test_long_script_analysis_uses_bounded_excerpts_before_storyboard(self):
-        source = "Cảnh 1 — Miu\n" + "Miu nhìn ra cửa sổ. 🐱\n" * 140 + "\nCảnh 2 — Miu chạy ra vườn."
-        job = {"id": self.ident, "status": "RUNNING", "brief":{
-            **self.brief, "idea": source}}
-        provider = {"provider":"ollama", "model":"fixture"}
+        source = "Miu nhìn ra cửa sổ. 🐱\n" * 140
+        job = {"id": self.ident, "status": "RUNNING", "brief": {
+            **self.brief, "duration_mode": "manual", "idea": source}}
+        provider = {"provider": "ollama", "model": "fixture"}
         excerpts = []
+
         def respond(profile, instructions, data, schema, comfy, **kwargs):
             if "excerpt" in data:
                 excerpts.append(data["excerpt"])
                 self.assertLessEqual(len(data["excerpt"]), 900)
                 return {"facts": "Miu chờ bên cửa sổ."}
             self.assertLess(len(str(data)), len(source))
-            return {"title":"Miu", "continuity":"Orange cat", "description":"Miu đợi",
-                    "image_prompt":"Orange cat by a window", "audio":"Yên tĩnh"}
+            return {"title": "Miu", "continuity": "Orange cat", "description": "Miu đợi",
+                    "image_prompt": "Orange cat by a window", "audio": "Yên tĩnh"}
+
         with (patch.object(draft, "_measured", return_value=nullcontext()),
               patch.object(draft, "_ask", side_effect=respond)):
-            draft._write_board(job, {"film.storyboard":provider, "image.generate":{}})
-        board = draft._read(self.ident)["board"]
-        self.assertEqual(len(board["scenes"]), 2)
-        self.assertEqual("".join(excerpts), source[:board["scenes"][1]["script_range"][0]])
-        self.assertEqual("".join(source[start:end] for start,end in
-                                 (scene["script_range"] for scene in board["scenes"])), source)
+            result = draft._script_scene(job, provider, None, source, "", 0,
+                proposed_shot={"action": "Miu đợi", "reason": "Mở đầu", "timeline_seconds": 3})
+        self.assertEqual("".join(excerpts), source)
+        self.assertEqual(result["title"], "Miu")
 
     def test_long_vietnamese_script_http_sqlite_roundtrip_and_limit(self):
         client = owner_http_fixture.OwnerHttpFixture()
@@ -1330,26 +1331,11 @@ class DraftTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 draft.draft_timeline.timeline(seconds, 9)
 
-    def test_30_second_storyboard_uses_ai_count_and_preserves_script_order(self):
-        text = "\n\n".join(f"Cảnh {i} — Miu mở cánh cửa rồi nhìn quanh." for i in range(1, 16))
-        job = {"id": self.ident, "status": "RUNNING", "storyboard_version": 1,
-               "brief": {"idea": text, "seconds": 30, "mode": "motion", "scene_count": 15, "ratio": "16:9"}}
-        provider = {"provider": "ollama", "model": "fixture"}
-        bindings = {"general.text": provider, "film.storyboard": provider, "image.generate": {}}
-        with (patch.object(draft, "_measured", return_value=nullcontext()),
-              patch.object(draft, "_ask", return_value={"outline": "Miu waits and checks each door.", "scene_count": 16}),
-              patch.object(draft, "_script_scene", side_effect=lambda *args: {
-                  "title": "Miu", "continuity": "orange tabby", "description": "Cat opens the door",
-                  "image_prompt": "A cat by the door", "audio": "silent", "duration_weight": 1 + args[-1]%3})):
-            draft._write_board(job, bindings)
-        draft._stamp_storyboard(job)
-        scenes = job["board"]["scenes"]
-        self.assertEqual(len(scenes), 16)
-        self.assertEqual(sum(s["frames"] for s in scenes), 720)
-        self.assertTrue(all(40 <= s["frames"] <= 49 for s in scenes))
-        self.assertGreater(len({s["frames"] for s in scenes}), 1)
-        self.assertEqual("".join(text[start:end] for start,end in (s["script_range"] for s in scenes)), text)
-        self.assertEqual(job["status"], "STORYBOARD_REVIEW")
+    def test_historical_30_second_timeline_preserves_frame_budget(self):
+        frames = draft.draft_timeline.timeline(30, 16, [1+i%3 for i in range(16)])
+        self.assertEqual(sum(frames), 720)
+        self.assertTrue(all(40 <= frame <= 49 for frame in frames))
+        self.assertGreater(len(set(frames)), 1)
         self.assertEqual(sum(draft.draft_timeline.timeline(30, 15)), 720)
         for invalid in (14, 17):
             with self.assertRaises(ValueError):
@@ -1525,19 +1511,25 @@ class DraftTests(unittest.TestCase):
         result = draft._story(self.board(), 2, 7, {"cat": {}})
         self.assertEqual([scene["seconds"] for scene in result["scenes"]], [4, 3])
 
-    def test_planning_outline_contract_matches_validation(self):
-        job = {"id": self.ident, "status": "RUNNING", "brief": {**self.brief,
-            "seconds": 15, "scene_count": 8, "mode": "motion"}}
-        bindings = {"general.text": {"provider": "ollama", "model": "fixture"}, "image.generate": {}}
-        with (patch.object(draft, "_measured", return_value=nullcontext()),
-              patch.object(draft, "_ask", return_value={"outline": "ế" * 701}) as planner):
-            with self.assertRaisesRegex(ValueError, "Dàn ý do AI trả về.*700"):
-                draft._write_board(job, bindings)
-        self.assertNotIn("plan", draft._read(self.ident))
-        _, instructions, brief, schema, _ = planner.call_args.args
-        self.assertIn("700 characters", instructions)
-        self.assertEqual(brief["seconds"], 15)
-        self.assertEqual(schema["properties"]["outline"]["maxLength"], 700)
+    def test_incomplete_legacy_draft_cannot_run_retired_planner(self):
+        job = {"id": self.ident, "status": "RUNNING", "stage": "PLANNING",
+               "storyboard_version": 1, "brief": {**self.brief, "mode": "motion",
+                                                    "seconds": 15, "scene_count": 8}}
+        draft._save(job)
+        with (patch.object(draft, "_studio_bindings") as bindings,
+              patch.object(draft, "_ask") as ask, patch.object(draft, "_dispatch")):
+            draft._work(job, nullcontext())
+            saved = draft._read(self.ident)
+            self.assertEqual(saved["status"], "FAILED")
+            self.assertIn("planner cũ", saved["error"])
+            self.assertNotIn("board", saved)
+            self.assertEqual(saved["brief"], job["brief"])
+            with self.assertRaisesRegex(ValueError, "planner cũ"):
+                draft.act(self.ident, "resume", {})
+            with self.assertRaisesRegex(ValueError, "planner cũ"):
+                draft._write_board(saved, {})
+            bindings.assert_not_called()
+            ask.assert_not_called()
 
     def test_resume_reuses_previous_asset_and_generates_only_failed_scene(self):
         job = {"id": self.ident, "brief": self.brief, "status": "RUNNING", "stage": "IMAGES",
