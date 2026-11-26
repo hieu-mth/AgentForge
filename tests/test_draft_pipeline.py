@@ -553,7 +553,7 @@ class DraftTests(unittest.TestCase):
             with self.subTest(status=status):
                 job = {"id": self.ident, "brief": self.brief, "board": self.board(), "status": status}
                 draft._save(job)
-                with self.assertRaisesRegex(ValueError, "Scene cannot be edited"):
+                with self.assertRaisesRegex(ValueError, "Draft cannot be resumed"):
                     draft.act(self.ident, "edit", {})
                 job["storyboard_version"] = 1
                 job["storyboard_sha"] = draft.draft_timeline.digest(job)
@@ -1723,11 +1723,10 @@ class DraftTests(unittest.TestCase):
                 draft._save(job)
                 with self.assertRaisesRegex(ValueError, "current draft"):
                     draft.act(self.ident, "approve", {"sha256": "wrong"})
-                edited = draft.act(self.ident, "edit", {
-                    "index": 1, "description": "Sửa", "image_prompt": "New scene"})
-                self.assertEqual(edited["board"]["scenes"][0]["asset"], job["board"]["scenes"][0]["asset"])
-                self.assertIsNone(edited["board"]["scenes"][1]["asset"])
-                self.assertIsNone(edited["video_sha"])
-                draft._save(job)
+                with self.assertRaisesRegex(ValueError, "Draft cannot be resumed"):
+                    draft.act(self.ident, "edit", {
+                        "index": 1, "description": "Sửa", "image_prompt": "New scene"})
+                self.assertEqual(draft._read(self.ident)["board"], job["board"])
+                self.assertEqual(draft._read(self.ident)["video_sha"], job["video_sha"])
                 result = draft.act(self.ident, "approve", {"sha256": job["video_sha"]})
                 self.assertEqual(result["status"], "APPROVED")
