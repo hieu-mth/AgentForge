@@ -145,6 +145,30 @@ class OwnerAuthVideoFoundationTests(unittest.TestCase):
             self.assertEqual((status, resumed["id"], resumed["stage"]), (200, identifier, "STORYBOARD"))
             self.assertTrue(done.wait(3))
 
+    def test_unexpected_owner_api_errors_are_safe_and_keep_http_response(self):
+        from agentforge.api import server
+
+        status, login, headers = self.request("POST", "/api/login", {"code": self.code})
+        self.assertEqual(status, 200)
+        self.cookie = headers["Set-Cookie"].split(";", 1)[0]
+        self.csrf = login["csrf"]
+        for method, target, expected in (
+            ("GET", "agentforge.api.server.read.dispatch", "OWNER_API_GET_UNEXPECTED"),
+            ("POST", "agentforge.api.server._owner_action", "OWNER_API_POST_UNEXPECTED"),
+        ):
+            with self.subTest(method=method):
+                with (patch(target, side_effect=RuntimeError("secret-provider-payload")),
+                      self.assertLogs(server.LOG, level="ERROR") as logs):
+                    status, response, _ = self.request(method, "/api/fixture?secret=private", {})
+                self.assertEqual(status, 500)
+                self.assertEqual(response["error"], "internal_error")
+                self.assertEqual(response["code"], expected)
+                self.assertIn(expected, str(logs.output))
+                self.assertNotIn("secret-provider-payload", str(response))
+                self.assertNotIn("secret-provider-payload", str(logs.output))
+                self.assertNotIn("secret=private", str(logs.output))
+        self.assertEqual(self.request("GET", "/api/session")[0], 200)
+
     def test_dashboard_redirect_and_retired_routes_are_not_exposed(self):
         status, _, headers = self.request("GET", "/")
         self.assertEqual(status, 302)
