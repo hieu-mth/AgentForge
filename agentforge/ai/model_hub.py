@@ -1005,6 +1005,7 @@ def production_profile(profile_id, method, *, db_path=None):
 def _production_options(state):
     """Read-only UI options from the same admission logic as the router."""
     from agentforge.features.film_studio import draft_timeline, production_router
+    from agentforge.features.film_studio.studio_contracts import BRIEF_LIMIT
     candidates = _production_candidates(state, "auto")
     by_method = {method: sum(c["method"] == method for c in candidates)
                  for method in ("local", "hybrid", "cloud")}
@@ -1022,7 +1023,8 @@ def _production_options(state):
         {"id": "assigned", "available": not assigned_cloud, "execution_ready": assigned_ready},
         {"id": "auto", "available": bool(candidates), "execution_ready": any(ready.values())},
         *({"id": method, "available": bool(count), "execution_ready": ready[method]} for method, count in by_method.items()),
-    ], "duration_bounds": {"motion": draft_timeline.duration_bounds(True),
+    ], "brief_limit": BRIEF_LIMIT,
+        "duration_bounds": {"motion": draft_timeline.duration_bounds(True),
                             "still": draft_timeline.duration_bounds(False)},
         "min_cloud_seconds": production_router.MIN_CLOUD_SECONDS,
         "max_cloud_seconds": production_router.MAX_CLOUD_SECONDS,
