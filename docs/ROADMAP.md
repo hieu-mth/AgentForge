@@ -8,7 +8,7 @@ Baseline main: `9db60df28f242abf9ed199c409409f422d4f89db`. Mục tiêu: một St
 | F02 character references | BLOCKED_RUNTIME | POC conditioning với ảnh đã duyệt, benchmark A/B |
 | F03 giới hạn shot local | BLOCKED_RUNTIME | Clip dài hơn được xác nhận trên GPU hoặc adapter khác |
 | F04 mất provider ID | PARTIAL (Owner-attested GET-only recovery; duplicate remote IDs rejected) | Đối soát có chứng cứ, không retry mù |
-| F05 compatibility production | PARTIAL (strict motion ledger and current Studio HTTP brief; historical runtime compatibility remains) | Một schema mới, archive DB cũ có chủ đích |
+| F05 compatibility production | PARTIAL (strict motion ledger and canonical Studio HTTP/Python creation brief; historical runtime compatibility remains) | Một schema mới, archive DB cũ có chủ đích |
 | F06 draft_pipeline | PARTIAL (script analysis and timeline extracted) | Tách theo trách nhiệm, giữ checkpoint/approval |
 | F07 readiness quá sớm | IMPLEMENTED | Storyboard theo phương pháp cụ thể không cần quyền media/FFmpeg; approval vẫn chặn |
 | F08 OAuth Dashboard | IMPLEMENTED (runtime pending) | Đăng nhập, danh sách model và logout có consent |
@@ -25,6 +25,6 @@ Baseline main: `9db60df28f242abf9ed199c409409f422d4f89db`. Mục tiêu: một St
 
 ## Hợp đồng Studio hiện hành
 
-- Tạo production qua HTTP chỉ dùng `duration_mode` là `auto` hoặc `manual`, `scene_count: null`, và `mode` rõ ràng. AI lập số cảnh; Owner duyệt storyboard trước khi sinh media. Nếu chọn tuyến sản xuất, gửi cả `route_strategy` và `max_cloud_seconds`.
+- Tạo production qua HTTP và Python chỉ dùng `duration_mode` là `auto` hoặc `manual`, `scene_count: null`, và `mode` rõ ràng. AI lập số cảnh; Owner duyệt storyboard trước khi sinh media. Kế hoạch 30 giây hiện hành không yêu cầu trường trọng số preset cũ. Nếu chọn tuyến sản xuất, gửi cả `route_strategy` và `max_cloud_seconds`.
 - Không hỗ trợ trường `motion_approved` hay API sửa cảnh không có phiên bản. Mọi chỉnh sửa đi qua `storyboard-*` với SHA hiện tại.
-- Các bản ghi lịch sử vẫn có thể đọc, xác minh và đối soát theo checkpoint gốc; không tự chuyển đổi SHA hoặc xóa dữ liệu. Cơ chế preset nội bộ và lịch sử còn tồn tại, chưa đóng F05.
+- Các bản ghi lịch sử vẫn có thể đọc, xác minh và đối soát theo checkpoint gốc; không tự chuyển đổi SHA hoặc xóa dữ liệu. Không tạo production mới bằng preset. Chỉ giữ planner/timeline preset để xử lý checkpoint lịch sử; chưa đóng F05.
