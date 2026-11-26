@@ -192,3 +192,73 @@ class CloudMotionIntegrationTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     motion.recover_provider_id(job, data, {"model": "ltx-2-3-fast"})
                 request.assert_called_once()
+
+    def test_cancel_reconciliation_validates_all_shots_and_orphaned_jobs_before_polling(self):
+        import tempfile
+        from pathlib import Path
+        from contextlib import closing
+        from unittest.mock import patch
+        from agentforge.features.film_studio import draft_pipeline as draft
+
+        production, ident, other, remote = "a"*32, "b"*32, "c"*32, "d"*32
+        profile = {"model": "ltx-2-3-fast"}
+        job = {"id": production, "board": {"scenes": [{"motion_job": ident, "frames": 144}]}}
+        with tempfile.TemporaryDirectory() as tmp, patch.object(motion, "DB", Path(tmp)/"ledger.db"):
+            with closing(motion._db(True)) as conn, conn:
+                conn.execute("INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?,?)",
+                    (ident, other, "text-to-video", profile["model"], 6, "e"*64, "SUBMITTED", remote, None))
+            with (patch.object(draft, "_studio_bindings", return_value=(1, {"film.motion": profile}, 1)),
+                  patch.object(motion, "_key", return_value="fixture"),
+                  patch.object(motion.ltx, "_request", return_value={"id": remote, "status": "completed"}) as request):
+                self.assertFalse(motion.reconcile_cancelled(job))
+                request.assert_not_called()
+                with closing(motion._db(True)) as conn, conn:
+                    conn.execute("UPDATE jobs SET production=?, seconds=8 WHERE id=?", (production, ident))
+                self.assertFalse(motion.reconcile_cancelled(job))
+                request.assert_not_called()
+                with closing(motion._db(True)) as conn, conn:
+                    conn.execute("UPDATE jobs SET seconds=6 WHERE id=?", (ident,))
+                    conn.execute("INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?,?)",
+                        (other, production, "text-to-video", profile["model"], 6,
+                         "f"*64, "SUBMITTING", None, None))
+                self.assertFalse(motion.reconcile_cancelled(job))
+                request.assert_not_called()
+                with closing(motion._db(True)) as conn, conn:
+                    conn.execute("DELETE FROM jobs WHERE id=?", (other,))
+                self.assertTrue(motion.reconcile_cancelled(job))
+                request.assert_called_once()
+                self.assertEqual(request.call_args.args[0], "GET")
+                self.assertEqual(motion._row(ident)["state"], "CANCELLED_REMOTE_TERMINAL")
+
+    def test_cloud_poll_refuses_untrusted_endpoint_and_mismatched_metadata(self):
+        from unittest.mock import patch
+        from agentforge.features.film_studio.draft_resources import NeedsReconciliation
+
+        remote = "a"*32
+        row = {"endpoint": "../other", "provider_id": remote,
+               "model": "ltx-2-3-fast", "seconds": 6}
+        with (patch.object(motion, "_key", return_value="fixture"),
+              patch.object(motion.ltx, "_request", return_value={
+                  "id": remote, "status": "completed", "duration": 8}) as request):
+            with self.assertRaises(NeedsReconciliation):
+                motion._poll(row, {})
+            request.assert_not_called()
+            with self.assertRaises(NeedsReconciliation):
+                motion._poll({**row, "endpoint": "text-to-video"}, {})
+            request.assert_called_once()
+
+    def test_cloud_ledger_read_connection_cannot_write(self):
+        import sqlite3
+        import tempfile
+        from pathlib import Path
+        from contextlib import closing
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp, patch.object(motion, "DB", Path(tmp)/"ledger.db"):
+            self.assertIsNone(motion._db())
+            self.assertFalse(motion.DB.exists())
+            with closing(motion._db(True)):
+                pass
+            with closing(motion._db()) as conn:
+                with self.assertRaises(sqlite3.OperationalError):
+                    conn.execute("DELETE FROM jobs")
