@@ -4,7 +4,7 @@ import {NumberField} from '../components/NumberField.jsx';
 import {ScriptContent} from './ScriptContent.jsx';
 import {draftTitle} from './scriptPresentation.js';
 import {groupDraftScenes} from './studioScenes.js';
-import {MAX_STUDIO_SECONDS,productionMethodLabels,cloudSecondsRemainingEstimate} from './studioDuration.js';
+import {productionMethodLabels,cloudSecondsRemainingEstimate} from './studioDuration.js';
 import './storyboard-review.css';
 
 export function StoryboardReview({job,modelRoutes,busy,error,onClose,onApprove,onEdit,onRewrite,onAdd,onMove,onRemove,onPreview,onDuration,onRegenerate,onVisualReview,onVisualReviewBatch,onQualityRepair,onAudio,onContinuity,onAudioDirect}){
@@ -41,7 +41,7 @@ export function StoryboardReview({job,modelRoutes,busy,error,onClose,onApprove,o
     </div>}>
     {error&&<Alert type="error" showIcon message={error}/>}
     {job.production_plan&&<Alert showIcon type="info" message={"Phương pháp: "+productionMethodLabels[job.production_plan.method]+" · "+job.production_plan.motion_ref}
-      description={<><p>{job.production_plan.reason}</p>{job.production_plan.method!=="local"&&<p>Giây đã giữ ngân sách: {job.cloud_motion_seconds??0}/{job.production_plan.max_cloud_seconds}. Cần thêm dự kiến {cloudSecondsRemainingEstimate(job)} giây. Có âm thanh native nếu chưa có Audio Director.</p>}</>}/>}
+      description={<><p>{job.production_plan.reason}</p>{job.production_plan.method!=="local"&&<p>Giây đã giữ ngân sách: {job.cloud_motion_seconds??0}/{job.production_plan.max_cloud_seconds}. Cần thêm dự kiến {cloudSecondsRemainingEstimate(job)??'—'} giây. Có âm thanh native nếu chưa có Audio Director.</p>}</>}/>}
     {reviewing&&job.deferred_media_binding&&<Alert type="info" showIcon
       message="Storyboard chưa khóa model media"
       description="Bạn có thể xem và chỉnh nội dung trước khi duyệt. Khi duyệt sản xuất, hệ thống kiểm tra và khóa các model media theo tuyến đã chọn."/>}
@@ -63,7 +63,7 @@ export function StoryboardReview({job,modelRoutes,busy,error,onClose,onApprove,o
           {' '+countLabel}. Timeline hiện tại <strong>{job.brief.seconds} giây</strong>.</p>
         <p className="env-muted">{job.duration_plan.duration_reasoning}</p>
         {onDuration&&<Space wrap>
-          <NumberField aria-label="Thời lượng storyboard" min={job.brief.mode==='motion'?4:6} max={MAX_STUDIO_SECONDS}
+          <NumberField aria-label="Thời lượng storyboard" min={job.editor_constraints.duration.min} max={job.editor_constraints.duration.max}
             precision={0} value={seconds??job.brief.seconds} onChange={setSeconds} suffix="giây"/>
           <Button disabled={busy||seconds===null||seconds===job.brief.seconds} onClick={()=>onDuration(seconds)}>Cập nhật thời lượng</Button>
         </Space>}
