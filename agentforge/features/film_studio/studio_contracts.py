@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from contextlib import AbstractContextManager, nullcontext
 from typing import Callable
 
+BRIEF_LIMIT = 20_000
+
 DispatchGuard = Callable[[], AbstractContextManager[int | None]]
 
 
