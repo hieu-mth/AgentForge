@@ -52,7 +52,7 @@ class CloudMotionIntegrationTests(unittest.TestCase):
                   patch.object(model_hub, "local_inference_slot", side_effect=lambda: nullcontext()),
                   patch.object(draft.ops_control, "require_active"),
                   patch.object(draft.characters, "list_characters", return_value={"characters": []}),
-                  patch.object(draft.studio_runtime, "image_adapter", side_effect=AssertionError("FLUX required")),
+                  patch.object(draft, "_image", side_effect=AssertionError("FLUX generation invoked")),
                   patch.dict(os.environ, {"LTX_BASE_URL": "https://api.ltx.io", "LTX_API_KEY": "fixture-key"})):
                 writer = {"id": "writer", "provider": "openai", "enabled": True,
                           "model": "fixture-writer", "base_url_env": "TEST_API_BASE", "api_key_env": "TEST_API_KEY"}
