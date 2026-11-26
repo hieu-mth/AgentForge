@@ -703,7 +703,7 @@ try {
   const planToggle=settings.getByRole('switch',{name:'Lập kế hoạch',exact:true});
   await planToggle.click();
   await settings.getByText('Có thay đổi chưa lưu',{exact:true}).waitFor();
-  if(await motionModel.isEnabled())throw new Error('Assignment can overwrite unsaved policy edits');
+  if(!await motionModel.isEnabled())throw new Error('Combined policy draft must allow model assignment');
   await settings.setViewportSize({width:1280,height:850});
   const tabs=settings.locator('.af-section-tabs');
   const modelTab=tabs.locator('[data-node-key="models"] [role="tab"]');
@@ -727,15 +727,54 @@ try {
   await settings.goto(policyOrigin+'/dashboard/#/models');
   await settings.getByRole('button',{name:'Đăng ký model'}).click();
   const registerDialog=settings.getByRole('dialog');
+  // OAuth status is an external-account observation, not part of the real SQLite
+  // profile registration fixture. Exercise both states without depending on runner credentials.
+  let oauthConnected=false;
+  let oauthChecks=0, oauthLists=0;
+  await settings.route('**/api/model-hub/chatgpt',route=>{
+    const body=route.request().postDataJSON();
+    if(body.account_ref!=='owner')throw new Error('Unexpected OAuth account');
+    if(body.ack==='CHATGPT_STATUS'){
+      oauthChecks++;
+      return route.fulfill({json:{account_ref:'owner',connected:oauthConnected}});
+    }
+    if(body.ack==='LIST_CHATGPT_MODELS'&&oauthConnected){
+      oauthLists++;
+      return route.fulfill({json:{account_ref:'owner',connected:true,models:[{slug:'fixture-gpt',display_name:'Fixture GPT'}]}});
+    }
+    throw new Error('Unexpected OAuth action in profile registration: '+body.ack);
+  });
   await registerDialog.getByText('Cloud',{exact:true}).click();
   await registerDialog.getByText('Kết nối ChatGPT qua OAuth',{exact:true}).waitFor();
+  const checkOAuth=registerDialog.getByRole('button',{name:'Kiểm tra',exact:true});
+  const listOAuth=registerDialog.getByRole('button',{name:'Lấy danh sách model',exact:true});
+  await checkOAuth.waitFor();
+  if(oauthChecks||oauthLists||await listOAuth.count())
+    throw new Error('Opening Cloud must not check OAuth or expose the model catalog');
+  await checkOAuth.click();
+  await registerDialog.getByRole('button',{name:'Liên kết ChatGPT',exact:true}).waitFor();
+  if(oauthChecks!==1||oauthLists||await listOAuth.count())
+    throw new Error('Disconnected account must not expose the model catalog');
+  oauthConnected=true;
+  await checkOAuth.click();
+  await registerDialog.getByText('Đã kết nối tài khoản ChatGPT',{exact:true}).waitFor();
+  await listOAuth.waitFor();
+  if(oauthChecks!==2||oauthLists)throw new Error('Checking OAuth must not fetch models automatically');
+  await listOAuth.click();
+  await registerDialog.getByRole('combobox',{name:'Model ChatGPT',exact:true}).waitFor();
+  if(oauthLists!==1)throw new Error('Explicit catalog request missing');
   const cloudAdapter=registerDialog.getByRole('combobox',{name:'Chuẩn kết nối'});
   await cloudAdapter.click();
-  await openOptions.filter({hasText:/^Anthropic API$/}).waitFor();
-  const cloudLabels=await openOptions.allTextContents();
-  if(JSON.stringify(cloudLabels)!==JSON.stringify(['ChatGPT','OpenAI API','Anthropic API','LTX Video API','ElevenLabs API']))
-    throw new Error('Unexpected cloud adapter labels or order: '+cloudLabels.join(', '));
-  await openOptions.filter({hasText:/^Anthropic API$/}).evaluate(option=>option.click());
+  const cloudLabels=['ChatGPT','OpenAI API','Anthropic API','LTX Video API','ElevenLabs API'];
+  await settings.waitForFunction(expected=>{
+    const combo=document.querySelector('.model-profile-dialog [aria-expanded="true"][role="combobox"]');
+    if(!combo)return false;
+    const list=document.getElementById(combo.getAttribute('aria-controls'));
+    if(!list)return false;
+    const labels=Array.from(list.querySelectorAll('[role="option"]'),option=>option.textContent.trim());
+    return JSON.stringify(labels)===JSON.stringify(expected);
+  },cloudLabels);
+  await openOptions.filter({hasText:/^Anthropic API$/}).click();
   await registerDialog.getByLabel('Endpoint Cloud',{exact:true}).waitFor();
   await registerDialog.getByLabel('API key',{exact:true}).waitFor();
   await registerDialog.getByRole('button',{name:'Dùng biến môi trường'}).click();
@@ -812,10 +851,10 @@ try {
   await settings.goto(policyOrigin+'/dashboard/#/orchestrator');
   await planModel.click();
   await openOptions.filter({hasText:/local_primary/}).click();
-  await settings.getByRole('dialog').getByRole('button',{name:'Xác nhận'}).click();
-  await settings.getByRole('dialog').waitFor({state:'hidden'});
-  await settings.goto(policyOrigin+'/dashboard/#/orchestrator');
-  await settings.getByRole('heading',{name:'AI điều phối tác vụ',exact:true}).waitFor();
+  await settings.getByText('Có thay đổi chưa lưu',{exact:true}).waitFor();
+  const draftAssignment=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
+  if(draftAssignment.revision!==1||draftAssignment.routes.find(row=>row.id==='general.text')?.model_ref)
+    throw new Error('Assignment was persisted before the combined save');
   await planToggle.click();
   const cloudToggle=settings.getByRole('switch',{name:'Gọi AI cloud',exact:true});
   await cloudToggle.click();
@@ -832,9 +871,9 @@ try {
   await toolsSelect.waitFor({state:'hidden'});
   await savePolicy.click();
   await settings.getByRole('dialog').getByRole('button',{name:'Lưu cấu hình'}).click();
-  await settings.getByText('Owner tùy chỉnh · Phiên bản 3',{exact:true}).waitFor();
+  await settings.getByText('Owner tùy chỉnh · Phiên bản 2',{exact:true}).waitFor();
   await settings.reload();
-  await settings.getByText('Owner tùy chỉnh · Phiên bản 3',{exact:true}).waitFor();
+  await settings.getByText('Owner tùy chỉnh · Phiên bản 2',{exact:true}).waitFor();
   if((await planToggle.getAttribute('aria-checked'))!=='true')
     throw new Error('Settings did not persist after reload');
   const persisted=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
@@ -849,20 +888,22 @@ try {
     throw new Error('Saved model was not read back from real Model Hub');
   const {csrf}=await (await settings.request.get(policyOrigin+'/api/session')).json();
   const invalid=await settings.request.post(policyOrigin+'/api/model-hub/route',{headers:{...postOptions.headers,'X-CSRF-Token':csrf},
-    data:{ack:'SET_MODEL_ROUTE',expected_revision:3,task_id:'film.motion',model_ref:'local_primary'}});
+    data:{ack:'SET_MODEL_ROUTE',expected_revision:2,task_id:'film.motion',model_ref:'local_primary'}});
   if(invalid.status()!==400)throw new Error('API accepted a text model for video');
   const obsolete=await settings.request.post(endpoint,{headers:{...postOptions.headers,'X-CSRF-Token':csrf},
-    data:{ack:'SAVE_ORCHESTRATOR',expected_revision:3,policy:persisted.orchestrator.policy,
+    data:{ack:'SAVE_ORCHESTRATOR',expected_revision:2,policy:persisted.orchestrator.policy,
       route_changes:{'film.motion':'local_primary'}}});
-  if(obsolete.status()===200)throw new Error('Retired policy assignment API accepted a write');
+  if(obsolete.status()!==400)throw new Error('Combined policy API accepted an incompatible route');
+  const afterInvalid=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
+  if(JSON.stringify(afterInvalid)!==JSON.stringify(persisted))throw new Error('Invalid combined save changed the persisted snapshot');
   const assignedDelete=await settings.request.post(policyOrigin+'/api/model-hub/profile/delete',{
     headers:{Origin:policyOrigin,'X-CSRF-Token':csrf},
-    data:{ack:'DELETE_MODEL_PROFILE',expected_revision:3,profile_id:'local_primary'},
+    data:{ack:'DELETE_MODEL_PROFILE',expected_revision:2,profile_id:'local_primary'},
   });
   if(assignedDelete.status()!==400)throw new Error('API deleted assigned AI model');
   await settings.getByRole('button',{name:'Đặt lại mặc định'}).click();
   await settings.getByRole('dialog').getByRole('button',{name:'Đặt lại',exact:true}).click();
-  await settings.getByText('Mặc định · Phiên bản 4',{exact:true}).waitFor();
+  await settings.getByText('Mặc định · Phiên bản 3',{exact:true}).waitFor();
   if((await planToggle.getAttribute('aria-checked'))==='true'||(await cloudToggle.getAttribute('aria-checked'))==='true')
     throw new Error('Reset did not restore defaults');
   for(const width of [390,900,1440]){
@@ -890,19 +931,30 @@ try {
   if(!(await settings.locator('.model-route').filter({has:planModel}).innerText()).includes('local_primary'))throw new Error('Policy reset removed the assignment');
   await planModel.click();
   await openOptions.filter({hasText:'Chưa gán'}).click();
-  await settings.getByRole('dialog').getByRole('button',{name:'Xác nhận'}).click();
-  await settings.getByRole('dialog').waitFor({state:'hidden'});
+  await settings.getByText('Có thay đổi chưa lưu',{exact:true}).waitFor();
+  await settings.getByRole('button',{name:'Hủy thay đổi'}).click();
+  if(!(await settings.locator('.model-route').filter({has:planModel}).innerText()).includes('local_primary'))
+    throw new Error('Cancelling the draft did not restore the assigned model');
+  await planModel.click();
+  await openOptions.filter({hasText:'Chưa gán'}).click();
+  await savePolicy.click();
+  await settings.getByRole('dialog').getByRole('button',{name:'Lưu cấu hình'}).click();
+  await settings.getByText('Owner tùy chỉnh · Phiên bản 4',{exact:true}).waitFor();
   await settings.goto(policyOrigin+'/dashboard/#/models');
   await modelRow.getByText('Xóa',{exact:true}).click();
   await settings.getByRole('dialog').getByRole('button',{name:'Xác nhận'}).click();
   await settings.getByText('Chưa đăng ký model. Chọn Đăng ký model để bắt đầu.',{exact:true}).waitFor();
   const cleaned=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
-  if(cleaned.profiles.length!==0||cleaned.revision!==6)
+  if(cleaned.profiles.length!==0||cleaned.revision!==5)
     throw new Error('Owner profile removal did not persist in SQLite');
   if(process.platform==='win32'){
     const fixtureKey='smoke-credential-not-a-real-key';
     await settings.getByRole('button',{name:'Đăng ký model'}).click();
+    oauthConnected=true;
     await registerDialog.getByText('Cloud',{exact:true}).click();
+    await checkOAuth.waitFor();
+    if(oauthChecks!==2||oauthLists!==1||await listOAuth.count())
+      throw new Error('Reopening the dialog reused or automatically checked OAuth');
     await registerDialog.getByRole('combobox',{name:'Chuẩn kết nối'}).click();
     await openOptions.filter({hasText:/^Anthropic API$/}).click();
     await registerDialog.getByLabel('Model ID',{exact:true}).fill('fixture-cloud');
@@ -925,6 +977,9 @@ try {
     await settings.getByText('Chưa kiểm tra',{exact:true}).first().waitFor();
     await settings.getByText('Đã lưu hồ sơ model',{exact:true}).waitFor();
   }
+  if(oauthChecks!==2||oauthLists!==1)
+    throw new Error('OAuth requests must match explicit Owner actions');
+  await settings.unroute('**/api/model-hub/chatgpt');
   const concurrent=await browser.newContext();
   const login2=await concurrent.request.post(policyOrigin+'/api/login',{
     headers:{Origin:policyOrigin},data:{code:ownerCode},
