@@ -4,10 +4,10 @@ import {NumberField} from '../components/NumberField.jsx';
 import {ScriptContent} from './ScriptContent.jsx';
 import {draftTitle} from './scriptPresentation.js';
 import {groupDraftScenes} from './studioScenes.js';
-import {MAX_STUDIO_SECONDS} from './studioDuration.js';
+import {MAX_STUDIO_SECONDS,productionMethodLabels,cloudSecondsRemainingEstimate} from './studioDuration.js';
 import './storyboard-review.css';
 
-export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewrite,onAdd,onMove,onRemove,onPreview,onDuration,onRegenerate,onVisualReview,onVisualReviewBatch,onQualityRepair,onAudio,onContinuity,onAudioDirect}){
+export function StoryboardReview({job,modelRoutes,busy,error,onClose,onApprove,onEdit,onRewrite,onAdd,onMove,onRemove,onPreview,onDuration,onRegenerate,onVisualReview,onVisualReviewBatch,onQualityRepair,onAudio,onContinuity,onAudioDirect}){
   const [shot,setShot]=useState(null);
   const [seconds,setSeconds]=useState(null);
   const [view,setView]=useState('scenes');
@@ -16,6 +16,8 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
   const [voices,setVoices]=useState(job.audio_plan?.voices??{});
   const [generateAudio,setGenerateAudio]=useState(Boolean(job.audio_plan?.generated_profiles));
   const scenes=job.board.scenes;
+  const nativeAudio=['hybrid','cloud'].includes(job.production_plan?.method);
+  const routeAssigned=id=>modelRoutes?.some(route=>route.id===id&&['CONFIG_ONLY','LOCAL_RUNTIME'].includes(route.status));
   const index=Math.max(0,scenes.findIndex((s,i)=>(s.shot_id??i)===shot));
   const scene=scenes[index];
   const reviewing=job.status==='STORYBOARD_REVIEW';
@@ -38,8 +40,8 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
       </Space>
     </div>}>
     {error&&<Alert type="error" showIcon message={error}/>}
-    {job.production_plan&&<Alert showIcon type="info" message={"Tuyến sản xuất: "+job.production_plan.method+" · "+job.production_plan.motion_ref}
-      description={<><p>{job.production_plan.reason}</p>{job.production_plan.method!=="local"&&<p>Giây đã giữ ngân sách: {job.cloud_motion_seconds??0}/{job.production_plan.max_cloud_seconds}. Cần thêm dự kiến {scenes.filter(s=>!s.motion_job).reduce((n,s)=>n+([6,8,10].find(t=>t*24>=s.frames)??10),0)} giây. Có âm thanh native nếu chưa có Audio Director.</p>}</>}/>}
+    {job.production_plan&&<Alert showIcon type="info" message={"Phương pháp: "+productionMethodLabels[job.production_plan.method]+" · "+job.production_plan.motion_ref}
+      description={<><p>{job.production_plan.reason}</p>{job.production_plan.method!=="local"&&<p>Giây đã giữ ngân sách: {job.cloud_motion_seconds??0}/{job.production_plan.max_cloud_seconds}. Cần thêm dự kiến {cloudSecondsRemainingEstimate(job)} giây. Có âm thanh native nếu chưa có Audio Director.</p>}</>}/>}
     {reviewing&&job.deferred_media_binding&&<Alert type="info" showIcon
       message="Storyboard chưa khóa model media"
       description="Bạn có thể xem và chỉnh nội dung trước khi duyệt. Khi duyệt sản xuất, hệ thống kiểm tra và khóa các model media theo tuyến đã chọn."/>}
@@ -73,7 +75,7 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
       </div>}
       <h3>Âm thanh</h3>
       <p>{job.audio_plan?.format==='directed.v1'?'AI Audio Director · '+job.audio_plan.cues.length+' cue':
-        job.audio_plan?'Lời thoại từ phụ đề · '+job.audio_plan.engine:'Không có lời thoại tự động'}</p>
+        job.audio_plan?'Lời thoại từ phụ đề · '+job.audio_plan.engine:nativeAudio?'Âm thanh từ model video cloud':'Không có lời thoại tự động'}</p>
       {job.audio_plan?.format==='directed.v1'&&<div className="storyboard-context">
         {job.audio_plan.cues.map((cue,i)=><p key={i}>{cue.kind} · Cảnh {scenes.findIndex(s=>s.shot_id===cue.shot_id)+1}
           {' · frame '+cue.start_frame+'–'+cue.end_frame+' · '+cue.gain_db+' dB · '+(cue.text||cue.asset)}
@@ -85,16 +87,16 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
         <Space wrap>
           <Select aria-label="Nguồn lời thoại" value={engine} onChange={setEngine} options={[
             {value:'none',label:'Không lời thoại'},{value:'windows',label:'Windows SAPI'},
-            {value:'piper',label:'Piper local'},{value:'cloud',label:'Speech cloud (Model Hub)'},
+            {value:'piper',label:'Piper local'},{value:'cloud',label:'Model tạo thoại cloud',disabled:!routeAssigned('film.tts')&&engine!=='cloud'},
           ]}/>
-          {engine!=='none'&&<Input aria-label="Tên voice local" value={voice} maxLength={100}
+          {engine!=='none'&&<Input aria-label="Mã giọng đọc" value={voice} maxLength={100}
             onChange={e=>setVoice(e.target.value)} placeholder={engine==='piper'?'voice.onnx':engine==='cloud'?'Mã voice cloud':'Voice mặc định nếu để trống'}/>}
           <Button disabled={busy||engine==='cloud'||engine==='piper'&&!voice}
             onClick={()=>onAudio(engine,engine==='none'?'':voice)}>{engine==='none'?'Tắt âm thanh':'Chỉ đọc phụ đề'}</Button>
           {onAudioDirect&&<Button type="primary" disabled={busy||engine==='none'||['cloud','piper'].includes(engine)&&!voice}
             onClick={()=>onAudioDirect(engine,voice,voices,generateAudio)}>AI lập kế hoạch âm thanh</Button>}
         </Space>
-        {onAudioDirect&&engine!=='none'&&<p><Checkbox checked={generateAudio} onChange={event=>setGenerateAudio(event.target.checked)}>Cho phép AI sinh hiệu ứng/nhạc cloud khi thiếu WAV phù hợp</Checkbox></p>}
+        {onAudioDirect&&engine!=='none'&&<p><Checkbox checked={generateAudio} disabled={!generateAudio&&!routeAssigned('film.sound')&&!routeAssigned('film.music')} onChange={event=>setGenerateAudio(event.target.checked)}>Cho phép AI sinh hiệu ứng/nhạc cloud khi thiếu WAV phù hợp</Checkbox></p>}
         {engine!=='none'&&Object.entries(job.cast??{}).map(([id,character])=><p key={id}>
           <label>{character.name} · voice riêng <Input value={voices[id]??''} maxLength={100}
             onChange={e=>setVoices(old=>({...old,[id]:e.target.value}))} placeholder="Để trống dùng voice mặc định"/></label>
@@ -139,7 +141,7 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
         {scene.continuity_plan&&<div className="storyboard-context">
           <strong>{({CUT:'Chuyển cảnh',CAMERA_CHANGE:'Đổi góc',CONTINUE:'Tiếp nối frame cuối'})[scene.continuity_plan.transition]}</strong>
           <p>Bắt đầu: {scene.continuity_plan.start_state}</p><p>Kết thúc: {scene.continuity_plan.end_state}</p>
-          {scene.continuity_plan.transition==='CONTINUE'&&<p className="env-muted">Ảnh bên dưới là ảnh dự kiến; clip dùng frame cuối đã xác minh của cảnh trước.</p>}
+          {scene.continuity_plan.transition==='CONTINUE'&&<p className="env-muted">{scene.asset?'Ảnh bên dưới là ảnh dự kiến; ':''}Clip dùng frame cuối đã xác minh của cảnh trước.</p>}
         </div>}
         {scene.asset&&<div className="storyboard-image"><Image loading="lazy" alt={'Ảnh cảnh '+(index+1)}
           src={'/api/film/drafts/'+job.id+'/scene-'+index+'?v='+scene.asset}/></div>}
@@ -151,7 +153,7 @@ export function StoryboardReview({job,busy,error,onClose,onApprove,onEdit,onRewr
           <ScriptContent text={Array.from(job.brief.idea).slice(...scene.script_range).join('')}/>
         </details>}
         <details><summary>Chi tiết AI</summary>
-          <p><strong>Prompt ảnh</strong><br/>{scene.image_prompt}</p>
+          <p><strong>{job.production_plan?.method==='cloud'?'Mô tả hình ảnh':'Prompt ảnh'}</strong><br/>{scene.image_prompt}</p>
           {scene.motion_prompt&&<p><strong>Prompt chuyển động</strong><br/>{scene.motion_prompt}</p>}
           {scene.audio&&<p><strong>Âm thanh dự kiến</strong><br/>{scene.audio}</p>}
         </details>

@@ -675,21 +675,25 @@ try {
     throw new Error('Fresh Owner Model Hub must not preload any model');
   await settings.goto(policyOrigin+'/dashboard/#/orchestrator',{waitUntil:'networkidle'});
   await settings.getByRole('heading',{name:'AI điều phối tác vụ',exact:true}).waitFor();
-  for(const title of ['Chế độ thực thi','Phân công AI theo năng lực',
+  for(const title of ['Chế độ thực thi','Model thực thi',
     'An toàn runtime','Quyền thực thi']){
     await settings.getByText(title,{exact:true}).waitFor();
   }
   if((await settings.request.post(endpoint,postOptions)).status()!==403)
     throw new Error('Orchestrator mutation is accessible without a CSRF token');
-  await settings.getByText('Không khả dụng',{exact:true}).first().waitFor();
+  if(await settings.getByRole('combobox',{name:/Model chính/}).count())
+    throw new Error('Duplicate model assignment editor in policy screen');
   const savePolicy=settings.locator('.orchestrator-header').getByRole('button',{name:'Lưu cấu hình'});
   const openOptions=settings.locator('.ant-select-dropdown:visible .ant-select-item-option-content');
-  const motionModel=settings.getByRole('combobox',{name:'Model chính · Tạo chuyển động'});
+  await settings.getByRole('button',{name:'Quản lý phân công model'}).click();
+  await settings.waitForURL('**/#/models');
+  const motionModel=settings.getByRole('combobox',{name:'Model cho Tạo chuyển động'});
   await motionModel.click();
   await openOptions.filter({hasText:'Chưa gán'}).waitFor();
   if(await openOptions.filter({hasText:/local_primary|cloud_primary/}).count())
     throw new Error('Video binding offers incompatible text models');
   await motionModel.press('Escape');
+  await settings.goto(policyOrigin+'/dashboard/#/orchestrator');
   for(const name of ['Model điều phối','Model không khả dụng','Model được phép đề xuất',
     'Tác vụ GPU đồng thời','Lượt gọi API trả phí mỗi ngày','Số lần thử lại tối đa']){
     if(await settings.getByLabel(name,{exact:true}).count())throw new Error('Retired control still visible: '+name);
@@ -793,11 +797,13 @@ try {
     throw new Error('Metadata was presented as inference or retried automatically');
   await settings.unroute('**/api/model-hub/readiness');
   console.log('Model adapter selection, validation and real SQLite registration: PASS');
-  await settings.goto(policyOrigin+'/dashboard/#/orchestrator');
-  await settings.getByRole('heading',{name:'AI điều phối tác vụ',exact:true}).waitFor();
-  const planModel=settings.getByRole('combobox',{name:'Model chính · Lập kế hoạch'});
+  const planModel=settings.getByRole('combobox',{name:'Model cho Lập kế hoạch'});
   await planModel.click();
   await openOptions.filter({hasText:/local_primary/}).click();
+  await settings.getByRole('dialog').getByRole('button',{name:'Xác nhận'}).click();
+  await settings.getByRole('dialog').waitFor({state:'hidden'});
+  await settings.goto(policyOrigin+'/dashboard/#/orchestrator');
+  await settings.getByRole('heading',{name:'AI điều phối tác vụ',exact:true}).waitFor();
   await planToggle.click();
   const cloudToggle=settings.getByRole('switch',{name:'Gọi AI cloud',exact:true});
   await cloudToggle.click();
@@ -814,9 +820,9 @@ try {
   await toolsSelect.waitFor({state:'hidden'});
   await savePolicy.click();
   await settings.getByRole('dialog').getByRole('button',{name:'Lưu cấu hình'}).click();
-  await settings.getByText('Owner tùy chỉnh · Phiên bản 2',{exact:true}).waitFor();
+  await settings.getByText('Owner tùy chỉnh · Phiên bản 3',{exact:true}).waitFor();
   await settings.reload();
-  await settings.getByText('Owner tùy chỉnh · Phiên bản 2',{exact:true}).waitFor();
+  await settings.getByText('Owner tùy chỉnh · Phiên bản 3',{exact:true}).waitFor();
   if((await planToggle.getAttribute('aria-checked'))!=='true')
     throw new Error('Settings did not persist after reload');
   const persisted=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
@@ -831,17 +837,17 @@ try {
     throw new Error('Saved model was not read back from real Model Hub');
   const {csrf}=await (await settings.request.get(policyOrigin+'/api/session')).json();
   const invalid=await settings.request.post(endpoint,{headers:{...postOptions.headers,'X-CSRF-Token':csrf},
-    data:{ack:'SAVE_ORCHESTRATOR',expected_revision:2,policy:persisted.orchestrator.policy,
+    data:{ack:'SAVE_ORCHESTRATOR',expected_revision:3,policy:persisted.orchestrator.policy,
       route_changes:{'film.motion':'local_primary'}}});
   if(invalid.status()!==400)throw new Error('API accepted a text model for video');
   const assignedDelete=await settings.request.post(policyOrigin+'/api/model-hub/profile/delete',{
     headers:{Origin:policyOrigin,'X-CSRF-Token':csrf},
-    data:{ack:'DELETE_MODEL_PROFILE',expected_revision:2,profile_id:'local_primary'},
+    data:{ack:'DELETE_MODEL_PROFILE',expected_revision:3,profile_id:'local_primary'},
   });
   if(assignedDelete.status()!==400)throw new Error('API deleted assigned AI model');
   await settings.getByRole('button',{name:'Đặt lại mặc định'}).click();
   await settings.getByRole('dialog').getByRole('button',{name:'Đặt lại',exact:true}).click();
-  await settings.getByText('Mặc định · Phiên bản 3',{exact:true}).waitFor();
+  await settings.getByText('Mặc định · Phiên bản 4',{exact:true}).waitFor();
   if((await planToggle.getAttribute('aria-checked'))==='true'||(await cloudToggle.getAttribute('aria-checked'))==='true')
     throw new Error('Reset did not restore defaults');
   for(const width of [390,900,1440]){
@@ -863,11 +869,16 @@ try {
     throw new Error('Editor did not load the persisted model');
   await registerDialog.getByRole('button',{name:'Hủy',exact:true}).click();
   await registerDialog.waitFor({state:'hidden'});
+  // Resetting permissions must not unassign the model. Unassign at Model AI.
+  await planModel.click();
+  await openOptions.filter({hasText:'Chưa gán'}).click();
+  await settings.getByRole('dialog').getByRole('button',{name:'Xác nhận'}).click();
+  await settings.getByRole('dialog').waitFor({state:'hidden'});
   await modelRow.getByText('Xóa',{exact:true}).click();
   await settings.getByRole('dialog').getByRole('button',{name:'Xác nhận'}).click();
   await settings.getByText('Chưa đăng ký model. Chọn Đăng ký model để bắt đầu.',{exact:true}).waitFor();
   const cleaned=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
-  if(cleaned.profiles.length!==0||cleaned.revision!==4)
+  if(cleaned.profiles.length!==0||cleaned.revision!==6)
     throw new Error('Owner profile removal did not persist in SQLite');
   if(process.platform==='win32'){
     const fixtureKey='smoke-credential-not-a-real-key';

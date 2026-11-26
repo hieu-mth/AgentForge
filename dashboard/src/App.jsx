@@ -161,7 +161,7 @@ export default function App(){
     case 'characters':page=<CharacterLibrary mutate={mutate} onNavigate={navigate}/>;break;
     case 'projects':page=<Projects/>;break;
     case 'models':page=<ModelHub mutate={mutate}/>;break;
-    case 'orchestrator':page=<Orchestrator mutate={mutate} dirty={draftDirty} setDirty={setDraftDirty}/>;break;
+    case 'orchestrator':page=<Orchestrator mutate={mutate} dirty={draftDirty} setDirty={setDraftDirty} onNavigate={navigate}/>;break;
     case 'environment':page=<Environment onNavigate={navigate} mutate={mutate}/>;break;
     case 'channels':page=<Publishing mutate={mutate}/>;break;
     default:page=<Overview onNavigate={navigate}/>;break;

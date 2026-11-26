@@ -205,16 +205,16 @@ export function ModelHub({mutate}) {
           {title:'Thao tác',responsive:desktopColumns,render:(_,row)=>profileActions(row)},
         ]}/>
     </Card>
-    {profiles.length>0&&hub?.routes?.some(route=>route.kind!=='rules')&&<Card className="env-panel"
+    {hub?.routes?.some(route=>route.kind!=='rules')&&<Card className="env-panel"
       title={<SectionTitle icon={<AppstoreOutlined/>} title="Phân công model"
-        description="Chọn hồ sơ tương thích cho từng năng lực. Việc phân công chỉ lưu cấu hình."/>}>
+        description="Nơi duy nhất phân công model cho từng năng lực. Quyền thực thi được quản lý tại AI điều phối."/>}>
       <div className="model-route-list">{hub.routes.filter(route=>route.kind!=='rules').map(route=>{
         const options=configurableProfiles(profiles,route.id);
         return <label key={route.id} className="model-route">
           <strong>{route.label}</strong>
-          <Select aria-label={'Model cho '+route.label} value={route.model_ref??''}
+          <Select showSearch optionFilterProp="label" aria-label={'Model cho '+route.label} value={route.model_ref??''}
             options={[{value:'',label:'Chưa gán'},...options.map(profile=>({value:profile.id,
-              label:profile.id+(byAdapter[profile.provider]?.connection==='cloud'?' · Cloud':'')})),
+              label:profile.id+' · '+profile.model+(byAdapter[profile.provider]?.connection==='cloud'?' · Cloud':' · Local')})),
               ...(route.model_ref&&!options.some(profile=>profile.id===route.model_ref)
                 ?[{value:route.model_ref,label:route.model_ref+' · Không khả dụng',disabled:true}]:[])]}
             onChange={model=>update(model?'/api/model-hub/route':'/api/model-hub/reset',{
