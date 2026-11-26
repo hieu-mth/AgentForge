@@ -61,11 +61,11 @@ export function Overview({onNavigate}){
     {usage&&usage.count>0&&<Card className="env-panel" title="Số liệu vận hành Studio">
       <div className="env-stat-grid overview-stats">
         <Stat label="Production đã duyệt" value={usage.approved+'/'+usage.count}/>
-        <Stat label="Lượt cloud đã giữ ngân sách" value={usage.cloudCalls}/>
-        <Stat label="Giây video cloud đã giữ ngân sách" value={usage.cloudSeconds}/>
+        <Stat label="Lượt cloud đã giữ ngân sách" value={usage.cloudCalls??'—'}/>
+        <Stat label="Giây video cloud đã giữ ngân sách" value={usage.cloudSeconds??'—'}/>
         <Stat label="Thời gian attempt gần nhất (trung vị)" value={usage.medianAttemptSeconds===null?'—':usage.medianAttemptSeconds+' giây'}/>
       </div>
-      <p className="env-muted">Tối đa 30 bản nháp gần nhất. Lượt/giây đặt chỗ gồm cả lỗi; không phải hóa đơn. Thời gian chỉ tính attempt đã kết thúc, không phải tổng thời gian sản xuất.</p>
+      <p className="env-muted">Tối đa 30 bản nháp gần nhất. Có số liệu lượt cloud: {usage.cloudCallSamples}/{usage.count}; giây cloud: {usage.cloudSecondSamples}/{usage.count}; attempt đã kết thúc: {usage.attemptSamples}/{usage.count}. Dấu — là chưa có dữ liệu, không phải 0. Lượt/giây đặt chỗ gồm cả lỗi; không phải hóa đơn. Thời gian không phải tổng thời gian sản xuất.</p>
     </Card>}
     {empty&&<Card className="env-panel">
       <Empty description="Chưa có video đã dựng hoặc tập phim trong workspace">{studioButton}</Empty>
