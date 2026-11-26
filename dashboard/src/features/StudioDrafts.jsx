@@ -301,7 +301,7 @@ export function StudioDrafts({mutate,onCharacters}) {
         <Space wrap align="start">
           <Form.Item name="routeStrategy" label="Phương pháp" rules={[{validator:(_,value)=>
             methodOptions.some(option=>option.value===value&&!option.disabled)?Promise.resolve():
-              Promise.reject(new Error('Phương pháp chưa khả dụng. Kiểm tra model và quyền thực thi.'))}]}>
+              Promise.reject(new Error('Phương pháp chưa có model video tương thích. Kiểm tra Model AI.'))}]}>
             <Select style={{width:280,maxWidth:'100%'}} loading={hub.loading} options={methodOptions}/>
           </Form.Item>
           {needsCloudBudget&&<Form.Item name="cloudSeconds" label="Tối đa giây video cloud" rules={[{required:true,type:'integer',...cloudBounds}]}>
@@ -309,7 +309,7 @@ export function StudioDrafts({mutate,onCharacters}) {
           </Form.Item>}
         </Space>
         {hub.error&&<Alert type="warning" showIcon message="Chưa đọc được phương pháp sản xuất" action={<Button onClick={hub.reload}>Thử lại</Button>}/>}
-        <p className="env-muted">Các phương pháp khả dụng dựa trên model và quyền đã cấp. Cloud có thể tính phí theo clip sinh ra, kể cả phần bị cắt. Chỉ gọi video API sau khi duyệt storyboard.</p>
+        <p className="env-muted">Có thể lập storyboard theo model video đã đăng ký dù chưa cấp quyền tạo media hoặc FFmpeg. Khi duyệt mới kiểm tra đầy đủ quyền, cấu hình và công cụ. Cloud có thể tính phí cả phần clip bị cắt.</p>
       </details>}
       <details className="draft-resource-details">
         <summary>Thời lượng · {manual?(values.targetSeconds??'—')+' giây':'AI tự đề xuất'}</summary>

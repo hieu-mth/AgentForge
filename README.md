@@ -11,7 +11,7 @@ Yêu cầu Python 3.13+, Node 22. Chỉ cần runtime media local nếu sản xu
 ```powershell
 cd D:\AgentForge
 py -3.13 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e ".[media]"
+.\.venv\Scripts\python.exe -m pip install -e ".[media,chatgpt]"
 npm.cmd ci --prefix dashboard --ignore-scripts --no-audit --no-fund
 npm.cmd run build --prefix dashboard
 .\.venv\Scripts\python.exe -m agentforge --port 8780
@@ -33,6 +33,7 @@ Checkout mới không có model mặc định. Nếu nâng cấp từ Model Hub 
 
 - [Kiến trúc và Model Hub](docs/ARCHITECTURE.md)
 - [Phát triển và kiểm thử](docs/DEVELOPMENT.md)
+- [Roadmap và trạng thái finding](docs/ROADMAP.md)
 - [Runtime và vận hành](docs/RUNTIME.md)
 - [Kết nối ChatGPT Plan](docs/CHATGPT.md)
 - [Sản xuất video cloud](docs/CLOUD_VIDEO.md)

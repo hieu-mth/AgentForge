@@ -1,6 +1,7 @@
 ﻿"""Checkpointed local idea-to-draft production."""
 import copy
 import hashlib
+import logging
 import os
 import json
 import math
@@ -26,6 +27,7 @@ MAX_MOTION_INPUTS = 256 * 1024 * 1024
 SIZES = {"9:16": (720, 1280), "16:9": (1280, 720)}
 LOCK = threading.Lock()
 ACTIVE = None
+LOG = logging.getLogger(__name__)
 IMG_RETRIES = 3
 BRIEF_LIMIT = 20_000
 OUTLINE_LIMIT = 700
@@ -242,11 +244,7 @@ def _plan_production(job, bindings):
     with _measured(job, "plan", bindings.get("image.generate")):
         choice = production_router.choose(job["brief"], candidates, lambda instructions, data, schema:
             _ask(planner, instructions, data, schema, bindings.get("image.generate"), job=job))
-    _, selected = model_hub.draft_routes(moving=True, motion_ref=choice["motion_ref"],
-                                         direct_cloud=choice["method"] == "cloud")
-    profile = selected["film.motion"]
-    if (choice["method"] == "local") != (profile["provider"] != "ltx_cloud"):
-        raise ValueError("Model video thay đổi khi AI đang lập kế hoạch.")
+    profile = model_hub.production_profile(choice["motion_ref"], choice["method"])
     choice["motion_profile_sha"] = studio_runtime.routing_identity({"film.motion": profile}, moving=True)["film.motion"]
     job["production_plan"] = choice
     job["motion_plan"] = studio_runtime.motion_identity(studio_runtime.motion_adapter(profile), profile)
@@ -1375,8 +1373,13 @@ def _work(job, slot, retry_motion_job=None):
             job.update(status="WAITING_RESOURCES", error="GPU_BUSY")
         else:
             job.update(status="FAILED", error=str(exc)[:240])
-    except Exception:
-        job.update(status="FAILED", error="Studio failed at " + job["stage"] + "; check the assigned model/API and runtime before resuming.")
+    except Exception as exc:
+        # Never log exception messages, provider bodies, prompt text, or local variables.
+        kind = type(exc).__name__
+        code = "STUDIO_UNEXPECTED_" + (kind.upper() if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", kind) else "ERROR")
+        job.update(status="FAILED", error="Studio failed at " + job["stage"] + "; check the assigned model/API and runtime before resuming.",
+                   error_code=code)
+        LOG.error("Studio failure production=%s stage=%s code=%s", job["id"], job["stage"], code)
     finally:
         try:
             if used_image and job.get("status") != "WAITING_RESOURCES" and image_profile.get("base_url"):
@@ -1408,6 +1411,7 @@ def _start(job, slot, retry_motion_job=None):
             raise DraftCancelled
         comfy_service.reset_idle()
         job.update(status="RUNNING", error=None)
+        job.pop("error_code", None)
         job["attempt_started_at"] = visual_jobs._now()
         job.setdefault("started_at", job["attempt_started_at"])
         job.pop("attempt_finished_at", None)

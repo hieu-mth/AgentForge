@@ -1,6 +1,7 @@
 """ChatGPT plan inference via documented public Responses API (no fallback or retries)."""
 import http.client
 import json
+import sqlite3
 import time
 
 from agentforge.ai import chatgpt_auth
@@ -52,7 +53,7 @@ def collect(stream):
 def request(profile, instructions, content):
     try:
         token = chatgpt_auth.access_token(profile["account_ref"])
-    except (ValueError, OSError):
+    except (ValueError, OSError, sqlite3.Error):
         raise CloudRequestError("AUTH_REQUIRED") from None
     body = json.dumps({"model": profile["model"], "instructions": instructions,
                        "input": [{"role": "user", "content": content}],
@@ -91,7 +92,7 @@ def infer_structured(profile, instructions, data, schema, *, cpu_only=False, ext
 def readiness(profile):
     try:
         return "READY" if profile["model"] in {m["slug"] for m in chatgpt_auth.models(profile["account_ref"])} else "MODEL_OR_ENDPOINT_NOT_FOUND"
-    except (ValueError, OSError):
+    except (ValueError, OSError, sqlite3.Error):
         return "AUTH_REQUIRED"
 
 

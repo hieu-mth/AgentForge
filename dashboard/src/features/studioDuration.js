@@ -26,7 +26,7 @@ export const productionMethodLabels={
 export function productionMethodOptions(catalog){
   const advertised=catalog?.production_options?.methods??[{id:'assigned',available:true}];
   return advertised.filter(method=>Object.hasOwn(productionMethodLabels,method.id))
-    .map(method=>({value:method.id,label:productionMethodLabels[method.id],disabled:!method.available}));
+    .map(method=>({value:method.id,label:productionMethodLabels[method.id]+(method.available&&method.execution_ready===false?' · Chỉ lập storyboard':''),disabled:!method.available}));
 }
 export function cloudSecondsBounds(catalog,method){
   const options=catalog?.production_options;

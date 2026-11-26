@@ -146,6 +146,50 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(approved["board"], saved["board"])
         self.assertEqual(approved["status"], "QUEUED")
 
+    def test_explicit_cloud_storyboard_without_media_permission_or_tools(self):
+        writer = {"id": "owner_writer", "provider": "ollama", "enabled": True,
+                  "model": "writer:8b", "base_url": "http://127.0.0.1:11434"}
+        video = {"id": "cloud_video", "provider": "ltx_cloud", "enabled": True,
+                 "model": "ltx-2-3-fast", "base_url_env": "LTX_BASE_URL", "api_key_env": "LTX_API_KEY"}
+        for profile in (writer, video):
+            self.registry_change("SAVE_MODEL_PROFILE", profile=profile)
+        for task in ("general.text", "film.storyboard"):
+            self.registry_change("SET_MODEL_ROUTE", task_id=task, model_ref=writer["id"])
+        policy = draft.model_hub.orchestrator_policy.defaults()
+        policy["permissions"].update(plan=True, assign_models=True, call_local=True)
+        self.registry_change("SAVE_ORCHESTRATOR", policy=policy)
+        from agentforge.features.film_studio import draft_motion_cloud
+        def storyboard(job, bindings):
+            self.assertEqual(set(bindings), {"general.text", "film.storyboard"})
+            job.update(board=draft._story(self.board(), 2, 4, {"cat": {}}), cast={})
+        with (patch.object(draft, "_dispatch"),
+              patch.object(draft, "_write_board", side_effect=storyboard),
+              patch.object(draft, "_image", side_effect=AssertionError("image generation")),
+              patch.object(draft_motion_cloud, "bind", side_effect=AssertionError("video readiness")),
+              patch.object(draft_motion_cloud.ltx, "_request", side_effect=AssertionError("cloud video API")),
+              patch.object(draft.render, "_ffmpeg", side_effect=AssertionError("FFmpeg"))):
+            job = draft.submit({"id": self.ident, **self.brief, "mode": "motion", "seconds": 4,
+                                "scene_count": None, "duration_mode": "manual",
+                                "route_strategy": "cloud", "max_cloud_seconds": 12})
+            draft._work(job, nullcontext())
+            saved = draft._read(self.ident)
+            self.assertEqual(saved["status"], "STORYBOARD_REVIEW", saved.get("error"))
+            self.assertEqual(saved["production_plan"]["motion_ref"], video["id"])
+            self.assertNotIn("cloud_motion_seconds", saved)
+            with self.assertRaises(PermissionError):
+                draft.act(self.ident, "storyboard-approve", {"sha256": saved["storyboard_sha"]})
+
+    def test_unexpected_error_has_safe_diagnostic_code(self):
+        job = {"id": self.ident, "stage": "PLANNING", "status": "RUNNING", "brief": {}}
+        with (patch.object(draft, "_dispatch"),
+              patch.object(draft, "_studio_bindings", side_effect=RuntimeError("secret-provider-payload")),
+              self.assertLogs(draft.LOG, level="ERROR") as logs):
+            draft._work(job, nullcontext())
+        saved = draft._read(self.ident)
+        self.assertEqual(saved["error_code"], "STUDIO_UNEXPECTED_RUNTIMEERROR")
+        self.assertNotIn("secret-provider-payload", str(saved))
+        self.assertNotIn("secret-provider-payload", str(logs.output))
+
     def test_legacy_approval_uses_historical_bindings_without_changing_digest(self):
         original = {**self.motion_profile(), "enabled": True}
         revision = self.seed_registry(flux_profile(), original)

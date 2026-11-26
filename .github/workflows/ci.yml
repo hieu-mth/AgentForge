@@ -19,8 +19,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Install Python media dependencies
-        run: python -m pip install -e ".[media]"
+      - name: Install Python media and ChatGPT dependencies
+        run: python -m pip install -e ".[media,chatgpt]"
       - name: Verify installed Python package from outside source tree
         shell: pwsh
         run: |
@@ -50,7 +50,7 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "FFmpeg installation failed" }
           }
           python -c "from agentforge.features.media.render import find_media_tool; assert all(find_media_tool(t) for t in ('ffmpeg','ffprobe')), 'Missing FFmpeg/ffprobe'"
-      - name: Run V5 cloud video integration with real media tools
+      - name: Run cloud video integration with real media tools
         run: python -m unittest tests.test_v5_cloud_motion -v
       - name: Run no-inference Owner preflight wrapper
         shell: powershell

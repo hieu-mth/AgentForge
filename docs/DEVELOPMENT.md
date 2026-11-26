@@ -4,7 +4,7 @@ Yêu cầu Python 3.13+, Node 22, FFmpeg (được cung cấp bởi optional `[m
 
 ```powershell
 cd D:\AgentForge
-.\.venv\Scripts\python.exe -m pip install -e ".[media]"
+.\.venv\Scripts\python.exe -m pip install -e ".[media,chatgpt]"
 npm.cmd ci --prefix dashboard --ignore-scripts --no-audit --no-fund
 npm.cmd run test:navigation --prefix dashboard
 npm.cmd run build --prefix dashboard
