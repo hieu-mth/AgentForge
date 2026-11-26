@@ -187,12 +187,16 @@ def clip_path(scene):
     return path
 
 
+def remaining_seconds(job):
+    return sum(billed_seconds(scene["frames"]) for scene in job["board"]["scenes"]
+               if not scene.get("motion_job"))
+
+
 def prepare(job, folder):
     plan = job.get("production_plan") or {}
     if plan.get("method") not in {"cloud", "hybrid"} or job.get("approved_storyboard_sha") is None:
         raise ValueError("Cloud motion requires an explicitly approved production route and budget.")
-    missing = sum(billed_seconds(scene["frames"]) for scene in job["board"]["scenes"]
-                  if not scene.get("motion_job"))
+    missing = remaining_seconds(job)
     if job.get("cloud_motion_seconds", 0) + missing > plan["max_cloud_seconds"]:
         raise ValueError("Cloud video seconds budget exceeded before rendering.")
     return job["id"], job, folder, workflow_sha()
