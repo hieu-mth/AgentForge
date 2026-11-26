@@ -7,17 +7,17 @@ import json
 import math
 import re
 import shutil
-import sqlite3
 import threading
-from contextlib import closing, contextmanager, nullcontext
+from contextlib import contextmanager, nullcontext
 from uuid import uuid4
 
 from agentforge import ops_control
 from agentforge.ai import model_hub
 from agentforge.features.film_studio import characters, creative_plan, script_analysis
-from agentforge.features.film_studio import draft_audio, draft_continuity, draft_resources, draft_timeline, studio_runtime
+from agentforge.features.film_studio import draft_audio, draft_continuity, draft_resources, draft_store, draft_timeline, studio_runtime
 from agentforge.features.media import render, visual_jobs
 from agentforge.features.film_studio.draft_resources import NeedsReconciliation, ResourceWait
+from agentforge.features.film_studio.draft_store import DraftNotFound, DraftStoreUnavailable, validate_id as _id
 from agentforge.integrations import comfy_service
 from agentforge.paths import COMPANY_DATA_DIR, WORKSPACE_DIR, ensure_local_root
 
@@ -46,14 +46,7 @@ def _queue_limit():
 
 
 def _cancellation(ident, *, mark=False):
-    with _db(mark) as conn:
-        if conn is None:
-            return False
-        if mark:
-            conn.execute("CREATE TABLE IF NOT EXISTS draft_cancellations (id TEXT PRIMARY KEY)")
-            conn.execute("INSERT OR IGNORE INTO draft_cancellations VALUES (?)", (ident,))
-        table = conn.execute("SELECT 1 FROM sqlite_master WHERE name='draft_cancellations'").fetchone()
-        return bool(table and conn.execute("SELECT 1 FROM draft_cancellations WHERE id=?", (ident,)).fetchone())
+    return draft_store.cancellation(DB, ident, mark=mark)
 
 
 @contextmanager
@@ -91,15 +84,6 @@ def _measured(job, operation, comfy_profile=None):
             raise DraftCancelled
 
 
-class DraftNotFound(KeyError):
-    """A valid production identifier has no persisted record."""
-
-
-class DraftStoreUnavailable(RuntimeError):
-    def __init__(self, message="Không truy cập được SQLite của bản nháp."):
-        super().__init__(message)
-
-
 def _text(value, max_length, *, label="Văn bản bản nháp"):
     if not isinstance(value, str) or not 1 <= len(value.strip()) <= max_length:
         raise ValueError(f"{label} phải có từ 1 đến {max_length} ký tự.")
@@ -112,77 +96,20 @@ def _number(value, low, high):
     return value
 
 
-@contextmanager
-def _db(create=False):
-    try:
-        path = ensure_local_root(DB)
-        if not create and not path.exists():
-            yield None
-            return
-        if create:
-            path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(path if create else path.as_uri() + "?mode=ro", uri=not create, timeout=3)
-        with closing(conn), conn:
-            if create:
-                conn.execute("CREATE TABLE IF NOT EXISTS drafts (id TEXT PRIMARY KEY, body TEXT NOT NULL)")
-            yield conn
-    except sqlite3.DatabaseError as exc:
-        code = getattr(exc, "sqlite_errorcode", 0) & 0xff
-        if code in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}:
-            raise DraftStoreUnavailable("SQLite của bản nháp đang bận. Hãy thử lại.") from exc
-        if code in {sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB}:
-            raise DraftStoreUnavailable("Tệp SQLite của bản nháp bị hỏng hoặc sai định dạng.") from exc
-        raise DraftStoreUnavailable() from exc
-    except OSError as exc:
-        raise DraftStoreUnavailable() from exc
-
-
-def _decode_row(row):
-    try:
-        job = json.loads(row[0])
-        if (not isinstance(job, dict) or not isinstance(job.get("id"), str)
-                or not isinstance(job.get("brief"), dict) or not isinstance(job.get("status"), str)):
-            raise ValueError("Invalid draft record")
-        return job
-    except (ValueError, TypeError) as exc:
-        raise DraftStoreUnavailable("Bản ghi bản nháp trong SQLite bị lỗi.") from exc
-
-
-def _id(value):
-    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{32}", value):
-        raise ValueError("Invalid production ID")
-    return value
-
-
 def _folder(ident):
     return ensure_local_root(WORKSPACE_DIR / "drafts" / _id(ident) / "episode-01")
 
 
 def _read(ident):
-    _id(ident)
-    with _db() as conn:
-        row = conn.execute("SELECT body FROM drafts WHERE id=?", (ident,)).fetchone() if conn else None
-        if row is None:
-            raise DraftNotFound(ident)
-        return _decode_row(row)
+    return draft_store.read(DB, ident)
 
 
 def _save(job):
-    job["updated_at"] = visual_jobs._now()
-    with _db(True) as conn:
-        conn.execute("INSERT INTO drafts(id,body) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body",
-                     (job["id"], json.dumps(job, ensure_ascii=False)))
+    draft_store.save(DB, job, updated_at=visual_jobs._now())
 
 
 def list_drafts():
-    with _db() as conn:
-        if conn is None:
-            return []
-        jobs = [_decode_row(row) for row in conn.execute(
-            """SELECT body FROM drafts
-               ORDER BY COALESCE(julianday(json_extract(body, '$.updated_at')),
-                                 julianday(json_extract(body, '$.created_at'))) DESC, rowid DESC
-               LIMIT 30""")]
+    jobs = draft_store.recent(DB)
     for job in jobs:
         job["worker_active"] = job["id"] == ACTIVE
         if job["status"] == "RUNNING" and not job["worker_active"] and "storyboard_version" in job:
@@ -191,12 +118,7 @@ def list_drafts():
 
 
 def jobs_pending():
-    if ACTIVE:
-        return True
-    with _db() as conn:
-        return bool(conn and conn.execute(
-            "SELECT 1 FROM drafts WHERE json_extract(body,'$.status') IN "
-            "('QUEUED','RUNNING','WAITING_RESOURCES') LIMIT 1").fetchone())
+    return bool(ACTIVE) or draft_store.pending(DB)
 
 
 @contextmanager
@@ -1217,16 +1139,9 @@ def _dispatch():
         return
     started = False
     try:
-        with _db() as conn:
-            if conn is None:
-                return
-            if conn.execute("SELECT 1 FROM drafts WHERE json_extract(body,'$.status') IN "
-                            "('RUNNING','WAITING_RESOURCES') LIMIT 1").fetchone():
-                return
-            row = conn.execute("SELECT body FROM drafts WHERE json_extract(body,'$.status')='QUEUED' "
-                               "ORDER BY rowid LIMIT 1").fetchone()
-        if row:
-            result = _start(_decode_row(row), slot)
+        job = draft_store.next_queued(DB)
+        if job:
+            result = _start(job, slot)
             started = True
             return result
     finally:
@@ -1299,19 +1214,11 @@ def submit(data):
     job["studio_plan"] = studio_runtime.routing_identity(bindings, moving=motion_mode)
     job["deferred_media_binding"] = True
     job["submitted_brief"] = dict(brief)
-    with comfy_service.LOCK, _db(True) as conn:
+    with comfy_service.LOCK, draft_store.connect(DB, True) as conn:
         conn.execute("BEGIN IMMEDIATE")
-        row = conn.execute("SELECT body FROM drafts WHERE id=?", (ident,)).fetchone()
-        if row:
-            prior = _decode_row(row)
-            if prior.get("submitted_brief", prior["brief"]) != brief:
-                raise ValueError("Production ID already belongs to another brief")
+        prior = draft_store.insert_queued(conn, job, _queue_limit())
+        if prior is not None:
             return prior
-        statuses = [row[0] for row in conn.execute("SELECT json_extract(body,'$.status') FROM drafts "
-                    "WHERE json_extract(body,'$.status') IN ('QUEUED','RUNNING','WAITING_RESOURCES')")]
-        if "WAITING_RESOURCES" in statuses or len(statuses) >= _queue_limit():
-            raise ValueError("Draft queue is full or paused for resources")
-        conn.execute("INSERT INTO drafts VALUES (?,?)", (ident, json.dumps(job, ensure_ascii=False)))
         comfy_service.reset_idle()
     started = _dispatch()
     return started if started and started["id"] == ident else _read(ident)
@@ -1375,14 +1282,9 @@ def _storyboard_action(job, action, data):
             # The reviewed content is unchanged; the receipt now also binds actual media.
             job["storyboard_sha"] = draft_timeline.digest(job)
         job.update(approved_storyboard_sha=job["storyboard_sha"], motion_revision=revision, status="QUEUED")
-        with comfy_service.LOCK, _db(True) as conn:
+        with comfy_service.LOCK, draft_store.connect(DB, True) as conn:
             conn.execute("BEGIN IMMEDIATE")
-            statuses = [row[0] for row in conn.execute(
-                "SELECT json_extract(body,'$.status') FROM drafts "
-                "WHERE json_extract(body,'$.status') IN ('QUEUED','RUNNING','WAITING_RESOURCES')")]
-            if "WAITING_RESOURCES" in statuses or len(statuses) >= _queue_limit():
-                raise ValueError("Hàng đợi production đầy hoặc đang chờ tài nguyên.")
-            conn.execute("UPDATE drafts SET body=? WHERE id=?", (json.dumps(job, ensure_ascii=False), job["id"]))
+            draft_store.approve_queued(conn, job, _queue_limit())
             comfy_service.reset_idle()
         return job
     if job["status"] not in {"STORYBOARD_REVIEW", "REVIEW", "FAILED"}:
@@ -1596,13 +1498,11 @@ def _delete_draft(ident):
         folder = ensure_local_root(root / ident).resolve()
         if folder.parent != root.resolve():
             raise PermissionError("Draft storage path refused")
-        with _db(True) as conn:
+        with draft_store.connect(DB, True) as conn:
             conn.execute("BEGIN IMMEDIATE")
             if folder.exists():
                 shutil.rmtree(folder)
-            conn.execute("DELETE FROM drafts WHERE id=?", (ident,))
-            if conn.execute("SELECT 1 FROM sqlite_master WHERE name='draft_cancellations'").fetchone():
-                conn.execute("DELETE FROM draft_cancellations WHERE id=?", (ident,))
+            draft_store.delete_record(conn, ident)
     return {"id": ident, "deleted": True}
 
 
@@ -1662,10 +1562,8 @@ def act(ident, action, data):
                 job.update(status="CANCELLED", error=None, video_sha=None)
                 _save(job)
             return job
-        with _db() as conn:
-            if conn.execute("SELECT 1 FROM drafts WHERE id<>? AND json_extract(body,'$.status')="
-                            "'WAITING_RESOURCES' LIMIT 1", (ident,)).fetchone():
-                raise ValueError("Resume the draft that is waiting for resources first")
+        if draft_store.other_waiting(DB, ident):
+            raise ValueError("Resume the draft that is waiting for resources first")
         ops_control.require_active()
         _require_current_planner(job)
         _studio_bindings(job)
