@@ -325,8 +325,9 @@ try {
   const overviewStats=overview.locator('.overview-stats');
   if((await overviewStats.nth(0).locator('.env-stat-value').allTextContents()).join(',')!=='1,1,1')
     throw new Error('Overview counters do not match project states');
-  if((await overviewStats.nth(1).locator('.env-stat-value').allTextContents()).join(',')!=='1/1,0,0,—')
-    throw new Error('Overview usage counters do not match persisted draft metrics');
+  if((await overviewStats.nth(1).locator('.env-stat-value').allTextContents()).join(',')!=='1/1,—,—,—')
+    throw new Error('Overview must distinguish missing usage counters from measured zero');
+  await overview.getByText('Có số liệu lượt cloud: 0/1;', {exact:false}).waitFor();
   const overviewOverflow=await overview.locator('.ant-table-content').evaluateAll(
     tables=>tables.some(table=>table.scrollWidth>table.clientWidth+2));
   if(overviewOverflow)throw new Error('Overview table overflows on mobile');
