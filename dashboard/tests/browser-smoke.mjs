@@ -729,13 +729,19 @@ try {
   const registerDialog=settings.getByRole('dialog');
   await registerDialog.getByText('Cloud',{exact:true}).click();
   await registerDialog.getByText('Kết nối ChatGPT qua OAuth',{exact:true}).waitFor();
+  await registerDialog.getByRole('button',{name:'Liên kết ChatGPT',exact:true}).waitFor();
   const cloudAdapter=registerDialog.getByRole('combobox',{name:'Chuẩn kết nối'});
   await cloudAdapter.click();
-  await openOptions.filter({hasText:/^Anthropic API$/}).waitFor();
-  const cloudLabels=await openOptions.allTextContents();
-  if(JSON.stringify(cloudLabels)!==JSON.stringify(['ChatGPT','OpenAI API','Anthropic API','LTX Video API','ElevenLabs API']))
-    throw new Error('Unexpected cloud adapter labels or order: '+cloudLabels.join(', '));
-  await openOptions.filter({hasText:/^Anthropic API$/}).evaluate(option=>option.click());
+  const cloudLabels=['ChatGPT','OpenAI API','Anthropic API','LTX Video API','ElevenLabs API'];
+  await settings.waitForFunction(expected=>{
+    const combo=document.querySelector('.model-profile-dialog [aria-expanded="true"][role="combobox"]');
+    if(!combo)return false;
+    const list=document.getElementById(combo.getAttribute('aria-controls'));
+    if(!list)return false;
+    const labels=Array.from(list.querySelectorAll('[role="option"]'),option=>option.textContent.trim());
+    return JSON.stringify(labels)===JSON.stringify(expected);
+  },cloudLabels);
+  await openOptions.filter({hasText:/^Anthropic API$/}).click();
   await registerDialog.getByLabel('Endpoint Cloud',{exact:true}).waitFor();
   await registerDialog.getByLabel('API key',{exact:true}).waitFor();
   await registerDialog.getByRole('button',{name:'Dùng biến môi trường'}).click();
@@ -912,6 +918,7 @@ try {
     const fixtureKey='smoke-credential-not-a-real-key';
     await settings.getByRole('button',{name:'Đăng ký model'}).click();
     await registerDialog.getByText('Cloud',{exact:true}).click();
+    await registerDialog.getByRole('button',{name:'Liên kết ChatGPT',exact:true}).waitFor();
     await registerDialog.getByRole('combobox',{name:'Chuẩn kết nối'}).click();
     await openOptions.filter({hasText:/^Anthropic API$/}).click();
     await registerDialog.getByLabel('Model ID',{exact:true}).fill('fixture-cloud');

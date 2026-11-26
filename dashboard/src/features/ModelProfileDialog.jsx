@@ -185,7 +185,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         </Form.Item>
         <Form.Item name="provider" label={connection==='local'?'Runtime':'Chuẩn kết nối'}
           rules={[{required:true,message:'Chọn runtime hoặc chuẩn kết nối.'}]}>
-          <Select disabled={editing} options={adapters.filter(item=>item.connection===connection)
+          <Select disabled={editing} virtual={false} options={adapters.filter(item=>item.connection===connection)
             .map(item=>({value:item.id,label:item.label}))}/>
         </Form.Item>
       </div>
