@@ -76,6 +76,9 @@ jobs:
       - name: Dashboard production build
         working-directory: dashboard
         run: npm run build
+      - name: Dashboard initial bundle and lazy screen gate
+        working-directory: dashboard
+        run: node tests/build-layout.mjs
       - name: Dashboard Edge browser smoke
         working-directory: dashboard
         run: npm run test:browser
