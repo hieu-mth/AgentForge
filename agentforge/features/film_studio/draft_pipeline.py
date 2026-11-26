@@ -597,7 +597,7 @@ def _write_planned_board(job, bindings):
             plan = job["duration_plan"] = directed
             brief["scene_count"] = plan["recommended_shot_count"]
             _save(job)
-    layout = _storyboard_layout(job, brief["scene_count"], [shot["suggested_seconds"] for shot in plan["shots"]])
+    layout = draft_timeline.storyboard_layout(job, brief["scene_count"], [shot["suggested_seconds"] for shot in plan["shots"]])
     script = brief["idea"]
     authored = bool(plan.get("content_scene_count"))
     checkpoint = job.get("storyboard_checkpoint") if authored else None
@@ -645,7 +645,7 @@ def _write_planned_board(job, bindings):
     title = continuity = ""
     for index, shot in enumerate(plan["shots"]):
         source = script[slice(*ranges[index])] if ranges else script
-        request = {**shot, "timeline_seconds": layout[index] / _job_fps(job)}
+        request = {**shot, "timeline_seconds": layout[index] / draft_timeline.job_fps(job)}
         if authored:
             if shot["content_shot"] == 1:
                 previous, frame_offset = None, 0
@@ -873,9 +873,9 @@ def _scene_path(job, index):
 def _stamp_storyboard(job):
     board = job["board"]
     weight_key = "suggested_seconds" if "duration_mode" in job["brief"] else "duration_weight"
-    layout = _storyboard_layout(job, len(board["scenes"]), [s.get(weight_key, 2) for s in board["scenes"]])
+    layout = draft_timeline.storyboard_layout(job, len(board["scenes"]), [s.get(weight_key, 2) for s in board["scenes"]])
     moving = job["brief"].get("mode") == "motion"
-    fps = _job_fps(job)
+    fps = draft_timeline.job_fps(job)
     for scene, frames in zip(board["scenes"], layout):
         scene.setdefault("shot_id", uuid4().hex)
         scene.setdefault("motion_prompt", scene["description"])
@@ -884,36 +884,6 @@ def _stamp_storyboard(job):
     job.update(status="STORYBOARD_REVIEW", stage="STORYBOARD", error=None)
     job.pop("approved_storyboard_sha", None)
 
-
-def _job_fps(job):
-    return studio_runtime.job_output(job).fps if job["brief"].get("mode") == "motion" else draft_timeline.STILL_FPS
-
-
-def _storyboard_layout(job, count, weights=None):
-    brief = job["brief"]
-    plan = job.get("duration_plan") or {}
-    if plan.get("content_scene_count"):
-        if "creative_plan" in plan:
-            compiled = creative_plan.compiled_shots(plan["creative_plan"], studio_runtime.job_output(job))
-            if compiled != plan["shots"]:
-                raise ValueError("Các segment không khớp kế hoạch Creative Director.")
-        frames = [shot["script_shot_frames"] for shot in plan["shots"]]
-        total = brief["seconds"] * _job_fps(job)
-        cap = studio_runtime.job_output(job).max_frames if brief.get("mode") == "motion" else total
-        if (count != len(frames) or any(type(frame) is not int or not 1 <= frame <= cap for frame in frames)
-                or sum(frames) != total):
-            raise ValueError("Timeline cảnh gốc đã thay đổi. Hãy tạo một bản nháp mới để đổi cấu trúc.")
-        return frames
-    if "duration_mode" in brief:
-        return draft_timeline.planned_timeline(brief["seconds"], brief.get("mode") == "motion",
-                                               weights if weights is not None else [2]*count,
-                                               studio_runtime.job_output(job))
-    if brief.get("mode") == "motion":
-        return draft_timeline.timeline(brief["seconds"], count, weights, studio_runtime.job_output(job))
-    if not 2 <= count <= 6 or count * 2 > brief["seconds"]:
-        raise ValueError("Bản nháp ảnh tĩnh cần 2–6 cảnh và ít nhất 2 giây mỗi cảnh.")
-    length, extra = divmod(brief["seconds"], count)
-    return [(length + (index < extra)) * draft_timeline.STILL_FPS for index in range(count)]
 
 
 def _image(job, index, scene, revision, profile):
@@ -983,7 +953,7 @@ def _render(job):
         ids = [scene.get("motion_job") for scene in job["board"]["scenes"]]
         if None in ids or len(set(ids)) != len(ids):
             raise ValueError("Phim từ 30 giây cần clip riêng cho từng cảnh.")
-    fps = _job_fps(job)
+    fps = draft_timeline.job_fps(job)
     width, height = studio_runtime.job_output(job).resolution if moving else SIZES[job["brief"]["ratio"]]
     ffmpeg = render._ffmpeg()
     command = [ffmpeg, "-nostdin", "-n", "-v", "error"]
@@ -1157,7 +1127,7 @@ def _dispatch_guard(job):
 def _validate_creative_frames(job):
     if job.get("duration_plan", {}).get("creative_plan"):
         scenes = job["board"]["scenes"]
-        if [scene["frames"] for scene in scenes] != _storyboard_layout(job, len(scenes)):
+        if [scene["frames"] for scene in scenes] != draft_timeline.storyboard_layout(job, len(scenes)):
             raise ValueError("Số frame storyboard không khớp timeline đã duyệt.")
 
 
@@ -1281,8 +1251,12 @@ def _work(job, slot, retry_motion_job=None):
                 try:
                     with model_hub.local_inference_slot():
                         _release_idle_image(image_profile)
-                except OSError:
-                    pass
+                except Exception:
+                    # Offloading is best-effort. Never let adapter/slot cleanup errors
+                    # prevent the terminal checkpoint or release of the worker slot.
+                    # Do not log exception text: it may contain provider credentials.
+                    LOG.warning("Studio image cleanup failed production=%s stage=%s code=STUDIO_IMAGE_CLEANUP_FAILED",
+                                job["id"], job["stage"])
             activity = job.pop("activity", {})
             if job["status"] == "FAILED" and activity.get("scene"):
                 job["failed_scene"] = activity["scene"]
@@ -1635,14 +1609,14 @@ def _storyboard_action(job, action, data):
             scene["motion_seed"] = 42 + index + 1000 * job["storyboard_version"]
         draft_continuity.clear_motion(scene)
     elif action == "storyboard-remove":
-        _storyboard_layout(job, len(scenes)-1)
+        draft_timeline.storyboard_layout(job, len(scenes)-1)
         scenes.pop(index)
     elif action == "storyboard-move":
         target = _number(data["target"], 0, len(scenes)-1)
         scenes.insert(target, scenes.pop(index))
     else:
         if action == "storyboard-add":
-            _storyboard_layout(job, len(scenes)+1)
+            draft_timeline.storyboard_layout(job, len(scenes)+1)
             scene = {"character_ids": [], "audio": "", "attempts": 0, "asset": None, "job_id": None}
             scenes.insert(index, scene)
         else:

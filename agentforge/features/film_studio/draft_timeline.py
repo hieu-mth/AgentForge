@@ -2,6 +2,7 @@
 import hashlib
 import json
 import math
+from agentforge.features.film_studio import studio_runtime
 from agentforge.features.film_studio.studio_runtime import LEGACY_MOTION_OUTPUT
 
 STILL_FPS = 24
@@ -104,6 +105,38 @@ def timeline(seconds, count, weights=None, output=LEGACY_MOTION_OUTPUT):
         return frames
     frames, extra = divmod(total, count)
     return [frames + (index < extra) for index in range(count)]
+
+
+def job_fps(job):
+    return studio_runtime.job_output(job).fps if job["brief"].get("mode") == "motion" else STILL_FPS
+
+
+def storyboard_layout(job, count, weights=None):
+    brief = job["brief"]
+    plan = job.get("duration_plan") or {}
+    if plan.get("content_scene_count"):
+        if "creative_plan" in plan:
+            from agentforge.features.film_studio import creative_plan
+            compiled = creative_plan.compiled_shots(plan["creative_plan"], studio_runtime.job_output(job))
+            if compiled != plan["shots"]:
+                raise ValueError("Các segment không khớp kế hoạch Creative Director.")
+        frames = [shot["script_shot_frames"] for shot in plan["shots"]]
+        total = brief["seconds"] * job_fps(job)
+        cap = studio_runtime.job_output(job).max_frames if brief.get("mode") == "motion" else total
+        if (count != len(frames) or any(type(frame) is not int or not 1 <= frame <= cap for frame in frames)
+                or sum(frames) != total):
+            raise ValueError("Timeline cảnh gốc đã thay đổi. Hãy tạo một bản nháp mới để đổi cấu trúc.")
+        return frames
+    if "duration_mode" in brief:
+        return planned_timeline(brief["seconds"], brief.get("mode") == "motion",
+                                               weights if weights is not None else [2]*count,
+                                               studio_runtime.job_output(job))
+    if brief.get("mode") == "motion":
+        return timeline(brief["seconds"], count, weights, studio_runtime.job_output(job))
+    if not 2 <= count <= 6 or count * 2 > brief["seconds"]:
+        raise ValueError("Bản nháp ảnh tĩnh cần 2–6 cảnh và ít nhất 2 giây mỗi cảnh.")
+    length, extra = divmod(brief["seconds"], count)
+    return [(length + (index < extra)) * STILL_FPS for index in range(count)]
 
 
 def snapshot(job):

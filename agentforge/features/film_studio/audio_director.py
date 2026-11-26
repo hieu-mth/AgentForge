@@ -144,8 +144,8 @@ def propose(job, engine, voice_name, voices, infer, *, generate=False):
                        "gain_db": {"type": "integer", "minimum": -30, "maximum": 0},
                        "speaker": {"type": "string"}, "text": {"type": "string", "maxLength": 180},
                        "asset": {"type": "string", "enum": ["", *assets]}}}}}}}}}
-        from agentforge.features.film_studio import draft_pipeline as draft
-        data = {"fps": draft._job_fps(job), "cast": job.get("cast", {}),
+        from agentforge.features.film_studio import draft_timeline
+        data = {"fps": draft_timeline.job_fps(job), "cast": job.get("cast", {}),
                 "local_library": {name: {"seconds": item["seconds"]} for name, item in assets.items()},
                 "generatable_kinds": [kind for kind, route in studio_audio_generation.ROUTES.items()
                                      if route in config.get("generated_profiles", {})],

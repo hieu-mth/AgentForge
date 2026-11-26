@@ -39,7 +39,7 @@ def dispatch(self, route):
         if parts[5] == "captions" and job.get("subtitle_sha"):
             from agentforge.features.film_studio import draft_timeline
             draft_pipeline.verified_receipt(job)
-            captions = draft_timeline.captions(job["board"]["scenes"], draft_pipeline._job_fps(job))
+            captions = draft_timeline.captions(job["board"]["scenes"], draft_timeline.job_fps(job))
             if draft_pipeline._sha(captions) != job["subtitle_sha"]:
                 raise ValueError("Draft subtitle hash mismatch")
             return self._reply(200, captions, mime="application/x-subrip",
