@@ -336,7 +336,9 @@ def _script_scene(job, profile, comfy, source, continuity, index, *, proposed_sh
         source = facts
     fields = {key: {**STRING, "minLength": 1, "maxLength": limit} for key, limit in
               (("title", 100), ("continuity", 240), ("description", 350), ("image_prompt", 600), ("audio", 160))}
-    weighted = job["brief"]["seconds"] == 30 and job["brief"].get("mode") == "motion"
+    # Historical 30-second presets used weights; current plans already own timing.
+    weighted = (proposed_shot is None and "duration_mode" not in job["brief"]
+                and job["brief"]["seconds"] == 30 and job["brief"].get("mode") == "motion")
     if weighted:
         fields["duration_weight"] = {"type": "integer", "minimum": 1, "maximum": 3}
     context = {"source": source, "prior_continuity": continuity, "scene": index + 1,
