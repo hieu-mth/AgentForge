@@ -366,6 +366,24 @@ export function StudioDrafts({mutate,onCharacters}) {
             </Form.Item>
             <Button htmlType="submit" disabled={pending} type="primary">Gắn lại ID (không tạo video mới)</Button>
           </Form>}
+        {!row.provider_id&&<details style={{marginTop:12}}>
+          <summary>Nhà cung cấp đã xác nhận request cũ bị từ chối</summary>
+          <Alert type="warning" showIcon message="Chỉ dùng nếu có xác nhận cho đúng request gốc."
+            description="Lỗi từ một lần test PowerShell khác không phải bằng chứng. Không dùng khi chỉ không tìm thấy video. AgentForge không xác minh được lời xác nhận này độc lập."/>
+          <Form layout="vertical" onFinish={values=>run('/'+reconcile.job.id+'/cloud-rejected',{
+            sha256:reconcile.job.approved_storyboard_sha,motion_job:row.id,request_sha:row.request_sha,
+            provider_request_id:values.provider_request_id,owner_confirmed_rejected:true,
+          },()=>setReconcile(null))}>
+            <Form.Item name="provider_request_id" label="Mã request gốc được nhà cung cấp xác nhận từ chối"
+              rules={[{required:true,pattern:/^[A-Za-z0-9_-]{8,160}$/}]}>
+              <Input maxLength={160}/>
+            </Form.Item>
+            <Form.Item name="confirmed" rules={[{validator:(_,v)=>v===true?Promise.resolve():Promise.reject(new Error('Cần xác nhận bằng chứng'))}]}>
+              <Select placeholder="Xác nhận bằng chứng" options={[{value:true,label:'Đúng request gốc, đã xác nhận không tạo job'}]}/>
+            </Form.Item>
+            <Button htmlType="submit" disabled={pending}>Ghi nhận từ chối (không tự tạo lại)</Button>
+          </Form>
+        </details>}
       </Card>)}
     </Modal>}
     {sourceDraft&&<Modal open centered width={760} rootClassName="script-reader" title="Nội dung video"

@@ -249,3 +249,28 @@ class AgnesContractTests(unittest.TestCase):
                 self.assertEqual(motion._row(scene["motion_job"])["state"], "REJECTED")
                 self.assertIsNone(motion.submission_error(scene["motion_job"])["retry_at"])
                 submit.assert_called_once()
+
+
+    def test_old_uncertain_request_requires_owner_attestation_and_no_post(self):
+        from contextlib import closing
+        motion = draft_motion_cloud
+        profile = self.profile("agnes-video-2.5-flash")
+        ident = "e"*32
+        job = {"id": "f"*32, "status": "NEEDS_RECONCILIATION",
+               "board": {"scenes": [{"motion_job": ident}]}}
+        payload = {"motion_job": ident, "request_sha": "d"*64,
+                   "provider_request_id": "original-request-123", "owner_confirmed_rejected": True}
+        with tempfile.TemporaryDirectory() as folder, patch.object(motion, "DB", Path(folder)/"ledger.db"):
+            with closing(motion._db(True)) as conn, conn:
+                conn.execute("INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?,?)",
+                    (ident, job["id"], "text-to-video", profile["model"], 4, payload["request_sha"], "SUBMITTING", None, None))
+            with patch.object(studio_agnes, "_request", side_effect=AssertionError("unexpected network")) as request:
+                with self.assertRaises(PermissionError):
+                    motion.confirm_rejected_submission(job, {**payload, "owner_confirmed_rejected": False}, profile)
+                self.assertEqual(motion._row(ident)["state"], "SUBMITTING")
+                result = motion.confirm_rejected_submission(job, payload, profile)
+                self.assertFalse(result["provider_status_verified"])
+                self.assertEqual(result["shot"], 1)
+                self.assertEqual(motion._row(ident)["state"], "REJECTED")
+                self.assertIsNone(motion.submission_error(ident)["retry_at"])
+                request.assert_not_called()

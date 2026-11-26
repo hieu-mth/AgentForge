@@ -1546,6 +1546,7 @@ def act(ident, action, data):
             _cancellation(ident, mark=True)
             if job["status"] not in {"RUNNING", "WAITING_CLOUD_RESOURCES"} or not active_here:
                 job.update(status="CANCELLED", error=None)
+                job.pop("cloud_wait", None)
                 _save(job)
         _dispatch()
         return job
@@ -1557,16 +1558,21 @@ def act(ident, action, data):
     started = False
     try:
         job = _read(ident)
-        if action == "cloud-reconcile":
+        if action in {"cloud-reconcile", "cloud-rejected"}:
             from agentforge.features.film_studio import draft_motion_cloud
             if (job.get("production_plan", {}).get("method") not in {"cloud", "hybrid"}
                     or job.get("approved_storyboard_sha") != data.get("sha256")
                     or draft_timeline.digest(job) != data.get("sha256")):
                 raise PermissionError("Cloud reconciliation needs the current approved storyboard.")
             _, bindings, _ = _studio_bindings(job)
-            result = draft_motion_cloud.recover_provider_id(job, data, bindings["film.motion"])
+            if action == "cloud-rejected":
+                result = draft_motion_cloud.confirm_rejected_submission(job, data, bindings["film.motion"])
+                job.update(status="FAILED", stage="MOTION", failed_scene=result["shot"],
+                           error="Owner xác nhận request cũ bị từ chối. Có thể chủ động thử lại shot.")
+            else:
+                result = draft_motion_cloud.recover_provider_id(job, data, bindings["film.motion"])
+                job["error"] = "Đã gắn lại provider ID. Tiếp tục từ checkpoint để kiểm tra job cũ."
             job["cloud_reconciliations"] = (job.get("cloud_reconciliations", []) + [result])[-32:]
-            job["error"] = "Đã gắn lại provider ID. Tiếp tục từ checkpoint để kiểm tra job cũ."
             _save(job)
             return job
         if action in {"visual-review", "visual-review-batch"}:

@@ -1,6 +1,7 @@
 """Shared cloud video lifecycle. Provider transports own request and output formats."""
 import hashlib
 import json
+import re
 import sqlite3
 import time
 from contextlib import closing, nullcontext
@@ -211,6 +212,38 @@ def recover_provider_id(job, data, profile):
             raise ValueError("Cloud reconciliation checkpoint changed.")
     return {"motion_job": ident, "provider_id": remote, "provider_status": response["status"],
             "association": "OWNER_ATTESTED", "provider_status_verified": True}
+
+
+def confirm_rejected_submission(job, data, profile):
+    """Explicit Owner attestation of the original rejected POST, never a new POST."""
+    ident = ltx._id(data["motion_job"])
+    evidence = data.get("provider_request_id")
+    if (data.get("owner_confirmed_rejected") is not True
+            or not isinstance(evidence, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,160}", evidence)
+            or job.get("status") != "NEEDS_RECONCILIATION"):
+        raise PermissionError("Require provider evidence for the original rejected request.")
+    scenes = job.get("board", {}).get("scenes", [])
+    matches = [i for i, scene in enumerate(scenes, 1)
+               if scene.get("motion_job") == ident and not scene.get("motion_sha")]
+    row = _row(ident)
+    if (len(matches) != 1 or row["production"] != job["id"] or row["state"] != "SUBMITTING"
+            or row["provider_id"] is not None or row["model"] != profile["model"]
+            or row["request_sha"] != data.get("request_sha")):
+        raise ValueError("Cloud reconciliation checkpoint changed.")
+    # Keep the original reservation and history. Owner attestation is not an
+    # independently verified provider response and never itself sends a request.
+    with closing(_db(True)) as conn, conn:
+        conn.execute("BEGIN IMMEDIATE")
+        changed = conn.execute("UPDATE jobs SET state='REJECTED' WHERE id=? AND production=? "
+                               "AND state='SUBMITTING' AND provider_id IS NULL AND request_sha=?",
+                               (ident, job["id"], row["request_sha"]))
+        if changed.rowcount != 1:
+            raise ValueError("Cloud reconciliation checkpoint changed.")
+        conn.execute("INSERT INTO submission_errors VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+                     "message=excluded.message,retry_at=NULL",
+                     (ident, len(RETRY_DELAYS)+1, "Owner confirmed original POST was rejected (not independently verified).", None))
+    return {"motion_job": ident, "provider_request_id": evidence, "shot": matches[0],
+            "association": "OWNER_ATTESTED_REJECTION", "provider_status_verified": False}
 
 
 def require_resolved_ledger(job):
