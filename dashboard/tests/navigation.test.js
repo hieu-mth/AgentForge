@@ -50,8 +50,8 @@ test('studio and settings remain reachable',()=>{
 test('current video shell has no retired UI styles',()=>{
   const css=readFileSync(new URL('../src/styles.css',import.meta.url),'utf8');
   assert.match(css,/\.app-shell\{/);
-  assert.match(css,/\.status-pill\{/);
-  for(const obsolete of ['workspace-owner','goal-owner','prompt-composer','visual-picker','overview-chart'])
+  assert.match(css,/\.env-status\{/);
+  for(const obsolete of ['workspace-owner','goal-owner','prompt-composer','visual-picker','overview-chart','status-pill'])
     assert.equal(css.includes('.'+obsolete),false,obsolete);
 });
 import { productionElapsed,productionProgress } from '../src/features/studioProgress.js';

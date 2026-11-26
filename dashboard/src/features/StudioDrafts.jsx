@@ -4,7 +4,6 @@ import {Alert,App as AntApp,Button,Card,Collapse,Empty,Form,Input,Modal,Select,S
 import {StudioBriefForm} from './StudioBriefForm.jsx';
 import {CaretRightFilled,CloseOutlined,DeleteOutlined,FileTextOutlined,PlayCircleOutlined,ReloadOutlined} from '@ant-design/icons';
 import {useResource,ResourceStatus} from '../use_resource.jsx';
-import {useScreenRefresh} from '../refresh_scope.jsx';
 import {api,requestError} from '../api.js';
 import {formatMemory,formatVram} from '../environment_format.js';
 import {StudioPreview} from './StudioPreview.jsx';
@@ -84,7 +83,7 @@ export function StudioDrafts({mutate,onCharacters}) {
   const {data,reload,setData,...resource}=useResource(API);
   const {data:capacity,reload:refreshCapacity}=useResource(API+'/resources');
   const hub=useResource('/api/model-hub');
-  useScreenRefresh(()=>Promise.all([reload(),hub.reload()]));
+
   const busy=useRef(false);
   const request=useRef(null);
   const filmsRef=useRef(null);

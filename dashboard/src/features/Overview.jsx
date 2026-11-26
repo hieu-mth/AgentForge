@@ -3,7 +3,6 @@ import {Button,Card,Empty,Modal,Table} from 'antd';
 import {CheckSquareOutlined,ClockCircleOutlined,PlayCircleOutlined,VideoCameraOutlined} from '@ant-design/icons';
 import {SectionTitle,SettingsHeading,SettingsStatus,Stat} from '../components/settings.jsx';
 import {useResource,ResourceStatus} from '../use_resource.jsx';
-import {useScreenRefresh} from '../refresh_scope.jsx';
 import {StudioPreview} from './StudioPreview.jsx';
 import {draftTitle} from './scriptPresentation.js';
 import {productionUsage} from './productionUsage.js';
@@ -31,8 +30,8 @@ export function Overview({onNavigate}){
   const resource=useResource('/api/video-studio/projects');
   const draftsResource=useResource('/api/film/drafts');
   const [preview,setPreview]=useState(null);
-  useScreenRefresh(resource.reload);
-  useScreenRefresh(draftsResource.reload);
+
+
   const episodes=resource.data?.projects?.filter(row=>row.source!=='studio_draft');
   const drafts=draftsResource.data?.drafts;
   const videos=drafts?.filter(row=>row.video_sha);

@@ -14,7 +14,7 @@ const initialMode = () => {
   return 'dark'; // Explicit owner default; saved light preference remains respected.
 };
 
-export function buildTheme(mode) {
+function buildTheme(mode) {
   const dark = mode === 'dark';
   return {
     algorithm: dark ? antTheme.darkAlgorithm : antTheme.defaultAlgorithm,

@@ -3,7 +3,6 @@ import { Alert, App as AntApp, Button, Card, Checkbox, Descriptions, Form,
   Input, Select, Space, Table, Tag, Typography } from 'antd';
 import {NumberField} from '../components/NumberField.jsx';
 import { api } from '../api.js';
-import {useScreenRefresh} from '../refresh_scope.jsx';
 import {useReadSequence} from '../use_resource.jsx';
 
 const { Text, Paragraph } = Typography;
@@ -38,7 +37,7 @@ export function Publishing({mutate,data}) {
     finally{if(current())setBusy(false);}
   },[message,beginRead]);
   useEffect(()=>{reload();},[reload]);
-  useScreenRefresh(reload);
+
 
   const inspectEpisode=async value=>{
     setSelected(null);

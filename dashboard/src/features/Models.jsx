@@ -5,7 +5,6 @@ import { App as AntApp, Alert, Button, Card, Empty, Grid, Select,
 import {AppstoreOutlined,DeleteOutlined,DesktopOutlined,HistoryOutlined,PlusOutlined,ReloadOutlined} from '@ant-design/icons';
 import {SectionTitle,SettingsHeading,SettingsStatus,Stat} from '../components/settings.jsx';
 import {useResource, ResourceStatus} from '../use_resource.jsx';
-import {useScreenRefresh} from '../refresh_scope.jsx';
 import {displayStatus} from '../environment_format.js';
 import {ModelProfileDialog} from './ModelProfileDialog.jsx';
 import {FluxProbeDialog} from './FluxProbeDialog.jsx';
@@ -28,7 +27,7 @@ export function ModelHub({mutate}) {
   const [fluxProbe,setFluxProbe]=useState(null);
 
   const reload=hubResource.reload;
-  useScreenRefresh(reload);
+
 
   const profiles=hub?.profiles||[];
   const adapters=hub?.adapters||[];
