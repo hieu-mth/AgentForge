@@ -125,7 +125,7 @@ Tham chiếu API: [sound generation](https://elevenlabs.io/docs/api-reference/te
 
 ### Safety contract
 
-- Use only Film Production `production.inspect_render` technical-pass `episode.mp4`, `captions.srt`, source episode SHA, render receipt SHA and MP4 SHA. The Owner must **watch the local MP4** and explicitly attest all content/music/voice rights; synthetic-media and kids declarations are Owner-provided booleans. Technical QA alone does **not** prove copyright, visual continuity or YouTube policy compliance.
+- Use only a verified Film Production render or an APPROVED Studio draft with its verified MP4, source SHA and render receipt SHA. Captions are included when available. The Owner must **watch the local MP4** and explicitly attest all content/music/voice rights; synthetic-media and kids declarations are Owner-provided booleans. Technical QA alone does **not** prove copyright, visual continuity or YouTube policy compliance.
 - One immutable release per film episode, assigned UUID and SHA in local `data/company/film_publishing.sqlite3`. No script calls Google on prepare, inspect, attest or observe; the original MP4 is not copied or moved. Duplicate release attempts fail. File mutation invalidates release inspection.
 - `planned_utc` is **only a local planning reminder**. Film Publishing has **NO automatic upload scheduler**, no YouTube `publishAt` call, no public/unlisted upload command, no advertising spend. Published/scheduled states in the local journal are Owner claims and not independent proof.
 - Owner observation snapshots (views, likes, comments, watch minutes, UTC date) are **MANUAL** and have `platform_api_verified=false`. This is not a financial or YouTube monetization verification.
@@ -149,7 +149,7 @@ npm.cmd run build --prefix dashboard
 .\.venv\Scripts\python.exe -m agentforge --port 8780
 ~~~
 
-Open `http://127.0.0.1:8780/dashboard/`, navigate to **Kênh xuất bản**. First generate real motion shots and complete Film Production assembled MP4. Then select the assembled episode: Dashboard reads exact source and render SHA. Enter YouTube title/description, rights and watched confirmation, synthetic/kids disclosures and optional future ISO8601 timestamp (planning only). Click **Chuẩn bị handoff local (Private)**; inspect the new SHA receipt and local MP4/SRT paths. Nothing leaves your computer.
+Open `http://127.0.0.1:8780/dashboard/`, navigate to **Kênh xuất bản**. Select an approved Studio draft directly, or a manually assembled Film Production episode with a verified render receipt. The Dashboard reads the exact source and render SHA; Studio drafts do not need manual reassembly. Enter YouTube title/description, rights and watched confirmation, synthetic/kids disclosures and optional future ISO8601 timestamp (planning only). Click **Chuẩn bị handoff local (Private)**; inspect the new SHA receipt and local MP4/SRT paths. Nothing leaves your computer.
 
 For manual upload, open YouTube Studio yourself and choose `episode.mp4`, attach `captions.srt` if appropriate, review disclosures, and set `Private`. After checking Studio, enter its **11-character video ID** and Owner-observed privacy state in Dashboard; statistics may be entered as manual snapshots. Do not interpret Owner-reported public/scheduled as platform verified.
 
