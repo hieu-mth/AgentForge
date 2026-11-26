@@ -1020,7 +1020,8 @@ class DraftTests(unittest.TestCase):
         prefix = "Cảnh 1 — Miu nhìn ra cửa sổ.\nMiu: Chào bạn!\n"
         suffix = "\n\nCảnh 2 — Miu chạy ra vườn.\n"
         source = prefix + "🐱" * (20_000 - len(prefix) - len(suffix)) + suffix
-        body = {**self.brief, "id":self.ident, "idea":source}
+        body = {**self.brief, "id":self.ident, "idea":source,
+                "mode": "still", "duration_mode": "manual", "scene_count": None}
         with (patch.object(draft.model_hub, "draft_routes", return_value=(1, {})), patch.object(draft.render, "_ffmpeg"),
               patch.object(draft, "_dispatch")):
             status, result, _ = client.req("POST", "/api/film/drafts/start", body)
@@ -1033,6 +1034,28 @@ class DraftTests(unittest.TestCase):
                                          {**body, "idea":source+"đ"})
             self.assertEqual(status, 400)
             self.assertIn("20,000", error["message"])
+
+    def test_http_rejects_retired_submission_and_scene_edit_contracts(self):
+        client = owner_http_fixture.OwnerHttpFixture()
+        client.setUp()
+        self.addCleanup(client.doCleanups)
+        client.server.allow_external_actions = True
+        client.login()
+        route = "/api/film/drafts/start"
+        old = {**self.brief, "id": self.ident, "mode": "still"}
+        current = {**old, "duration_mode": "manual", "scene_count": None}
+        with patch.object(draft, "submit") as submit:
+            for invalid in (old, {**old, "motion_approved": True},
+                            {**current, "duration_mode": None},
+                            {**current, "scene_count": 2},
+                            {**current, "motion_approved": True}):
+                with self.subTest(fields=invalid):
+                    self.assertEqual(client.req("POST", route, invalid)[0], 400)
+            submit.assert_not_called()
+        with patch.object(draft, "act") as act:
+            self.assertEqual(client.req("POST", f"/api/film/drafts/{self.ident}/edit",
+                             {"index": 0, "description": "New scene", "image_prompt": "Cat"})[0], 400)
+            act.assert_not_called()
 
     def test_submission_validation_and_idempotence(self):
         with self.assertRaises(ValueError):
@@ -1072,9 +1095,10 @@ class DraftTests(unittest.TestCase):
         self.addCleanup(client.doCleanups)
         client.server.allow_external_actions = True
         client.login()
-        body = {**self.brief, "id": self.ident, "seconds": 4, "mode": "motion"}
+        body = {**self.brief, "id": self.ident, "seconds": 4, "mode": "motion",
+                "duration_mode": "manual", "scene_count": None}
         route = "/api/film/drafts/start"
-        self.assertEqual(client.req("POST", route, {**body, "seconds": 6})[0], 400)
+        self.assertEqual(client.req("POST", route, {**body, "seconds": 3})[0], 400)
         profile = {"id": "selected_by_registry", "provider": "comfyui", "model": ltx.CHECKPOINT, "enabled": True,
                    "motion_encoder": str(self.root / ltx.ENCODER), "base_url": "http://127.0.0.1:8188"}
         image_profile = flux_profile()
