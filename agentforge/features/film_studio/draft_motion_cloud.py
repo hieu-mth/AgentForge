@@ -78,7 +78,7 @@ def _db(create=False):
         return None
     if create:
         path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, timeout=5)
+    conn = sqlite3.connect(path if create else path.as_uri() + "?mode=ro", uri=not create, timeout=5)
     conn.row_factory = sqlite3.Row
     if create:
         conn.execute("CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, production TEXT, endpoint TEXT, "
@@ -127,9 +127,6 @@ def recover_provider_id(job, data, profile):
     ops_control.require_active()
     # The API confirms existence/status, not provenance when the original POST was lost.
     response = _poll({**row, "provider_id": remote}, profile)
-    if ("model" in response and response["model"] != row["model"]) or (
-            "duration" in response and response["duration"] != row["seconds"]):
-        raise ValueError("Provider job model or duration does not match.")
     with closing(_db(True)) as conn, conn:
         conn.execute("BEGIN IMMEDIATE")
         if conn.execute("SELECT 1 FROM jobs WHERE provider_id=? AND id<>?", (remote, ident)).fetchone():
@@ -236,9 +233,15 @@ def _reserve(job, profile, seconds, save):
 
 
 def _poll(row, profile):
+    if row["endpoint"] not in {"image-to-video", "text-to-video"}:
+        raise NeedsReconciliation("Unknown cloud motion endpoint.")
     response = ltx._request("GET", "/v2/" + row["endpoint"] + "/" + ltx._id(row["provider_id"]), _key(profile))
-    if response.get("id") != row["provider_id"] or response.get("status") not in {"pending", "processing", "completed", "failed"}:
+    if (not isinstance(response, dict) or response.get("id") != row["provider_id"]
+            or response.get("status") not in {"pending", "processing", "completed", "failed"}):
         raise NeedsReconciliation("Unknown cloud motion response.")
+    if ("model" in response and response["model"] != row["model"]) or (
+            "duration" in response and response["duration"] != row["seconds"]):
+        raise NeedsReconciliation("Provider job model or duration does not match.")
     return response
 
 
@@ -261,16 +264,26 @@ def _state(ident, state, *, provider_id=None, digest=None):
                      (state, digest, ident))
 
 
+def _shot_row(production, scene, profile):
+    row = _row(scene["motion_job"])
+    if (row["production"] != production or row["model"] != profile["model"]
+            or row["seconds"] != billed_seconds(scene["frames"])):
+        raise NeedsReconciliation("Cloud motion ledger does not match this approved shot.")
+    return row
+
+
 def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard=nullcontext,
              retry_motion_job=None, previous_motion=None):
     production, job, folder, _ = prepared
     if retry_motion_job:
         if scene.get("motion_job") != retry_motion_job:
             raise ValueError("Cloud retry checkpoint changed.")
+        _shot_row(production, scene, profile)
         retryable_motion_job(retry_motion_job)
         draft_continuity.clear_motion(scene)
         save()
     if scene.get("motion_sha"):
+        _shot_row(production, scene, profile)
         clip_path(scene)
         return
     seconds = billed_seconds(scene["frames"])
@@ -302,9 +315,7 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
                 _state(ident, "SUBMITTED", provider_id=ltx._id(response.get("id")))
             except (ValueError, OSError, TypeError, sqlite3.Error):
                 raise NeedsReconciliation("Cloud POST outcome uncertain; inspect provider dashboard, never resubmit.") from None
-    row = _row(scene["motion_job"])
-    if row["production"] != production or row["model"] != profile["model"] or row["seconds"] != seconds:
-        raise NeedsReconciliation("Cloud motion ledger does not match this approved shot.")
+    row = _shot_row(production, scene, profile)
     if row["state"] == "VERIFIED":
         scene["motion_sha"] = row["output_sha"]
         clip_path(scene)
@@ -352,21 +363,24 @@ def reconcile_cancelled(job):
     from agentforge.features.film_studio import draft_pipeline as draft
     _, bindings, _ = draft._studio_bindings(job)
     profile = bindings["film.motion"]
-    for scene in job["board"]["scenes"]:
-        if not scene.get("motion_job"):
-            continue
-        row = _row(scene["motion_job"])
-        if row["state"] in {"VERIFIED", "FAILED", "CANCELLED_REMOTE_TERMINAL"}:
-            continue
-        if row["state"] != "SUBMITTED":
+    try:
+        rows = [_shot_row(job["id"], scene, profile) for scene in job["board"]["scenes"]
+                if scene.get("motion_job")]
+        owned = {row["id"] for row in rows}
+        if any(row["id"] not in owned for row in reconciliation_jobs(job)):
             return False
-        try:
+        if any(row["state"] not in {"VERIFIED", "FAILED", "CANCELLED_REMOTE_TERMINAL", "SUBMITTED"}
+               for row in rows):
+            return False
+        for row in rows:
+            if row["state"] != "SUBMITTED":
+                continue
             response = _poll(row, profile)
-        except (ValueError, OSError):
-            return False
-        if response["status"] not in {"completed", "failed"}:
-            return False
-        _state(row["id"], "CANCELLED_REMOTE_TERMINAL")
+            if response["status"] not in {"completed", "failed"}:
+                return False
+            _state(row["id"], "CANCELLED_REMOTE_TERMINAL")
+    except (ValueError, OSError, TypeError, KeyError):
+        return False
     return True
 
 
