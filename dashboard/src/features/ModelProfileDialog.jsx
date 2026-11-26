@@ -164,8 +164,8 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
           <Radio.Group optionType="button" buttonStyle="solid" disabled={editing}
             options={connectionOptions.filter(option=>adapters.some(item=>item.connection===option.value))}/>
         </Form.Item>
-        <Form.Item name="provider" label={connection==='local'?'Runtime':'Nhà cung cấp'}
-          rules={[{required:true,message:'Chọn runtime hoặc nhà cung cấp.'}]}>
+        <Form.Item name="provider" label={connection==='local'?'Runtime':'Chuẩn kết nối'}
+          rules={[{required:true,message:'Chọn runtime hoặc chuẩn kết nối.'}]}>
           <Select disabled={editing} options={adapters.filter(item=>item.connection===connection)
             .map(item=>({value:item.id,label:item.label}))}/>
         </Form.Item>
@@ -195,7 +195,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         <Input placeholder={directCloud?'https://api.example.com':example} spellCheck={false}/>
       </Form.Item>)}
       {provider==='chatgpt'&&<>
-        <Alert type="info" showIcon message="Kết nối ChatGPT Plan qua OAuth"
+        <Alert type="info" showIcon message="Kết nối ChatGPT qua OAuth"
           description={<>
             <p>Liên kết mở trình duyệt OpenAI trên máy chạy AgentForge. Không nhập mật khẩu, cookie hoặc token tại đây.</p>
             <Space wrap>
@@ -281,7 +281,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
     {review&&<>
       <dl className="model-dialog-summary">
         <dt>Mã hồ sơ</dt><dd>{review.id}</dd>
-        <dt>{connection==='local'?'Runtime':'Nhà cung cấp'}</dt><dd>{adapter.label}</dd>
+        <dt>{connection==='local'?'Runtime':'Chuẩn kết nối'}</dt><dd>{adapter.label}</dd>
         <dt>{adapter.model_label}</dt><dd>{review.model}</dd>
         {Object.keys(fields).map(key=><Fragment key={key}><dt>{directCloud?'Endpoint Cloud':fieldLabels[key]}</dt><dd>{review[key]}</dd></Fragment>)}
         {directCloud&&<><dt>API key</dt><dd>••••••••</dd></>}

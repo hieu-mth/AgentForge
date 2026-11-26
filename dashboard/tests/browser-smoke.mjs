@@ -728,7 +728,14 @@ try {
   await settings.getByRole('button',{name:'Đăng ký model'}).click();
   const registerDialog=settings.getByRole('dialog');
   await registerDialog.getByText('Cloud',{exact:true}).click();
-  await registerDialog.getByText('Anthropic-compatible',{exact:true}).waitFor();
+  await registerDialog.getByText('Kết nối ChatGPT qua OAuth',{exact:true}).waitFor();
+  const cloudAdapter=registerDialog.getByRole('combobox',{name:'Chuẩn kết nối'});
+  await cloudAdapter.click();
+  await openOptions.filter({hasText:/^Anthropic API$/}).waitFor();
+  const cloudLabels=await openOptions.allTextContents();
+  if(JSON.stringify(cloudLabels)!==JSON.stringify(['ChatGPT','OpenAI API','Anthropic API','LTX Video API','ElevenLabs API']))
+    throw new Error('Unexpected cloud adapter labels or order: '+cloudLabels.join(', '));
+  await openOptions.filter({hasText:/^Anthropic API$/}).evaluate(option=>option.click());
   await registerDialog.getByLabel('Endpoint Cloud',{exact:true}).waitFor();
   await registerDialog.getByLabel('API key',{exact:true}).waitFor();
   await registerDialog.getByRole('button',{name:'Dùng biến môi trường'}).click();
@@ -896,6 +903,8 @@ try {
     const fixtureKey='smoke-credential-not-a-real-key';
     await settings.getByRole('button',{name:'Đăng ký model'}).click();
     await registerDialog.getByText('Cloud',{exact:true}).click();
+    await registerDialog.getByRole('combobox',{name:'Chuẩn kết nối'}).click();
+    await openOptions.filter({hasText:/^Anthropic API$/}).click();
     await registerDialog.getByLabel('Model ID',{exact:true}).fill('fixture-cloud');
     await registerDialog.getByLabel('Endpoint Cloud',{exact:true}).fill('https://api.example.com');
     await registerDialog.getByLabel('API key',{exact:true}).fill(fixtureKey);
