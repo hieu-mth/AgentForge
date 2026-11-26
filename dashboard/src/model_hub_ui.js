@@ -53,6 +53,7 @@ export function configurableProfiles(profiles,capability) {
 export function outputSummary(limits) {
   if(!limits)return null;
   if(limits.resolution)return `${limits.resolution.join(' × ')} px · ${limits.fps} FPS · tối đa ${limits.max_frames} frame/clip`;
+  if(limits.size)return limits.size+' · '+(limits.ratios??[]).join(' / ');
   if(limits.max_resolution)return `${limits.min_resolution}–${limits.max_resolution} px mỗi cạnh · tối đa ${limits.max_steps} bước`;
   return limits.format==='structured_json'?'JSON có cấu trúc':limits.format;
 }

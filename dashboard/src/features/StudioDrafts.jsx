@@ -355,7 +355,7 @@ export function StudioDrafts({mutate,onCharacters}) {
             sha256:reconcile.job.approved_storyboard_sha,motion_job:row.id,request_sha:row.request_sha,
             provider_id:values.provider_id,owner_matched:true,
           },()=>setReconcile(null))}>
-            <Form.Item name="provider_id" label="Provider job ID đã đối chiếu" rules={[{required:true,pattern:/^[a-f0-9]{32}$/}]}>
+            <Form.Item name="provider_id" label="Provider job ID đã đối chiếu" rules={[{required:true,pattern:/^[A-Za-z0-9_-]{1,160}$/}]}>
               <Input maxLength={32}/>
             </Form.Item>
             <Form.Item name="owner_matched" rules={[{validator:(_,v)=>v?Promise.resolve():Promise.reject(new Error('Cần xác nhận đối chiếu'))}]}>

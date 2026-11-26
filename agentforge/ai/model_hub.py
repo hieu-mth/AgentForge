@@ -147,7 +147,7 @@ ADAPTERS = {
         "description": "Agnes Image / Video Flash. Kiểm tra hạn mức trước khi tạo nội dung.",
         "defaults": {"base_url": "https://apihub.agnes-ai.com/v1"},
         "environment_defaults": {"base_url_env": "AGNES_BASE_URL", "api_key_env": "AGNES_API_KEY"},
-        "local_probe": False, "cloud_probe": False,
+        "local_probe": False, "cloud_probe": False, "media_probe": True,
     },
     "elevenlabs": {
         "label": "ElevenLabs API", "connection": "cloud", "model_label": "Model ID",
@@ -448,17 +448,10 @@ def capability_contract(capability, profile):
     elif adapter and kind == "audio":
         adapter_id = "openai_compatible_speech"
         output = {"format": "wav", "max_input_chars": 180, "max_output_bytes": adapter.MAX_WAV_BYTES}
-    elif adapter and kind == "image" and not local:
-        adapter_id = adapter.ADAPTER_ID
-        output = adapter.output_limits()
     elif adapter and kind == "image":
-        adapter_id = "comfyui_flux_gguf"
-        graph = json.dumps(profile["flux"]["workflow"], sort_keys=True, separators=(",", ":"),
-                           ensure_ascii=False).encode("utf-8")
-        workflow_sha = hashlib.sha256(graph).hexdigest()
-        output = {"format": "png", "batch": 1, "min_resolution": 256,
-                  "max_resolution": profile["flux"]["max_resolution"], "dimension_multiple": 16,
-                  "min_steps": 1, "max_steps": profile["flux"]["max_steps"]}
+        adapter_id = adapter.ADAPTER_ID
+        workflow_sha = adapter.workflow_sha(profile)
+        output = adapter.output_limits(profile)
     elif adapter and kind == "video":
         adapter_id = adapter.ADAPTER_ID
         workflow_sha = adapter.workflow_sha()
@@ -796,6 +789,17 @@ def probe_local_profile(profile_id, *, expected_revision, db_path=None):
         lambda: runtime._ollama_inference(profile_id, profile=(host, port, name)))
     return {**result, "model": name, "revision": revision,
             "checked_at": datetime.now(timezone.utc).isoformat()}
+
+
+def media_probe_profile(profile_id, *, expected_revision, db_path=None):
+    _required_text(profile_id, ID_RE, "model ID")
+    revision, state = _read_state(db_path=db_path)
+    if type(expected_revision) is not int or revision != expected_revision:
+        raise ModelConfigError("MODEL_HUB_REVISION_CONFLICT")
+    profile = _profiles(state=state).get(profile_id)
+    if not profile or not profile["enabled"] or not ADAPTERS[profile["provider"]].get("media_probe"):
+        raise ModelConfigError("Probe requires an enabled cloud media profile")
+    return profile
 
 
 def flux_probe_profile(profile_id, *, expected_revision, db_path=None):

@@ -8,6 +8,7 @@ import {useResource, ResourceStatus} from '../use_resource.jsx';
 import {displayStatus} from '../environment_format.js';
 import {ModelProfileDialog} from './ModelProfileDialog.jsx';
 import {FluxProbeDialog} from './FluxProbeDialog.jsx';
+import {MediaProbeDialog} from './MediaProbeDialog.jsx';
 import {outputSummary,profileCapability,readinessLabels,readinessReason} from '../model_hub_ui.js';
 import {requestError} from '../api.js';
 
@@ -25,6 +26,7 @@ export function ModelHub({mutate}) {
   const [probes,setProbes]=useState({});
   const [editor,setEditor]=useState(null);
   const [fluxProbe,setFluxProbe]=useState(null);
+  const [mediaProbe,setMediaProbe]=useState(null);
 
   const reload=hubResource.reload;
 
@@ -120,6 +122,9 @@ export function ModelHub({mutate}) {
       </AppTooltip>}
     {row.flux&&<Button size="small" disabled={!row.enabled}
       onClick={()=>setFluxProbe({profile:row,revision:hub.revision})}>Chạy thử</Button>}
+    {byAdapter[row.provider]?.media_probe&&profileCapability(row)?.runtime_compatible&&
+      <Button size="small" disabled={!row.enabled}
+        onClick={()=>setMediaProbe({profile:row,revision:hub.revision})}>Chạy thử</Button>}
     {byAdapter[row.provider]?.local_probe&&<>
       <Button size="small" disabled={!row.enabled} onClick={()=>update('/api/model-hub/probe',{
         ack:'RUN_LOCAL_MODEL_PROBE',profile_id:row.id,expected_revision:hub.revision,
@@ -218,5 +223,6 @@ export function ModelHub({mutate}) {
         ack:'PREVIEW_MODEL_PROFILE',expected_revision:revision,profile,
       },{inlineError:true})}/>}
     {fluxProbe&&<FluxProbeDialog {...fluxProbe} mutate={mutate} onCancel={()=>setFluxProbe(null)}/>}
+    {mediaProbe&&<MediaProbeDialog {...mediaProbe} mutate={mutate} onCancel={()=>setMediaProbe(null)}/>}
   </div>;
 }

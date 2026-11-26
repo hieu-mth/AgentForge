@@ -1,5 +1,6 @@
 """Agnes image generation using the shared durable visual asset ledger."""
 import hashlib
+import json
 import time
 from contextlib import closing
 from uuid import uuid4
@@ -17,8 +18,12 @@ def supports(profile):
     return profile.get("provider") == "agnes" and profile.get("model") == studio_agnes.IMAGE_MODEL
 
 
-def output_limits():
+def output_limits(profile):
     return {"format": "png", "batch": 1, "size": "1K", "ratios": ["16:9", "9:16", "1:1"]}
+
+
+def workflow_sha(profile):
+    return None
 
 
 def preflight(profile, *, include_profiles=False):
@@ -50,6 +55,10 @@ def generate(profile, request):
             db.execute("INSERT INTO visual_jobs VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                        (ident, ident, "video" if request.scene else "image", 0, request.prompt,
                         profile["model"], None, "SUBMITTING", None, None, now, now))
+            metadata = {"provider": "agnes", "probe": not bool(request.scene),
+                        "profile_sha": hashlib.sha256(json.dumps(profile, sort_keys=True).encode()).hexdigest(),
+                        "scene": request.scene, "prompt": request.prompt}
+            db.execute("INSERT INTO visual_runtime(job_id,metadata) VALUES(?,?)", (ident, json.dumps(metadata)))
         try:
             data = studio_agnes.image_bytes(body, token, visual_jobs.MAX_IMAGE)
             digest = hashlib.sha256(data).hexdigest()
@@ -59,6 +68,8 @@ def generate(profile, request):
             with closing(visual_jobs._db(create=True)) as db, db:
                 db.execute("UPDATE visual_jobs SET status='ASSET_READY',asset_sha=?,updated_at=? WHERE job_id=?",
                            (digest, visual_jobs._now(), ident))
+                metadata["duration_seconds"] = round(time.monotonic() - started, 3)
+                db.execute("UPDATE visual_runtime SET metadata=? WHERE job_id=?", (json.dumps(metadata), ident))
         except Exception:
             with closing(visual_jobs._db(create=True)) as db, db:
                 db.execute("UPDATE visual_jobs SET status='SUBMIT_UNCERTAIN',updated_at=? WHERE job_id=?",

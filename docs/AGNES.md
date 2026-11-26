@@ -12,3 +12,11 @@ The shared cloud video contract currently normalizes to 720p / 24 FPS, 4–10 se
 for Agnes, without native audio. Image output is requested at 1K and verified as PNG.
 Unknown POST outcomes are not automatically retried. Promotions and quota are not
 verified by this adapter. Real account inference remains an Owner acceptance test.
+
+## Dashboard test
+
+Open **Model AI → Chạy thử** for an enabled Agnes media profile. Enter a test
+prompt; the action explicitly authorizes one image or one four-second video.
+Use the same probe ID to poll the existing video; it never submits again.
+Probe image and video previews are served locally after verification. Cloud
+billing and account entitlement remain unverified until the Owner runs a test.

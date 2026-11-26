@@ -1579,7 +1579,7 @@ class DraftTests(unittest.TestCase):
               patch.object(flux_runtime, "generate", side_effect=missing_output) as generate):
             draft._work(job, nullcontext())
             self.assertEqual(job["status"], "FAILED")
-            self.assertEqual(job["error"], "ComfyUI scene result: COMFYUI_STOPPED")
+            self.assertEqual(job["error"], "Image scene result: COMFYUI_STOPPED")
             self.assertNotIn("activity", job)
             self.assertEqual(job["board"]["scenes"][1]["attempts"], 1)
             generate.assert_called_once()

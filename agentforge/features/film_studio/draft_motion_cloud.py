@@ -1,38 +1,36 @@
 """Shared cloud video lifecycle. Provider transports own request and output formats."""
 import hashlib
 import json
-import os
-import re
 import sqlite3
 import time
 from contextlib import closing, nullcontext
 from uuid import uuid4
 
 from agentforge import ops_control
-from agentforge.ai import cloud_credentials, model_hub
+from agentforge.ai import model_hub
 from agentforge.features.film_studio import draft_continuity, studio_ltx_cloud as ltx, studio_agnes as agnes
 from agentforge.features.film_studio.draft_resources import NeedsReconciliation, ResourceBlocked
 from agentforge.features.film_studio.studio_contracts import MotionOutput
 from agentforge.features.media import render
 from agentforge.paths import COMPANY_DATA_DIR, ensure_local_root
 
-ADAPTER_ID = "ltx-cloud-v2-720p"
+ADAPTER_ID = "cloud-motion-720p"
 MAX_CLIP_BYTES = ltx.MAX_MP4
 DB = COMPANY_DATA_DIR / "cloud_motion.sqlite3"
 
 
+TRANSPORTS = (ltx, agnes)
+
+
 def _transport(profile):
-    model = profile.get("model")
-    if model in agnes.VIDEO_MODELS:
-        return agnes
-    if model in ltx.MODELS:
-        return ltx
-    raise ValueError("Unsupported cloud video model.")
+    matches = [transport for transport in TRANSPORTS if transport.supports_video(profile)]
+    if len(matches) != 1:
+        raise ValueError("Unsupported cloud video model.")
+    return matches[0]
 
 
 def supports(profile):
-    return ((profile.get("provider") == "ltx_cloud" and profile.get("model") in ltx.MODELS)
-            or (profile.get("provider") == "agnes" and profile.get("model") in agnes.VIDEO_MODELS))
+    return bool(profile.get("provider")) and any(transport.supports_video(profile) for transport in TRANSPORTS)
 
 
 def billable_durations(profile):
@@ -40,7 +38,7 @@ def billable_durations(profile):
 
 
 def native_audio(profile):
-    return _transport(profile) is ltx
+    return _transport(profile).NATIVE_AUDIO
 
 
 def output_profile():
@@ -64,16 +62,7 @@ def registry_readiness(profile):
 
 
 def _key(profile):
-    if _transport(profile) is agnes:
-        return agnes.key(profile)
-    endpoint = profile.get("base_url") or os.environ.get(profile.get("base_url_env", ""), "")
-    if endpoint.rstrip("/") not in {"https://api.ltx.io", "https://api.ltx.io/v2"}:
-        raise ValueError("LTX cloud endpoint must be the official HTTPS endpoint.")
-    key = (cloud_credentials.unprotect_api_key(profile["api_key_protected"])
-           if "api_key_protected" in profile else os.environ.get(profile.get("api_key_env", ""), ""))
-    if not re.fullmatch(r"[!-~]{1,4096}", key):
-        raise ValueError("LTX cloud API key is not configured.")
-    return key
+    return _transport(profile).credential(profile)
 
 
 def bind(profile):
@@ -166,7 +155,7 @@ def require_resolved_ledger(job):
     if conn is not None:
         with closing(conn):
             if any(row[0] not in owned for row in conn.execute(
-                    "SELECT id FROM jobs WHERE state IN ('SUBMITTING','SUBMITTED')")):
+                    "SELECT id FROM jobs WHERE production NOT LIKE 'probe:%' AND state IN ('SUBMITTING','SUBMITTED')")):
                 raise ResourceBlocked("CLOUD_MOTION_RECONCILIATION_REQUIRED")
 
 
@@ -181,7 +170,11 @@ def require_draft_removable(ident):
 
 def _path(row):
     from agentforge.features.film_studio import draft_pipeline as draft
-    return ensure_local_root(draft._folder(row["production"]) / ("cloud-" + ltx._id(row["id"]) + ".mp4"))
+    ident = ltx._id(row["id"])
+    if row["production"].startswith("probe:"):
+        from agentforge.paths import WORKSPACE_DIR
+        return ensure_local_root(WORKSPACE_DIR / "model-probes" / (ident + ".mp4"))
+    return ensure_local_root(draft._folder(row["production"]) / ("cloud-" + ident + ".mp4"))
 
 
 def verify_clip(scene, stream):
@@ -259,17 +252,10 @@ def _reserve(job, profile, seconds, save):
 def _poll(row, profile):
     if row["endpoint"] not in {"image-to-video", "text-to-video"}:
         raise NeedsReconciliation("Unknown cloud motion endpoint.")
-    transport = _transport(profile)
-    if transport is agnes:
-        return agnes.poll(row, _key(profile))
-    response = ltx._request("GET", "/v2/" + row["endpoint"] + "/" + ltx._id(row["provider_id"]), _key(profile))
-    if (not isinstance(response, dict) or response.get("id") != row["provider_id"]
-            or response.get("status") not in {"pending", "processing", "completed", "failed"}):
-        raise NeedsReconciliation("Unknown cloud motion response.")
-    if ("model" in response and response["model"] != row["model"]) or (
-            "duration" in response and response["duration"] != row["seconds"]):
-        raise NeedsReconciliation("Provider job model or duration does not match.")
-    return response
+    try:
+        return _transport(profile).poll_video(row, _key(profile))
+    except ValueError:
+        raise NeedsReconciliation("Cloud job status could not be verified.") from None
 
 
 def _state(ident, state, *, provider_id=None, digest=None):
@@ -339,11 +325,7 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
                 conn.execute("INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?,?)",
                              (ident, production, endpoint, profile["model"], seconds, request_sha, "SUBMITTING", None, None))
             try:
-                if transport is agnes:
-                    remote = agnes.submit(body, key)
-                else:
-                    response = ltx._request("POST", "/v2/" + endpoint, key, body)
-                    remote = ltx._id(response.get("id"))
+                remote = transport.submit_video(body, key, endpoint)
                 _state(ident, "SUBMITTED", provider_id=remote)
             except (ValueError, OSError, TypeError, sqlite3.Error):
                 raise NeedsReconciliation("Cloud POST outcome uncertain; inspect provider dashboard, never resubmit.") from None
@@ -376,10 +358,7 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
                     # Recover an interrupted finalization only after technical re-verification.
                     digest = ltx._verify(output, seconds, require_audio=native_audio(profile))
                 else:
-                    if transport is agnes:
-                        agnes.download_normalized(response["url"], temp, seconds)
-                    else:
-                        ltx._download(response["result"]["video_url"], temp)
+                    transport.download_video(response, temp, seconds)
                     digest = ltx._verify(temp, seconds, require_audio=native_audio(profile))
                     temp.replace(output)
                 _state(row["id"], "VERIFIED", digest=digest)

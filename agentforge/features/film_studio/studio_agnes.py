@@ -20,12 +20,18 @@ HOST = "apihub.agnes-ai.com"
 BASE = "https://" + HOST + "/v1"
 IMAGE_MODEL = "agnes-image-2.5-flash"
 VIDEO_MODELS = {"agnes-video-2.5-flash"}
+PROVIDER = "agnes"
+NATIVE_AUDIO = False
+
+
+def supports_video(profile):
+    return profile.get("provider", PROVIDER) == PROVIDER and profile.get("model") in VIDEO_MODELS
 # Studio currently caps its shared cloud output contract at 10 seconds.
 DURATIONS = tuple(range(4, 11))
 MAX_JSON = 12 * 1024 * 1024
 
 
-def key(profile):
+def credential(profile):
     endpoint = profile.get("base_url") or os.environ.get(profile.get("base_url_env", ""), "")
     if endpoint.rstrip("/") != BASE:
         raise ValueError("Agnes endpoint must be the official HTTPS endpoint.")
@@ -34,6 +40,9 @@ def key(profile):
     if not re.fullmatch(r"[!-~]{1,4096}", value):
         raise ValueError("Agnes API key is not configured.")
     return value
+
+
+key = credential
 
 
 def _id(value):
@@ -113,6 +122,10 @@ def submit(body, token):
     return _id(_request("POST", "/v1/videos", token, body).get("video_id"))
 
 
+def submit_video(body, key, endpoint):
+    return submit(body, key)
+
+
 def poll(row, token):
     remote = _id(row["provider_id"])
     result = _request("GET", "/agnesapi?" + urlencode({"video_id": remote, "model_name": row["model"]}), token)
@@ -124,6 +137,13 @@ def poll(row, token):
     if result["status"] == "completed" and not isinstance(result.get("url"), str):
         raise ValueError("Missing Agnes output URL.")
     return result
+
+
+poll_video = poll
+
+
+def download_video(result, target, seconds):
+    download_normalized(result["url"], target, seconds)
 
 
 def _public_addresses(host):

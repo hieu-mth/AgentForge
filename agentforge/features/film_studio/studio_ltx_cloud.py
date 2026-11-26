@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 from agentforge.paths import ensure_local_root
+from agentforge.ai import cloud_credentials
 from agentforge.features.media import render
 
 HOST = "api.ltx.io"
@@ -47,6 +48,44 @@ def payload(model, prompt, duration, *, image=None, audio=True):
             im.verify()
         result["image_uri"] = "data:image/" + fmt + ";base64," + base64.b64encode(image).decode("ascii")
     return result
+
+
+PROVIDER = "ltx_cloud"
+NATIVE_AUDIO = True
+
+
+def supports_video(profile):
+    return profile.get("provider", PROVIDER) == PROVIDER and profile.get("model") in MODELS
+
+
+def credential(profile):
+    endpoint = profile.get("base_url") or os.environ.get(profile.get("base_url_env", ""), "")
+    if endpoint.rstrip("/") not in {"https://api.ltx.io", "https://api.ltx.io/v2"}:
+        raise ValueError("LTX cloud endpoint must be the official HTTPS endpoint.")
+    key = (cloud_credentials.unprotect_api_key(profile["api_key_protected"])
+           if "api_key_protected" in profile else os.environ.get(profile.get("api_key_env", ""), ""))
+    if not re.fullmatch(r"[!-~]{1,4096}", key):
+        raise ValueError("LTX cloud API key is not configured.")
+    return key
+
+
+def submit_video(body, key, endpoint):
+    return _id(_request("POST", "/v2/" + endpoint, key, body).get("id"))
+
+
+def poll_video(row, key):
+    response = _request("GET", "/v2/" + row["endpoint"] + "/" + _id(row["provider_id"]), key)
+    if (not isinstance(response, dict) or response.get("id") != row["provider_id"]
+            or response.get("status") not in {"pending", "processing", "completed", "failed"}):
+        raise ValueError("Unknown cloud motion response.")
+    if ("model" in response and response["model"] != row["model"]) or (
+            "duration" in response and response["duration"] != row["seconds"]):
+        raise ValueError("Provider job model or duration does not match.")
+    return response
+
+
+def download_video(result, target, seconds):
+    _download(result["result"]["video_url"], target)
 
 
 def _key():

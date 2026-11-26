@@ -1,10 +1,27 @@
 """ComfyUI image adapter for Studio using the verified FLUX workflow."""
 import time
+import hashlib
+import json
 from urllib.parse import urlsplit
 
 from agentforge.features.film_studio import draft_resources
 from agentforge.features.media import flux_runtime, flux_workflow
 from agentforge.integrations import comfy_service, comfyui
+
+
+ADAPTER_ID = "comfyui_flux_gguf"
+
+
+def output_limits(profile):
+    return {"format": "png", "batch": 1, "min_resolution": 256,
+            "max_resolution": profile["flux"]["max_resolution"], "dimension_multiple": 16,
+            "min_steps": 1, "max_steps": profile["flux"]["max_steps"]}
+
+
+def workflow_sha(profile):
+    graph = json.dumps(profile["flux"]["workflow"], sort_keys=True, separators=(",", ":"),
+                       ensure_ascii=False).encode("utf-8")
+    return hashlib.sha256(graph).hexdigest()
 
 
 def supports(profile):
