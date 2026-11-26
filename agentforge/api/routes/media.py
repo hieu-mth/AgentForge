@@ -28,14 +28,16 @@ def handle(server, path, request, session=None):
             "storyboard-audio-direct": {"sha256", "engine", "voice_name", "voices"},
             "storyboard-continuity": {"sha256"},
         }
-        if len(parts) != 6 or parts[5] not in {"approve", "reject", "edit", "resume", "cancel", "delete", "visual-review", "visual-review-batch", *storyboard}:
+        if len(parts) != 6 or parts[5] not in {"approve", "reject", "edit", "resume", "cancel", "delete", "visual-review", "visual-review-batch", "cloud-reconcile", *storyboard}:
             raise ValueError("Unknown draft action")
         from agentforge.features.film_studio import draft_pipeline
         identifier, action = parts[4:]
-        if action in {"resume", "storyboard-approve", "storyboard-rewrite", "storyboard-continuity", "storyboard-audio-direct", "storyboard-quality-repair", "visual-review", "visual-review-batch"} and not server.allow_external_actions:
+        if action in {"resume", "storyboard-approve", "storyboard-rewrite", "storyboard-continuity", "storyboard-audio-direct", "storyboard-quality-repair", "visual-review", "visual-review-batch", "cloud-reconcile"} and not server.allow_external_actions:
             raise PermissionError("Draft production requires external-tools mode")
         required = {"sha256"} if action in {"approve", "reject"} else (
             {"index", "description", "image_prompt"} if action == "edit" else storyboard.get(action, set()))
+        if action == "cloud-reconcile":
+            required = {"sha256", "motion_job", "provider_id", "request_sha", "owner_matched"}
         if action == "visual-review":
             required = {"sha256", "video_sha", "index", "allow_cloud"}
         if action == "visual-review-batch":

@@ -5,7 +5,7 @@ import {NumberField} from '../components/NumberField.jsx';
 import {CaretRightFilled,CloseOutlined,DeleteOutlined,FileTextOutlined,PlayCircleOutlined,ReloadOutlined} from '@ant-design/icons';
 import {useResource,ResourceStatus} from '../use_resource.jsx';
 import {useScreenRefresh} from '../refresh_scope.jsx';
-import {requestError} from '../api.js';
+import {api,requestError} from '../api.js';
 import {formatMemory,formatVram} from '../environment_format.js';
 import {StudioPreview} from './StudioPreview.jsx';
 import {StoryboardReview} from './StoryboardReview.jsx';
@@ -125,6 +125,14 @@ export function StudioDrafts({mutate,onCharacters}) {
   const [selectedId,setSelectedId]=useState(null);
   const [storyboardId,setStoryboardId]=useState(null);
   const [sourceId,setSourceId]=useState(null);
+  const [reconcile,setReconcile]=useState(null);
+  async function inspectCloudJobs(job){
+    setError(null);
+    try{
+      const result=await api(API+'/'+job.id+'/cloud-jobs');
+      setReconcile({job,jobs:result.jobs||[]});
+    }catch(failure){setError(draftError(failure));}
+  }
   const drafts=Array.isArray(data?.drafts)?data.drafts.filter(job=>!missing.includes(job.id)):[];
   const visibleDrafts=drafts.filter(job=>historyStates.has(job.status)===(filter==='history'))
     .sort((a,b)=>draftTime(b)-draftTime(a));
@@ -378,6 +386,8 @@ export function StudioDrafts({mutate,onCharacters}) {
         </div>,
         children:<>
           <ProductionProgress job={job} labels={labels} warnings={warnings}/>
+          {job.status==='NEEDS_RECONCILIATION'&&['cloud','hybrid'].includes(job.production_plan?.method)&&
+            <Button disabled={pending||running} onClick={()=>inspectCloudJobs(job)}>Đối soát job cloud</Button>}
           {!job.board&&<Button type="default" aria-label="Xem nội dung video" icon={<FileTextOutlined/>}
             onClick={()=>setSourceId(job.id)}>
             Xem nội dung video
@@ -429,6 +439,28 @@ export function StudioDrafts({mutate,onCharacters}) {
           video_sha:reviewing.video_sha,allow_cloud:true}),
       }):null}
       onPreview={(index,sha)=>setScenePreview({id:reviewing.id,index,sha})}/>}
+    {reconcile&&<Modal open title="Đối soát job cloud" footer={null} onCancel={()=>setReconcile(null)}>
+      <Alert type="warning" showIcon message="Chỉ gắn ID của chính request đã gửi"
+        description="Kiểm tra trên hệ thống nhà cung cấp. AgentForge chỉ xác minh ID và trạng thái bằng GET; không thể chứng minh ID đó thuộc request cũ nếu phản hồi POST bị mất. Không nhập ID của video khác."/>
+      {error&&<Alert type="error" showIcon message={error}/>}
+      {reconcile.jobs.length===0&&<Empty description="Không có ledger đang chờ đối soát cho production này"/>}
+      {reconcile.jobs.map(row=><Card key={row.id} size="small" title={row.model+' · '+row.seconds+' giây'}>
+        <p>Trạng thái: {row.state} · <code>{row.id}</code></p>
+        {row.provider_id?<p>Provider ID: <code>{row.provider_id}</code>. Dùng Tiếp tục từ checkpoint.</p>:
+          <Form layout="vertical" onFinish={values=>run('/'+reconcile.job.id+'/cloud-reconcile',{
+            sha256:reconcile.job.approved_storyboard_sha,motion_job:row.id,request_sha:row.request_sha,
+            provider_id:values.provider_id,owner_matched:true,
+          },()=>setReconcile(null))}>
+            <Form.Item name="provider_id" label="Provider job ID đã đối chiếu" rules={[{required:true,pattern:/^[a-f0-9]{32}$/}]}>
+              <Input maxLength={32}/>
+            </Form.Item>
+            <Form.Item name="owner_matched" rules={[{validator:(_,v)=>v?Promise.resolve():Promise.reject(new Error('Cần xác nhận đối chiếu'))}]}>
+              <Select placeholder="Xác nhận đã đối chiếu" options={[{value:true,label:'Tôi đã xác nhận đây là request cũ'}]}/>
+            </Form.Item>
+            <Button htmlType="submit" disabled={pending} type="primary">Gắn lại ID (không tạo video mới)</Button>
+          </Form>}
+      </Card>)}
+    </Modal>}
     {sourceDraft&&<Modal open centered width={760} rootClassName="script-reader" title="Nội dung video"
       onCancel={()=>setSourceId(null)} footer={<Button onClick={()=>setSourceId(null)}>Đóng</Button>}>
       <ScriptContent text={sourceDraft.brief.idea}/>

@@ -25,6 +25,9 @@ def dispatch(self, route):
         job = draft_pipeline._read(parts[4])
         if len(parts) == 5:
             return self._reply(200, job)
+        if parts[5] == "cloud-jobs":
+            from agentforge.features.film_studio import draft_motion_cloud
+            return self._reply(200, {"jobs": draft_motion_cloud.reconciliation_jobs(job)})
         if parts[5] == "preview":
             def verify(stream):
                 draft_pipeline.verify_video(job, stream)

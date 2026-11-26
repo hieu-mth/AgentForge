@@ -1856,6 +1856,18 @@ def act(ident, action, data):
     started = False
     try:
         job = _read(ident)
+        if action == "cloud-reconcile":
+            from agentforge.features.film_studio import draft_motion_cloud
+            if (job.get("production_plan", {}).get("method") not in {"cloud", "hybrid"}
+                    or job.get("approved_storyboard_sha") != data.get("sha256")
+                    or draft_timeline.digest(job) != data.get("sha256")):
+                raise PermissionError("Cloud reconciliation needs the current approved storyboard.")
+            _, bindings, _ = _studio_bindings(job)
+            result = draft_motion_cloud.recover_provider_id(job, data, bindings["film.motion"])
+            job["cloud_reconciliations"] = (job.get("cloud_reconciliations", []) + [result])[-32:]
+            job["error"] = "Đã gắn lại provider ID. Tiếp tục từ checkpoint để kiểm tra job cũ."
+            _save(job)
+            return job
         if action in {"visual-review", "visual-review-batch"}:
             from agentforge.features.film_studio import draft_quality
             return (draft_quality.review_batch if action == "visual-review-batch" else draft_quality.review)(job, data)
