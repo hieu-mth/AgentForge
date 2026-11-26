@@ -195,3 +195,7 @@ CI Windows/React chỉ kiểm code, security contracts, fixture FFmpeg và stati
 5. Render episode với FFmpeg, phát lại và đối chiếu source/receipt SHA.
 6. Chỉ tạo Publishing handoff khi Owner đã duyệt; private upload phải xác minh độc lập trong YouTube Studio.
 7. Không xóa/migrate SQLite, workspace, model, secret, video trong cleanup Git.
+
+## Phát hành trực tiếp từ Studio
+
+Video mới ở trạng thái APPROVED xuất hiện trong màn hình Xuất bản. Kiểm tra phiên bản storyboard, receipt và SHA của MP4, sau đó xác nhận quyền sử dụng nội dung để tạo handoff trong cùng sổ phát hành. Không dựng lại bằng workflow thủ công. Có thể tải phụ đề đã xác minh từ Dashboard nếu tồn tại. Handoff và private upload CLI kiểm tra lại đúng nguồn Studio; không tự đăng, không tự upload và không khẳng định chất lượng thương mại.

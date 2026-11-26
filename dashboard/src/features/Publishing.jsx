@@ -17,6 +17,7 @@ const CLAIMS = [
 export function Publishing({mutate,data}) {
   const {modal,message}=AntApp.useApp();
   const [episodes,setEpisodes]=useState([]);
+  const [drafts,setDrafts]=useState([]);
   const [report,setReport]=useState(null);
   const [release,setRelease]=useState(null);
   const [handoff,setHandoff]=useState(null);
@@ -31,8 +32,8 @@ export function Publishing({mutate,data}) {
     const current=beginRead();
     setBusy(true);
     try{
-      const [r,e]=await Promise.all([api('/api/publishing'),api('/api/film/productions')]);
-      if(current()){setReport(r);setEpisodes(e.episodes||[]);}
+      const [r,e,d]=await Promise.all([api('/api/publishing'),api('/api/film/productions'),api('/api/film/drafts')]);
+      if(current()){setReport(r);setEpisodes(e.episodes||[]);setDrafts((d.drafts||[]).filter(job=>job.status==='APPROVED'&&job.receipt_sha));}
     }catch(err){if(current())message.error(err.message||'Không đọc được sổ phát hành local');}
     finally{if(current())setBusy(false);}
   },[message,beginRead]);
@@ -43,6 +44,15 @@ export function Publishing({mutate,data}) {
     setSelected(null);
     if(!value)return;
     try{
+      if(value.startsWith('draft:')){
+        const id=value.slice(6);
+        const source=await api('/api/publishing/draft/'+id);
+        setSelected({draft_id:id,film_slug:source.film_slug,episode_id:source.episode_id,
+          proposal:{episode_sha256:source.episode_sha256},
+          render:{receipt_sha256:source.receipt_sha256,video_sha256:source.video_sha256}});
+        prepareForm.setFieldValue('title',source.title.slice(0,100));
+        return;
+      }
       const [film,episode]=value.split(':');
       const detail=await api('/api/film/productions/'+film+'/'+episode);
       if(!detail.render){
@@ -66,10 +76,11 @@ export function Publishing({mutate,data}) {
       </Space>,
       okText:'Xác nhận lưu local',cancelText:'Hủy',
       onOk:async()=>{
-        const result=await mutate('/api/publishing/prepare',{
-          ack:'PREPARE_PRIVATE_RELEASE',film_slug:selected.film_slug,
-          episode_id:selected.episode_id,
-          episode_sha:selected.proposal.episode_sha256,
+        const studio=!!selected.draft_id;
+        const source=studio?{ack:'PREPARE_DRAFT_RELEASE',draft_id:selected.draft_id}:
+          {ack:'PREPARE_PRIVATE_RELEASE',film_slug:selected.film_slug,episode_id:selected.episode_id};
+        const result=await mutate(studio?'/api/publishing/prepare-draft':'/api/publishing/prepare',{
+          ...source,episode_sha:selected.proposal.episode_sha256,
           render_sha:selected.render.receipt_sha256,
           metadata:{title:values.title,description:values.description||'',
             rights_attested:!!values.rights_attested,
@@ -161,11 +172,12 @@ export function Publishing({mutate,data}) {
       <Form form={prepareForm} layout="vertical" onFinish={prepare}
         initialValues={{rights_attested:false,owner_watched:false,
           synthetic_media:true,made_for_kids:false}}>
-        <Form.Item label="Chọn phim đã assemble" name="episode" rules={[{required:true}]}>
+        <Form.Item label="Chọn video đã hoàn thành" name="episode" rules={[{required:true}]}>
           <Select showSearch placeholder="Chọn phim → kiểm tra SHA"
-            options={episodes.filter(x=>x.render_receipt_present_uninspected)
-              .map(x=>({label:x.film_slug+' / '+x.episode_id,
-                value:x.film_slug+':'+x.episode_id}))}
+            options={[...drafts.map(job=>({label:(job.board?.title||job.id)+' · Studio đã duyệt',value:'draft:'+job.id})),
+              ...episodes.filter(x=>x.render_receipt_present_uninspected)
+              .map(x=>({label:x.film_slug+' / '+x.episode_id+' · Dựng thủ công',
+                value:x.film_slug+':'+x.episode_id}))]}
             onChange={inspectEpisode}/>
         </Form.Item>
         {selected?.render&&<Alert type="info" showIcon style={{marginBottom:12}}
@@ -209,7 +221,8 @@ export function Publishing({mutate,data}) {
         <Button onClick={showHandoff}>Xem đường dẫn file & metadata cho YouTube Studio</Button>
         {handoff&&<Card size="small">
           <Paragraph>Video MP4: <Text code copyable>{handoff.video_file}</Text></Paragraph>
-          <Paragraph>SRT: <Text code copyable>{handoff.srt_file}</Text></Paragraph>
+          {handoff.srt_file&&<Paragraph>SRT: <Text code copyable>{handoff.srt_file}</Text></Paragraph>}
+          {handoff.captions_url&&<Paragraph><a href={handoff.captions_url} download="captions.srt">Tải phụ đề SRT đã xác minh</a></Paragraph>}
           <Paragraph type="secondary">Chỉ upload từ YouTube Studio thủ công hoặc CLI private-only đã cấp OAuth. Không được gọi là public khi chưa kiểm tra trên platform.</Paragraph>
         </Card>}
         <Card size="small" title="Ghi nhận trạng thái đã thay đổi thủ công trên YouTube Studio">

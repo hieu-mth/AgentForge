@@ -95,8 +95,7 @@ def upload_private(release_id, release_sha, *, client_secrets_path,
     handoff = publishing.handoff(release_id, db_path=db_path, film_root=film_root)
     video_file = Path(handoff["video_file"])
     # Reverify the exact signed film render and source hash before any OAuth/network.
-    report = production.inspect_render(
-        item["episode_id"], item["film_slug"], film_root=film_root)
+    report = publishing.source_render(item["film_slug"], item["episode_id"], film_root)
     if (report["video_sha256"] != item["video_sha256"]
             or report["receipt_sha256"] != item["render_receipt_sha256"]):
         raise PermissionError("Rendered MP4 receipt is stale")
@@ -110,8 +109,7 @@ def upload_private(release_id, release_sha, *, client_secrets_path,
         # replaced the file while OAuth/upload was in progress. We must not
         # record a successful source-identical upload in that case. The API
         # may already have created a private video: leave status UNCERTAIN.
-        after = production.inspect_render(
-            item["episode_id"], item["film_slug"], film_root=film_root)
+        after = publishing.source_render(item["film_slug"], item["episode_id"], film_root)
         if (after["video_sha256"] != item["video_sha256"]
                 or after["receipt_sha256"] != item["render_receipt_sha256"]):
             raise PermissionError("Film source changed while uploading")

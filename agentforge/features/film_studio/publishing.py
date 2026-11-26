@@ -124,6 +124,40 @@ def _render(film_slug, episode_id, film_root):
     return report
 
 
+def draft_source(draft_id):
+    """A Studio approval is the source of truth; do not assemble a second episode."""
+    from agentforge.features.film_studio import draft_pipeline as draft, draft_timeline
+    job = draft._read(_id(draft_id, "draft ID"))
+    if (job["status"] != "APPROVED" or not job.get("storyboard_version")
+            or not job.get("video_sha") or not job.get("receipt_sha")
+            or job.get("approved_storyboard_sha") != job.get("storyboard_sha")
+            or job["storyboard_sha"] != draft_timeline.digest(job)):
+        raise PermissionError("Chỉ phát hành video Studio đã duyệt đúng phiên bản.")
+    path = draft.video_path(job)
+    with path.open("rb") as stream:
+        draft.verify_video(job, stream)
+    receipt = json.loads(draft.verified_receipt(job))
+    if (receipt.get("production_id") != draft_id or receipt.get("version") != job["storyboard_version"]
+            or receipt.get("storyboard_sha") != job["storyboard_sha"]
+            or receipt.get("video_sha") != job["video_sha"]
+            or receipt.get("subtitle_sha") != job.get("subtitle_sha")):
+        raise PublishingError("Studio receipt does not match the approved source.")
+    return {"film_slug": "draft:" + draft_id, "episode_id": f"v{job['storyboard_version']:02d}",
+            "episode_sha256": job["storyboard_sha"], "receipt_sha256": job["receipt_sha"],
+            "video_sha256": job["video_sha"], "caption_sha256": job.get("subtitle_sha"),
+            "source_clip_count": len(job["board"]["scenes"]),
+            "title": job["board"]["title"], "video_file": str(path)}
+
+
+def source_render(film_slug, episode_id, film_root):
+    if film_slug.startswith("draft:"):
+        result = draft_source(film_slug.removeprefix("draft:"))
+        if result["episode_id"] != episode_id:
+            raise PermissionError("Studio source version changed.")
+        return result
+    return _render(film_slug, episode_id, film_root)
+
+
 def _validated_payload(payload):
     if not isinstance(payload, dict) or set(payload) != {
             "title", "description", "synthetic_media", "made_for_kids",
@@ -160,13 +194,29 @@ def prepare(*, film_slug, episode_id, episode_sha, render_sha,
             or source["episode_sha256"] != episode_sha
             or report["receipt_sha256"] != render_sha):
         raise PermissionError("Reviewed film source/receipt SHA changed")
+    return _prepare_release(film_slug, episode_id, episode_sha, render_sha, report,
+                            metadata, db_path=db_path, film_root=film_root)
+
+
+def prepare_draft(*, draft_id, episode_sha, render_sha, metadata, confirmed=False,
+                  db_path=DB, film_root=production.FILMS):
+    if confirmed is not True:
+        raise PermissionError("Explicit Owner release review required")
+    source = draft_source(draft_id)
+    if source["episode_sha256"] != episode_sha or source["receipt_sha256"] != render_sha:
+        raise PermissionError("Reviewed Studio source/receipt SHA changed")
+    return _prepare_release(source["film_slug"], source["episode_id"], episode_sha, render_sha, source,
+                            metadata, db_path=db_path, film_root=film_root)
+
+
+def _prepare_release(film_slug, episode_id, episode_sha, render_sha, report, metadata, *, db_path, film_root):
     meta = _validated_payload(metadata)
     body = {
         "format": RELEASE_FORMAT, "film_slug": film_slug, "episode_id": episode_id,
         "episode_sha256": episode_sha, "render_receipt_sha256": render_sha,
         "video_sha256": report["video_sha256"],
         "captions_sha256": report["caption_sha256"],
-        "source_clip_count": len(report["source_clips"]),
+        "source_clip_count": report["source_clip_count"] if film_slug.startswith("draft:") else len(report["source_clips"]),
         "source_technical_qa_only": True, "platform": "youtube",
         "initial_privacy": "private", **meta,
     }
@@ -211,9 +261,10 @@ def inspect(release_id, *, db_path=DB, film_root=production.FILMS, verify_source
         if item["platform_id"] is not None and not VIDEO.fullmatch(item["platform_id"]):
             raise ValueError("Invalid video ID")
         if verify_source:
-            report = _render(item["film_slug"], item["episode_id"], film_root)
+            report = source_render(item["film_slug"], item["episode_id"], film_root)
             if report["receipt_sha256"] != item["render_sha"] \
-                    or report["video_sha256"] != item["video_sha"]:
+                    or report["video_sha256"] != item["video_sha"] \
+                    or (item["film_slug"].startswith("draft:") and report["episode_sha256"] != item["source_sha"]):
                 raise PermissionError("Film MP4 source changed since release review")
     except (ValueError, TypeError, AttributeError, UnicodeError) as exc:
         raise PublishingError("Release payload or source invalid") from exc
@@ -383,11 +434,20 @@ def summary(*, db_path=DB, film_root=production.FILMS):
 def handoff(release_id, *, db_path=DB, film_root=production.FILMS):
     """Read-only trusted filenames + bounded metadata for manual YouTube upload."""
     item = inspect(release_id, db_path=db_path, film_root=film_root)
-    folder = production._folder(item["film_slug"], item["episode_id"], film_root)
+    if item["film_slug"].startswith("draft:"):
+        source = source_render(item["film_slug"], item["episode_id"], film_root)
+        video_file = source["video_file"]
+        srt_file = None
+        captions_url = ("/api/film/drafts/" + item["film_slug"].removeprefix("draft:") + "/captions"
+                        if item["captions_sha256"] else None)
+    else:
+        folder = production._folder(item["film_slug"], item["episode_id"], film_root)
+        video_file, srt_file = str(folder / "episode.mp4"), str(folder / "captions.srt")
+        captions_url = None
     return {
         "release_id": release_id, "release_sha256": item["release_sha256"],
         "film_slug": item["film_slug"], "episode_id": item["episode_id"],
-        "video_file": str(folder / "episode.mp4"), "srt_file": str(folder / "captions.srt"),
+        "video_file": video_file, "srt_file": srt_file, "captions_url": captions_url,
         "metadata": {"title": item["title"], "description": item["description"],
                      "synthetic_media": item["synthetic_media"],
                      "made_for_kids": item["made_for_kids"],

@@ -4,7 +4,7 @@ Baseline main: `9db60df28f242abf9ed199c409409f422d4f89db`. Mục tiêu: một St
 
 | Finding | Trạng thái trên nhánh này | Tiêu chí đóng |
 |---|---|---|
-| F01 lifecycle production/publishing | OPEN | Một thành phẩm đã duyệt đi thẳng tới handoff, SHA kiểm tra lại |
+| F01 lifecycle production/publishing | IMPLEMENTED (Studio → handoff) | Một thành phẩm đã duyệt đi thẳng tới handoff, SHA kiểm tra lại |
 | F02 character references | BLOCKED_RUNTIME | POC conditioning với ảnh đã duyệt, benchmark A/B |
 | F03 giới hạn shot local | BLOCKED_RUNTIME | Clip dài hơn được xác nhận trên GPU hoặc adapter khác |
 | F04 mất provider ID | OPEN | Đối soát có chứng cứ, không retry mù |
