@@ -107,7 +107,8 @@ class OwnerAuthVideoFoundationTests(unittest.TestCase):
         endpoint = "/api/film/drafts"
         identifier = "a" * 32
         db = self.root / "drafts.sqlite3"
-        brief = {"idea": "Mèo cam tìm đường về", "seconds": 6, "scene_count": 2, "ratio": "16:9"}
+        brief = {"idea": "Mèo cam tìm đường về", "seconds": 6, "scene_count": None,
+                 "ratio": "16:9", "mode": "still", "duration_mode": "manual"}
         with patch.object(drafts, "DB", db):
             self.assertEqual(self.request("GET", endpoint)[:2], (200, {"drafts": []}))
             self.assertFalse(db.exists())
