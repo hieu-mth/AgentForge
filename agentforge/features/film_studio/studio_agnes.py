@@ -82,10 +82,16 @@ def image_payload(prompt, ratio):
 def image_bytes(body, token, max_bytes):
     from PIL import Image
     result = _request("POST", "/v1/images/generations", token, body)
-    encoded = result["data"][0]["b64_json"]
-    if not isinstance(encoded, str) or len(encoded) > (max_bytes * 4 // 3 + 8):
-        raise ValueError("Agnes image exceeds limit.")
-    raw = base64.b64decode(encoded, validate=True)
+    item = result["data"][0]
+    encoded = item.get("b64_json")
+    if encoded:
+        if not isinstance(encoded, str) or len(encoded) > (max_bytes * 4 // 3 + 8):
+            raise ValueError("Agnes image exceeds limit.")
+        raw = base64.b64decode(encoded, validate=True)
+    else:
+        sink = io.BytesIO()
+        _download_to(item["url"], sink, max_bytes)
+        raw = sink.getvalue()
     with Image.open(io.BytesIO(raw)) as image:
         if image.format not in {"PNG", "JPEG", "WEBP"} or image.width * image.height > 12_000_000:
             raise ValueError("Unsupported Agnes image.")
@@ -134,8 +140,12 @@ def poll(row, token):
         raise ValueError("Unrecognized Agnes job status.")
     if "model" in result and result["model"] != row["model"]:
         raise ValueError("Agnes job model mismatch.")
-    if result["status"] == "completed" and not isinstance(result.get("url"), str):
-        raise ValueError("Missing Agnes output URL.")
+    if result["status"] == "completed":
+        metadata = result.get("metadata")
+        url = result.get("url") or (metadata.get("url") if isinstance(metadata, dict) else None)
+        if not isinstance(url, str) or not url:
+            raise ValueError("Missing Agnes output URL.")
+        result = {**result, "url": url}
     return result
 
 
@@ -154,7 +164,9 @@ def _public_addresses(host):
     return sorted(addresses)
 
 
-def _download(url, target):
+def _download_to(url, stream, max_bytes):
+    if not isinstance(url, str):
+        raise ValueError("Invalid Agnes download URL.")
     parsed = urlsplit(url)
     if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
             or parsed.port not in {None, 443} or not parsed.path or parsed.fragment
@@ -172,16 +184,20 @@ def _download(url, target):
             if response.status != 200:
                 raise ValueError("Agnes download unavailable.")
             total = 0
-            with target.open("xb") as stream:
-                while chunk := response.read(1024 * 1024):
-                    total += len(chunk)
-                    if total > studio_ltx_cloud.MAX_MP4:
-                        raise ValueError("Agnes output exceeds size limit.")
-                    stream.write(chunk)
+            while chunk := response.read(1024 * 1024):
+                total += len(chunk)
+                if total > max_bytes:
+                    raise ValueError("Agnes output exceeds size limit.")
+                stream.write(chunk)
     except (OSError, http.client.HTTPException):
         raise ValueError("Agnes download failed.") from None
     finally:
         conn.close()
+
+
+def _download(url, target):
+    with target.open("xb") as stream:
+        _download_to(url, stream, studio_ltx_cloud.MAX_MP4)
 
 
 def download_normalized(url, target, seconds):
@@ -191,7 +207,7 @@ def download_normalized(url, target, seconds):
         # Normalize provider FPS / dimensions; never synthesize missing duration.
         # Native audio is not advertised until verified against the real provider.
         render._run_process([render._ffmpeg(), "-nostdin", "-n", "-v", "error", "-xerror",
-            "-protocol_whitelist", "file,pipe", "-i", str(raw), "-map", "0:v:0", "-an",
+            "-protocol_whitelist", "file,pipe", "-f", "mov", "-i", str(raw), "-map", "0:v:0", "-an",
             "-vf", "fps=24,scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,setsar=1",
             "-frames:v", str(seconds * 24), "-c:v", "libx264", "-threads", "2",
             "-pix_fmt", "yuv420p", str(target)], cwd=target.parent, timeout=150)

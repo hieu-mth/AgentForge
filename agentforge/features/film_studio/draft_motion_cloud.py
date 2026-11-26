@@ -252,6 +252,8 @@ def _reserve(job, profile, seconds, save):
 def _poll(row, profile):
     if row["endpoint"] not in {"image-to-video", "text-to-video"}:
         raise NeedsReconciliation("Unknown cloud motion endpoint.")
+    if row["model"] != profile.get("model"):
+        raise NeedsReconciliation("Cloud job does not match the assigned model.")
     try:
         return _transport(profile).poll_video(row, _key(profile))
     except ValueError:

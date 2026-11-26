@@ -275,7 +275,8 @@ def validate_profile(value, *, profile_id=None, preview=False):
 def _save_profile(value, api_key, profiles):
     if not isinstance(value, dict) or "api_key_protected" in value:
         raise ModelConfigError("Invalid model profile")
-    if value.get("provider") not in {"anthropic", "openai", "elevenlabs", "ltx_cloud", "agnes"} or "base_url" not in value:
+    adapter = ADAPTERS.get(value.get("provider"), {})
+    if adapter.get("connection") != "cloud" or "base_url" not in adapter.get("defaults", {}) or "base_url" not in value:
         if api_key is not None:
             raise ModelConfigError("API key chỉ dùng với endpoint Cloud nhập trực tiếp")
         return validate_profile(value)
@@ -411,12 +412,11 @@ def _orchestrator_catalog(state, profiles, routes):
                    if orchestrator_policy.compatible(kind, profile)]
         capabilities.append({
             "id": key, "label": label, "kind": kind, "tool": tool,
-            "adapter": ("COMFYUI_FLUX" if key == "image.generate" and "flux" in profiles.get(ref, {})
-                        else "EXISTING_TOOL" if key in {"film.assemble", "ops.monitor"}
-                        else "NONE"),
+            "adapter": ("EXISTING_TOOL" if kind == "tool" else
+                        (capability_contract(key, profiles[ref])["adapter"] or "NONE") if ref in profiles else "NONE"),
             "model_ref": ref, "options": sorted(options),
-            "status": ("LOCAL_RUNTIME" if key == "image.generate"
-                       and "flux" in profiles.get(decision.get("model_ref"), {}) else decision["status"]),
+            "status": ("LOCAL_RUNTIME" if key == "image.generate" and decision.get("model_ref") in profiles
+                       and not is_cloud(profiles[decision["model_ref"]]) else decision["status"]),
             "existing_route": route is not None and kind != "tool",
         })
     return {"policy": policy, "capabilities": capabilities,
@@ -640,7 +640,7 @@ def _draft_bindings(state, *, moving, planning=False, motion_ref=None, direct_cl
             raise ModelConfigError(f"{capability}: chưa phân công model cho Studio.")
         if not profile or not profile["enabled"]:
             raise ModelConfigError(f"{capability}: hồ sơ {ref} đã bị xóa hoặc đang tắt.")
-        permission = "call_cloud" if ADAPTERS[profile["provider"]]["connection"] == "cloud" else "call_local"
+        permission = "call_cloud" if is_cloud(profile) else "call_local"
         if not permissions[permission]:
             raise PermissionError(f"{capability}: chưa cấp quyền {permission} trong AI điều phối.")
         if not orchestrator_policy.runtime_adapter(orchestrator_policy.KINDS[capability], profile):
@@ -667,7 +667,7 @@ def _catalog(revision, state):
         elif not orchestrator_policy.compatible(route["kind"], profiles[selected]):
             status = "INCOMPATIBLE"
         else:
-            status = "LOCAL_RUNTIME" if key == "image.generate" and "flux" in profiles[selected] else "CONFIG_ONLY"
+            status = "LOCAL_RUNTIME" if key == "image.generate" and not is_cloud(profiles[selected]) else "CONFIG_ONLY"
         routes.append({**route, "model_ref": selected,
                         "source": ("owner" if key in refs else "system"),
                        "status": status,
@@ -752,7 +752,7 @@ def vision_binding(*, db_path=None):
         raise ModelConfigError("vision.qa: hãy phân công model có hỗ trợ hình ảnh trong AI điều phối.")
     policy = _active_policy(state)
     permissions = policy["permissions"]
-    permission = "call_cloud" if profile["provider"] in {"openai", "anthropic", "chatgpt"} else "call_local"
+    permission = "call_cloud" if is_cloud(profile) else "call_local"
     if (policy["mode"] == "MANUAL" or not permissions["assign_models"] or not permissions[permission]
             or not permissions["run_tools"] or "ffmpeg" not in policy["tools"]):
         raise PermissionError("vision.qa: cần cấp quyền model và công cụ FFmpeg trong AI điều phối.")
@@ -1053,6 +1053,8 @@ def _production_options(state):
     else:
         assigned_ready = not is_cloud(motion)
     assigned_cloud = is_cloud(motion)
+    cloud_minimum = min((2 * c["min_billable_seconds"] for c in candidates if c["method"] != "local"),
+                        default=production_router.MIN_CLOUD_SECONDS)
     return {"methods": [
         {"id": "assigned", "available": not assigned_cloud, "execution_ready": assigned_ready},
         {"id": "auto", "available": bool(candidates), "execution_ready": any(ready.values())},
@@ -1060,6 +1062,6 @@ def _production_options(state):
     ], "brief_limit": BRIEF_LIMIT,
         "duration_bounds": {"motion": draft_timeline.duration_bounds(True),
                             "still": draft_timeline.duration_bounds(False)},
-        "min_cloud_seconds": production_router.MIN_CLOUD_SECONDS,
+        "min_cloud_seconds": cloud_minimum,
         "max_cloud_seconds": production_router.MAX_CLOUD_SECONDS,
-        "auto_min_cloud_seconds": 0 if by_method["local"] else production_router.MIN_CLOUD_SECONDS}
+        "auto_min_cloud_seconds": 0 if by_method["local"] else cloud_minimum}
