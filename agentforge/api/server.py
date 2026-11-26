@@ -2,6 +2,7 @@
 import argparse
 import hmac
 import json
+import logging
 import secrets
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -14,6 +15,7 @@ from agentforge.features.film_studio.draft_pipeline import DraftNotFound, DraftS
 from agentforge.api.routes.mutations import _owner_action
 
 MAX_BODY = 65536
+LOG = logging.getLogger(__name__)
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -43,6 +45,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
     def _reply_headers(self, code, mime, length, headers=()):
+        self._response_started = True
         self.send_response(code)
         self.send_header("Content-Type", mime)
         self.send_header("Content-Length", str(length))
@@ -67,6 +70,13 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _blocked(self, code=403, error="forbidden"):
         self._reply(code, {"error": error})
+
+    def _unexpected(self, code):
+        # Never log provider exceptions, request bodies, URLs or query strings.
+        LOG.error("Owner API unexpected failure code=%s", code)
+        if not getattr(self, "_response_started", False):
+            return self._reply(500, {"error": "internal_error", "code": code,
+                                     "message": "Check local video job status before any retry"})
 
     def do_GET(self):
         if not self._host_ok():
@@ -94,6 +104,10 @@ class _Handler(BaseHTTPRequestHandler):
             return self._reply(503, {"error": "draft_storage_unavailable", "message": str(exc)})
         except (ValueError, KeyError, PermissionError, TypeError, FileNotFoundError):
             return self._blocked(404, "not_found")
+        except (BrokenPipeError, ConnectionResetError):
+            return  # Client abandoned the response.
+        except Exception:
+            return self._unexpected("OWNER_API_GET_UNEXPECTED")
 
     def _read_json(self, max_body=MAX_BODY):
         if self.headers.get("Content-Type", "").lower() != "application/json":
@@ -150,9 +164,10 @@ class _Handler(BaseHTTPRequestHandler):
             msg = str(exc)[:180]
             return self._reply(400, {"error": type(exc).__name__,
                                      "message": msg})
+        except (BrokenPipeError, ConnectionResetError):
+            return
         except Exception:
-            return self._reply(500, {"error": "internal_error",
-                                     "message": "Check local video job status before any retry"})
+            return self._unexpected("OWNER_API_POST_UNEXPECTED")
 
     def do_PUT(self):
         return self._blocked(405, "method_not_allowed")
