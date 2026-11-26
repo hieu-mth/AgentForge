@@ -730,17 +730,39 @@ try {
   // OAuth status is an external-account observation, not part of the real SQLite
   // profile registration fixture. Exercise both states without depending on runner credentials.
   let oauthConnected=false;
-  let oauthChecks=0;
+  let oauthChecks=0, oauthLists=0;
   await settings.route('**/api/model-hub/chatgpt',route=>{
     const body=route.request().postDataJSON();
-    if(body.ack!=='CHATGPT_STATUS'||body.account_ref!=='owner')
-      throw new Error('Unexpected OAuth action in profile registration: '+body.ack);
-    oauthChecks++;
-    return route.fulfill({json:{account_ref:'owner',connected:oauthConnected}});
+    if(body.account_ref!=='owner')throw new Error('Unexpected OAuth account');
+    if(body.ack==='CHATGPT_STATUS'){
+      oauthChecks++;
+      return route.fulfill({json:{account_ref:'owner',connected:oauthConnected}});
+    }
+    if(body.ack==='LIST_CHATGPT_MODELS'&&oauthConnected){
+      oauthLists++;
+      return route.fulfill({json:{account_ref:'owner',connected:true,models:[{slug:'fixture-gpt',display_name:'Fixture GPT'}]}});
+    }
+    throw new Error('Unexpected OAuth action in profile registration: '+body.ack);
   });
   await registerDialog.getByText('Cloud',{exact:true}).click();
   await registerDialog.getByText('Kết nối ChatGPT qua OAuth',{exact:true}).waitFor();
+  const checkOAuth=registerDialog.getByRole('button',{name:'Kiểm tra',exact:true});
+  const listOAuth=registerDialog.getByRole('button',{name:'Lấy danh sách model',exact:true});
+  await checkOAuth.waitFor();
+  if(oauthChecks||oauthLists||await listOAuth.count())
+    throw new Error('Opening Cloud must not check OAuth or expose the model catalog');
+  await checkOAuth.click();
   await registerDialog.getByRole('button',{name:'Liên kết ChatGPT',exact:true}).waitFor();
+  if(oauthChecks!==1||oauthLists||await listOAuth.count())
+    throw new Error('Disconnected account must not expose the model catalog');
+  oauthConnected=true;
+  await checkOAuth.click();
+  await registerDialog.getByText('Đã kết nối tài khoản ChatGPT',{exact:true}).waitFor();
+  await listOAuth.waitFor();
+  if(oauthChecks!==2||oauthLists)throw new Error('Checking OAuth must not fetch models automatically');
+  await listOAuth.click();
+  await registerDialog.getByRole('combobox',{name:'Model ChatGPT',exact:true}).waitFor();
+  if(oauthLists!==1)throw new Error('Explicit catalog request missing');
   const cloudAdapter=registerDialog.getByRole('combobox',{name:'Chuẩn kết nối'});
   await cloudAdapter.click();
   const cloudLabels=['ChatGPT','OpenAI API','Anthropic API','LTX Video API','ElevenLabs API'];
@@ -930,8 +952,9 @@ try {
     await settings.getByRole('button',{name:'Đăng ký model'}).click();
     oauthConnected=true;
     await registerDialog.getByText('Cloud',{exact:true}).click();
-    await registerDialog.getByText('Đã kết nối tài khoản ChatGPT',{exact:true}).waitFor();
-    await registerDialog.getByRole('button',{name:'Lấy danh sách model',exact:true}).waitFor();
+    await checkOAuth.waitFor();
+    if(oauthChecks!==2||oauthLists!==1||await listOAuth.count())
+      throw new Error('Reopening the dialog reused or automatically checked OAuth');
     await registerDialog.getByRole('combobox',{name:'Chuẩn kết nối'}).click();
     await openOptions.filter({hasText:/^Anthropic API$/}).click();
     await registerDialog.getByLabel('Model ID',{exact:true}).fill('fixture-cloud');
@@ -954,8 +977,8 @@ try {
     await settings.getByText('Chưa kiểm tra',{exact:true}).first().waitFor();
     await settings.getByText('Đã lưu hồ sơ model',{exact:true}).waitFor();
   }
-  if(oauthChecks<(process.platform==='win32'?2:1))
-    throw new Error('OAuth status was not requested for each Cloud registration');
+  if(oauthChecks!==2||oauthLists!==1)
+    throw new Error('OAuth requests must match explicit Owner actions');
   await settings.unroute('**/api/model-hub/chatgpt');
   const concurrent=await browser.newContext();
   const login2=await concurrent.request.post(policyOrigin+'/api/login',{
