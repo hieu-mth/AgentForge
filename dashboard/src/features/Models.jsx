@@ -1,6 +1,6 @@
 import {AppTooltip} from '../components/AppTooltip.jsx';
 import { useState } from 'react';
-import { App as AntApp, Alert, Button, Card, Empty, Grid, Select,
+import { App as AntApp, Alert, Button, Card, Empty, Grid,
   Space, Table, Typography } from 'antd';
 import {AppstoreOutlined,DeleteOutlined,DesktopOutlined,HistoryOutlined,PlusOutlined,ReloadOutlined} from '@ant-design/icons';
 import {SectionTitle,SettingsHeading,SettingsStatus,Stat} from '../components/settings.jsx';
@@ -8,7 +8,7 @@ import {useResource, ResourceStatus} from '../use_resource.jsx';
 import {displayStatus} from '../environment_format.js';
 import {ModelProfileDialog} from './ModelProfileDialog.jsx';
 import {FluxProbeDialog} from './FluxProbeDialog.jsx';
-import {configurableProfiles,outputSummary,profileCapability,readinessLabels,readinessReason} from '../model_hub_ui.js';
+import {outputSummary,profileCapability,readinessLabels,readinessReason} from '../model_hub_ui.js';
 import {requestError} from '../api.js';
 
 const { Text, Paragraph } = Typography;
@@ -204,25 +204,6 @@ export function ModelHub({mutate}) {
           {title:'Thao tác',responsive:desktopColumns,render:(_,row)=>profileActions(row)},
         ]}/>
     </Card>
-    {hub?.routes?.some(route=>route.kind!=='rules')&&<Card className="env-panel"
-      title={<SectionTitle icon={<AppstoreOutlined/>} title="Phân công model"
-        description="Nơi duy nhất phân công model cho từng năng lực. Quyền thực thi được quản lý tại AI điều phối."/>}>
-      <div className="model-route-list">{hub.routes.filter(route=>route.kind!=='rules').map(route=>{
-        const options=configurableProfiles(profiles,route.id);
-        return <label key={route.id} className="model-route">
-          <strong>{route.label}</strong>
-          <Select showSearch optionFilterProp="label" aria-label={'Model cho '+route.label} value={route.model_ref??''}
-            options={[{value:'',label:'Chưa gán'},...options.map(profile=>({value:profile.id,
-              label:profile.id+' · '+profile.model+(byAdapter[profile.provider]?.connection==='cloud'?' · Cloud':' · Local')})),
-              ...(route.model_ref&&!options.some(profile=>profile.id===route.model_ref)
-                ?[{value:route.model_ref,label:route.model_ref+' · Không khả dụng',disabled:true}]:[])]}
-            onChange={model=>update(model?'/api/model-hub/route':'/api/model-hub/reset',{
-              ack:model?'SET_MODEL_ROUTE':'RESET_MODEL_ROUTE',expected_revision:hub.revision,task_id:route.id,
-              ...(model?{model_ref:model}:{}),
-            },'Cập nhật phân công model?',route.label+' · '+(model||'Chưa gán'))}/>
-        </label>;
-      })}</div>
-    </Card>}
     <div className="model-history">
       <Button type="text" size="small" icon={<HistoryOutlined/>} disabled={!hub?.revision} onClick={rollback}>
         Khôi phục phiên bản trước

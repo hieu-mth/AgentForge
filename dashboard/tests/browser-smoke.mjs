@@ -680,7 +680,7 @@ try {
     throw new Error('Fresh Owner Model Hub must not preload any model');
   await settings.goto(policyOrigin+'/dashboard/#/orchestrator',{waitUntil:'networkidle'});
   await settings.getByRole('heading',{name:'AI điều phối tác vụ',exact:true}).waitFor();
-  for(const title of ['Chế độ thực thi','Model thực thi',
+  for(const title of ['Chế độ thực thi','Phân công model',
     'An toàn runtime','Quyền thực thi']){
     await settings.getByText(title,{exact:true}).waitFor();
   }
@@ -690,15 +690,12 @@ try {
     throw new Error('Duplicate model assignment editor in policy screen');
   const savePolicy=settings.locator('.orchestrator-header').getByRole('button',{name:'Lưu cấu hình'});
   const openOptions=settings.locator('.ant-select-dropdown:visible .ant-select-item-option-content');
-  await settings.getByRole('button',{name:'Quản lý phân công model'}).click();
-  await settings.waitForURL('**/#/models');
   const motionModel=settings.getByRole('combobox',{name:'Model cho Tạo chuyển động'});
   await motionModel.click();
   await openOptions.filter({hasText:'Chưa gán'}).waitFor();
   if(await openOptions.filter({hasText:/local_primary|cloud_primary/}).count())
     throw new Error('Video binding offers incompatible text models');
   await motionModel.press('Escape');
-  await settings.goto(policyOrigin+'/dashboard/#/orchestrator');
   for(const name of ['Model điều phối','Model không khả dụng','Model được phép đề xuất',
     'Tác vụ GPU đồng thời','Lượt gọi API trả phí mỗi ngày','Số lần thử lại tối đa']){
     if(await settings.getByLabel(name,{exact:true}).count())throw new Error('Retired control still visible: '+name);
@@ -706,6 +703,7 @@ try {
   const planToggle=settings.getByRole('switch',{name:'Lập kế hoạch',exact:true});
   await planToggle.click();
   await settings.getByText('Có thay đổi chưa lưu',{exact:true}).waitFor();
+  if(await motionModel.isEnabled())throw new Error('Assignment can overwrite unsaved policy edits');
   await settings.setViewportSize({width:1280,height:850});
   const tabs=settings.locator('.af-section-tabs');
   const modelTab=tabs.locator('[data-node-key="models"] [role="tab"]');
@@ -803,6 +801,8 @@ try {
   await settings.unroute('**/api/model-hub/readiness');
   console.log('Model adapter selection, validation and real SQLite registration: PASS');
   const planModel=settings.getByRole('combobox',{name:'Model cho Lập kế hoạch'});
+  if(await planModel.count())throw new Error('Duplicate assignment editor in Model AI');
+  await settings.goto(policyOrigin+'/dashboard/#/orchestrator');
   await planModel.click();
   await openOptions.filter({hasText:/local_primary/}).click();
   await settings.getByRole('dialog').getByRole('button',{name:'Xác nhận'}).click();
@@ -877,11 +877,15 @@ try {
     throw new Error('Editor did not load the persisted model');
   await registerDialog.getByRole('button',{name:'Hủy',exact:true}).click();
   await registerDialog.waitFor({state:'hidden'});
-  // Resetting permissions must not unassign the model. Unassign at Model AI.
+  // Resetting permissions must not unassign the model. Unassign at AI điều phối.
+  await settings.goto(policyOrigin+'/dashboard/#/orchestrator');
+  await planModel.waitFor();
+  if(!(await settings.locator('.model-route').filter({has:planModel}).innerText()).includes('local_primary'))throw new Error('Policy reset removed the assignment');
   await planModel.click();
   await openOptions.filter({hasText:'Chưa gán'}).click();
   await settings.getByRole('dialog').getByRole('button',{name:'Xác nhận'}).click();
   await settings.getByRole('dialog').waitFor({state:'hidden'});
+  await settings.goto(policyOrigin+'/dashboard/#/models');
   await modelRow.getByText('Xóa',{exact:true}).click();
   await settings.getByRole('dialog').getByRole('button',{name:'Xác nhận'}).click();
   await settings.getByText('Chưa đăng ký model. Chọn Đăng ký model để bắt đầu.',{exact:true}).waitFor();
