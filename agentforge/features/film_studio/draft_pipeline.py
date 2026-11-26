@@ -1281,8 +1281,12 @@ def _work(job, slot, retry_motion_job=None):
                 try:
                     with model_hub.local_inference_slot():
                         _release_idle_image(image_profile)
-                except OSError:
-                    pass
+                except Exception:
+                    # Offloading is best-effort. Never let adapter/slot cleanup errors
+                    # prevent the terminal checkpoint or release of the worker slot.
+                    # Do not log exception text: it may contain provider credentials.
+                    LOG.warning("Studio image cleanup failed production=%s stage=%s code=STUDIO_IMAGE_CLEANUP_FAILED",
+                                job["id"], job["stage"])
             activity = job.pop("activity", {})
             if job["status"] == "FAILED" and activity.get("scene"):
                 job["failed_scene"] = activity["scene"]
