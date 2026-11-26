@@ -135,6 +135,37 @@ class CloudMotionIntegrationTests(unittest.TestCase):
                 self.assertEqual(request.call_count, 1)
                 self.assertEqual(motion._row(scene["motion_job"])["state"], "SUBMITTING")
 
+    def test_duplicate_remote_id_is_not_bound_or_resubmitted(self):
+        import tempfile
+        from pathlib import Path
+        from contextlib import closing
+        from unittest.mock import patch
+        from agentforge.features.film_studio.draft_resources import NeedsReconciliation
+
+        existing, remote = "a"*32, "b"*32
+        with tempfile.TemporaryDirectory() as tmp, patch.object(motion, "DB", Path(tmp)/"ledger.db"):
+            with closing(motion._db(True)) as conn, conn:
+                conn.execute("INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?,?)",
+                    (existing, "c"*32, "text-to-video", "ltx-2-3-fast", 6,
+                     "d"*64, "SUBMITTED", remote, None))
+            job = {"production_plan": {"method": "cloud", "max_cloud_seconds": 6}}
+            scene = {"frames": 144, "image_prompt": "Cat", "description": "Cat walks", "audio": "Quiet"}
+            profile = {"model": "ltx-2-3-fast"}
+            prepared = ("e"*32, job, Path(tmp), motion.workflow_sha())
+            with (patch.object(motion, "_key", return_value="fixture"),
+                  patch.object(motion, "_reserve"),
+                  patch.object(motion.ops_control, "require_active"),
+                  patch.object(motion.ltx, "_request", return_value={"id": remote}) as request):
+                for _ in range(2):
+                    with self.assertRaises(NeedsReconciliation):
+                        motion.run_shot(scene, 0, prepared, profile, lambda: None, lambda: False)
+                request.assert_called_once()
+                self.assertEqual(request.call_args.args[0], "POST")
+            self.assertEqual(motion._row(existing)["provider_id"], remote)
+            pending = motion._row(scene["motion_job"])
+            self.assertEqual(pending["state"], "SUBMITTING")
+            self.assertIsNone(pending["provider_id"])
+
     def test_recover_missing_provider_id_is_get_only_and_owner_attested(self):
         import tempfile
         from pathlib import Path
