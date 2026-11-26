@@ -2,7 +2,7 @@
   "entry": [
     "src/main.jsx",
     "tests/*.test.js",
-    "tests/browser-smoke.mjs",
+    "tests/*.mjs",
     "vite.config.js"
   ],
   "project": [
