@@ -27,7 +27,7 @@ Mở http://127.0.0.1:8780/dashboard/ và đăng nhập bằng mã Owner in tạ
 4. Kiểm tra, chỉnh sửa storyboard; tùy chọn AI lập liên tục chuyển động và kế hoạch âm thanh; duyệt phiên bản trước khi tạo media.
 5. Xem video, kiểm tra chất lượng và duyệt thành phẩm. Xuất bản là thao tác riêng.
 
-Checkout mới không có model mặc định. Không tự tải weights, cài runtime, gọi cloud hay public YouTube.
+Checkout mới không có model mặc định. Nếu nâng cấp từ Model Hub schema cũ, xem [khởi tạo lại Model Hub](docs/RUNTIME.md#khởi-tạo-lại-model-hub); ứng dụng không tự xóa DB. Không tự tải weights, cài runtime, gọi cloud hay public YouTube.
 
 ## Tài liệu
 

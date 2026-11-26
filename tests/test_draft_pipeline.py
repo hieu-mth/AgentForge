@@ -69,7 +69,7 @@ class DraftTests(unittest.TestCase):
                 "model": "writer:8b", "base_url": "http://127.0.0.1:11434"}
         self.registry_change("SAVE_MODEL_PROFILE", profile=text)
         policy = draft.model_hub.orchestrator_policy.defaults()
-        policy["permissions"].update(plan=True, assign_local=True, call_local=True)
+        policy["permissions"].update(plan=True, assign_models=True, call_local=True)
         for task in ("general.text", "film.storyboard"):
             self.registry_change("SET_MODEL_ROUTE", task_id=task, model_ref=text["id"])
         self.registry_change("SAVE_ORCHESTRATOR", policy=policy)
@@ -157,7 +157,7 @@ class DraftTests(unittest.TestCase):
         draft._save(job)
         self.registry_change("SAVE_MODEL_PROFILE", profile={
             "id": "cloud_config", "provider": "anthropic", "model": "unused", "enabled": True,
-            **draft.model_hub.ADAPTERS["anthropic"]["legacy_defaults"]})
+            **draft.model_hub.ADAPTERS["anthropic"]["environment_defaults"]})
         saved = draft._read(self.ident)
         current, _, legacy = draft._studio_bindings(saved)
         self.assertGreater(current, revision)
@@ -201,7 +201,6 @@ class DraftTests(unittest.TestCase):
               patch.object(draft, "_ask", return_value={"ids": ["cat"]}) as ask):
             self.assertEqual(draft._select_cast(job, bindings, "A cat")["cat"]["reference_version"], 3)
             self.assertEqual(ask.call_args.args[0]["id"], "owner_story")
-            policy = draft.model_hub.orchestrator_policy.defaults()
             self.registry_change("SET_MODEL_ROUTE", task_id="character.select", model_ref="owner_planner")
             with self.assertRaisesRegex(ValueError, "character.select"):
                 draft._studio_bindings(job)

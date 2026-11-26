@@ -1,4 +1,4 @@
-"""DB-only policy persistence, guardrails, compatibility and rollback."""
+"""Current DB policy persistence, guardrails, and rollback."""
 import copy
 import json
 from contextlib import closing
@@ -85,7 +85,7 @@ class OrchestratorTests(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 self.save({**policy.defaults(), **change})
         self.seed()
-        with self.assertRaisesRegex(ValueError, "tương thích"):
+        with self.assertRaisesRegex(ValueError, "does not support task"):
             self.assign("film.motion", "local_primary", revision=2)
 
     def test_save_reset_and_rollback_share_existing_route_and_revision(self):
@@ -170,7 +170,7 @@ class OrchestratorTests(unittest.TestCase):
                  "enabled": True, **model_hub.ADAPTERS["ltx_cloud"]["environment_defaults"]}
         model_hub.change("SAVE_MODEL_PROFILE", expected_revision=2, db_path=self.db, profile=video)
         p = policy.defaults()
-        p["permissions"].update(plan=True, assign_local=True, call_cloud=True, run_tools=True)
+        p["permissions"].update(plan=True, assign_models=True, call_cloud=True, run_tools=True)
         p["tools"] = ["ffmpeg"]
         self.assign("general.text", "cloud_primary", revision=3)
         self.assign("film.storyboard", "cloud_primary", revision=4)

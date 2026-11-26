@@ -547,7 +547,7 @@ def image_runtime(*, automated=False, db_path=None):
         raise ModelConfigError("Assign an enabled FLUX profile to image.generate")
     permissions = policy["permissions"]
     if automated and (policy["mode"] == "MANUAL" or not (
-            permissions["assign_local"] and permissions["call_local"])):
+            permissions["assign_models"] and permissions["call_local"])):
         raise PermissionError("Owner policy does not allow automated local image calls")
     return revision, profile
 
@@ -611,7 +611,7 @@ def _draft_bindings(state, *, moving, planning=False, motion_ref=None, direct_cl
     policy = _active_policy(state)
     permissions = policy["permissions"]
     if (policy["mode"] == "MANUAL" or not all(permissions[key] for key in
-            ("plan", "assign_local"))):
+            ("plan", "assign_models"))):
         raise PermissionError("Hãy bật lập kế hoạch và phân công model trong AI điều phối.")
     if not planning and (not permissions["run_tools"] or "ffmpeg" not in policy["tools"]):
         raise PermissionError("Hãy bật chạy công cụ local và FFmpeg trong AI điều phối.")
@@ -715,7 +715,7 @@ def audio_generation_binding(capability, *, db_path=None, optional=False):
         raise ModelConfigError(capability + ": cần phân công model âm thanh tương thích.")
     policy = _active_policy(state)
     permissions = policy["permissions"]
-    if (policy["mode"] == "MANUAL" or not all(permissions[key] for key in ("assign_local", "call_cloud", "run_tools"))
+    if (policy["mode"] == "MANUAL" or not all(permissions[key] for key in ("assign_models", "call_cloud", "run_tools"))
             or "ffmpeg" not in policy["tools"]):
         raise PermissionError("Sinh âm thanh cloud cần quyền cloud và FFmpeg.")
     return revision, profile, policy["cloud_call_limit"]
@@ -728,7 +728,7 @@ def speech_binding(*, db_path=None):
         raise ModelConfigError("film.tts: hãy phân công model speech cloud tương thích.")
     policy = _active_policy(state)
     permissions = policy["permissions"]
-    if (policy["mode"] == "MANUAL" or not all(permissions[key] for key in ("assign_local", "call_cloud", "run_tools"))
+    if (policy["mode"] == "MANUAL" or not all(permissions[key] for key in ("assign_models", "call_cloud", "run_tools"))
             or "ffmpeg" not in policy["tools"]):
         raise PermissionError("film.tts: cần cấp quyền cloud và FFmpeg.")
     return revision, profile, policy["cloud_call_limit"]
@@ -743,7 +743,7 @@ def vision_binding(*, db_path=None):
     policy = _active_policy(state)
     permissions = policy["permissions"]
     permission = "call_cloud" if profile["provider"] in {"openai", "anthropic", "chatgpt"} else "call_local"
-    if (policy["mode"] == "MANUAL" or not permissions["assign_local"] or not permissions[permission]
+    if (policy["mode"] == "MANUAL" or not permissions["assign_models"] or not permissions[permission]
             or not permissions["run_tools"] or "ffmpeg" not in policy["tools"]):
         raise PermissionError("vision.qa: cần cấp quyền model và công cụ FFmpeg trong AI điều phối.")
     return revision, profile, policy["cloud_call_limit"]

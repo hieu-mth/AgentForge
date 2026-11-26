@@ -16,6 +16,8 @@ CAPABILITIES = (
     ("ops.monitor", "Giám sát hệ thống", "tool", "Python rules"),
 )
 KINDS = {key: kind for key, _, kind, _ in CAPABILITIES}
+
+
 def compatible(kind, profile):
     return bool(profile and profile.get("enabled") is True and (
         runtime_adapter(kind, profile)))
@@ -53,7 +55,7 @@ def local_adapter(kind, profile):
 def defaults():
     """Only controls enforced by the current runtime."""
     return {"mode": "SUPERVISED",
-            "permissions": dict.fromkeys(("plan", "assign_local", "call_local", "call_cloud", "run_tools"), False),
+            "permissions": dict.fromkeys(("plan", "assign_models", "call_local", "call_cloud", "run_tools"), False),
             "tools": [], "cloud_call_limit": 64}
 
 

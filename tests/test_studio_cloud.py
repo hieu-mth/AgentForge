@@ -44,7 +44,7 @@ class CloudTextTests(unittest.TestCase):
             profile = self.profile()
             model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0, profile=profile)
             policy = orchestrator_policy.defaults()
-            policy["permissions"].update(plan=True, assign_local=True, call_cloud=True)
+            policy["permissions"].update(plan=True, assign_models=True, call_cloud=True)
             policy["cloud_call_limit"] = 2
             model_hub.change("SET_MODEL_ROUTE", expected_revision=1, task_id="general.text", model_ref=profile["id"])
             model_hub.change("SET_MODEL_ROUTE", expected_revision=2, task_id="film.storyboard", model_ref=profile["id"])
@@ -95,7 +95,7 @@ class CloudTextTests(unittest.TestCase):
                 profile = self.profile("anthropic")
                 model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0, profile=profile)
                 policy = orchestrator_policy.defaults()
-                policy["permissions"].update(plan=True, assign_local=True, call_cloud=True)
+                policy["permissions"].update(plan=True, assign_models=True, call_cloud=True)
                 model_hub.change("SET_MODEL_ROUTE", expected_revision=1, task_id="general.text", model_ref=profile["id"])
                 model_hub.change("SET_MODEL_ROUTE", expected_revision=2, task_id="film.storyboard", model_ref=profile["id"])
                 model_hub.change("SAVE_ORCHESTRATOR", expected_revision=3, policy=policy)
