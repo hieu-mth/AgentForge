@@ -55,13 +55,14 @@ export function StudioBriefForm({hub,pending,waiting,onCharacters,onSubmit}){
       <Form.Item className="draft-editor-field" label="Nội dung video" name="idea"
         rules={[{required:true,whitespace:true,message:'Nhập ý tưởng hoặc kịch bản video.'},
           {validator:(_,value)=>Number.isInteger(limit)&&Array.from(value??'').length<=limit?Promise.resolve():
-            Promise.reject(new Error('Nội dung vượt giới hạn '+(limit?.toLocaleString('vi-VN')??'—')+' ký tự.'))}]}
+            Promise.reject(new Error(Number.isInteger(limit)?'Nội dung vượt giới hạn '+limit.toLocaleString('vi-VN')+' ký tự.':'Chưa đọc được giới hạn nội dung.'))}]}
         extra={<span className="draft-editor-count">
-          {characterCount.toLocaleString('vi-VN')} / {limit.toLocaleString('vi-VN')} ký tự
+          {characterCount.toLocaleString('vi-VN')} / {limit?.toLocaleString('vi-VN')??'—'} ký tự
         </span>}>
         <Input.TextArea autoSize={{minRows:7,maxRows:20}} spellCheck={false}
           placeholder="Mô tả ý tưởng hoặc nhập kịch bản bạn muốn AI thực hiện..."/>
       </Form.Item>
+      {hub.error&&!moving&&<Alert type="warning" showIcon message="Chưa đọc được giới hạn sản xuất" action={<Button onClick={hub.reload}>Thử lại</Button>}/>}
       {saveFailed&&<Alert type="warning" showIcon message="Trình duyệt không lưu được nội dung để khôi phục khi tải lại."/>}
       <div className="draft-form-options">
         <Form.Item className="draft-video-mode" name="mode" label="Kiểu video" rules={[{required:true}]}>
