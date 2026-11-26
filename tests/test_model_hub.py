@@ -200,6 +200,11 @@ class ModelHubTests(unittest.TestCase):
             self.assertTrue(all(row["model_ref"] is None for row in result["routes"]))
             self.assertEqual(result["routes"][-1]["status"], "DETERMINISTIC")
             self.assertFalse(result["cloud_fallback"])
+            from agentforge.features.film_studio.studio_contracts import BRIEF_LIMIT
+            from agentforge.features.film_studio.draft_timeline import duration_bounds
+            options = result["production_options"]
+            self.assertEqual(options["brief_limit"], BRIEF_LIMIT)
+            self.assertEqual(options["duration_bounds"], {"motion": duration_bounds(True), "still": duration_bounds(False)})
 
     def test_adapter_catalog_matches_persisted_profile_validation(self):
         expected = {"ollama": "local", "comfyui": "local", "anthropic": "cloud", "openai": "cloud", "elevenlabs": "cloud", "chatgpt": "cloud", "ltx_cloud": "cloud"}
