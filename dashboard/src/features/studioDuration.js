@@ -1,4 +1,5 @@
 // The backend owns timeline constraints and cloud seconds calculations.
+export const videoModes={motion:'Có chuyển động',still:'Ảnh tĩnh (lia và thu phóng)'};
 export function storyboardShotLimits(job){
   const limits=job?.editor_constraints;
   return limits?.layout_editable?[limits.min_scenes,limits.max_scenes]:[0,0];
