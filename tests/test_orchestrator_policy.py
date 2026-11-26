@@ -214,3 +214,40 @@ class OrchestratorTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unassign"):
             model_hub.change("DELETE_MODEL_PROFILE", expected_revision=4,
                              db_path=self.db, profile_id="fixture_flux")
+
+    def test_historical_casting_projects_into_routes_without_read_migration(self):
+        self.seed()
+        _, state = model_hub._read_state(db_path=self.db)
+        state["orchestrator"] = {**policy.defaults(), "mappings": {"character.select": "local_primary"}}
+        with closing(sqlite3.connect(self.db)) as conn, conn:
+            conn.execute("UPDATE hub_state SET payload=?", (json.dumps(state),))
+        before = self.db.read_bytes()
+        snapshot = model_hub.catalog(db_path=self.db)
+        self.assertEqual(self.db.read_bytes(), before)
+        self.assertEqual(next(row for row in snapshot["routes"] if row["id"] == "character.select")["model_ref"], "local_primary")
+        self.assertEqual(snapshot["orchestrator"]["policy"]["mappings"], {})
+        saved = self.save(snapshot["orchestrator"]["policy"], revision=2)
+        _, canonical = model_hub._read_state(db_path=self.db)
+        self.assertEqual(canonical["routes"]["character.select"], "local_primary")
+        self.assertEqual(canonical["orchestrator"]["mappings"], {})
+        self.assertEqual(saved["revision"], 3)
+        reset = model_hub.change("RESET_ORCHESTRATOR", db_path=self.db, expected_revision=3)
+        self.assertEqual(next(row for row in reset["routes"] if row["id"] == "character.select")["model_ref"], "local_primary")
+        self.assertFalse(reset["orchestrator"]["owner_override"])
+
+    def test_production_options_are_pure_and_reflect_admission(self):
+        self.seed()
+        snapshot = model_hub.catalog(db_path=self.db)
+        methods = {row["id"]: row["available"] for row in snapshot["production_options"]["methods"]}
+        self.assertEqual(methods, {"assigned": True, "auto": False, "local": False, "hybrid": False, "cloud": False})
+        video = {"id": "cloud_video", "provider": "ltx_cloud", "model": "ltx-2-3-fast",
+                 "enabled": True, **model_hub.ADAPTERS["ltx_cloud"]["legacy_defaults"]}
+        model_hub.change("SAVE_MODEL_PROFILE", expected_revision=2, db_path=self.db, profile=video)
+        p = policy.defaults()
+        p["permissions"].update(plan=True, assign_local=True, call_cloud=True, run_tools=True)
+        p["tools"] = ["ffmpeg"]
+        snapshot = self.save(p, {"general.text": "cloud_primary", "film.storyboard": "cloud_primary",
+                                 "film.motion": "cloud_video"}, revision=3)
+        self.assertEqual({row["id"]: row["available"] for row in snapshot["production_options"]["methods"]},
+                         {"assigned": False, "auto": True, "local": False, "hybrid": False, "cloud": True})
+        self.assertEqual(snapshot["production_options"]["auto_min_cloud_seconds"], 12)

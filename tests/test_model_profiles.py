@@ -66,9 +66,12 @@ class ModelProfileTests(unittest.TestCase):
                              expected_revision=2, profile_id="studio_local")
         with closing(sqlite3.connect(self.db)) as conn:
             self.assertEqual(conn.execute("SELECT max(revision) FROM hub_history").fetchone()[0], 2)
-        model_hub.change("RESET_ORCHESTRATOR", db_path=self.db, expected_revision=2)
+        reset = model_hub.change("RESET_ORCHESTRATOR", db_path=self.db, expected_revision=2)
+        self.assertEqual(next(row for row in reset["routes"] if row["id"] == "character.select")["model_ref"], "studio_local")
+        model_hub.change("RESET_MODEL_ROUTE", db_path=self.db, expected_revision=3,
+                         task_id="character.select")
         self.assertEqual(model_hub.change("DELETE_MODEL_PROFILE", db_path=self.db,
-                                          expected_revision=3,
+                                          expected_revision=4,
                                           profile_id="studio_local")["profiles"], [])
 
     def test_profile_validation_rejects_secret_and_invalid_cloud_url(self):

@@ -180,7 +180,7 @@ class ModelHubTests(unittest.TestCase):
     def test_capability_catalog_is_video_first_without_model_defaults(self):
         routes = model_hub.route_catalog()
         self.assertEqual(set(routes), {
-            "general.text", "film.storyboard", "film.motion",
+            "general.text", "film.storyboard", "character.select", "film.motion",
             "image.generate", "vision.qa", "film.tts", "film.sound", "film.music", "ops.monitor"})
         self.assertTrue(all("worker" not in item and
                             "default_model" not in item for item in routes.values()))

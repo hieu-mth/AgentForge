@@ -233,7 +233,7 @@ def _plan_production(job, bindings):
     strategy = job["brief"]["route_strategy"]
     cap = job["brief"]["max_cloud_seconds"]
     _, candidates = model_hub.production_candidates(strategy)
-    minimum_cloud = max(12, job["brief"].get("seconds") or 0)
+    minimum_cloud = max(production_router.MIN_CLOUD_SECONDS, job["brief"].get("seconds") or 0)
     candidates = [c for c in candidates if c["method"] == "local" or cap >= minimum_cloud]
     if not candidates:
         raise ValueError("Không có model video phù hợp quyền và ngân sách. Đăng ký model hoặc chọn tuyến đã gán.")
@@ -1497,9 +1497,10 @@ def submit(data):
     if "route_strategy" in data or "max_cloud_seconds" in data:
         if not motion_mode or duration_mode is None or data.get("route_strategy") not in {"auto", "local", "hybrid", "cloud"}:
             raise ValueError("Chọn tuyến sản xuất chỉ áp dụng storyboard motion mới.")
-        cap = _number(data.get("max_cloud_seconds"), 0, 240)
-        if data["route_strategy"] in {"hybrid", "cloud"} and cap < 12:
-            raise ValueError("Cloud video cần ngân sách ít nhất 12 giây cho hai shot.")
+        from agentforge.features.film_studio import production_router
+        cap = _number(data.get("max_cloud_seconds"), 0, production_router.MAX_CLOUD_SECONDS)
+        if data["route_strategy"] in {"hybrid", "cloud"} and cap < production_router.MIN_CLOUD_SECONDS:
+            raise ValueError(f"Cloud video cần ngân sách ít nhất {production_router.MIN_CLOUD_SECONDS} giây cho hai shot.")
         brief.update(route_strategy=data["route_strategy"], max_cloud_seconds=cap)
     try:
         prior = _read(ident)
