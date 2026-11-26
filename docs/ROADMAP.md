@@ -9,7 +9,7 @@ Baseline main: `9db60df28f242abf9ed199c409409f422d4f89db`. Mục tiêu: một St
 | F03 giới hạn shot local | BLOCKED_RUNTIME | Clip dài hơn được xác nhận trên GPU hoặc adapter khác |
 | F04 mất provider ID | PARTIAL (Owner-attested GET-only recovery; duplicate remote IDs rejected) | Đối soát có chứng cứ, không retry mù |
 | F05 compatibility production | PARTIAL (strict motion ledger and canonical creation and planner; historical timeline/receipt compatibility remains) | Một schema mới, archive DB cũ có chủ đích |
-| F06 draft_pipeline | PARTIAL (script analysis and timeline extracted) | Tách theo trách nhiệm, giữ checkpoint/approval |
+| F06 draft_pipeline | PARTIAL (script analysis, timeline and SQLite draft store extracted) | Tách theo trách nhiệm, giữ checkpoint/approval |
 | F07 readiness quá sớm | IMPLEMENTED | Storyboard theo phương pháp cụ thể không cần quyền media/FFmpeg; approval vẫn chặn |
 | F08 OAuth Dashboard | IMPLEMENTED (runtime pending) | Đăng nhập, danh sách model và logout có consent |
 | F09 chẩn đoán lỗi | PARTIAL | Mã lỗi an toàn, checkpoint cuối không bị bỏ qua khi offload lỗi; chưa có logging toàn hệ thống |
@@ -30,3 +30,7 @@ Baseline main: `9db60df28f242abf9ed199c409409f422d4f89db`. Mục tiêu: một St
 - Các bản ghi lịch sử vẫn có thể đọc, xác minh và đối soát theo checkpoint gốc; không tự chuyển đổi SHA hoặc xóa dữ liệu. Không tạo production mới bằng preset. Planner preset đã bị loại bỏ; bản ghi cũ chưa có storyboard phải tạo production mới từ nội dung gốc, không tự gọi model hoặc sửa dữ liệu. Timeline/receipt preset vẫn được giữ để xác minh, chỉnh sửa theo phiên bản và tiếp tục storyboard đã lưu; chưa đóng F05.
 
 Số liệu Overview phân biệt dữ liệu chưa ghi nhận và giá trị 0; hiển thị số bản nháp có counter và attempt hoàn tất. Đây là số liệu đặt chỗ và attempt gần nhất, không phải hóa đơn hay benchmark end-to-end.
+
+## Ranh giới lưu trữ Studio
+
+`draft_store.py` quản lý truy vấn SQLite, đọc/ghi checkpoint, cancellation và hàng đợi. Pipeline giữ quyết định lifecycle, khóa worker và phạm vi transaction admission/deletion. Không đổi schema, đường dẫn DB, digest hoặc cơ chế xác minh media.

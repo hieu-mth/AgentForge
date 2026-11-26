@@ -1598,6 +1598,48 @@ class DraftTests(unittest.TestCase):
             image.assert_not_called()
         self.assertTrue(all(scene["attempts"] == 0 for scene in job["board"]["scenes"]))
 
+    def test_draft_store_read_only_and_atomic_queue_operations(self):
+        from agentforge.features.film_studio import draft_store as store
+
+        db = self.root / "storage.sqlite3"
+        self.assertEqual(store.recent(db), [])
+        self.assertFalse(store.pending(db))
+        self.assertIsNone(store.next_queued(db))
+        self.assertFalse(store.cancellation(db, self.ident))
+        with self.assertRaises(store.DraftNotFound):
+            store.read(db, self.ident)
+        self.assertFalse(db.exists())
+        job = {"id": self.ident, "brief": self.brief, "status": "QUEUED"}
+        with store.connect(db, True) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            self.assertIsNone(store.insert_queued(conn, job, 1))
+            self.assertEqual(store.insert_queued(conn, job, 1), job)
+        self.assertEqual(store.next_queued(db), job)
+        self.assertTrue(store.pending(db))
+        another = {**job, "id": "b"*32}
+        with self.assertRaisesRegex(ValueError, "queue"):
+            with store.connect(db, True) as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                store.insert_queued(conn, another, 1)
+        self.assertEqual(store.recent(db), [job])
+        store.save(db, {**job, "status": "WAITING_RESOURCES"}, updated_at="2026-11-26T00:00:00Z")
+        self.assertIsNone(store.next_queued(db))
+        self.assertTrue(store.other_waiting(db, another["id"]))
+        self.assertFalse(store.other_waiting(db, self.ident))
+        self.assertTrue(store.cancellation(db, self.ident, mark=True))
+        with self.assertRaises(RuntimeError):
+            with store.connect(db, True) as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                store.delete_record(conn, self.ident)
+                raise RuntimeError("rollback fixture")
+        self.assertEqual(store.read(db, self.ident)["status"], "WAITING_RESOURCES")
+        self.assertTrue(store.cancellation(db, self.ident))
+        with store.connect(db, True) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            store.delete_record(conn, self.ident)
+        self.assertFalse(store.pending(db))
+        self.assertFalse(store.cancellation(db, self.ident))
+
     def test_queue_limit_idempotence_and_queued_cancel(self):
         with (patch.object(draft.model_hub, "draft_routes", return_value=(1, {})), patch.object(draft.render, "_ffmpeg"),
               patch.object(draft, "_queue_limit", return_value=1), patch.object(draft, "_dispatch")):
