@@ -18,8 +18,12 @@ STORY_FIELDS = ("description", "image_prompt", "motion_prompt", "character_ids",
                 "creative_camera", "motion_seed", "continuity_plan")
 
 
+def duration_bounds(moving):
+    return {"min": 4 if moving else 6, "max": MAX_DURATION_SECONDS}
+
+
 def duration_limits(seconds, moving, output=LEGACY_MOTION_OUTPUT):
-    minimum = 4 if moving else 6
+    minimum = duration_bounds(moving)["min"]
     if type(seconds) is not int or not minimum <= seconds <= MAX_DURATION_SECONDS:
         raise ValueError(f"Thời lượng phải là số nguyên từ {minimum} đến {MAX_DURATION_SECONDS} giây. "
                          "Hãy rút gọn hành động hoặc chia kịch bản thành nhiều video.")
@@ -137,6 +141,33 @@ def storyboard_layout(job, count, weights=None):
         raise ValueError("Bản nháp ảnh tĩnh cần 2–6 cảnh và ít nhất 2 giây mỗi cảnh.")
     length, extra = divmod(brief["seconds"], count)
     return [(length + (index < extra)) * STILL_FPS for index in range(count)]
+
+
+def editor_constraints(job):
+    """Presentation metadata only; never stored or included in approval digests."""
+    brief = job["brief"]
+    moving = brief.get("mode") == "motion"
+    bounds = duration_bounds(moving)
+    result = {"duration": bounds, "layout_editable": False, "duration_editable": False,
+              "min_scenes": None, "max_scenes": None}
+    if (not job.get("board") or not job.get("storyboard_version")
+            or job.get("status") not in {"STORYBOARD_REVIEW", "REVIEW", "FAILED"}
+            or job["storyboard_version"] >= MAX_VERSIONS
+            or (job.get("duration_plan") or {}).get("content_scene_count")):
+        return result
+    seconds = brief.get("seconds")
+    try:
+        if brief.get("duration_mode") in {"auto", "manual"}:
+            lo, hi = duration_limits(seconds, moving, studio_runtime.job_output(job))
+            result["duration_editable"] = True
+        elif moving:
+            lo, hi = shot_limits(seconds)
+        else:
+            lo, hi = duration_limits(seconds, False)
+    except (ValueError, TypeError, KeyError):
+        return result
+    result.update(layout_editable=lo <= hi, min_scenes=lo, max_scenes=hi)
+    return result
 
 
 def snapshot(job):

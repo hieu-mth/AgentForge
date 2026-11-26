@@ -3,7 +3,6 @@ import {App as AntApp,Button,Card,Form,InputNumber,Select,Switch,Typography} fro
 import {ApartmentOutlined,ControlOutlined,RollbackOutlined,SafetyCertificateOutlined,SaveOutlined,TeamOutlined} from '@ant-design/icons';
 import {SectionTitle,SettingsHeading,SettingsStatus} from '../components/settings.jsx';
 import {useResource,ResourceStatus} from '../use_resource.jsx';
-import {useScreenRefresh} from '../refresh_scope.jsx';
 
 const {Text}=Typography;
 const modeOptions=[
@@ -35,7 +34,7 @@ function PermissionToggle({field,label,description}){
 
 export function Orchestrator({mutate,dirty,setDirty,onNavigate}){
   const resource=useResource('/api/model-hub');
-  useScreenRefresh(()=>dirty?undefined:resource.reload());
+
   return <div className="orchestrator-page">
     <ResourceStatus resource={resource} label="chính sách điều phối"/>
     {resource.data?.orchestrator&&<PolicyEditor key={resource.data.revision}

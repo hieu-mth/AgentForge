@@ -8,7 +8,7 @@ def handle(server, path, request, session=None):
             raise PermissionError("Draft production requires external-tools mode")
         from agentforge.features.film_studio import draft_pipeline
         draft_pipeline.validate_submission_shape(request)
-        return draft_pipeline.submit(request)
+        return draft_pipeline.public_view(draft_pipeline.submit(request))
     if path.startswith("/api/film/drafts/"):
         parts = path.split("/")
         storyboard = {
@@ -53,8 +53,8 @@ def handle(server, path, request, session=None):
         result = draft_pipeline.act(identifier, action, request)
         if action == "storyboard-approve":
             draft_pipeline._dispatch()
-            return draft_pipeline._read(identifier)
-        return result
+            return draft_pipeline.public_view(draft_pipeline._read(identifier))
+        return draft_pipeline.public_view(result)
     if path in {"/api/film/productions/render", "/api/film/productions/voice"}:
         if not server.allow_external_actions:
             raise PermissionError("Explicit Owner external-process mode required")

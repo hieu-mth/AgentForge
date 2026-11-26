@@ -4,7 +4,6 @@ import {FolderOpenOutlined,PlayCircleOutlined,ReloadOutlined,
   SettingOutlined,ToolOutlined,VideoCameraOutlined} from '@ant-design/icons';
 import {SectionTitle,SettingsHeading,SettingsStatus} from '../components/settings.jsx';
 import {useResource,ResourceStatus} from '../use_resource.jsx';
-import {useScreenRefresh} from '../refresh_scope.jsx';
 import {FilmProduction,MotionClips} from './FilmProduction.jsx';
 import {StudioEpisodeDetails} from './StudioEpisodeDetails.jsx';
 import {StudioImages} from './StudioImages.jsx';
@@ -36,7 +35,7 @@ function groupProjects(episodes){
 
 export function MediaStudio({onNavigate,mutate}){
   const episodesResource=useResource('/api/film/productions');
-  useScreenRefresh(episodesResource.reload);
+
   const [tool,setTool]=useState(null);
   const [filter,setFilter]=useState('all');
   const [selected,setSelected]=useState(null);

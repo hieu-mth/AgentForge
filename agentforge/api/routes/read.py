@@ -15,7 +15,7 @@ def dispatch(self, route):
         return self._reply(200, draft_resources.snapshot())
     if route == "/api/film/drafts":
         from agentforge.features.film_studio import draft_pipeline
-        return self._reply(200, {"drafts": draft_pipeline.list_drafts()})
+        return self._reply(200, {"drafts": [draft_pipeline.public_view(job) for job in draft_pipeline.list_drafts()]})
     if route.startswith("/api/film/drafts/"):
         from agentforge.features.film_studio import draft_pipeline
         from agentforge.api.routes.film_preview import _serve
@@ -24,7 +24,7 @@ def dispatch(self, route):
             raise ValueError("Invalid draft route")
         job = draft_pipeline._read(parts[4])
         if len(parts) == 5:
-            return self._reply(200, job)
+            return self._reply(200, draft_pipeline.public_view(job))
         if parts[5] == "cloud-jobs":
             from agentforge.features.film_studio import draft_motion_cloud
             return self._reply(200, {"jobs": draft_motion_cloud.reconciliation_jobs(job)})

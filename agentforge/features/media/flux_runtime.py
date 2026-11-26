@@ -1,5 +1,6 @@
 ﻿"""Execute the bound Model Hub image capability through the visual job ledger."""
 import hashlib
+from importlib import import_module
 import http.client
 import io
 import json
@@ -160,7 +161,7 @@ def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=No
     directory = output_directory(config["output_dir"])
     target = ensure_local_root(directory / (ident + ".png"))
     try:
-        import PIL.Image  # Require the decoder before submitting GPU work.
+        import_module("PIL.Image")  # Require the decoder before submitting GPU work.
     except ImportError:
         raise ValueError("FLUX image verification requires the AgentForge media extra") from None
     draft_resources.require_gpu("image")

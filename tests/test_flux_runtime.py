@@ -201,7 +201,8 @@ class FluxRuntimeTests(unittest.TestCase):
 
     def test_owner_policy_and_concurrent_gpu_admission(self):
         try:
-            import PIL
+            from importlib import import_module
+            import_module("PIL")
         except ImportError:
             self.skipTest("Media extra unavailable")
         with tempfile.TemporaryDirectory() as directory:

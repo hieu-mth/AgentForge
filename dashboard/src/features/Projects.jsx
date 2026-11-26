@@ -1,13 +1,12 @@
 import { Alert, Button, Card, Space, Table, Tag, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { useResource, ResourceStatus } from '../use_resource.jsx';
-import { useScreenRefresh } from '../refresh_scope.jsx';
 
 const { Text } = Typography;
 
 export function Projects() {
   const resource = useResource('/api/video-studio/projects');
-  useScreenRefresh(resource.reload);
+
   const rows = resource.data?.projects || [];
   return <Space direction="vertical" size="large" style={{width:'100%'}}>
     <Alert type="info" showIcon message="Kho dự án video local"

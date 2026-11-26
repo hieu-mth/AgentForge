@@ -3,7 +3,7 @@ import {Alert,Button,Form,Image,Input,Modal,Space,Typography} from 'antd';
 import {NumberField} from '../components/NumberField.jsx';
 import {requestError} from '../api.js';
 
-export const fluxStatus={
+const fluxStatus={
   READY:'Workflow và model khả dụng',GPU_UNAVAILABLE:'Chưa phát hiện GPU CUDA',
   MODEL_UNAVAILABLE:'Thiếu model trong ComfyUI',WORKFLOW_NODE_UNAVAILABLE:'ComfyUI thiếu node của workflow',
   COMFYUI_UNAVAILABLE:'Không kết nối được ComfyUI',COMFYUI_TIMEOUT:'ComfyUI phản hồi quá chậm',

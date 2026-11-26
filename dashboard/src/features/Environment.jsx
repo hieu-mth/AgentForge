@@ -5,7 +5,6 @@ import {AppstoreOutlined, CloudServerOutlined, CodeOutlined, DatabaseOutlined,
   DesktopOutlined, HddOutlined, InfoCircleOutlined, ReloadOutlined,
   SafetyCertificateOutlined, ThunderboltOutlined} from '@ant-design/icons';
 import {useResource, ResourceStatus} from '../use_resource.jsx';
-import {useScreenRefresh} from '../refresh_scope.jsx';
 import {formatCapacity, formatMemory, formatVram, percentUsed, formatChecked, displayStatus,
   statusTone} from '../environment_format.js';
 
@@ -110,7 +109,7 @@ const profileColumns=[
 export function Environment({onNavigate,mutate}){
   const scan=useResource('/api/ops/discovery');
   const {sm}=Grid.useBreakpoint();
-  useScreenRefresh(scan.reload);
+
   const snapshot=scan.data;
   const hw=snapshot?.hardware;
   const gpu=hw?.gpu||{};

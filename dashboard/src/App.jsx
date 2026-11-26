@@ -1,4 +1,4 @@
-import {useCallback,useEffect,useRef,useState} from 'react';
+import {Component,lazy,Suspense,useCallback,useEffect,useRef,useState} from 'react';
 import {Alert,App as AntApp,Button,Drawer,Form,Input,Layout,Menu,Space,Spin,Tabs,Typography} from 'antd';
 import {AppstoreOutlined,ArrowRightOutlined,CodeOutlined,DashboardOutlined,LockOutlined,MenuOutlined,MoonOutlined,
   PlayCircleOutlined,ReloadOutlined,SendOutlined,SettingOutlined,
@@ -6,14 +6,14 @@ import {AppstoreOutlined,ArrowRightOutlined,CodeOutlined,DashboardOutlined,LockO
 import {api,onAuthExpired,requestError} from './api.js';
 import {useThemeMode} from './theme.jsx';
 import {NAV_GROUPS,groupFor,defaultSection,parseSection,hashFor,tabsFor,labelFor} from './navigation.js';
-import {MediaStudio} from './features/MediaStudio.jsx';
-import {CharacterLibrary} from './features/CharacterLibrary.jsx';
-import {Projects} from './features/Projects.jsx';
-import {ModelHub} from './features/Models.jsx';
-import {Orchestrator} from './features/Orchestrator.jsx';
-import {Environment} from './features/Environment.jsx';
-import {Publishing} from './features/Publishing.jsx';
-import {Overview} from './features/Overview.jsx';
+const MediaStudio=lazy(()=>import('./features/MediaStudio.jsx').then(module=>({default:module.MediaStudio})));
+const CharacterLibrary=lazy(()=>import('./features/CharacterLibrary.jsx').then(module=>({default:module.CharacterLibrary})));
+const Projects=lazy(()=>import('./features/Projects.jsx').then(module=>({default:module.Projects})));
+const ModelHub=lazy(()=>import('./features/Models.jsx').then(module=>({default:module.ModelHub})));
+const Orchestrator=lazy(()=>import('./features/Orchestrator.jsx').then(module=>({default:module.Orchestrator})));
+const Environment=lazy(()=>import('./features/Environment.jsx').then(module=>({default:module.Environment})));
+const Publishing=lazy(()=>import('./features/Publishing.jsx').then(module=>({default:module.Publishing})));
+const Overview=lazy(()=>import('./features/Overview.jsx').then(module=>({default:module.Overview})));
 
 const {Header,Sider,Content}=Layout;
 const {Text}=Typography;
@@ -21,6 +21,18 @@ const NAV_ICONS={overview:<DashboardOutlined/>,studio:<VideoCameraOutlined/>,
   characters:<UserOutlined/>,products:<PlayCircleOutlined/>,business:<SendOutlined/>,
   settings:<SettingOutlined/>};
 const MENU_ITEMS=NAV_GROUPS.map(g=>({key:g.key,label:g.label,icon:NAV_ICONS[g.key]}));
+
+class ScreenBoundary extends Component {
+  state={failed:false};
+  static getDerivedStateFromError(){return {failed:true};}
+  render(){
+    if(this.state.failed)return <Alert type="error" showIcon
+      message="Không tải được màn hình"
+      description="Kiểm tra bản build Dashboard và tải lại trang."
+      action={<Button onClick={()=>window.location.reload()}>Tải lại</Button>}/>;
+    return this.props.children;
+  }
+}
 
 function Login({onLogin,error,busy}){
   const [edited,setEdited]=useState(false);
@@ -207,7 +219,7 @@ export default function App(){
             items={tabs.map(t=>({key:t.key,label:t.label}))} onChange={navigate}/>}
           {error&&<Alert closable showIcon type="error" message={requestError(error)}
             onClose={()=>setError(null)} style={{marginBottom:16}}/>}
-          {page}
+          <ScreenBoundary key={section}><Suspense fallback={<div className="loading-screen"><Spin/><Text>Đang tải màn hình…</Text></div>}>{page}</Suspense></ScreenBoundary>
         </div>
       </Content>
     </Layout>

@@ -5,7 +5,6 @@ import {SectionTitle,SettingsStatus} from '../components/settings.jsx';
 import {StudioPreview} from './StudioPreview.jsx';
 import {api} from '../api.js';
 import {useResource, ResourceStatus} from '../use_resource.jsx';
-import {useScreenRefresh} from '../refresh_scope.jsx';
 
 const {Text}=Typography;
 const desktopColumns=['md'];
@@ -37,7 +36,7 @@ export function MotionClips({mutate}){
   const motionResource=useResource('/api/film/motion');
   const {data:motion,loading:motionBusy,reload:reloadMotion}=motionResource;
   const [motionFilename,setMotionFilename]=useState({});
-  useScreenRefresh(reloadMotion);
+
 
   const actionMotion=(job,action)=>{
     const filename=(motionFilename[job.job_id]||'').trim();

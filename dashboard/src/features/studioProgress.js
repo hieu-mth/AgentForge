@@ -1,4 +1,4 @@
-export const productionStages = [
+const productionStages = [
   ['PLANNING','Phân tích kịch bản'],['STORYBOARD','Tạo storyboard'],
   ['IMAGES','Tạo hình ảnh'],['MOTION','Tạo chuyển động'],
   ['RENDER','Dựng video'],['VERIFY','Xác minh kết quả'],

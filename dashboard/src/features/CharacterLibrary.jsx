@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Alert, Button, Card, Col, Form, Image, Input, Modal, Row, Space, Table, Tag, Typography } from 'antd';
 import { useResource, ResourceStatus } from '../use_resource.jsx';
-import { useScreenRefresh } from '../refresh_scope.jsx';
 const { Text, Paragraph } = Typography;
 const FIELDS = [
   ['name','Tên nhân vật',100],['species','Loài / kiểu nhân vật',80],
@@ -18,7 +17,7 @@ export function CharacterLibrary({mutate,onNavigate}) {
   const [form]=Form.useForm();
   const [saving,setSaving]=useState(false);
   const refresh=useCallback(()=>registry.reload(),[registry.reload]);
-  useScreenRefresh(refresh);
+
   const open=character=>{setEditing(character||{});form.setFieldsValue(
     Object.fromEntries(FIELDS.map(([key])=>[key,character?.[key]||''])))};
   const save=async values=>{

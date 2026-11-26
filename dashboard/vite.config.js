@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   base: '/dashboard/',
   plugins: [react()],
-  build: { outDir: 'dist', emptyOutDir: true, assetsDir: 'assets', chunkSizeWarningLimit: 900,
+  build: { manifest: true, outDir: 'dist', emptyOutDir: true, assetsDir: 'assets', chunkSizeWarningLimit: 900,
     rollupOptions: { output: { entryFileNames: 'assets/[name]-[hash].js',
       chunkFileNames: 'assets/[name]-[hash].js', assetFileNames: 'assets/[name]-[hash][extname]' } } },
   server: {

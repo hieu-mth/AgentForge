@@ -1,0 +1,13 @@
+{
+  "entry": [
+    "src/main.jsx",
+    "tests/*.test.js",
+    "tests/*.mjs",
+    "vite.config.js"
+  ],
+  "project": [
+    "src/**/*.{js,jsx}",
+    "tests/**/*.{js,mjs}",
+    "vite.config.js"
+  ]
+}

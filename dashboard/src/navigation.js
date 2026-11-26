@@ -8,10 +8,6 @@ export const NAV_GROUPS = Object.freeze([
   {key:'settings',label:'Cài đặt',tabs:[
     ['models','Model AI'],['orchestrator','AI điều phối tác vụ'],['environment','Môi trường & Tài nguyên']]},
 ]);
-export const DEFAULT_TAB = Object.freeze({
-  overview:'overview',studio:'media-studio',characters:'characters',
-  products:'projects',business:'channels',settings:'models',
-});
 const ROUTES = Object.fromEntries(NAV_GROUPS.flatMap(group=>
   group.tabs.map(([key,label])=>[key,{group:group.key,label}])
 ));
@@ -22,7 +18,7 @@ export function labelFor(section) {
   return ROUTES[section]?.label || 'Tổng quan';
 }
 export function defaultSection(group) {
-  return DEFAULT_TAB[group] || 'overview';
+  return NAV_GROUPS.find(item=>item.key===group)?.tabs[0]?.[0] || 'overview';
 }
 export function tabsFor(group) {
   return (NAV_GROUPS.find(x=>x.key===group)?.tabs || []).map(([key,label])=>({key,label}));

@@ -1331,6 +1331,34 @@ class DraftTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 draft.draft_timeline.timeline(seconds, 9)
 
+    def test_public_view_uses_backend_limits_without_mutating_checkpoint(self):
+        from agentforge.features.film_studio import draft_timeline
+
+        job = {"id": self.ident, "status": "STORYBOARD_REVIEW", "storyboard_version": 1,
+               "brief": {**self.brief, "mode": "motion", "seconds": 24, "duration_mode": "auto"},
+               "motion_plan": {"output": {"fps": 24, "max_frames": 240, "resolution": [1280, 720]}},
+               "board": {"scenes": [{"frames": 145}, {"frames": 240, "motion_job": "existing"},
+                                    {"frames": 48}]},
+               "production_plan": {"method": "cloud"}}
+        before = json.dumps(job, sort_keys=True)
+        view = draft.public_view(job)
+        self.assertEqual(view["editor_constraints"], {
+            "duration": {"min": 4, "max": 60}, "layout_editable": True,
+            "duration_editable": True, "min_scenes": 3, "max_scenes": 16})
+        self.assertEqual(view["cloud_seconds_remaining"], 14)
+        self.assertEqual(json.dumps(job, sort_keys=True), before)
+        self.assertNotIn("editor_constraints", job)
+        for modified in ({**job, "status": "RUNNING"},
+                         {**job, "storyboard_version": draft_timeline.MAX_VERSIONS},
+                         {**job, "duration_plan": {"content_scene_count": 2}}):
+            self.assertFalse(draft.public_view(modified)["editor_constraints"]["layout_editable"])
+        legacy = {**job, "brief": {**self.brief, "mode": "motion", "seconds": 15}}
+        limits = draft.public_view(legacy)["editor_constraints"]
+        self.assertEqual((limits["min_scenes"], limits["max_scenes"]), (8, 9))
+        self.assertFalse(limits["duration_editable"])
+        self.assertEqual(draft.public_view({"id": self.ident, "deleted": True}),
+                         {"id": self.ident, "deleted": True})
+
     def test_historical_30_second_timeline_preserves_frame_budget(self):
         frames = draft.draft_timeline.timeline(30, 16, [1+i%3 for i in range(16)])
         self.assertEqual(sum(frames), 720)

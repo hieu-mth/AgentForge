@@ -29,6 +29,12 @@ jobs:
             python -c "import agentforge, os; from pathlib import Path; from agentforge.paths import REPOSITORY_ROOT; assert Path(agentforge.__file__).resolve().parent == REPOSITORY_ROOT / 'agentforge'; assert REPOSITORY_ROOT == Path(os.environ['GITHUB_WORKSPACE']).resolve()"
             if ($LASTEXITCODE -ne 0) { throw "Python package import failed" }
           } finally { Pop-Location }
+      - name: Install Python static audit tool (CI only)
+        run: python -m pip install ruff==0.11.13
+      - name: Python undefined-name gate
+        run: python -m ruff check agentforge scripts tests --select F821,F822,F823 --output-format concise
+      - name: Python unused-import and variable gate
+        run: python -m ruff check agentforge scripts tests --select F401,F841 --output-format concise
       - name: Compile all Python modules
         run: python -m compileall -q agentforge tests
       - name: Validate Markdown links
@@ -61,12 +67,18 @@ jobs:
       - name: Install Dashboard dependencies
         working-directory: dashboard
         run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Dashboard dead-code and dependency gate
+        working-directory: dashboard
+        run: npm exec --yes --package=knip@5.46.0 --package=typescript@5.8.3 -- knip
       - name: Dashboard unit checks
         working-directory: dashboard
         run: npm run test:navigation
       - name: Dashboard production build
         working-directory: dashboard
         run: npm run build
+      - name: Dashboard initial bundle and lazy screen gate
+        working-directory: dashboard
+        run: node tests/build-layout.mjs
       - name: Dashboard Edge browser smoke
         working-directory: dashboard
         run: npm run test:browser
