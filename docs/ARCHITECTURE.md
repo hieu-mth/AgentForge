@@ -79,7 +79,7 @@ Studio có thể lập storyboard từ nội dung Owner, tạo ảnh và motion 
 - Danh mục capability (`general.text`, `film.storyboard`, `character.select`, `film.motion`, `image.generate`, `vision.qa`, `film.tts`, `film.sound`, `film.music`, `ops.monitor`) được khai báo từ `agentforge/ai/orchestrator_policy.py` và `model_hub.route_catalog()` — chỉ metadata thuộc source, **không chứa model ID mặc định**.
 - Lưu profile và gán route **không chạy model**. Film/image routes `CONFIG_ONLY`; `ops.monitor` deterministic. Studio lấy route đã phân công từ snapshot Model Hub và kiểm tra fingerprint trước dispatch; trạng thái CONFIG_ONLY không tự cấp quyền thực thi.
 - Owner có thể xóa profile chưa được phân công cho năng lực hiện hành. Muốn xóa profile đang được phân công phải bỏ gán trước. Xóa profile không xóa weights, DB khác hay workspace.
-- Model AI là nơi duy nhất chỉnh phân công, AI điều phối quản lý quyền/công cụ/ngân sách. Tất cả phân công nằm trong `routes`, kể cả chọn nhân vật. API chính sách chỉ nhận policy; API route chỉ nhận phân công. Đặt lại chính sách không bỏ gán model. GET không ghi SQLite. Schema và route không còn được hỗ trợ bị từ chối; không tự chuyển đổi dữ liệu cũ.
+- AI điều phối là nơi duy nhất chỉnh phân công và quản lý quyền/công cụ/ngân sách; Model AI chỉ quản lý hồ sơ và kiểm tra model. Tất cả phân công nằm trong `routes`, kể cả chọn nhân vật. API chính sách chỉ nhận policy; API route chỉ nhận phân công. Đặt lại chính sách không bỏ gán model. GET không ghi SQLite. Schema và route không còn được hỗ trợ bị từ chối; không tự chuyển đổi dữ liệu cũ.
 - Các giá trị `api_key_env`, `base_url_env` của cloud profile là **tên biến môi trường**, không phải token; không có cơ chế tự nạp file `.env` ở ứng dụng. Khi dùng kiểu biến môi trường, credentials phải được inject an toàn vào môi trường tiến trình. Cloud text inference dùng quyền call_cloud đã cấp; mỗi production có giới hạn lượt gọi thực thi, không tự fallback.
 - `.env` không nằm trong Git, bị ignore để ngăn lộ bí mật. Không cần tạo file `.env` để chạy local Video Studio; không xóa `.env` sẵn có trên máy Owner bằng Git cleanup.
 
@@ -87,7 +87,7 @@ Chỉ ComfyUI loopback + workflow/SHA/Owner consent thuộc Film Studio mới đ
 
 ## Hợp đồng readiness
 
-Trong **Cài đặt → Model AI**, Owner có thể xem lại và xác thực cấu hình trước khi lưu, phân công hồ sơ theo năng lực và kiểm tra metadata theo yêu cầu. API `POST /api/model-hub/profile/preview` nhận `ack: "PREVIEW_MODEL_PROFILE"`, `expected_revision` và `profile` để xác thực hồ sơ nháp. API key chỉ gửi ở thao tác lưu hồ sơ.
+Trong **Cài đặt → Model AI**, Owner có thể xem lại và xác thực cấu hình trước khi lưu, kiểm tra metadata theo yêu cầu. Phân công hồ sơ theo năng lực tại AI điều phối. API `POST /api/model-hub/profile/preview` nhận `ack: "PREVIEW_MODEL_PROFILE"`, `expected_revision` và `profile` để xác thực hồ sơ nháp. API key chỉ gửi ở thao tác lưu hồ sơ.
 
 `GET /api/model-hub` trả `capability_contracts` cho từng profile, gồm adapter tương thích, mã lý do và giới hạn đầu ra. Để kiểm tra runtime, phiên Owner gửi `POST /api/model-hub/readiness` với CSRF và payload gồm `ack: "CHECK_CAPABILITY_READINESS"`, `profile_id`, `capability` và `expected_revision` lấy từ catalog.
 

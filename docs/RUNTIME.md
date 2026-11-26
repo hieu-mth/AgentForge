@@ -31,7 +31,7 @@ Trước tiên, đăng ký profile Ollama có ID `my_local_model` (hoặc ID kh�
 
 Đăng ký hồ sơ ChatGPT Plan (xem [hướng dẫn OAuth](CHATGPT.md)), OpenAI-compatible hoặc Anthropic-compatible tại Model AI. Endpoint là API base URL (ví dụ `https://provider.example/v1`), model ID và API key do Owner cung cấp. **Kiểm tra** chỉ gọi metadata model; **Chạy thử** gửi một yêu cầu JSON cố định tối đa 64 token đầu ra, có thể phát sinh phí. Một số gateway không hỗ trợ metadata, khi đó dùng Chạy thử để xác nhận inference. Không cần Ollama hoặc ComfyUI.
 
-Tại Model AI, gán model cho Lập kế hoạch và Sáng tạo kịch bản, có thể gán thêm Chọn nhân vật. Trong AI điều phối, bật lập kế hoạch, phân công model, gọi AI cloud và đặt giới hạn lượt gọi phù hợp. Không cần quyền gọi AI local hay FFmpeg khi chỉ tạo storyboard cloud. Backend cần `--allow-external-tools`. Dừng khẩn cấp chặn lượt gọi cloud mới; request đang xử lý có thể hoàn tất. Giới hạn lượt gọi không thay cho ngân sách tiền.
+Tại AI điều phối, gán model cho Lập kế hoạch và Sáng tạo kịch bản, có thể gán thêm Chọn nhân vật. Trong AI điều phối, bật lập kế hoạch, sử dụng model đã phân công, gọi AI cloud và đặt giới hạn lượt gọi phù hợp. Không cần quyền gọi AI local hay FFmpeg khi chỉ tạo storyboard cloud. Backend cần `--allow-external-tools`. Dừng khẩn cấp chặn lượt gọi cloud mới; request đang xử lý có thể hoàn tất. Giới hạn lượt gọi không thay cho ngân sách tiền.
 
 ### ComfyUI, shot thật và Film Studio
 

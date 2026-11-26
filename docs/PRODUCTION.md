@@ -89,7 +89,7 @@ Trong Nội dung & phiên bản, chọn AI lập liên tục chuyển động. M
 
 ## AI đánh giá frame mẫu (pilot có giám sát)
 
-Tại Model AI, gán model hỗ trợ ảnh qua ChatGPT Plan, Ollama, OpenAI-compatible hoặc Anthropic-compatible tại tuyến Kiểm tra chất lượng hình ảnh (vision.qa). Metadata readiness chỉ kiểm tra endpoint, không chứng minh model thực sự hiểu hình ảnh. Bật quyền gọi tương ứng và FFmpeg. Trong storyboard của video đang chờ duyệt, chọn AI đánh giá cảnh; hộp xác nhận thông báo việc gửi ảnh ra cloud và khả năng tính phí. Pipeline kiểm tra SHA video và ảnh, lấy frame đầu/giữa/cuối cảnh và ranh giới trước đó, tạo contact sheet JPEG có giới hạn, gọi đúng model đã gán và lưu kết quả kèm SHA, revision, frame indices. Mỗi lượt cloud được tính vào ngân sách production; không tự fallback hoặc thử lại.
+Tại AI điều phối, gán model hỗ trợ ảnh qua ChatGPT Plan, Ollama, OpenAI-compatible hoặc Anthropic-compatible tại tuyến Kiểm tra chất lượng hình ảnh (vision.qa). Metadata readiness chỉ kiểm tra endpoint, không chứng minh model thực sự hiểu hình ảnh. Bật quyền gọi tương ứng và FFmpeg. Trong storyboard của video đang chờ duyệt, chọn AI đánh giá cảnh; hộp xác nhận thông báo việc gửi ảnh ra cloud và khả năng tính phí. Pipeline kiểm tra SHA video và ảnh, lấy frame đầu/giữa/cuối cảnh và ranh giới trước đó, tạo contact sheet JPEG có giới hạn, gọi đúng model đã gán và lưu kết quả kèm SHA, revision, frame indices. Mỗi lượt cloud được tính vào ngân sách production; không tự fallback hoặc thử lại.
 
 Kết quả PASS/FAIL/UNCERTAIN chỉ đánh giá các frame mẫu, không xác nhận toàn bộ chuyển động, âm thanh hoặc chất lượng điện ảnh. Chưa chạy QA tự động, chưa tự tạo lại và không thay thế Owner review. Cần benchmark model thị giác thực tế trước khi bật tự động.
 

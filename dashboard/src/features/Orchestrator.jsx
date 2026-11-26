@@ -3,6 +3,7 @@ import {App as AntApp,Button,Card,Form,InputNumber,Select,Switch,Typography} fro
 import {ApartmentOutlined,ControlOutlined,RollbackOutlined,SafetyCertificateOutlined,SaveOutlined,TeamOutlined} from '@ant-design/icons';
 import {SectionTitle,SettingsHeading,SettingsStatus} from '../components/settings.jsx';
 import {useResource,ResourceStatus} from '../use_resource.jsx';
+import {configurableProfiles} from '../model_hub_ui.js';
 
 const {Text}=Typography;
 const modeOptions=[
@@ -32,21 +33,42 @@ function PermissionToggle({field,label,description}){
   </div>;
 }
 
-export function Orchestrator({mutate,dirty,setDirty,onNavigate}){
+export function Orchestrator({mutate,dirty,setDirty}){
   const resource=useResource('/api/model-hub');
 
   return <div className="orchestrator-page">
     <ResourceStatus resource={resource} label="chính sách điều phối"/>
     {resource.data?.orchestrator&&<PolicyEditor key={resource.data.revision}
       snapshot={resource.data} mutate={mutate} dirty={dirty} setDirty={setDirty}
-      accept={resource.setData} onNavigate={onNavigate}/>}
+      accept={resource.setData} reload={resource.reload}/>}
   </div>;
 }
 
-function PolicyEditor({snapshot,mutate,dirty,setDirty,accept,onNavigate}){
+function PolicyEditor({snapshot,mutate,dirty,setDirty,accept,reload}){
   const {modal,message}=AntApp.useApp();
   const [form]=Form.useForm();
   const [saving,setSaving]=useState(false);
+  const profiles=snapshot.profiles??[];
+  const byAdapter=Object.fromEntries((snapshot.adapters??[]).map(adapter=>[adapter.id,adapter]));
+
+  function updateRoute(taskId,model,label){
+    if(dirty||saving)return;
+    modal.confirm({
+      title:'Cập nhật phân công model?',content:label+' · '+(model||'Chưa gán')+' · Revision '+snapshot.revision,
+      okText:'Xác nhận',cancelText:'Hủy',
+      onOk:async()=>{
+        setSaving(true);
+        try{
+          const result=await mutate(model?'/api/model-hub/route':'/api/model-hub/reset',{
+            ack:model?'SET_MODEL_ROUTE':'RESET_MODEL_ROUTE',expected_revision:snapshot.revision,task_id:taskId,
+            ...(model?{model_ref:model}:{}),
+          });
+          if(result){accept(result);message.success('Đã lưu phân công model');}
+          else await reload();
+        }finally{setSaving(false);}
+      },
+    });
+  }
   const {policy,owner_override}=snapshot.orchestrator;
   const runTools=Form.useWatch(['permissions','run_tools'],form)??policy.permissions.run_tools;
   const initial={mode:policy.mode,
@@ -91,7 +113,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept,onNavigate}){
     onValuesChange={()=>setDirty(true)} onFinish={save} disabled={saving}>
     <SettingsHeading className="orchestrator-header" title="AI điều phối tác vụ" eyebrow="CHÍNH SÁCH OWNER"
       description={<>
-        Quản lý quyền thực thi, công cụ và ngân sách của Studio. Model được phân công tại Model AI.
+        Phân công model, quản lý quyền thực thi, công cụ và ngân sách của Studio.
         <span className="orchestrator-edit-status" role="status">
           <SettingsStatus tone={dirty?'warn':'neutral'}>
             {dirty?'Có thay đổi chưa lưu':'Không có thay đổi'}
@@ -112,10 +134,23 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept,onNavigate}){
         <Form.Item name="mode" label="Chế độ hoạt động"><Select options={modeOptions}/></Form.Item>
       </div>
     </Card>
-    <Card className="env-panel" title={<SectionTitle icon={<TeamOutlined/>}
-      title="Model thực thi" description="Đăng ký và phân công model ở một nơi duy nhất."/>}>
-      <Button onClick={()=>onNavigate('models')}>Quản lý phân công model</Button>
-    </Card>
+    {snapshot.routes?.some(route=>route.kind!=='rules')&&<Card className="env-panel"
+      title={<SectionTitle icon={<TeamOutlined/>} title="Phân công model"
+        description="Chọn model đã đăng ký tại Model AI cho từng năng lực. Phân công được lưu riêng với chính sách."/>}>
+      {dirty&&<Text type="secondary">Lưu hoặc hủy thay đổi chính sách trước khi phân công model.</Text>}
+      <div className="model-route-list">{snapshot.routes.filter(route=>route.kind!=='rules').map(route=>{
+        const options=configurableProfiles(profiles,route.id);
+        return <label key={route.id} className="model-route">
+          <strong>{route.label}</strong>
+          <Select disabled={dirty||saving} showSearch optionFilterProp="label" aria-label={'Model cho '+route.label} value={route.model_ref??''}
+            options={[{value:'',label:'Chưa gán'},...options.map(profile=>({value:profile.id,
+              label:profile.id+' · '+profile.model+(byAdapter[profile.provider]?.connection==='cloud'?' · Cloud':' · Local')})),
+              ...(route.model_ref&&!options.some(profile=>profile.id===route.model_ref)
+                ?[{value:route.model_ref,label:route.model_ref+' · Không khả dụng',disabled:true}]:[])]}
+            onChange={model=>updateRoute(route.id,model,route.label)}/>
+        </label>;
+      })}</div>
+    </Card>}
     <Card className="env-panel" title={<SectionTitle icon={<ControlOutlined/>}
       title="An toàn runtime" description="Các điều kiện bắt buộc khi xử lý media local"/>}>
       <p>GPU xử lý lần lượt. Studio dừng hoặc giữ checkpoint khi thiếu tài nguyên.</p>
@@ -127,7 +162,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept,onNavigate}){
         <RuleRow title="AI được tự làm gì" description="Chọn từng bước AI được phép tự thực hiện.">
           <PermissionToggle field="plan" label="Lập kế hoạch"
             description="Cho phép Studio lập kế hoạch."/>
-          <PermissionToggle field="assign_models" label="Phân công model"
+          <PermissionToggle field="assign_models" label="Sử dụng model đã phân công"
             description="Cho phép sử dụng model đã phân công hoặc chọn tuyến trong phạm vi cấu hình."/>
           <PermissionToggle field="call_local" label="Gọi model local"
             description="Gửi yêu cầu thực thi đến model local đã được cấp quyền."/>
