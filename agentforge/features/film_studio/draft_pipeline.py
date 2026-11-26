@@ -14,7 +14,7 @@ from uuid import uuid4
 from agentforge import ops_control
 from agentforge.ai import model_hub
 from agentforge.features.film_studio import characters, creative_plan, script_analysis
-from agentforge.features.film_studio import draft_audio, draft_continuity, draft_resources, draft_store, draft_timeline, studio_runtime
+from agentforge.features.film_studio import draft_audio, draft_continuity, draft_lifecycle, draft_resources, draft_store, draft_timeline, studio_runtime
 from agentforge.features.media import render, visual_jobs
 from agentforge.features.film_studio.draft_resources import NeedsReconciliation, ResourceWait
 from agentforge.features.film_studio.draft_store import DraftNotFound, DraftStoreUnavailable, validate_id as _id
@@ -109,12 +109,7 @@ def _save(job):
 
 
 def list_drafts():
-    jobs = draft_store.recent(DB)
-    for job in jobs:
-        job["worker_active"] = job["id"] == ACTIVE
-        if job["status"] == "RUNNING" and not job["worker_active"] and "storyboard_version" in job:
-            job["status"] = "INTERRUPTED"
-    return jobs
+    return [draft_lifecycle.interrupted_view(job, ACTIVE) for job in draft_store.recent(DB)]
 
 
 def jobs_pending():
@@ -1090,14 +1085,9 @@ def _work(job, slot, retry_motion_job=None):
                     # Do not log exception text: it may contain provider credentials.
                     LOG.warning("Studio image cleanup failed production=%s stage=%s code=STUDIO_IMAGE_CLEANUP_FAILED",
                                 job["id"], job["stage"])
-            activity = job.pop("activity", {})
-            if job["status"] == "FAILED" and activity.get("scene"):
-                job["failed_scene"] = activity["scene"]
             with comfy_service.LOCK:
-                if job["status"] != "NEEDS_RECONCILIATION" and _cancellation(job["id"]):
-                    job.update(status="CANCELLED", error=None, video_sha=None)
-                if job.get("attempt_started_at"):
-                    job["attempt_finished_at"] = visual_jobs._now()
+                cancelled = job["status"] != "NEEDS_RECONCILIATION" and _cancellation(job["id"])
+                draft_lifecycle.finish_attempt(job, visual_jobs._now(), cancelled=cancelled)
                 _save(job)
         finally:
             ACTIVE = None
@@ -1112,19 +1102,22 @@ def _start(job, slot, retry_motion_job=None):
         if _cancellation(job["id"]):
             raise DraftCancelled
         comfy_service.reset_idle()
-        job.update(status="RUNNING", error=None)
-        job.pop("error_code", None)
-        job["attempt_started_at"] = visual_jobs._now()
-        job.setdefault("started_at", job["attempt_started_at"])
-        job.pop("attempt_finished_at", None)
-        job.pop("failed_scene", None)
-        job.pop("activity", None)
+        prior = copy.deepcopy(job)
+        draft_lifecycle.begin_attempt(job, visual_jobs._now())
         _save(job)
         snapshot = copy.deepcopy(job)
         ACTIVE = job["id"]
         try:
             retry = {"retry_motion_job": retry_motion_job} if retry_motion_job is not None else {}
             threading.Thread(target=_work, args=(job, slot), kwargs=retry, daemon=True).start()
+        except Exception:
+            # No worker started. Preserve the prior checkpoint, including ambiguous cloud state.
+            ACTIVE = None
+            job.clear()
+            job.update(prior)
+            _save(job)
+            LOG.error("Studio worker launch failed production=%s code=STUDIO_WORKER_START_FAILED", job["id"])
+            raise RuntimeError("STUDIO_WORKER_START_FAILED") from None
         except BaseException:
             ACTIVE = None
             raise
@@ -1514,10 +1507,11 @@ def act(ident, action, data):
             job = _read(ident)
             if job["status"] not in _QUEUE_STATES:
                 raise ValueError("Draft cannot be cancelled")
-            if job["status"] == "RUNNING" and not ACTIVE and job.get("stage") == "MOTION":
+            active_here = ACTIVE == ident
+            if job["status"] == "RUNNING" and not active_here and job.get("stage") == "MOTION":
                 raise ValueError("Cần đối soát tác vụ chuyển động trước khi hủy.")
             _cancellation(ident, mark=True)
-            if job["status"] != "RUNNING" or not ACTIVE:
+            if job["status"] != "RUNNING" or not active_here:
                 job.update(status="CANCELLED", error=None)
                 _save(job)
         _dispatch()
