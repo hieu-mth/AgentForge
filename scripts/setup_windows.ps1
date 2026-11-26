@@ -4,7 +4,8 @@
 .DESCRIPTION
   Without switches, checks versions and runs the safe Python preflight.
   -Install -AllowNetwork explicitly opts into trusted pip/npm dependency installs,
-  writes only .venv, dashboard/node_modules, and dashboard/dist, and builds UI.
+  installs the media and ChatGPT extras used by README/CI, and builds UI.
+  Package installation writes to the virtualenv and Dashboard build directories.
   Does not touch data/, workspace/, .env or model weights; does not start GPU
   tools or publish. Python package installation can contact package registries.
 .EXAMPLE
@@ -101,7 +102,7 @@ $python = $venvPython
 & $python -c "import sys; sys.exit(0 if sys.version_info >= (3, 13) else 2)"
 Assert-Exit "Python must be 3.13+"
 Write-Warning "Installing trusted project dependencies can contact package registries. No data/workspace cleanup."
-& $python -m pip install -e ".[media]"
+& $python -m pip install -e ".[media,chatgpt]"
 Assert-Exit "Install Python package"
 & $npm.Source ci --prefix dashboard --ignore-scripts --no-audit --no-fund
 Assert-Exit "Install Dashboard dependencies"
