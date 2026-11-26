@@ -12,15 +12,13 @@ import {StoryboardReview} from './StoryboardReview.jsx';
 import {ProductionProgress} from './ProductionProgress.jsx';
 import {ScriptContent} from './ScriptContent.jsx';
 import {draftTitle} from './scriptPresentation.js';
-import {MAX_STUDIO_SECONDS,maxMotionShots,minMotionShots} from './studioDuration.js';
+import {MAX_STUDIO_SECONDS,storyboardShotLimits,productionMethodOptions,productionMethodLabels,cloudSecondsBounds} from './studioDuration.js';
 import './studio-draft-progress.css';
 
 const API='/api/film/drafts';
 const editorKey='agentforge.studio.video-brief.v1';
 const briefDefaults={idea:'',durationMode:'auto',targetSeconds:12,ratio:'9:16',mode:'motion',routeStrategy:'assigned',cloudSeconds:0};
-const motionShots={4:2,6:3,15:8,30:15};
 const videoModes={motion:'Có chuyển động',still:'Ảnh tĩnh (lia và thu phóng)'};
-const motionMaxShots={4:2,6:3,15:9,30:16};
 function savedBrief(){
   try {
     const saved=JSON.parse(localStorage.getItem(editorKey));
@@ -90,7 +88,7 @@ function DraftLabel({job}){
       {job.brief.ratio&&<span>{job.brief.ratio}</span>}
       <span>{videoModes[job.brief.mode==='motion'?'motion':'still']}</span>
       {job.duration_plan?.content_scene_count&&<span>{job.duration_plan.content_scene_count} cảnh · {job.brief.scene_count} shot</span>}
-      {job.board&&<span>{job.board.scenes.filter(scene=>scene.asset).length}/{job.board.scenes.length} ảnh</span>}
+      {job.board&&<span>{job.board.scenes.filter(scene=>job.brief.mode==='motion'?scene.motion_sha:scene.asset).length}/{job.board.scenes.length} {job.brief.mode==='motion'?'clip':'ảnh'}</span>}
     </div>
   </div>;
 }
@@ -107,7 +105,12 @@ export function StudioDrafts({mutate,onCharacters}) {
   const manual=(Form.useWatch('durationMode',form)??initialBrief.durationMode)==='manual';
   const {data,reload,setData,...resource}=useResource(API);
   const {data:capacity,reload:refreshCapacity}=useResource(API+'/resources');
-  useScreenRefresh(reload);
+  const hub=useResource('/api/model-hub');
+  useScreenRefresh(()=>Promise.all([reload(),hub.reload()]));
+  const method=values.routeStrategy??'assigned';
+  const methodOptions=productionMethodOptions(hub.data);
+  const cloudBounds=cloudSecondsBounds(hub.data,method);
+  const needsCloudBudget=['auto','hybrid','cloud'].includes(method);
   const busy=useRef(false);
   const request=useRef(null);
   const filmsRef=useRef(null);
@@ -135,12 +138,7 @@ export function StudioDrafts({mutate,onCharacters}) {
   const canEdit=reviewing?.storyboard_version&&['STORYBOARD_REVIEW','FAILED','REVIEW'].includes(reviewing.status);
   const canChangeLayout=canEdit&&!reviewing.duration_plan?.content_scene_count;
   const sceneCount=reviewing?.board.scenes.length;
-  const minScenes=reviewing?.brief.mode==='motion'?
-    (reviewing.brief.duration_mode?minMotionShots(reviewing.brief.seconds,reviewing.motion_plan?.output??
-      reviewing.approved_motion?.output):motionShots[reviewing.brief.seconds]):2;
-  const maxScenes=reviewing?.brief.mode==='motion'?
-    (reviewing.brief.duration_mode?maxMotionShots(reviewing.brief.seconds):motionMaxShots[reviewing.brief.seconds]):
-    Math.min(6,Math.floor((reviewing?.brief.seconds??0)/2));
+  const [minScenes,maxScenes]=storyboardShotLimits(reviewing);
   const running=!listError&&Boolean(active);
   const queued=drafts.filter(job=>job.status==='QUEUED').length;
   const waiting=drafts.filter(job=>job.status==='WAITING_RESOURCES').length;
@@ -240,7 +238,7 @@ export function StudioDrafts({mutate,onCharacters}) {
     const payload={idea:values.idea,mode:values.mode,duration_mode:values.durationMode,
       seconds:values.durationMode==='manual'?values.targetSeconds:null,scene_count:null,
       ratio:motion?'16:9':values.ratio};
-    if(motion&&values.routeStrategy!=='assigned')Object.assign(payload,{route_strategy:values.routeStrategy,max_cloud_seconds:values.cloudSeconds??0});
+    if(motion&&values.routeStrategy&&values.routeStrategy!=='assigned')Object.assign(payload,{route_strategy:values.routeStrategy,max_cloud_seconds:values.cloudSeconds??0});
     const brief=JSON.stringify(payload);
     if(request.current?.brief!==brief)request.current={brief,id:crypto.randomUUID().replaceAll('-','')};
     return run('/start',{...payload,id:request.current.id},result=>{
@@ -299,20 +297,19 @@ export function StudioDrafts({mutate,onCharacters}) {
           loading={pending} disabled={waiting>0||characterCount>limit}>Tạo storyboard</Button>
       </div>
       {moving&&<details className="draft-resource-details">
-        <summary>Tuyến sản xuất V5 · {values.routeStrategy==='assigned'?'Model đã phân công':'Tùy chọn production'}</summary>
+        <summary>Phương pháp sản xuất · {productionMethodLabels[method]??'Chưa chọn'}</summary>
         <Space wrap align="start">
-          <Form.Item name="routeStrategy" label="Phương pháp"><Select style={{width:230}} options={[
-            {value:'assigned',label:'Giữ pipeline V4 / model đã gán'},
-            {value:'auto',label:'AI chọn tuyến'},
-            {value:'local',label:'Local'},
-            {value:'hybrid',label:'Hybrid · ảnh local, video cloud'},
-            {value:'cloud',label:'Cloud video trực tiếp'},
-          ]}/></Form.Item>
-          {['auto','hybrid','cloud'].includes(values.routeStrategy)&&<Form.Item name="cloudSeconds" label="Tối đa giây video trả phí" rules={[{required:true,type:'integer',min:values.routeStrategy==='auto'?0:12,max:240}]}>
-            <NumberField min={values.routeStrategy==='auto'?0:12} max={240} precision={0} suffix="giây"/>
+          <Form.Item name="routeStrategy" label="Phương pháp" rules={[{validator:(_,value)=>
+            methodOptions.some(option=>option.value===value&&!option.disabled)?Promise.resolve():
+              Promise.reject(new Error('Phương pháp chưa khả dụng. Kiểm tra model và quyền thực thi.'))}]}>
+            <Select style={{width:280,maxWidth:'100%'}} loading={hub.loading} options={methodOptions}/>
+          </Form.Item>
+          {needsCloudBudget&&<Form.Item name="cloudSeconds" label="Tối đa giây video cloud" rules={[{required:true,type:'integer',...cloudBounds}]}>
+            <NumberField min={cloudBounds.min} max={cloudBounds.max} precision={0} suffix="giây"/>
           </Form.Item>}
         </Space>
-        <p className="env-muted">Model cloud tối thiểu 6 giây mỗi shot, kể cả đoạn bị cắt ngắn. 0 giây chỉ cho phép local. Chưa gọi video API cho đến khi bạn duyệt storyboard.</p>
+        {hub.error&&<Alert type="warning" showIcon message="Chưa đọc được phương pháp sản xuất" action={<Button onClick={hub.reload}>Thử lại</Button>}/>}
+        <p className="env-muted">Các phương pháp khả dụng dựa trên model và quyền đã cấp. Cloud có thể tính phí theo clip sinh ra, kể cả phần bị cắt. Chỉ gọi video API sau khi duyệt storyboard.</p>
       </details>}
       <details className="draft-resource-details">
         <summary>Thời lượng · {manual?(values.targetSeconds??'—')+' giây':'AI tự đề xuất'}</summary>
@@ -327,7 +324,7 @@ export function StudioDrafts({mutate,onCharacters}) {
         </Space>
       </details>
     </Form>
-    <p className="env-muted">AI đề xuất số cảnh. Studio tạo ảnh{moving?' và chuyển động':''} sau khi bạn duyệt storyboard.</p>
+    <p className="env-muted">AI đề xuất số cảnh. Studio tạo {moving?'video theo phương pháp đã chọn':'ảnh'} sau khi bạn duyệt storyboard.</p>
     </Card>
     <Card ref={filmsRef} className="env-panel studio-drafts-list" title="Video của bạn"
       extra={!listError&&<Button icon={<ReloadOutlined/>} onClick={()=>{reload();refreshCapacity();}}
@@ -391,7 +388,7 @@ export function StudioDrafts({mutate,onCharacters}) {
         </>,
       }))}/>}
     </Card>
-    {reviewing&&<StoryboardReview key={reviewing.id} job={reviewing} busy={pending||running} error={editor?null:error}
+    {reviewing&&<StoryboardReview key={reviewing.id} job={reviewing} modelRoutes={hub.data?.routes} busy={pending||running} error={editor?null:error}
       onClose={()=>setStoryboardId(null)}
       onApprove={()=>run('/'+reviewing.id+'/storyboard-approve',{sha256:reviewing.storyboard_sha},()=>setStoryboardId(null))}
       onEdit={canEdit?(index,scene)=>setEditor({job:reviewing,index,scene}):null}

@@ -367,7 +367,7 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .orchestrator-header .orchestrator-cancel-idle{visibility:hidden}
 .orchestrator-meta{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px}
 .orchestrator-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 20px}
-.orchestrator-fields .ant-form-item,.orchestrator-inline-field.ant-form-item{margin-bottom:0}
+.orchestrator-fields .ant-form-item{margin-bottom:0}
 .orchestrator-fields .ant-form-item-label label{font-weight:600}
 .orchestrator-rule-row{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:20px;
   padding:16px 0}
@@ -412,10 +412,6 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 }
 .orchestrator-fields + .ant-typography{display:block;margin-top:12px}
 .orchestrator-fields + .ant-alert{margin-top:16px}
-.orchestrator-capabilities{display:grid;gap:12px}
-.orchestrator-capabilities section{display:grid;min-width:0;gap:8px;padding:12px;
-  border:1px solid var(--line);border-radius:10px}
-.orchestrator-capabilities h5.ant-typography{margin:0}
 @media(width < 576px){
   .orchestrator-fields,.model-stat-grid,.overview-stats{grid-template-columns:1fr}
   .model-stat-grid .env-stat,.overview-stats .env-stat{min-height:0}

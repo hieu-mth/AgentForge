@@ -21,6 +21,7 @@ export function productionElapsed(job,active,now) {
 export function productionProgress(job) {
   const scenes=job?.board?.scenes??[];
   const moving=job?.brief?.mode==='motion';
+  const directCloud=moving&&job?.production_plan?.method==='cloud';
   const total=scenes.length||job?.brief?.scene_count||0;
   const images=scenes.filter(scene=>scene.asset&&total).length;
   const clips=scenes.filter(scene=>scene.motion_sha&&total).length;
@@ -33,12 +34,12 @@ export function productionProgress(job) {
     MOTION:total>0&&clips===total,RENDER:encoded,VERIFY:verified};
   const status=job?.status;
   const active=status==='RUNNING'&&job?.worker_active!==false;
-  const stages=productionStages.filter(([key])=>key!=='MOTION'||moving).map(([key,label])=>({
+  const stages=productionStages.filter(([key])=>(key!=='MOTION'||moving)&&(key!=='IMAGES'||!directCloud)).map(([key,label])=>({
     key,label,state:key===stage&&status==='FAILED'?'error':
       key===stage&&blockedStatuses.has(status)&&status!=='CANCELLED'?'waiting':
       done[key]?'done':key===stage&&active?'active':'pending',
   }));
-  const completed=Number(planned)+Number(Boolean(job?.board))+images+(moving?clips:0)+Number(encoded)+Number(verified);
-  return {stages,images,clips,total,verified,moving,scenes,active,
-    percent:verified?100:Math.min(99,Math.floor(100*completed/(4+total*(moving?2:1))))};
+  const completed=Number(planned)+Number(Boolean(job?.board))+(directCloud?0:images)+(moving?clips:0)+Number(encoded)+Number(verified);
+  return {stages,images,clips,total,verified,moving,directCloud,scenes,active,
+    percent:verified?100:Math.min(99,Math.floor(100*completed/(4+total*(moving&&!directCloud?2:1))))};
 }

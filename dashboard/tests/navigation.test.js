@@ -87,3 +87,12 @@ test('production progress reflects persisted checkpoints and verified output',()
   job.receipt_sha='receipt';
   assert.equal(productionProgress(job).percent,100);
 });
+
+test('direct cloud progress has no phantom image generation stage',()=>{
+  const job={brief:{mode:'motion'},production_plan:{method:'cloud'},status:'RUNNING',stage:'MOTION',
+    board:{scenes:[{motion_sha:'clip'},{motion_sha:null}]}};
+  const progress=productionProgress(job);
+  assert.equal(progress.directCloud,true);
+  assert.ok(!progress.stages.some(stage=>stage.key==='IMAGES'));
+  assert.equal(progress.percent,50);
+});

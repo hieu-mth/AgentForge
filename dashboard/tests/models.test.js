@@ -64,3 +64,18 @@ test('routing follows revision catalog contracts and preserves cloud configurati
   assert.equal(outputSummary({resolution:[512,288],fps:24,max_frames:49}),'512 × 288 px · 24 FPS · tối đa 49 frame/clip');
   assert.equal(readinessLabels.METADATA_COMPATIBLE,'Metadata tương thích');
 });
+
+import { productionMethodOptions, cloudSecondsBounds, storyboardShotLimits, cloudSecondsRemainingEstimate } from '../src/features/studioDuration.js';
+test('production options follow backend capability snapshot rather than version names',()=>{
+  const hub={production_options:{methods:[{id:'assigned',available:false},{id:'auto',available:true},
+    {id:'cloud',available:true},{id:'hybrid',available:false}],min_cloud_seconds:12,
+    max_cloud_seconds:240,auto_min_cloud_seconds:12}};
+  assert.deepEqual(productionMethodOptions(hub).map(x=>[x.value,x.disabled]),
+    [['assigned',true],['auto',false],['cloud',false],['hybrid',true]]);
+  assert.deepEqual(cloudSecondsBounds(hub,'auto'),{min:12,max:240});
+  assert.deepEqual(storyboardShotLimits({brief:{mode:'motion',seconds:15}}),[8,9]);
+  assert.deepEqual(storyboardShotLimits({brief:{mode:'motion',seconds:24,duration_mode:'auto'},
+    motion_plan:{output:{fps:24,max_frames:240}}}),[3,16]);
+  assert.equal(cloudSecondsRemainingEstimate({production_plan:{method:'cloud',billable_durations_seconds:[6,8,10]},
+    motion_plan:{output:{fps:24}},board:{scenes:[{frames:145},{frames:240,motion_job:'done'},{frames:48}]}}),14);
+});

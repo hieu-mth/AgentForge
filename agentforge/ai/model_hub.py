@@ -31,10 +31,10 @@ DB_PATH = COMPANY_DATA_DIR / "model_hub.sqlite3"
 ENV_NAME = re.compile(r"[A-Z_][A-Z0-9_]*\Z")
 # Routes are approved capabilities, NOT configured model selections.
 # Retain stable IDs for existing Owner SQLite routes and Dashboard clients.
-ROUTE_CAPABILITIES = frozenset({
-    "general.text", "film.storyboard", "film.motion",
-    "image.generate", "vision.qa", "film.tts", "film.sound", "film.music", "ops.monitor",
-})
+ROUTE_CAPABILITIES = frozenset(key for key, _, kind, _ in orchestrator_policy.CAPABILITIES
+                               if kind != "tool" or key == "ops.monitor")
+# Historical casting lived inside policy.mappings. Accept it on read/legacy writes only.
+LEGACY_MAPPING_CAPABILITIES = {"character.select"}
 # Persisted Owner overlays for retired products are accepted read-only but
 # excluded from active routes. Never rewrite the Owner's SQLite on GET.
 
@@ -110,7 +110,7 @@ ADAPTERS = {
     },
     "comfyui": {
         "label": "ComfyUI", "connection": "local", "model_label": "Mã checkpoint",
-        "model_example": "wan2.2_5b",
+        "model_example": "ltxv-2b-0.9.8-distilled-fp8.safetensors",
         "description": "Hồ sơ ảnh hoặc video. Đăng ký chỉ lưu cấu hình cho ComfyUI.",
         "defaults": {"base_url": "http://127.0.0.1:8188"}, "local_probe": False,
         "flux_workflow_max_bytes": flux_workflow.MAX_WORKFLOW_BYTES,
@@ -134,12 +134,12 @@ ADAPTERS = {
         "local_probe": False, "cloud_probe": True,
     },
     "chatgpt": {
-        "label": "ChatGPT Plan (preview)", "connection": "cloud", "model_label": "Model slug",
+        "label": "ChatGPT Plan", "connection": "cloud", "model_label": "Model slug",
         "model_example": "model-tu-lenh-models", "description": "Kết nối local bằng OAuth chính thức; không nhập API key. Chạy CLI chatgpt_auth login trước.",
         "defaults": {"account_ref": "owner"}, "local_probe": False, "cloud_probe": True,
     },
     "ltx_cloud": {
-        "label": "LTX Cloud V2", "connection": "cloud", "model_label": "Model ID",
+        "label": "LTX Cloud", "connection": "cloud", "model_label": "Model ID",
         "model_example": "ltx-2-3-fast", "description": "LTX V2 video; 720p, 24 fps, 6/8/10 giây. Chỉ gửi sau duyệt ngân sách.",
         "defaults": {"base_url": "https://api.ltx.io"},
         "legacy_defaults": {"base_url_env": "LTX_BASE_URL", "api_key_env": "LTX_API_KEY"},
@@ -352,7 +352,7 @@ def _validate_state(doc):
     defaults = route_catalog()
     if "orchestrator" in doc:
         orchestrator_policy.read_policy(
-            doc["orchestrator"], id_pattern=ID_RE, extra_routes=_extra_capabilities(defaults))
+            doc["orchestrator"], id_pattern=ID_RE, extra_routes=LEGACY_MAPPING_CAPABILITIES)
     for key, ref in doc["routes"].items():
         _required_text(key, TASK_RE, "stored task key")
         _required_text(ref, ID_RE, "stored model ID")
@@ -388,24 +388,33 @@ def effective_models(*, db_path=None):
             if value["provider"] in {"ollama", "anthropic", "openai", "chatgpt"}}
 
 
-def _extra_capabilities(routes):
-    return {key for key, kind in orchestrator_policy.KINDS.items()
-            if key not in routes and kind != "tool"}
-
-
 def _active_policy(state):
     return orchestrator_policy.read_policy(
         state.get("orchestrator", orchestrator_policy.defaults()),
-        id_pattern=ID_RE, extra_routes=_extra_capabilities(route_catalog()))
+        id_pattern=ID_RE, extra_routes=LEGACY_MAPPING_CAPABILITIES)
+
+
+def _route_refs(state):
+    """One effective assignment map. Explicit routes win over historical casting."""
+    return {**_active_policy(state)["mappings"], **state["routes"]}
+
+
+def _canonicalize_assignments(state):
+    """Only on an explicit write; never modify history or migrate on GET."""
+    policy = _active_policy(state)
+    if policy["mappings"]:
+        for key, ref in policy["mappings"].items():
+            state["routes"].setdefault(key, ref)
+        state["orchestrator"] = {**policy, "mappings": {}}
 
 
 def _orchestrator_catalog(state, profiles, routes):
-    policy = _active_policy(state)
+    policy = {**_active_policy(state), "mappings": {}}
     by_route = {row["id"]: row for row in routes}
     capabilities = []
     for key, label, kind, tool in orchestrator_policy.CAPABILITIES:
         route = by_route.get(key)
-        ref = route["model_ref"] if route else policy["mappings"].get(key)
+        ref = route["model_ref"] if route else None
         decision = orchestrator_policy.resolve(key, profiles, ref)
         options = [ident for ident, profile in profiles.items()
                    if orchestrator_policy.compatible(kind, profile)]
@@ -630,12 +639,13 @@ def _draft_bindings(state, *, moving, planning=False, motion_ref=None, direct_cl
     if not planning and (not permissions["run_tools"] or "ffmpeg" not in policy["tools"]):
         raise PermissionError("Hãy bật chạy công cụ local và FFmpeg trong AI điều phối.")
     profiles = _profiles(state=state)
+    refs = _route_refs(state)
     bindings = {}
     capabilities = PLANNING_CAPABILITIES if planning else (*PLANNING_CAPABILITIES, "image.generate", "film.motion")
     for capability in capabilities:
         if (capability == "film.motion" and moving is False) or (capability == "image.generate" and direct_cloud):
             continue
-        ref = motion_ref if capability == "film.motion" and motion_ref else state["routes"].get(capability, policy["mappings"].get(capability))
+        ref = motion_ref if capability == "film.motion" and motion_ref else refs.get(capability)
         if ref is None and (capability == "character.select" or (capability == "film.motion" and moving is None)):
             continue
         profile = profiles.get(ref)
@@ -656,10 +666,11 @@ def _draft_bindings(state, *, moving, planning=False, motion_ref=None, direct_cl
 
 def _catalog(revision, state):
     profiles = _profiles(state=state)
+    refs = _route_refs(state)
     routes = []
     for key, route in route_catalog().items():
         selected = (None if route["kind"] == "rules"
-                    else state["routes"].get(key))
+                    else refs.get(key))
         if route["kind"] == "rules":
             status = "DETERMINISTIC"
         elif not selected:
@@ -671,7 +682,7 @@ def _catalog(revision, state):
         else:
             status = "LOCAL_RUNTIME" if key == "image.generate" and "flux" in profiles[selected] else "CONFIG_ONLY"
         routes.append({**route, "model_ref": selected,
-                        "source": ("owner" if key in state["routes"] else "system"),
+                        "source": ("owner" if key in refs else "system"),
                        "status": status,
                        })
     return {
@@ -688,6 +699,7 @@ def _catalog(revision, state):
                                      if kind != "tool"]}
             for k, v in sorted(profiles.items())],
         "routes": routes,
+        "production_options": _production_options(state),
         "orchestrator": _orchestrator_catalog(state, profiles, routes),
         "cloud_fallback": False,
         "gpu_auto_start": False,
@@ -878,7 +890,7 @@ def _tables(conn):
 def _save_orchestrator(updated, policy, route_changes):
     routes = route_catalog()
     policy = orchestrator_policy.validate(
-        policy, id_pattern=ID_RE, extra_routes=_extra_capabilities(routes))
+        policy, id_pattern=ID_RE, extra_routes=LEGACY_MAPPING_CAPABILITIES)
     editable = {key for key in routes if orchestrator_policy.KINDS.get(key)
                 in {"text", "image", "video", "vision", "audio", "sound", "music"}}
     if not isinstance(route_changes, dict) or not route_changes.keys() <= editable:
@@ -893,13 +905,14 @@ def _save_orchestrator(updated, policy, route_changes):
             raise ModelConfigError("Model không khả dụng hoặc không tương thích")
     for key, ref in policy["mappings"].items():
         validate_ref(ref, orchestrator_policy.KINDS[key])
+        updated["routes"][key] = ref
     for key, ref in route_changes.items():
         if ref is None:
             updated["routes"].pop(key, None)
         else:
             validate_ref(ref, routes[key]["kind"])
             updated["routes"][key] = ref
-    updated["orchestrator"] = policy
+    updated["orchestrator"] = {**policy, "mappings": {}}
 
 
 def change(action, *, expected_revision, db_path=None, profile=None, profile_id=None,
@@ -923,6 +936,7 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
         if revision != expected_revision:
             raise ValueError("MODEL_HUB_REVISION_CONFLICT")
         updated = copy.deepcopy(current)
+        _canonicalize_assignments(updated)
         if action == "SAVE_MODEL_PROFILE":
             if intent is not None:
                 if intent not in ("create", "edit") or not isinstance(profile, dict):
@@ -942,10 +956,8 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
             _required_text(profile_id, ID_RE, "model ID")
             if profile_id not in updated["profiles"]:
                 raise ModelConfigError("Unknown model profile")
-            attached = {ref for key, ref in updated["routes"].items()
+            attached = {ref for key, ref in _route_refs(updated).items()
                         if key in route_catalog()}
-            current_policy = _active_policy(updated)
-            attached.update(current_policy["mappings"].values())
             if profile_id in attached:
                 raise ModelConfigError("Model is assigned; unassign it before deleting")
             del updated["profiles"][profile_id]
@@ -967,10 +979,8 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
         elif action == "SAVE_ORCHESTRATOR":
             _save_orchestrator(updated, policy, route_changes)
         elif action == "RESET_ORCHESTRATOR":
+            # Reset execution permissions, not model assignments.
             updated.pop("orchestrator", None)
-            for key in route_catalog():
-                if orchestrator_policy.KINDS.get(key) in {"text", "image", "video", "vision", "audio", "sound", "music"}:
-                    updated["routes"].pop(key, None)
         else:
             if (type(target_revision) is not int or target_revision < 0
                     or target_revision >= revision):
@@ -1003,6 +1013,10 @@ def production_candidates(strategy, *, db_path=None):
     if strategy not in {"auto", "local", "hybrid", "cloud"}:
         raise ModelConfigError("Unknown production strategy.")
     revision, state = _read_state(db_path=db_path)
+    return revision, _production_candidates(state, strategy)
+
+
+def _production_candidates(state, strategy):
     candidates = []
     for ident, profile in _profiles(state=state).items():
         if not orchestrator_policy.compatible("video", profile):
@@ -1016,8 +1030,28 @@ def production_candidates(strategy, *, db_path=None):
             except (ValueError, PermissionError):
                 continue
             adapter = orchestrator_policy.runtime_adapter("video", profile)
-            candidates.append({"id": ident, "method": method, "model": profile["model"],
-                               "max_frames": adapter.output_profile().max_frames,
-                               "fps": adapter.output_profile().fps,
-                               "min_billable_seconds": 6 if method != "local" else 0})
-    return revision, candidates
+            item = {"id": ident, "method": method, "model": profile["model"],
+                    "max_frames": adapter.output_profile().max_frames,
+                    "fps": adapter.output_profile().fps, "min_billable_seconds": 0}
+            if method != "local":
+                from agentforge.features.film_studio.studio_ltx_cloud import DURATIONS
+                item.update(billable_durations_seconds=list(DURATIONS), min_billable_seconds=min(DURATIONS))
+            candidates.append(item)
+    return candidates
+
+
+def _production_options(state):
+    """Read-only UI options from the same admission logic as the router."""
+    from agentforge.features.film_studio import production_router
+    candidates = _production_candidates(state, "auto")
+    by_method = {method: sum(c["method"] == method for c in candidates)
+                 for method in ("local", "hybrid", "cloud")}
+    motion = state["profiles"].get(_route_refs(state).get("film.motion"), {})
+    assigned_cloud = motion.get("provider") == "ltx_cloud"
+    return {"methods": [
+        {"id": "assigned", "available": not assigned_cloud},
+        {"id": "auto", "available": bool(candidates)},
+        *({"id": method, "available": bool(count)} for method, count in by_method.items()),
+    ], "min_cloud_seconds": production_router.MIN_CLOUD_SECONDS,
+        "max_cloud_seconds": production_router.MAX_CLOUD_SECONDS,
+        "auto_min_cloud_seconds": 0 if by_method["local"] else production_router.MIN_CLOUD_SECONDS}

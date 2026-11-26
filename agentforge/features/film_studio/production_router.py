@@ -1,5 +1,8 @@
 """AI chooses only from Owner-enabled, policy-compatible methods. No inference dispatch here."""
 
+MIN_CLOUD_SECONDS = 12
+MAX_CLOUD_SECONDS = 240
+
 
 def choose(brief, candidates, infer):
     if not candidates:
@@ -24,5 +27,8 @@ def choose(brief, candidates, infer):
         if not isinstance(key, str) or key not in options or not isinstance(reason, str) or not 1 <= len(reason.strip()) <= 350:
             raise ValueError("AI selected an unapproved route or invalid reason.")
     selected = options[key]
-    return {"method": selected["method"], "motion_ref": selected["id"],
+    plan = {"method": selected["method"], "motion_ref": selected["id"],
             "reason": reason.strip(), "max_cloud_seconds": brief["max_cloud_seconds"]}
+    if "billable_durations_seconds" in selected:
+        plan["billable_durations_seconds"] = selected["billable_durations_seconds"]
+    return plan

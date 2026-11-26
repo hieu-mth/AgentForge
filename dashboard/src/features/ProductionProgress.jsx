@@ -48,7 +48,7 @@ export function ProductionProgress({job,starting,labels,warnings}){
     const imageStatus=scene.asset?'Đã tạo':current&&a.operation==='image'?'Đang tạo':'Chờ';
     const motionStatus=scene.motion_sha?'Đã xác minh':current&&a.operation==='motion'?'Đang tạo':'Chờ';
     if(compact)return <li key={scene.shot_id??index} data-active={current||undefined} data-error={failed||undefined}>
-      <AppTooltip title={<>Ảnh · {imageStatus}{p.moving&&<><br/>Chuyển động · {motionStatus}</>}</>}>
+      <AppTooltip title={<>{!p.directCloud&&<>Ảnh · {imageStatus}</>}{p.moving&&<>{!p.directCloud&&<br/>}Chuyển động · {motionStatus}</>}</>}>
         <span className="production-shot-chip" tabIndex={0}><strong>{label}</strong>
           {done?<CheckCircleOutlined/>:failed?<ExclamationCircleOutlined/>:<span className="production-shot-dot"/>}
         </span>
@@ -57,7 +57,7 @@ export function ProductionProgress({job,starting,labels,warnings}){
     </li>;
     return <li key={scene.shot_id??index} data-active={current||undefined} data-error={failed||undefined}>
       <strong>{label} {done&&<CheckCircleOutlined/>}</strong>
-      <small>Ảnh · {imageStatus}</small>
+      {!p.directCloud&&<small>Ảnh · {imageStatus}</small>}
       {p.moving&&<small>Chuyển động · {motionStatus}</small>}
       {failed&&<small>Cần xử lý · {warnings[job.error]??job.error}</small>}
     </li>;
@@ -86,7 +86,7 @@ export function ProductionProgress({job,starting,labels,warnings}){
           status={status==='FAILED'?'exception':p.verified?'success':'normal'}/>}
       {job?.stage==='MOTION'&&!authored&&<small>{p.clips}/{p.total} clip đã xác minh</small>}
       {job?.error&&<p className="production-error"><ExclamationCircleOutlined/> {warnings[job.error]??job.error}</p>}
-      {a?.model&&<div className="production-meta">{a.provider==='ollama'?'Ollama':a.provider==='comfyui'?'ComfyUI':a.provider} · {a.model}</div>}
+      {a?.model&&<div className="production-meta">{a.provider==='ollama'?'Ollama':a.provider==='comfyui'?'ComfyUI':a.provider==='chatgpt'?'ChatGPT':a.provider==='ltx_cloud'?'LTX Cloud':a.provider} · {a.model}</div>}
     </div>
     <ol className="production-steps">{p.stages.map(({key,label,state})=>{
       const Icon=state==='done'?CheckCircleOutlined:icons[key];

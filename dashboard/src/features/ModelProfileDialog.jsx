@@ -162,16 +162,16 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
           const port=Number(localUrl.exec(value)?.[2]);
           const valid=key==='account_ref'?/^[a-z][a-z0-9_]{2,39}$/.test(value):directCloud?/^https:\/\/[^\s@?#\\]+$/.test(value)
             :key==='base_url'?port>=1&&port<=65535:envName.test(value);
-          const error=directCloud?'Nhập URL HTTPS hợp lệ.':key==='base_url'
+          const error=key==='account_ref'?'Mã tài khoản gồm 3–40 ký tự thường, số hoặc dấu gạch dưới.':directCloud?'Nhập URL HTTPS hợp lệ.':key==='base_url'
             ?'Dùng địa chỉ HTTP loopback với cổng từ 1 đến 65535.':'Chỉ nhập tên biến môi trường hợp lệ.';
           return valid?Promise.resolve():Promise.reject(new Error(error));
         }}]}>
         <Input placeholder={directCloud?'https://api.example.com':example} spellCheck={false}/>
       </Form.Item>)}
-      {provider==='chatgpt'&&<Alert type="info" showIcon message="Using ChatGPT plan (preview)"
+      {provider==='chatgpt'&&<Alert type="info" showIcon message="Kết nối ChatGPT Plan qua OAuth"
         description={<><p>Trên máy chạy AgentForge, cài gói chatgpt và dùng CLI đăng nhập, lấy model slug. Không nhập mật khẩu, cookie hoặc token tại đây.</p>
-          <code>python -m agentforge.ai.chatgpt_auth login owner</code><br/>
-          <code>python -m agentforge.ai.chatgpt_auth models owner</code><br/>
+          <code>python -m agentforge.ai.chatgpt_auth login {form.getFieldValue('account_ref')||'owner'}</code><br/>
+          <code>python -m agentforge.ai.chatgpt_auth models {form.getFieldValue('account_ref')||'owner'}</code><br/>
           <a href="https://chatgpt.com/#settings/Usage" target="_blank" rel="noreferrer">Quản lý hạn mức ChatGPT</a></>}/>}
       {directCloud&&<Form.Item name="api_key" label="API key" dependencies={['base_url']}
         extra={profile?.has_api_key?'Để trống để giữ API key đã lưu cho endpoint hiện tại.':'API key được mã hóa theo tài khoản Windows.'}
