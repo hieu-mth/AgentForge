@@ -9,7 +9,7 @@ Baseline main: `9db60df28f242abf9ed199c409409f422d4f89db`. Mục tiêu: một St
 | F03 giới hạn shot local | BLOCKED_RUNTIME | Clip dài hơn được xác nhận trên GPU hoặc adapter khác |
 | F04 mất provider ID | PARTIAL (Owner-attested GET-only recovery; duplicate remote IDs rejected) | Đối soát có chứng cứ, không retry mù |
 | F05 compatibility production | PARTIAL (strict motion ledger and canonical creation and planner; historical timeline/receipt compatibility remains) | Một schema mới, archive DB cũ có chủ đích |
-| F06 draft_pipeline | PARTIAL (script analysis, timeline and SQLite draft store extracted) | Tách theo trách nhiệm, giữ checkpoint/approval |
+| F06 draft_pipeline | PARTIAL (script analysis, timeline, SQLite draft store and worker attempt transitions extracted) | Tách theo trách nhiệm, giữ checkpoint/approval |
 | F07 readiness quá sớm | IMPLEMENTED | Storyboard theo phương pháp cụ thể không cần quyền media/FFmpeg; approval vẫn chặn |
 | F08 OAuth Dashboard | IMPLEMENTED (runtime pending) | Đăng nhập, danh sách model và logout có consent |
 | F09 chẩn đoán lỗi | PARTIAL | Mã lỗi an toàn, checkpoint cuối không bị bỏ qua khi offload lỗi; chưa có logging toàn hệ thống |
@@ -34,3 +34,5 @@ Số liệu Overview phân biệt dữ liệu chưa ghi nhận và giá trị 0;
 ## Ranh giới lưu trữ Studio
 
 `draft_store.py` quản lý truy vấn SQLite, đọc/ghi checkpoint, cancellation và hàng đợi. Pipeline giữ quyết định lifecycle, khóa worker và phạm vi transaction admission/deletion. Không đổi schema, đường dẫn DB, digest hoặc cơ chế xác minh media.
+
+`draft_lifecycle.py` chứa chuyển trạng thái attempt và cách trình bày bản ghi gián đoạn. Worker launch thất bại khôi phục checkpoint trước đó; hủy production kiểm tra đúng ID worker, không che khuất trạng thái cần đối soát. Pipeline vẫn sở hữu thread, khóa và điều phối media.
