@@ -392,9 +392,7 @@ export function StudioDrafts({mutate,onCharacters}) {
             onClick={()=>setSourceId(job.id)}>
             Xem nội dung video
           </Button>}
-          {!historyStates.has(job.status)&&!job.storyboard_version&&job.brief.mode!=='motion'&&job.board?.scenes.map((scene,index)=>
-            <Button key={index} disabled={running||pending}
-              onClick={()=>setEditor({id:job.id,index,scene})}>Sửa cảnh {index+1}</Button>)}
+
         </>,
       }))}/>}
     </Card>
@@ -488,10 +486,9 @@ export function StudioDrafts({mutate,onCharacters}) {
     {editor&&<Modal open title={(editor.rewrite?'AI viết lại cảnh ':editor.adding?'Thêm cảnh ':'Sửa cảnh ')+(editor.index+1)} footer={null}
       onCancel={()=>setEditor(null)}>
       {error&&<Alert showIcon type="error" message={error}/>}
-      <Form layout="vertical" initialValues={{...editor.scene,description:editor.scene.shot_description??editor.scene.description}} onFinish={values=>editor.job?
+      <Form layout="vertical" initialValues={{...editor.scene,description:editor.scene.shot_description??editor.scene.description}} onFinish={values=>
         run('/'+editor.job.id+'/storyboard-'+(editor.rewrite?'rewrite':editor.adding?'add':'edit'),
-          {...values,index:editor.index,sha256:editor.job.storyboard_sha},()=>setEditor(null)):
-        run('/'+editor.id+'/edit',{...values,index:editor.index},()=>setEditor(null))}>
+          {...values,index:editor.index,sha256:editor.job.storyboard_sha},()=>setEditor(null))}>
         {editor.rewrite?<Form.Item label="Yêu cầu viết lại" name="feedback" rules={[{required:true,whitespace:true}]}>
           <Input.TextArea maxLength={350}/>
         </Form.Item>:<>
@@ -501,16 +498,16 @@ export function StudioDrafts({mutate,onCharacters}) {
         <Form.Item name="image_prompt" label="Prompt ảnh" rules={[{required:true,whitespace:true}]}>
           <Input.TextArea maxLength={600}/>
         </Form.Item>
-        {editor.job&&<Form.Item name="motion_prompt" label="Prompt chuyển động" rules={[{required:true,whitespace:true}]}
+        <Form.Item name="motion_prompt" label="Prompt chuyển động" rules={[{required:true,whitespace:true}]}
           hidden={editor.job.brief.mode!=='motion'} initialValue={editor.adding?videoModes.still:undefined}>
           <Input.TextArea maxLength={600}/>
-        </Form.Item>}
-        {editor.job&&<>
+        </Form.Item>
+        <>
           <Form.Item name="scene_notes" label="Bối cảnh, trang phục, đạo cụ và góc máy">
             <Input.TextArea maxLength={240}/>
           </Form.Item>
           <Form.Item name="caption" label="Phụ đề của cảnh"><Input maxLength={220}/></Form.Item>
-        </>}
+        </>
         </>}
         <Button type="primary" htmlType="submit" loading={pending}>Lưu cảnh</Button>
       </Form>

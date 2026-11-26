@@ -107,7 +107,8 @@ class OwnerAuthVideoFoundationTests(unittest.TestCase):
         endpoint = "/api/film/drafts"
         identifier = "a" * 32
         db = self.root / "drafts.sqlite3"
-        brief = {"idea": "Mèo cam tìm đường về", "seconds": 6, "scene_count": 2, "ratio": "16:9"}
+        brief = {"idea": "Mèo cam tìm đường về", "seconds": 6, "scene_count": None,
+                 "ratio": "16:9", "mode": "still", "duration_mode": "manual"}
         with patch.object(drafts, "DB", db):
             self.assertEqual(self.request("GET", endpoint)[:2], (200, {"drafts": []}))
             self.assertFalse(db.exists())
@@ -143,6 +144,30 @@ class OwnerAuthVideoFoundationTests(unittest.TestCase):
             status, resumed, _ = self.request("POST", endpoint + "/" + identifier + "/resume")
             self.assertEqual((status, resumed["id"], resumed["stage"]), (200, identifier, "STORYBOARD"))
             self.assertTrue(done.wait(3))
+
+    def test_unexpected_owner_api_errors_are_safe_and_keep_http_response(self):
+        from agentforge.api import server
+
+        status, login, headers = self.request("POST", "/api/login", {"code": self.code})
+        self.assertEqual(status, 200)
+        self.cookie = headers["Set-Cookie"].split(";", 1)[0]
+        self.csrf = login["csrf"]
+        for method, target, expected in (
+            ("GET", "agentforge.api.server.read.dispatch", "OWNER_API_GET_UNEXPECTED"),
+            ("POST", "agentforge.api.server._owner_action", "OWNER_API_POST_UNEXPECTED"),
+        ):
+            with self.subTest(method=method):
+                with (patch(target, side_effect=RuntimeError("secret-provider-payload")),
+                      self.assertLogs(server.LOG, level="ERROR") as logs):
+                    status, response, _ = self.request(method, "/api/fixture?secret=private", {})
+                self.assertEqual(status, 500)
+                self.assertEqual(response["error"], "internal_error")
+                self.assertEqual(response["code"], expected)
+                self.assertIn(expected, str(logs.output))
+                self.assertNotIn("secret-provider-payload", str(response))
+                self.assertNotIn("secret-provider-payload", str(logs.output))
+                self.assertNotIn("secret=private", str(logs.output))
+        self.assertEqual(self.request("GET", "/api/session")[0], 200)
 
     def test_dashboard_redirect_and_retired_routes_are_not_exposed(self):
         status, _, headers = self.request("GET", "/")

@@ -4,12 +4,13 @@ from agentforge.api.routes._shared import UNHANDLED
 
 def handle(server, path, request, session=None):
     if path == "/api/film/drafts/start":
-        required = {"id", "idea", "seconds", "ratio", "scene_count"}
-        if not server.allow_external_actions or request.keys() not in (
-                required, required | {"mode"}, required | {"mode", "motion_approved"},
-                required | {"mode", "duration_mode"},
-                required | {"mode", "duration_mode", "route_strategy", "max_cloud_seconds"}):
-            raise PermissionError("Draft production requires external-tools mode and a complete brief")
+        required = {"id", "idea", "seconds", "ratio", "scene_count", "mode", "duration_mode"}
+        if not server.allow_external_actions:
+            raise PermissionError("Draft production requires external-tools mode")
+        if (request.keys() not in (required, required | {"route_strategy", "max_cloud_seconds"})
+                or request["duration_mode"] not in ("auto", "manual")
+                or request["scene_count"] is not None):
+            raise ValueError("Use the current Studio brief: auto or manual duration, with AI-planned scenes.")
         from agentforge.features.film_studio import draft_pipeline
         return draft_pipeline.submit(request)
     if path.startswith("/api/film/drafts/"):
@@ -28,14 +29,13 @@ def handle(server, path, request, session=None):
             "storyboard-audio-direct": {"sha256", "engine", "voice_name", "voices"},
             "storyboard-continuity": {"sha256"},
         }
-        if len(parts) != 6 or parts[5] not in {"approve", "reject", "edit", "resume", "cancel", "delete", "visual-review", "visual-review-batch", "cloud-reconcile", *storyboard}:
+        if len(parts) != 6 or parts[5] not in {"approve", "reject", "resume", "cancel", "delete", "visual-review", "visual-review-batch", "cloud-reconcile", *storyboard}:
             raise ValueError("Unknown draft action")
         from agentforge.features.film_studio import draft_pipeline
         identifier, action = parts[4:]
         if action in {"resume", "storyboard-approve", "storyboard-rewrite", "storyboard-continuity", "storyboard-audio-direct", "storyboard-quality-repair", "visual-review", "visual-review-batch", "cloud-reconcile"} and not server.allow_external_actions:
             raise PermissionError("Draft production requires external-tools mode")
-        required = {"sha256"} if action in {"approve", "reject"} else (
-            {"index", "description", "image_prompt"} if action == "edit" else storyboard.get(action, set()))
+        required = {"sha256"} if action in {"approve", "reject"} else storyboard.get(action, set())
         if action == "cloud-reconcile":
             required = {"sha256", "motion_job", "provider_id", "request_sha", "owner_matched"}
         if action == "visual-review":

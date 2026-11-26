@@ -1750,17 +1750,6 @@ def act(ident, action, data):
             job["status"] = "APPROVED" if action == "approve" else "REJECTED"
             _save(job)
             return job
-        if action == "edit":
-            if job["brief"].get("mode") == "motion" or "storyboard_version" in job:
-                raise ValueError("Chỉnh sửa từ storyboard để lưu phiên bản và duyệt lại.")
-            if job["status"] in {"APPROVED", "REJECTED", "CANCELLED"} or not job.get("board"):
-                raise ValueError("Scene cannot be edited")
-            scene = job["board"]["scenes"][_number(data["index"], 0, len(job["board"]["scenes"]) - 1)]
-            scene.update(description=_text(data["description"], 350), image_prompt=_text(data["image_prompt"], 600),
-                         asset=None, job_id=None, attempts=0)
-            job.update(status="FAILED", video_sha=None, error="Scene changed. Resume to regenerate this scene.")
-            _save(job)
-            return job
         if action != "resume" or job["status"] not in {"RUNNING", "FAILED", "WAITING_RESOURCES", "NEEDS_RECONCILIATION"}:
             raise ValueError("Draft cannot be resumed")
         if job["status"] == "NEEDS_RECONCILIATION" and _cancellation(ident):

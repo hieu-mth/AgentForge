@@ -553,7 +553,7 @@ class DraftTests(unittest.TestCase):
             with self.subTest(status=status):
                 job = {"id": self.ident, "brief": self.brief, "board": self.board(), "status": status}
                 draft._save(job)
-                with self.assertRaisesRegex(ValueError, "Scene cannot be edited"):
+                with self.assertRaisesRegex(ValueError, "Draft cannot be resumed"):
                     draft.act(self.ident, "edit", {})
                 job["storyboard_version"] = 1
                 job["storyboard_sha"] = draft.draft_timeline.digest(job)
@@ -1020,7 +1020,8 @@ class DraftTests(unittest.TestCase):
         prefix = "Cảnh 1 — Miu nhìn ra cửa sổ.\nMiu: Chào bạn!\n"
         suffix = "\n\nCảnh 2 — Miu chạy ra vườn.\n"
         source = prefix + "🐱" * (20_000 - len(prefix) - len(suffix)) + suffix
-        body = {**self.brief, "id":self.ident, "idea":source}
+        body = {**self.brief, "id":self.ident, "idea":source,
+                "mode": "still", "duration_mode": "manual", "scene_count": None}
         with (patch.object(draft.model_hub, "draft_routes", return_value=(1, {})), patch.object(draft.render, "_ffmpeg"),
               patch.object(draft, "_dispatch")):
             status, result, _ = client.req("POST", "/api/film/drafts/start", body)
@@ -1033,6 +1034,28 @@ class DraftTests(unittest.TestCase):
                                          {**body, "idea":source+"đ"})
             self.assertEqual(status, 400)
             self.assertIn("20,000", error["message"])
+
+    def test_http_rejects_retired_submission_and_scene_edit_contracts(self):
+        client = owner_http_fixture.OwnerHttpFixture()
+        client.setUp()
+        self.addCleanup(client.doCleanups)
+        client.server.allow_external_actions = True
+        client.login()
+        route = "/api/film/drafts/start"
+        old = {**self.brief, "id": self.ident, "mode": "still"}
+        current = {**old, "duration_mode": "manual", "scene_count": None}
+        with patch.object(draft, "submit") as submit:
+            for invalid in (old, {**old, "motion_approved": True},
+                            {**current, "duration_mode": None},
+                            {**current, "scene_count": 2},
+                            {**current, "motion_approved": True}):
+                with self.subTest(fields=invalid):
+                    self.assertEqual(client.req("POST", route, invalid)[0], 400)
+            submit.assert_not_called()
+        with patch.object(draft, "act") as act:
+            self.assertEqual(client.req("POST", f"/api/film/drafts/{self.ident}/edit",
+                             {"index": 0, "description": "New scene", "image_prompt": "Cat"})[0], 400)
+            act.assert_not_called()
 
     def test_submission_validation_and_idempotence(self):
         with self.assertRaises(ValueError):
@@ -1072,9 +1095,10 @@ class DraftTests(unittest.TestCase):
         self.addCleanup(client.doCleanups)
         client.server.allow_external_actions = True
         client.login()
-        body = {**self.brief, "id": self.ident, "seconds": 4, "mode": "motion"}
+        body = {**self.brief, "id": self.ident, "seconds": 4, "mode": "motion",
+                "duration_mode": "manual", "scene_count": None}
         route = "/api/film/drafts/start"
-        self.assertEqual(client.req("POST", route, {**body, "seconds": 6})[0], 400)
+        self.assertEqual(client.req("POST", route, {**body, "seconds": 3})[0], 400)
         profile = {"id": "selected_by_registry", "provider": "comfyui", "model": ltx.CHECKPOINT, "enabled": True,
                    "motion_encoder": str(self.root / ltx.ENCODER), "base_url": "http://127.0.0.1:8188"}
         image_profile = flux_profile()
@@ -1122,6 +1146,7 @@ class DraftTests(unittest.TestCase):
             self.assertNotIn("character.select", bindings)
             job.update(board=draft._story(self.board(), 2, 4, {"cat": {}}),
                        cast={"cat": {"name": "Miu", "appearance": "orange cat"}})
+            job["brief"]["scene_count"] = 2
 
         patches = (patch.object(draft, "_dispatch"), patch.object(draft, "_write_board", side_effect=storyboard),
               patch.object(draft, "_measured", return_value=nullcontext()),
@@ -1698,11 +1723,10 @@ class DraftTests(unittest.TestCase):
                 draft._save(job)
                 with self.assertRaisesRegex(ValueError, "current draft"):
                     draft.act(self.ident, "approve", {"sha256": "wrong"})
-                edited = draft.act(self.ident, "edit", {
-                    "index": 1, "description": "Sửa", "image_prompt": "New scene"})
-                self.assertEqual(edited["board"]["scenes"][0]["asset"], job["board"]["scenes"][0]["asset"])
-                self.assertIsNone(edited["board"]["scenes"][1]["asset"])
-                self.assertIsNone(edited["video_sha"])
-                draft._save(job)
+                with self.assertRaisesRegex(ValueError, "Draft cannot be resumed"):
+                    draft.act(self.ident, "edit", {
+                        "index": 1, "description": "Sửa", "image_prompt": "New scene"})
+                self.assertEqual(draft._read(self.ident)["board"], job["board"])
+                self.assertEqual(draft._read(self.ident)["video_sha"], job["video_sha"])
                 result = draft.act(self.ident, "approve", {"sha256": job["video_sha"]})
                 self.assertEqual(result["status"], "APPROVED")
