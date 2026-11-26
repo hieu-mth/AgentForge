@@ -38,14 +38,14 @@ Frontend Edge smoke: `npm.cmd run test:browser --prefix dashboard` sau khi build
 
 ## Kiểm tra source và build
 
-CI cài Ruff riêng trên runner, không phải runtime dependency. Gate F821/F822/F823 chặn tên không xác định; inventory F401/F841 chưa chặn CI để review re-export và test seam. Knip dùng entry production/build/test trong `dashboard/knip.json`, báo các file, export và dependency nghi dư thừa; không tự xóa theo kết quả scan. Review từng finding trước khi chốt.
+CI cài Ruff riêng trên runner, không phải runtime dependency. Gate F821/F822/F823 chặn tên không xác định; gate F401/F841 chặn unused imports và variables sau khi xử lý 5 finding đầu tiên. Knip dùng entry production/build/test trong `dashboard/knip.json`, báo các file, export và dependency nghi dư thừa; không tự xóa theo kết quả scan. Review từng finding trước khi chốt. Pin cả TypeScript 5.8.3 để tránh lỗi API compiler khi npm tự chọn peer dependency mới.
 
 ```powershell
 python -m pip install ruff==0.11.13
 python -m ruff check agentforge scripts tests --select F821,F822,F823
 python -m ruff check agentforge scripts tests --select F401,F841
 cd dashboard
-npm exec --yes --package=knip@5.46.0 -- knip
+npm exec --yes --package=knip@5.46.0 --package=typescript@5.8.3 -- knip
 npm run build
 node tests/build-layout.mjs
 ```
