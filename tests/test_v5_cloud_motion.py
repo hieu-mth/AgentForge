@@ -61,10 +61,11 @@ class CloudMotionIntegrationTests(unittest.TestCase):
                 model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0, profile=writer)
                 model_hub.change("SAVE_MODEL_PROFILE", expected_revision=1, profile=video)
                 policy = orchestrator_policy.defaults()
-                policy["permissions"].update(plan=True, assign_local=True, call_cloud=True, run_tools=True)
+                policy["permissions"].update(plan=True, assign_models=True, call_cloud=True, run_tools=True)
                 policy["tools"] = ["ffmpeg"]
-                model_hub.change("SAVE_ORCHESTRATOR", expected_revision=2, policy=policy,
-                                 route_changes={"general.text": "writer", "film.storyboard": "writer"})
+                model_hub.change("SET_MODEL_ROUTE", expected_revision=2, task_id="general.text", model_ref="writer")
+                model_hub.change("SET_MODEL_ROUTE", expected_revision=3, task_id="film.storyboard", model_ref="writer")
+                model_hub.change("SAVE_ORCHESTRATOR", expected_revision=4, policy=policy)
                 job = draft.submit({"id": "a"*32, "idea": "Mèo nhìn cửa rồi bước đi.",
                                     "seconds": None, "scene_count": None, "ratio": "16:9",
                                     "mode": "motion", "duration_mode": "auto",

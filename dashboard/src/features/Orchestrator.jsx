@@ -83,9 +83,9 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept,onNavigate}){
   }
 
   function save(values){
-    const next={mode:values.mode,mappings:{},permissions:values.permissions,
+    const next={mode:values.mode,permissions:values.permissions,
       tools:form.getFieldValue('tools')??initial.tools,cloud_call_limit:values.cloud_call_limit};
-    confirm('SAVE_ORCHESTRATOR',{policy:next,route_changes:{}});
+    confirm('SAVE_ORCHESTRATOR',{policy:next});
   }
 
   return <Form form={form} layout="vertical" initialValues={initial}
@@ -128,7 +128,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept,onNavigate}){
         <RuleRow title="AI được tự làm gì" description="Chọn từng bước AI được phép tự thực hiện.">
           <PermissionToggle field="plan" label="Lập kế hoạch"
             description="Cho phép Studio lập kế hoạch."/>
-          <PermissionToggle field="assign_local" label="Phân công model"
+          <PermissionToggle field="assign_models" label="Phân công model"
             description="Cho phép sử dụng model đã phân công hoặc chọn tuyến trong phạm vi cấu hình."/>
           <PermissionToggle field="call_local" label="Gọi model local"
             description="Gửi yêu cầu thực thi đến model local đã được cấp quyền."/>

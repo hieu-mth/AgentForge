@@ -126,3 +126,18 @@ Tạo ba draft kiểm thử riêng bằng Dashboard; duyệt từng storyboard t
 ```
 
 Chỉ kết luận đạt khi cả ba MP4 qua kiểm tra và Dashboard vẫn sử dụng được. Mẫu theo chu kỳ không chứng minh peak tuyệt đối. Không giảm ngưỡng RAM/commit/VRAM để ép chạy.
+
+
+## Khởi tạo lại Model Hub
+
+Schema hiện hành không đọc chính sách Model Hub cũ (có mapping hoặc quyền cũ). Không tự động xóa hay migrate DB. Sau khi dừng backend và xác nhận không có job đang chạy hoặc chưa đối soát, Owner có thể chuyển DB Model Hub cũ và các sidecar SQLite (nếu có) ra thư mục lưu trữ ngoài `data`, rồi khởi động lại. Ví dụ trên PowerShell, từ thư mục repository:
+
+```powershell
+$backup = Join-Path $HOME ("agentforge-hub-backup-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
+New-Item -ItemType Directory -Path $backup | Out-Null
+Get-ChildItem -LiteralPath .\data\company -File |
+    Where-Object { $_.Name -in @('model_hub.sqlite3','model_hub.sqlite3-wal','model_hub.sqlite3-shm','model_hub.sqlite3-journal') } |
+    Move-Item -Destination $backup
+```
+
+Đăng ký lại model, phân công và cấp quyền trong Dashboard. Việc này đặt lại revision/config/rollback Model Hub. Bản nháp đã duyệt bằng cấu hình cũ có thể không tiếp tục được: tạo production mới, không sửa digest thủ công. Không xóa các ledger motion/cloud, workspace, weights, DB nhân vật hoặc credential OAuth. ChatGPT account token nằm riêng; đăng ký lại profile dùng account reference đã kết nối nếu phiên còn hợp lệ. Không chạy lệnh khi backend hoặc công cụ khác còn sử dụng DB.

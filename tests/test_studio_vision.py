@@ -53,13 +53,12 @@ class VisionTests(unittest.TestCase):
                        "enabled": True, "base_url": "http://127.0.0.1:11434"}
             model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0, db_path=db, profile=profile)
             policy = orchestrator_policy.defaults()
-            model_hub.change("SAVE_ORCHESTRATOR", expected_revision=1, db_path=db, policy=policy,
-                             route_changes={"vision.qa": profile["id"]})
+            model_hub.change("SET_MODEL_ROUTE", expected_revision=1, db_path=db,
+                             task_id="vision.qa", model_ref=profile["id"])
             with self.assertRaises(PermissionError):
                 model_hub.vision_binding(db_path=db)
             policy.update(permissions=dict.fromkeys(policy["permissions"], True), tools=["ffmpeg"])
-            model_hub.change("SAVE_ORCHESTRATOR", expected_revision=2, db_path=db, policy=policy,
-                             route_changes={})
+            model_hub.change("SAVE_ORCHESTRATOR", expected_revision=2, db_path=db, policy=policy)
             self.assertEqual(model_hub.vision_binding(db_path=db)[1]["id"], profile["id"])
 
     def test_sampling_uses_exact_frame_boundaries_and_bounded_sheet(self):

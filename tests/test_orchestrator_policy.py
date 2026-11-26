@@ -1,4 +1,4 @@
-"""DB-only policy persistence, guardrails, compatibility and rollback."""
+"""Current DB policy persistence, guardrails, and rollback."""
 import copy
 import json
 from contextlib import closing
@@ -32,10 +32,13 @@ class OrchestratorTests(unittest.TestCase):
                              db_path=self.db, profile=profile)
         return 2
 
-    def save(self, values, changes=None, revision=0):
+    def save(self, values, revision=0):
         return model_hub.change(
-            "SAVE_ORCHESTRATOR", expected_revision=revision, db_path=self.db,
-            policy=values, route_changes=changes or {})
+            "SAVE_ORCHESTRATOR", expected_revision=revision, db_path=self.db, policy=values)
+
+    def assign(self, task, ref, revision):
+        return model_hub.change("SET_MODEL_ROUTE", expected_revision=revision,
+                                db_path=self.db, task_id=task, model_ref=ref)
 
     def test_default_catalog_is_read_only_and_never_calls_provider(self):
         with patch("urllib.request.urlopen", side_effect=AssertionError("network")):
@@ -72,7 +75,7 @@ class OrchestratorTests(unittest.TestCase):
             {"schema_version": 2}, {"mode": "legacy"}, {"gpu_concurrency": 2},
             {"retry_limit": True}, {"retry_unknown_submit": True},
             {"reconcile_comfyui": False}, {"selection": "SUGGEST"},
-            {"approvals": {key: False for key in policy.APPROVALS}},
+            {"approvals": {"cloud": False}},
             {"mappings": {"ops.monitor": "local_primary"}}, {"token": "unexpected"},
             {"fallbacks": {"general.text": "cloud_primary"}},
             {"primary": "missing"}, {"mappings": {"vision.qa": "local_primary"}},
@@ -82,85 +85,48 @@ class OrchestratorTests(unittest.TestCase):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 self.save({**policy.defaults(), **change})
         self.seed()
-        with self.assertRaisesRegex(ValueError, "tương thích"):
-            self.save(policy.defaults(), {"film.motion": "local_primary"}, revision=2)
+        with self.assertRaisesRegex(ValueError, "does not support task"):
+            self.assign("film.motion", "local_primary", revision=2)
 
     def test_save_reset_and_rollback_share_existing_route_and_revision(self):
         self.seed()
         values = {**policy.defaults(), "permissions": {**policy.defaults()["permissions"], "plan": True}}
-        result = self.save(values, {"general.text": "cloud_primary"}, revision=2)
+        self.assign("general.text", "cloud_primary", revision=2)
+        result = self.save(values, revision=3)
         same_route = next(row for row in result["routes"] if row["id"] == "general.text")
         self.assertEqual(same_route["model_ref"], "cloud_primary")
-        self.assertNotIn("general.text", result["orchestrator"]["policy"]["mappings"])
+        self.assertNotIn("mappings", result["orchestrator"]["policy"])
         with self.assertRaisesRegex(ValueError, "REVISION_CONFLICT"):
             self.save(values, revision=2)
-        reset = model_hub.change("RESET_ORCHESTRATOR", expected_revision=3, db_path=self.db)
+        reset = model_hub.change("RESET_ORCHESTRATOR", expected_revision=4, db_path=self.db)
         self.assertFalse(reset["orchestrator"]["owner_override"])
-        restored = model_hub.change("ROLLBACK_MODEL_HUB", expected_revision=4,
-                                    target_revision=3, db_path=self.db)
+        self.assertEqual(reset["routes"], result["routes"])
+        restored = model_hub.change("ROLLBACK_MODEL_HUB", expected_revision=5,
+                                    target_revision=4, db_path=self.db)
         self.assertEqual(restored["orchestrator"]["policy"], values)
         self.assertEqual(model_hub.catalog(db_path=self.db), restored)
 
-    def test_legacy_policy_reads_unchanged_and_retires_inactive_values_on_save(self):
-        self.save(policy.defaults())
-        old_policy = policy._legacy_defaults()
-        del old_policy["paid_api_daily_limit"]
-        old_state = {"profiles": {}, "routes": {}, "orchestrator": old_policy}
-        with closing(sqlite3.connect(self.db)) as conn, conn:
-            conn.execute("UPDATE hub_state SET payload=?", (json.dumps(old_state),))
-            conn.execute("UPDATE hub_history SET payload=? WHERE revision=1", (json.dumps(old_state),))
-        current = model_hub.catalog(db_path=self.db)
-        self.assertEqual(current["revision"], 1)
-        self.assertEqual(current["orchestrator"]["policy"], policy.defaults())
-        with closing(sqlite3.connect(self.db)) as conn:
-            self.assertEqual(json.loads(conn.execute("SELECT payload FROM hub_state").fetchone()[0]),
-                             old_state)
-        self.save(current["orchestrator"]["policy"], revision=1)
-        updated = model_hub.catalog(db_path=self.db)["orchestrator"]["policy"]
-        self.assertEqual(updated, policy.defaults())
-        with closing(sqlite3.connect(self.db)) as conn:
-            self.assertEqual(json.loads(conn.execute("SELECT payload FROM hub_state").fetchone()[0])["orchestrator"],
-                             policy.defaults())
-        restored = model_hub.change("ROLLBACK_MODEL_HUB", expected_revision=2,
-                                    target_revision=1, db_path=self.db)
-        self.assertEqual(restored["orchestrator"]["policy"], policy.defaults())
-        with closing(sqlite3.connect(self.db)) as conn:
-            self.assertEqual(json.loads(conn.execute("SELECT payload FROM hub_state").fetchone()[0]), old_state)
-
-    def test_current_save_accepts_only_runtime_controls_and_preserves_routes(self):
+    def test_obsolete_policy_is_rejected_without_rewriting_database(self):
         self.seed()
-        legacy = {**policy._legacy_defaults(), "gpu_exclusive": False, "gpu_concurrency": 4,
-                  "mode": "AUTOMATIC", "paid_api_daily_limit": 37, "primary": "local_primary"}
-        state = {"profiles": model_hub._read_state(db_path=self.db)[1]["profiles"],
-                 "routes": {"general.text": "local_primary"}, "orchestrator": legacy}
+        _, state = model_hub._read_state(db_path=self.db)
+        state["orchestrator"] = {**policy.defaults(), "mappings": {}}
         with closing(sqlite3.connect(self.db)) as conn, conn:
             conn.execute("UPDATE hub_state SET payload=?", (json.dumps(state),))
-        self.assertEqual(model_hub.catalog(db_path=self.db)["orchestrator"]["policy"], policy.defaults())
-        active = {"mode": "SUPERVISED", "mappings": {},
-                  "permissions": {**legacy["permissions"], "plan": True}, "tools": ["ffmpeg"]}
-        result = self.save(active, revision=2)
-        saved = result["orchestrator"]["policy"]
-        self.assertEqual(saved, {**active, "cloud_call_limit": policy.defaults()["cloud_call_limit"],
-                                 "permissions": {**active["permissions"], "call_cloud": False}})
-        self.assertTrue(saved["permissions"]["plan"])
-        self.assertEqual(saved["tools"], ["ffmpeg"])
-        self.assertEqual(next(row for row in result["routes"] if row["id"] == "general.text")["model_ref"],
-                         "local_primary")
+        before = self.db.read_bytes()
         with self.assertRaises(ValueError):
-            self.save({**active, "unknown": True}, revision=3)
+            model_hub.catalog(db_path=self.db)
+        self.assertEqual(self.db.read_bytes(), before)
 
-    def test_invalid_later_binding_rolls_back_policy_and_first_binding(self):
+    def test_invalid_policy_write_is_atomic(self):
         self.seed()
         original = self.save(policy.defaults(), revision=2)
         with self.assertRaises(ValueError):
-            self.save(policy.defaults(),
-                      {"general.text": "cloud_primary", "film.motion": "local_primary"},
-                      revision=3)
+            self.save({**policy.defaults(), "mappings": {}}, revision=3)
         self.assertEqual(model_hub.catalog(db_path=self.db), original)
         with closing(sqlite3.connect(self.db)) as conn:
             self.assertEqual(conn.execute("SELECT max(revision) FROM hub_history").fetchone()[0], 3)
 
-    def test_disabled_reference_and_legacy_snapshots_are_readable(self):
+    def test_disabled_reference_is_reported_unavailable(self):
         self.seed()
         legacy = model_hub.change("SET_MODEL_ROUTE", expected_revision=2, db_path=self.db,
                                   task_id="general.text", model_ref="cloud_primary")
@@ -186,54 +152,14 @@ class OrchestratorTests(unittest.TestCase):
             self.assertFalse(selected["execution_allowed"])
             self.assertEqual(policy.resolve("general.text", profiles, "local")["model_ref"], "local")
 
-    def test_retired_policy_cannot_override_active_image_route_or_block_unused_profile_delete(self):
+    def test_casting_uses_the_same_route_api_and_reset_preserves_it(self):
         self.seed()
-        model_hub.change("SAVE_MODEL_PROFILE", expected_revision=2, db_path=self.db,
-                         profile=flux_profile())
-        _, state = model_hub._read_state(db_path=self.db)
-        state["routes"]["image.generate"] = "fixture_flux"
-        state["orchestrator"] = {
-            **policy._legacy_defaults(), "primary": "local_primary",
-            "selection": "SUGGEST", "allowed_profiles": ["fixture_flux", "local_primary"],
-            "fallback": "LOCAL", "fallbacks": {"general.text": "local_primary"},
-            "permissions": {**policy._legacy_defaults()["permissions"], "assign_local": True, "call_local": True},
-        }
-        with closing(sqlite3.connect(self.db)) as conn, conn:
-            conn.execute("UPDATE hub_state SET payload=?", (json.dumps(state),))
-        revision, selected = model_hub.image_runtime(automated=True, db_path=self.db)
-        self.assertEqual(revision, 3)
-        self.assertEqual(selected["id"], "fixture_flux")
-        with closing(sqlite3.connect(self.db)) as conn:
-            self.assertEqual(json.loads(conn.execute("SELECT payload FROM hub_state").fetchone()[0]), state)
-        removed = model_hub.change("DELETE_MODEL_PROFILE", expected_revision=3,
-                                   db_path=self.db, profile_id="local_primary")
-        self.assertNotIn("local_primary", {row["id"] for row in removed["profiles"]})
-        self.assertEqual(removed["orchestrator"]["policy"]["permissions"], {**state["orchestrator"]["permissions"], "call_cloud": False})
-        with closing(sqlite3.connect(self.db)) as conn:
-            self.assertEqual(json.loads(conn.execute("SELECT payload FROM hub_state").fetchone()[0])["orchestrator"], state["orchestrator"])
-        with self.assertRaisesRegex(ValueError, "unassign"):
-            model_hub.change("DELETE_MODEL_PROFILE", expected_revision=4,
-                             db_path=self.db, profile_id="fixture_flux")
-
-    def test_historical_casting_projects_into_routes_without_read_migration(self):
-        self.seed()
-        _, state = model_hub._read_state(db_path=self.db)
-        state["orchestrator"] = {**policy.defaults(), "mappings": {"character.select": "local_primary"}}
-        with closing(sqlite3.connect(self.db)) as conn, conn:
-            conn.execute("UPDATE hub_state SET payload=?", (json.dumps(state),))
-        before = self.db.read_bytes()
-        snapshot = model_hub.catalog(db_path=self.db)
-        self.assertEqual(self.db.read_bytes(), before)
-        self.assertEqual(next(row for row in snapshot["routes"] if row["id"] == "character.select")["model_ref"], "local_primary")
-        self.assertEqual(snapshot["orchestrator"]["policy"]["mappings"], {})
-        saved = self.save(snapshot["orchestrator"]["policy"], revision=2)
-        _, canonical = model_hub._read_state(db_path=self.db)
-        self.assertEqual(canonical["routes"]["character.select"], "local_primary")
-        self.assertEqual(canonical["orchestrator"]["mappings"], {})
-        self.assertEqual(saved["revision"], 3)
-        reset = model_hub.change("RESET_ORCHESTRATOR", db_path=self.db, expected_revision=3)
-        self.assertEqual(next(row for row in reset["routes"] if row["id"] == "character.select")["model_ref"], "local_primary")
-        self.assertFalse(reset["orchestrator"]["owner_override"])
+        self.assign("character.select", "local_primary", revision=2)
+        saved = self.save(policy.defaults(), revision=3)
+        self.assertEqual(next(row for row in saved["routes"] if row["id"] == "character.select")["model_ref"], "local_primary")
+        self.assertNotIn("mappings", saved["orchestrator"]["policy"])
+        reset = model_hub.change("RESET_ORCHESTRATOR", expected_revision=4, db_path=self.db)
+        self.assertEqual(reset["routes"], saved["routes"])
 
     def test_production_options_are_pure_and_reflect_admission(self):
         self.seed()
@@ -241,13 +167,15 @@ class OrchestratorTests(unittest.TestCase):
         methods = {row["id"]: row["available"] for row in snapshot["production_options"]["methods"]}
         self.assertEqual(methods, {"assigned": True, "auto": False, "local": False, "hybrid": False, "cloud": False})
         video = {"id": "cloud_video", "provider": "ltx_cloud", "model": "ltx-2-3-fast",
-                 "enabled": True, **model_hub.ADAPTERS["ltx_cloud"]["legacy_defaults"]}
+                 "enabled": True, **model_hub.ADAPTERS["ltx_cloud"]["environment_defaults"]}
         model_hub.change("SAVE_MODEL_PROFILE", expected_revision=2, db_path=self.db, profile=video)
         p = policy.defaults()
-        p["permissions"].update(plan=True, assign_local=True, call_cloud=True, run_tools=True)
+        p["permissions"].update(plan=True, assign_models=True, call_cloud=True, run_tools=True)
         p["tools"] = ["ffmpeg"]
-        snapshot = self.save(p, {"general.text": "cloud_primary", "film.storyboard": "cloud_primary",
-                                 "film.motion": "cloud_video"}, revision=3)
+        self.assign("general.text", "cloud_primary", revision=3)
+        self.assign("film.storyboard", "cloud_primary", revision=4)
+        self.assign("film.motion", "cloud_video", revision=5)
+        snapshot = self.save(p, revision=6)
         self.assertEqual({row["id"]: row["available"] for row in snapshot["production_options"]["methods"]},
                          {"assigned": False, "auto": True, "local": False, "hybrid": False, "cloud": True})
         self.assertEqual(snapshot["production_options"]["auto_min_cloud_seconds"], 12)

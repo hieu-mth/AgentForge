@@ -213,9 +213,8 @@ class FluxRuntimeTests(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 model_hub.image_runtime(automated=True, db_path=hub)
             policy = orchestrator_policy.defaults()
-            policy["permissions"].update(assign_local=True, call_local=True)
-            model_hub.change("SAVE_ORCHESTRATOR", expected_revision=2, policy=policy,
-                             route_changes={}, db_path=hub)
+            policy["permissions"].update(assign_models=True, call_local=True)
+            model_hub.change("SAVE_ORCHESTRATOR", expected_revision=2, policy=policy, db_path=hub)
             dispatched, release = threading.Event(), threading.Event()
             calls = []
 

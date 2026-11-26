@@ -39,7 +39,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
   const adapter=adapters.find(item=>item.id===provider);
   const [useEnv,setUseEnv]=useState(Boolean(profile?.api_key_env));
   const directCloud=connection==='cloud'&&!useEnv&&provider!=='chatgpt';
-  const fields=useEnv&&adapter.legacy_defaults?adapter.legacy_defaults:adapter.defaults;
+  const fields=useEnv&&adapter.environment_defaults?adapter.environment_defaults:adapter.defaults;
   const [review,setReview]=useState(null);
   const [contracts,setContracts]=useState([]);
   const [saving,setSaving]=useState(false);
@@ -152,7 +152,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
       </Form.Item>
       <div className="model-dialog-divider"/>
       {connection==='cloud'&&provider!=='chatgpt'&&<Button type="link" className="model-dialog-mode" onClick={()=>{
-        form.setFieldsValue({...(useEnv?adapter.defaults:adapter.legacy_defaults),api_key:undefined});
+        form.setFieldsValue({...(useEnv?adapter.defaults:adapter.environment_defaults),api_key:undefined});
         setUseEnv(!useEnv);
       }}>{useEnv?'Nhập trực tiếp':'Dùng biến môi trường'}</Button>}
       {Object.entries(fields).map(([key,example])=><Form.Item key={key} name={key}

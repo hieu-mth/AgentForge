@@ -59,18 +59,20 @@ class DraftTests(unittest.TestCase):
             self.registry_change("SAVE_MODEL_PROFILE", profile=profile)
         policy = draft.model_hub.orchestrator_policy.defaults()
         policy.update(permissions=dict.fromkeys(policy["permissions"], True), tools=["ffmpeg"])
-        return self.registry_change("SAVE_ORCHESTRATOR", policy=policy, route_changes={
-            "general.text": text["id"], "film.storyboard": writer["id"],
-            "image.generate": image["id"], "film.motion": motion["id"]})["revision"]
+        for task, ref in {"general.text": text["id"], "film.storyboard": writer["id"],
+                          "image.generate": image["id"], "film.motion": motion["id"]}.items():
+            self.registry_change("SET_MODEL_ROUTE", task_id=task, model_ref=ref)
+        return self.registry_change("SAVE_ORCHESTRATOR", policy=policy)["revision"]
 
     def test_new_storyboard_without_media_routes_or_image_gpu_and_late_binding(self):
         text = {"id": "owner_writer", "provider": "ollama", "enabled": True,
                 "model": "writer:8b", "base_url": "http://127.0.0.1:11434"}
         self.registry_change("SAVE_MODEL_PROFILE", profile=text)
         policy = draft.model_hub.orchestrator_policy.defaults()
-        policy["permissions"].update(plan=True, assign_local=True, call_local=True)
-        self.registry_change("SAVE_ORCHESTRATOR", policy=policy,
-                             route_changes={"general.text": text["id"], "film.storyboard": text["id"]})
+        policy["permissions"].update(plan=True, assign_models=True, call_local=True)
+        for task in ("general.text", "film.storyboard"):
+            self.registry_change("SET_MODEL_ROUTE", task_id=task, model_ref=text["id"])
+        self.registry_change("SAVE_ORCHESTRATOR", policy=policy)
         def storyboard(job, bindings):
             self.assertEqual(set(bindings), {"general.text", "film.storyboard"})
             with draft._measured(job, "storyboard"):
@@ -93,7 +95,7 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(draft._read(self.ident), saved)
         policy["permissions"]["run_tools"] = True
         policy["tools"] = ["ffmpeg"]
-        self.registry_change("SAVE_ORCHESTRATOR", policy=policy, route_changes={})
+        self.registry_change("SAVE_ORCHESTRATOR", policy=policy)
         with self.assertRaisesRegex(ValueError, "image.generate"):
             draft.act(self.ident, "storyboard-approve", {"sha256": sha})
         image = flux_profile()
@@ -115,8 +117,9 @@ class DraftTests(unittest.TestCase):
         policy = draft.model_hub.orchestrator_policy.defaults()
         policy["permissions"] = dict.fromkeys(policy["permissions"], True)
         policy["tools"] = ["ffmpeg"]
-        self.registry_change("SAVE_ORCHESTRATOR", policy=policy,
-                             route_changes={"general.text": text["id"], "film.storyboard": text["id"]})
+        for task in ("general.text", "film.storyboard"):
+            self.registry_change("SET_MODEL_ROUTE", task_id=task, model_ref=text["id"])
+        self.registry_change("SAVE_ORCHESTRATOR", policy=policy)
         def storyboard(job, bindings):
             self.assertNotIn("film.motion", bindings)
             job.update(board=draft._story(self.board(), 2, 4, {"cat": {}}), cast={})
@@ -154,7 +157,7 @@ class DraftTests(unittest.TestCase):
         draft._save(job)
         self.registry_change("SAVE_MODEL_PROFILE", profile={
             "id": "cloud_config", "provider": "anthropic", "model": "unused", "enabled": True,
-            **draft.model_hub.ADAPTERS["anthropic"]["legacy_defaults"]})
+            **draft.model_hub.ADAPTERS["anthropic"]["environment_defaults"]})
         saved = draft._read(self.ident)
         current, _, legacy = draft._studio_bindings(saved)
         self.assertGreater(current, revision)
@@ -198,10 +201,7 @@ class DraftTests(unittest.TestCase):
               patch.object(draft, "_ask", return_value={"ids": ["cat"]}) as ask):
             self.assertEqual(draft._select_cast(job, bindings, "A cat")["cat"]["reference_version"], 3)
             self.assertEqual(ask.call_args.args[0]["id"], "owner_story")
-            policy = draft.model_hub.orchestrator_policy.defaults()
-            policy.update(permissions=dict.fromkeys(policy["permissions"], True), tools=["ffmpeg"],
-                          mappings={"character.select": "owner_planner"})
-            self.registry_change("SAVE_ORCHESTRATOR", policy=policy, route_changes={})
+            self.registry_change("SET_MODEL_ROUTE", task_id="character.select", model_ref="owner_planner")
             with self.assertRaisesRegex(ValueError, "character.select"):
                 draft._studio_bindings(job)
             _, explicit = draft.model_hub.draft_routes()
