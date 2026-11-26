@@ -112,6 +112,21 @@ def list_drafts():
     return [draft_lifecycle.interrupted_view(job, ACTIVE) for job in draft_store.recent(DB)]
 
 
+def public_view(job):
+    """Read projection; derived UI constraints cannot alter stored checkpoint or digest."""
+    if not isinstance(job.get("brief"), dict):
+        return job
+    remaining = None
+    if (job.get("production_plan") or {}).get("method") in {"hybrid", "cloud"} and job.get("board"):
+        from agentforge.features.film_studio import draft_motion_cloud
+        try:
+            remaining = draft_motion_cloud.remaining_seconds(job)
+        except (ValueError, TypeError, KeyError):
+            pass
+    return {**job, "editor_constraints": draft_timeline.editor_constraints(job),
+            "cloud_seconds_remaining": remaining}
+
+
 def jobs_pending():
     return bool(ACTIVE) or draft_store.pending(DB)
 
@@ -1217,69 +1232,72 @@ def submit(data):
     return started if started and started["id"] == ident else _read(ident)
 
 
+def _approve_storyboard(job):
+    if job["status"] != "STORYBOARD_REVIEW":
+        raise ValueError("Storyboard không chờ duyệt.")
+    _validate_creative_frames(job)
+    draft_audio.validate(job)
+    draft_continuity.validate(job)
+    ops_control.require_active()
+    moving = job["brief"].get("mode") == "motion"
+    deferred = job.get("deferred_media_binding")
+    if deferred:
+        # Owner approves the reviewed text and the currently assigned media routes.
+        # Preserve the text profile pins; bind media once from the same registry snapshot.
+        revision, bindings = model_hub.draft_routes(moving=moving, **_route_kwargs(job))
+        text_bindings = {key: value for key, value in bindings.items()
+                         if key in model_hub.PLANNING_CAPABILITIES}
+        identity_revision = _check_studio_routing(job, revision, text_bindings)
+    else:
+        revision, bindings, identity_revision = _studio_bindings(job)
+    if moving:
+        if deferred:
+            adapter = studio_runtime.motion_adapter(bindings.get("film.motion"))
+            if adapter.output_profile() != studio_runtime.job_output(job):
+                raise ValueError("Model chuyển động không khớp timeline I2V đã xem. Hãy lập lại storyboard.")
+            identity = studio_runtime.motion_identity(adapter, bindings["film.motion"])
+            if job.get("production_plan"):
+                pinned = studio_runtime.routing_identity({"film.motion": bindings["film.motion"]}, moving=True)["film.motion"]
+                if pinned != job["production_plan"]["motion_profile_sha"] or identity != job["motion_plan"]:
+                    raise ValueError("Model video đã thay đổi; lập production mới để chọn lại.")
+            job["motion_plan"] = identity
+        else:
+            adapter, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
+        if bindings["film.motion"]["provider"] == "ltx_cloud":
+            from agentforge.features.film_studio import draft_motion_cloud
+            plan = job.get("production_plan")
+            if not plan or plan["method"] not in {"hybrid", "cloud"}:
+                raise ValueError("Cloud video requires an approved production route and explicit budget.")
+            missing = draft_motion_cloud.remaining_seconds(job)
+            if job.get("cloud_motion_seconds", 0) + missing > plan["max_cloud_seconds"]:
+                raise ValueError("Ngân sách giây cloud không đủ cho timeline đã duyệt.")
+            job.pop("approved_motion_environment", None)
+        else:
+            job["approved_motion_environment"] = _motion_environment()
+        adapter.bind(bindings["film.motion"])
+        job["approved_motion"] = identity
+    else:
+        render._ffmpeg()
+    if deferred:
+        job["studio_plan"] = studio_runtime.routing_identity(bindings, moving=moving)
+        job.pop("deferred_media_binding")
+        # The reviewed content is unchanged; the receipt now also binds actual media.
+        job["storyboard_sha"] = draft_timeline.digest(job)
+    job.update(approved_storyboard_sha=job["storyboard_sha"], motion_revision=revision, status="QUEUED")
+    with comfy_service.LOCK, draft_store.connect(DB, True) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        draft_store.approve_queued(conn, job, _queue_limit())
+        comfy_service.reset_idle()
+    return job
+
+
 def _storyboard_action(job, action, data):
     if ("storyboard_version" not in job or not job.get("board")
             or data["sha256"] != draft_timeline.digest(job)
             or data["sha256"] != job.get("storyboard_sha")):
         raise ValueError("Storyboard đã thay đổi. Tải lại trước khi tiếp tục.")
     if action == "storyboard-approve":
-        if job["status"] != "STORYBOARD_REVIEW":
-            raise ValueError("Storyboard không chờ duyệt.")
-        _validate_creative_frames(job)
-        draft_audio.validate(job)
-        draft_continuity.validate(job)
-        ops_control.require_active()
-        moving = job["brief"].get("mode") == "motion"
-        deferred = job.get("deferred_media_binding")
-        if deferred:
-            # Owner approves the reviewed text and the currently assigned media routes.
-            # Preserve the text profile pins; bind media once from the same registry snapshot.
-            revision, bindings = model_hub.draft_routes(moving=moving, **_route_kwargs(job))
-            text_bindings = {key: value for key, value in bindings.items()
-                             if key in model_hub.PLANNING_CAPABILITIES}
-            identity_revision = _check_studio_routing(job, revision, text_bindings)
-        else:
-            revision, bindings, identity_revision = _studio_bindings(job)
-        if moving:
-            if deferred:
-                adapter = studio_runtime.motion_adapter(bindings.get("film.motion"))
-                if adapter.output_profile() != studio_runtime.job_output(job):
-                    raise ValueError("Model chuyển động không khớp timeline I2V đã xem. Hãy lập lại storyboard.")
-                identity = studio_runtime.motion_identity(adapter, bindings["film.motion"])
-                if job.get("production_plan"):
-                    pinned = studio_runtime.routing_identity({"film.motion": bindings["film.motion"]}, moving=True)["film.motion"]
-                    if pinned != job["production_plan"]["motion_profile_sha"] or identity != job["motion_plan"]:
-                        raise ValueError("Model video đã thay đổi; lập production mới để chọn lại.")
-                job["motion_plan"] = identity
-            else:
-                adapter, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
-            if bindings["film.motion"]["provider"] == "ltx_cloud":
-                from agentforge.features.film_studio import draft_motion_cloud
-                plan = job.get("production_plan")
-                if not plan or plan["method"] not in {"hybrid", "cloud"}:
-                    raise ValueError("Cloud video requires the V5 route and explicit budget.")
-                missing = sum(draft_motion_cloud.billed_seconds(scene["frames"]) for scene in job["board"]["scenes"]
-                              if not scene.get("motion_job"))
-                if job.get("cloud_motion_seconds", 0) + missing > plan["max_cloud_seconds"]:
-                    raise ValueError("Ngân sách giây cloud không đủ cho timeline đã duyệt.")
-                job.pop("approved_motion_environment", None)
-            else:
-                job["approved_motion_environment"] = _motion_environment()
-            adapter.bind(bindings["film.motion"])
-            job["approved_motion"] = identity
-        else:
-            render._ffmpeg()
-        if deferred:
-            job["studio_plan"] = studio_runtime.routing_identity(bindings, moving=moving)
-            job.pop("deferred_media_binding")
-            # The reviewed content is unchanged; the receipt now also binds actual media.
-            job["storyboard_sha"] = draft_timeline.digest(job)
-        job.update(approved_storyboard_sha=job["storyboard_sha"], motion_revision=revision, status="QUEUED")
-        with comfy_service.LOCK, draft_store.connect(DB, True) as conn:
-            conn.execute("BEGIN IMMEDIATE")
-            draft_store.approve_queued(conn, job, _queue_limit())
-            comfy_service.reset_idle()
-        return job
+        return _approve_storyboard(job)
     if job["status"] not in {"STORYBOARD_REVIEW", "REVIEW", "FAILED"}:
         raise ValueError("Storyboard chưa thể chỉnh ở trạng thái này.")
     if action == "storyboard-regenerate" and (job["status"] != "REVIEW" or not job.get("video_sha")):
