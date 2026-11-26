@@ -42,12 +42,12 @@ class AudioGenerationTests(unittest.TestCase):
                        "api_key_env": "ELEVENLABS_API_KEY"}
             model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0, db_path=db, profile=profile)
             policy = orchestrator_policy.defaults()
-            model_hub.change("SAVE_ORCHESTRATOR", expected_revision=1, db_path=db, policy=policy,
-                             route_changes={"film.sound": "owner_sound"})
+            model_hub.change("SET_MODEL_ROUTE", expected_revision=1, db_path=db,
+                             task_id="film.sound", model_ref="owner_sound")
             with self.assertRaises(PermissionError):
                 model_hub.audio_generation_binding("film.sound", db_path=db)
             policy.update(permissions=dict.fromkeys(policy["permissions"], True), tools=["ffmpeg"])
-            model_hub.change("SAVE_ORCHESTRATOR", expected_revision=2, db_path=db, policy=policy, route_changes={})
+            model_hub.change("SAVE_ORCHESTRATOR", expected_revision=2, db_path=db, policy=policy)
             self.assertEqual(model_hub.audio_generation_binding("film.sound", db_path=db)[1]["id"], "owner_sound")
 
     def test_generated_audio_decodes_mixes_and_reserves_budget(self):

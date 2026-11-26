@@ -83,9 +83,9 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept,onNavigate}){
   }
 
   function save(values){
-    const next={mode:values.mode,mappings:{},permissions:values.permissions,
+    const next={mode:values.mode,permissions:values.permissions,
       tools:form.getFieldValue('tools')??initial.tools,cloud_call_limit:values.cloud_call_limit};
-    confirm('SAVE_ORCHESTRATOR',{policy:next,route_changes:{}});
+    confirm('SAVE_ORCHESTRATOR',{policy:next});
   }
 
   return <Form form={form} layout="vertical" initialValues={initial}

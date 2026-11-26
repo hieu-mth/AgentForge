@@ -156,7 +156,7 @@ class ModelHubTests(unittest.TestCase):
                 {"id": "disabled", "provider": "ollama", "enabled": False,
                  "model": "fixture:latest", "base_url": "http://localhost:11434"},
                 {"id": "cloud", "provider": "anthropic", "enabled": True, "model": "fixture",
-                 **model_hub.ADAPTERS["anthropic"]["legacy_defaults"]},
+                 **model_hub.ADAPTERS["anthropic"]["environment_defaults"]},
             )
             for revision, profile in enumerate(profiles):
                 model_hub.change("SAVE_MODEL_PROFILE", expected_revision=revision, db_path=db, profile=profile)
@@ -212,7 +212,7 @@ class ModelHubTests(unittest.TestCase):
                 for revision, adapter in enumerate(catalog):
                     profile = {"id": f"owner_{revision}", "provider": adapter["id"],
                                "model": "fixture-model", "enabled": True,
-                               **adapter.get("legacy_defaults", adapter["defaults"])}
+                               **adapter.get("environment_defaults", adapter["defaults"])}
                     model_hub.change("SAVE_MODEL_PROFILE", expected_revision=revision,
                                      db_path=db, profile=profile)
                     with self.assertRaises(model_hub.ModelConfigError):
@@ -264,9 +264,10 @@ class ModelHubTests(unittest.TestCase):
                 model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0,
                                  db_path=db, profile=profile)
 
-    def test_historical_unknown_route_is_inert_and_deterministic_remains_protected(self):
-        model_hub._validate_state({
-            "profiles": {}, "routes": {"retired.legacy_route": "local_primary"}})
+    def test_unknown_route_and_deterministic_route_are_rejected(self):
+        with self.assertRaises(model_hub.ModelConfigError):
+            model_hub._validate_state({
+                "profiles": {}, "routes": {"retired.legacy_route": "local_primary"}})
         with self.assertRaises(model_hub.ModelConfigError):
             model_hub._validate_state({
                 "profiles": {}, "routes": {"ops.monitor": "local_primary"}})

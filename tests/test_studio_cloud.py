@@ -46,8 +46,9 @@ class CloudTextTests(unittest.TestCase):
             policy = orchestrator_policy.defaults()
             policy["permissions"].update(plan=True, assign_local=True, call_cloud=True)
             policy["cloud_call_limit"] = 2
-            model_hub.change("SAVE_ORCHESTRATOR", expected_revision=1, policy=policy,
-                             route_changes={"general.text": profile["id"], "film.storyboard": profile["id"]})
+            model_hub.change("SET_MODEL_ROUTE", expected_revision=1, task_id="general.text", model_ref=profile["id"])
+            model_hub.change("SET_MODEL_ROUTE", expected_revision=2, task_id="film.storyboard", model_ref=profile["id"])
+            model_hub.change("SAVE_ORCHESTRATOR", expected_revision=3, policy=policy)
             brief = {"id": "a"*32, "idea": "A cat", "seconds": 6, "scene_count": 2, "ratio": "16:9"}
             job = draft.submit(brief)
             board = {"title": "Cat", "continuity": "Same cat", "scenes": [
@@ -75,7 +76,7 @@ class CloudTextTests(unittest.TestCase):
                     draft._ask(profile, "Test", {}, {}, None, job=saved)
             self.assertFalse(policy["permissions"]["call_local"])
             policy["permissions"]["call_cloud"] = False
-            model_hub.change("SAVE_ORCHESTRATOR", expected_revision=2, policy=policy, route_changes={})
+            model_hub.change("SAVE_ORCHESTRATOR", expected_revision=4, policy=policy)
             with patch.object(studio_cloud, "infer_structured", side_effect=AssertionError("revoked permission")):
                 with self.assertRaises(PermissionError):
                     draft._ask(profile, "Test", {}, {}, None, job=saved)
@@ -95,8 +96,9 @@ class CloudTextTests(unittest.TestCase):
                 model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0, profile=profile)
                 policy = orchestrator_policy.defaults()
                 policy["permissions"].update(plan=True, assign_local=True, call_cloud=True)
-                model_hub.change("SAVE_ORCHESTRATOR", expected_revision=1, policy=policy,
-                                 route_changes={"general.text": profile["id"], "film.storyboard": profile["id"]})
+                model_hub.change("SET_MODEL_ROUTE", expected_revision=1, task_id="general.text", model_ref=profile["id"])
+                model_hub.change("SET_MODEL_ROUTE", expected_revision=2, task_id="film.storyboard", model_ref=profile["id"])
+                model_hub.change("SAVE_ORCHESTRATOR", expected_revision=3, policy=policy)
                 job = draft.submit({"id": "b"*32, "idea": "Mèo nhìn cửa rồi bước đi.",
                                     "seconds": None, "scene_count": None, "ratio": "16:9",
                                     "mode": "motion", "duration_mode": "auto"})

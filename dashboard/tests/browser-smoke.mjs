@@ -836,10 +836,13 @@ try {
     'primary' in persisted.orchestrator.policy||'gpu_concurrency' in persisted.orchestrator.policy)
     throw new Error('Saved model was not read back from real Model Hub');
   const {csrf}=await (await settings.request.get(policyOrigin+'/api/session')).json();
-  const invalid=await settings.request.post(endpoint,{headers:{...postOptions.headers,'X-CSRF-Token':csrf},
+  const invalid=await settings.request.post(policyOrigin+'/api/model-hub/route',{headers:{...postOptions.headers,'X-CSRF-Token':csrf},
+    data:{ack:'SET_MODEL_ROUTE',expected_revision:3,task_id:'film.motion',model_ref:'local_primary'}});
+  if(invalid.status()!==400)throw new Error('API accepted a text model for video');
+  const obsolete=await settings.request.post(endpoint,{headers:{...postOptions.headers,'X-CSRF-Token':csrf},
     data:{ack:'SAVE_ORCHESTRATOR',expected_revision:3,policy:persisted.orchestrator.policy,
       route_changes:{'film.motion':'local_primary'}}});
-  if(invalid.status()!==400)throw new Error('API accepted a text model for video');
+  if(obsolete.status()===200)throw new Error('Retired policy assignment API accepted a write');
   const assignedDelete=await settings.request.post(policyOrigin+'/api/model-hub/profile/delete',{
     headers:{Origin:policyOrigin,'X-CSRF-Token':csrf},
     data:{ack:'DELETE_MODEL_PROFILE',expected_revision:3,profile_id:'local_primary'},

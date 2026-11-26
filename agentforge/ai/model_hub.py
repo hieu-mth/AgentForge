@@ -33,10 +33,6 @@ ENV_NAME = re.compile(r"[A-Z_][A-Z0-9_]*\Z")
 # Retain stable IDs for existing Owner SQLite routes and Dashboard clients.
 ROUTE_CAPABILITIES = frozenset(key for key, _, kind, _ in orchestrator_policy.CAPABILITIES
                                if kind != "tool" or key == "ops.monitor")
-# Historical casting lived inside policy.mappings. Accept it on read/legacy writes only.
-LEGACY_MAPPING_CAPABILITIES = {"character.select"}
-# Persisted Owner overlays for retired products are accepted read-only but
-# excluded from active routes. Never rewrite the Owner's SQLite on GET.
 
 ID_RE = re.compile(r"[a-z][a-z0-9_]{2,39}\Z")
 TASK_RE = re.compile(r"[a-z][a-z0-9_.]{2,59}\Z")
@@ -121,7 +117,7 @@ ADAPTERS = {
         "model_example": "model-id-da-cap",
         "description": "API HTTPS tương thích Anthropic Messages; nhập API base URL và model ID.",
         "defaults": {"base_url": ""},
-        "legacy_defaults": {"base_url_env": "ANTHROPIC_BASE_URL",
+        "environment_defaults": {"base_url_env": "ANTHROPIC_BASE_URL",
                             "api_key_env": "ANTHROPIC_AUTH_TOKEN"}, "local_probe": False,
         "cloud_probe": True,
     },
@@ -130,7 +126,7 @@ ADAPTERS = {
         "model_example": "model-id-da-cap",
         "description": "API HTTPS tương thích Chat Completions; nhập API base URL và model ID.",
         "defaults": {"base_url": ""},
-        "legacy_defaults": {"base_url_env": "OPENAI_BASE_URL", "api_key_env": "OPENAI_API_KEY"},
+        "environment_defaults": {"base_url_env": "OPENAI_BASE_URL", "api_key_env": "OPENAI_API_KEY"},
         "local_probe": False, "cloud_probe": True,
     },
     "chatgpt": {
@@ -142,7 +138,7 @@ ADAPTERS = {
         "label": "LTX Cloud", "connection": "cloud", "model_label": "Model ID",
         "model_example": "ltx-2-3-fast", "description": "LTX V2 video; 720p, 24 fps, 6/8/10 giây. Chỉ gửi sau duyệt ngân sách.",
         "defaults": {"base_url": "https://api.ltx.io"},
-        "legacy_defaults": {"base_url_env": "LTX_BASE_URL", "api_key_env": "LTX_API_KEY"},
+        "environment_defaults": {"base_url_env": "LTX_BASE_URL", "api_key_env": "LTX_API_KEY"},
         "local_probe": False, "cloud_probe": False,
     },
     "elevenlabs": {
@@ -150,7 +146,7 @@ ADAPTERS = {
         "model_example": "model-id-da-cap",
         "description": "API HTTPS tạo hiệu ứng âm thanh hoặc nhạc; Owner tự chọn model và endpoint.",
         "defaults": {"base_url": ""},
-        "legacy_defaults": {"base_url_env": "ELEVENLABS_BASE_URL", "api_key_env": "ELEVENLABS_API_KEY"},
+        "environment_defaults": {"base_url_env": "ELEVENLABS_BASE_URL", "api_key_env": "ELEVENLABS_API_KEY"},
         "local_probe": False, "cloud_probe": False,
     },
 }
@@ -252,7 +248,7 @@ def validate_profile(value, *, profile_id=None, preview=False):
         if not valid_key:
             raise ModelConfigError("Invalid protected API key")
         common.update(base_url=_cloud_url(value["base_url"]), api_key_protected=key)
-    elif fields == ADAPTERS[provider]["legacy_defaults"].keys():
+    elif fields == ADAPTERS[provider]["environment_defaults"].keys():
         for key in fields:
             common[key] = _required_text(value[key], ENV_NAME, "environment variable name")
     else:
@@ -347,17 +343,14 @@ def _validate_state(doc):
         raise ModelConfigError("Model Hub exceeds bounded limits")
     for ident, profile in doc["profiles"].items():
         validate_profile(profile, profile_id=ident)
-    # Unknown keys in older Owner SQLite are inert archival data, not routes.
-    # Read safely without rewriting the Owner database during GET.
-    defaults = route_catalog()
+    routes = route_catalog()
     if "orchestrator" in doc:
-        orchestrator_policy.read_policy(
-            doc["orchestrator"], id_pattern=ID_RE, extra_routes=LEGACY_MAPPING_CAPABILITIES)
+        orchestrator_policy.validate(doc["orchestrator"])
     for key, ref in doc["routes"].items():
         _required_text(key, TASK_RE, "stored task key")
         _required_text(ref, ID_RE, "stored model ID")
-        if key in defaults and defaults[key]["kind"] == "rules":
-            raise ModelConfigError("Deterministic monitoring cannot use a model")
+        if key not in routes or routes[key]["kind"] == "rules":
+            raise ModelConfigError("Unknown or deterministic stored route")
     if len(json.dumps(doc, ensure_ascii=False).encode("utf-8")) > MAX_STATE_BYTES:
         raise ModelConfigError("Model Hub state exceeds safe size")
 
@@ -389,27 +382,11 @@ def effective_models(*, db_path=None):
 
 
 def _active_policy(state):
-    return orchestrator_policy.read_policy(
-        state.get("orchestrator", orchestrator_policy.defaults()),
-        id_pattern=ID_RE, extra_routes=LEGACY_MAPPING_CAPABILITIES)
-
-
-def _route_refs(state):
-    """One effective assignment map. Explicit routes win over historical casting."""
-    return {**_active_policy(state)["mappings"], **state["routes"]}
-
-
-def _canonicalize_assignments(state):
-    """Only on an explicit write; never modify history or migrate on GET."""
-    policy = _active_policy(state)
-    if policy["mappings"]:
-        for key, ref in policy["mappings"].items():
-            state["routes"].setdefault(key, ref)
-        state["orchestrator"] = {**policy, "mappings": {}}
+    return orchestrator_policy.validate(state.get("orchestrator", orchestrator_policy.defaults()))
 
 
 def _orchestrator_catalog(state, profiles, routes):
-    policy = {**_active_policy(state), "mappings": {}}
+    policy = _active_policy(state)
     by_route = {row["id"]: row for row in routes}
     capabilities = []
     for key, label, kind, tool in orchestrator_policy.CAPABILITIES:
@@ -639,7 +616,7 @@ def _draft_bindings(state, *, moving, planning=False, motion_ref=None, direct_cl
     if not planning and (not permissions["run_tools"] or "ffmpeg" not in policy["tools"]):
         raise PermissionError("Hãy bật chạy công cụ local và FFmpeg trong AI điều phối.")
     profiles = _profiles(state=state)
-    refs = _route_refs(state)
+    refs = state["routes"]
     bindings = {}
     capabilities = PLANNING_CAPABILITIES if planning else (*PLANNING_CAPABILITIES, "image.generate", "film.motion")
     for capability in capabilities:
@@ -666,7 +643,7 @@ def _draft_bindings(state, *, moving, planning=False, motion_ref=None, direct_cl
 
 def _catalog(revision, state):
     profiles = _profiles(state=state)
-    refs = _route_refs(state)
+    refs = state["routes"]
     routes = []
     for key, route in route_catalog().items():
         selected = (None if route["kind"] == "rules"
@@ -887,36 +864,8 @@ def _tables(conn):
         at TEXT NOT NULL)""")
 
 
-def _save_orchestrator(updated, policy, route_changes):
-    routes = route_catalog()
-    policy = orchestrator_policy.validate(
-        policy, id_pattern=ID_RE, extra_routes=LEGACY_MAPPING_CAPABILITIES)
-    editable = {key for key in routes if orchestrator_policy.KINDS.get(key)
-                in {"text", "image", "video", "vision", "audio", "sound", "music"}}
-    if not isinstance(route_changes, dict) or not route_changes.keys() <= editable:
-        raise ModelConfigError("Danh sách tuyến điều phối không hợp lệ")
-    profiles = _profiles(state=updated)
-
-    def validate_ref(ref, kind):
-        if not isinstance(ref, str) or not ID_RE.fullmatch(ref):
-            raise ModelConfigError("Mã model không hợp lệ")
-        profile = profiles.get(ref)
-        if not orchestrator_policy.compatible(kind, profile):
-            raise ModelConfigError("Model không khả dụng hoặc không tương thích")
-    for key, ref in policy["mappings"].items():
-        validate_ref(ref, orchestrator_policy.KINDS[key])
-        updated["routes"][key] = ref
-    for key, ref in route_changes.items():
-        if ref is None:
-            updated["routes"].pop(key, None)
-        else:
-            validate_ref(ref, routes[key]["kind"])
-            updated["routes"][key] = ref
-    updated["orchestrator"] = {**policy, "mappings": {}}
-
-
 def change(action, *, expected_revision, db_path=None, profile=None, profile_id=None,
-           task_id=None, model_ref=None, target_revision=None, policy=None, route_changes=None,
+           task_id=None, model_ref=None, target_revision=None, policy=None,
            api_key=None, intent=None):
     """CAS-guarded Owner mutation; snapshot history supports explicit rollback."""
     if type(expected_revision) is not int or expected_revision < 0:
@@ -936,7 +885,6 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
         if revision != expected_revision:
             raise ValueError("MODEL_HUB_REVISION_CONFLICT")
         updated = copy.deepcopy(current)
-        _canonicalize_assignments(updated)
         if action == "SAVE_MODEL_PROFILE":
             if intent is not None:
                 if intent not in ("create", "edit") or not isinstance(profile, dict):
@@ -956,8 +904,7 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
             _required_text(profile_id, ID_RE, "model ID")
             if profile_id not in updated["profiles"]:
                 raise ModelConfigError("Unknown model profile")
-            attached = {ref for key, ref in _route_refs(updated).items()
-                        if key in route_catalog()}
+            attached = set(updated["routes"].values())
             if profile_id in attached:
                 raise ModelConfigError("Model is assigned; unassign it before deleting")
             del updated["profiles"][profile_id]
@@ -977,7 +924,7 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
             else:
                 updated["routes"].pop(task_id, None)
         elif action == "SAVE_ORCHESTRATOR":
-            _save_orchestrator(updated, policy, route_changes)
+            updated["orchestrator"] = orchestrator_policy.validate(policy)
         elif action == "RESET_ORCHESTRATOR":
             # Reset execution permissions, not model assignments.
             updated.pop("orchestrator", None)
@@ -1046,7 +993,7 @@ def _production_options(state):
     candidates = _production_candidates(state, "auto")
     by_method = {method: sum(c["method"] == method for c in candidates)
                  for method in ("local", "hybrid", "cloud")}
-    motion = state["profiles"].get(_route_refs(state).get("film.motion"), {})
+    motion = state["profiles"].get(state["routes"].get("film.motion"), {})
     assigned_cloud = motion.get("provider") == "ltx_cloud"
     return {"methods": [
         {"id": "assigned", "available": not assigned_cloud},
