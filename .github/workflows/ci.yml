@@ -67,9 +67,9 @@ jobs:
       - name: Install Dashboard dependencies
         working-directory: dashboard
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Dashboard dead-code and dependency inventory
+      - name: Dashboard dead-code and dependency gate
         working-directory: dashboard
-        run: npm exec --yes --package=knip@5.46.0 --package=typescript@5.8.3 -- knip --no-exit-code
+        run: npm exec --yes --package=knip@5.46.0 --package=typescript@5.8.3 -- knip
       - name: Dashboard unit checks
         working-directory: dashboard
         run: npm run test:navigation
