@@ -213,6 +213,9 @@ class ModelHubTests(unittest.TestCase):
             catalog = model_hub.catalog(db_path=db)["adapters"]
             self.assertFalse(db.exists())
             self.assertEqual({row["id"]: row["connection"] for row in catalog}, expected)
+            self.assertEqual([(row["id"], row["label"]) for row in catalog if row["connection"] == "cloud"],
+                             [("chatgpt", "ChatGPT"), ("openai", "OpenAI API"), ("anthropic", "Anthropic API"),
+                              ("ltx_cloud", "LTX Video API"), ("elevenlabs", "ElevenLabs API")])
             with patch("urllib.request.urlopen", side_effect=AssertionError("network")):
                 for revision, adapter in enumerate(catalog):
                     profile = {"id": f"owner_{revision}", "provider": adapter["id"],
