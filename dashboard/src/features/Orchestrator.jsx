@@ -40,34 +40,21 @@ export function Orchestrator({mutate,dirty,setDirty}){
     <ResourceStatus resource={resource} label="chính sách điều phối"/>
     {resource.data?.orchestrator&&<PolicyEditor key={resource.data.revision}
       snapshot={resource.data} mutate={mutate} dirty={dirty} setDirty={setDirty}
-      accept={resource.setData} reload={resource.reload}/>}
+      accept={resource.setData}/>}
   </div>;
 }
 
-function PolicyEditor({snapshot,mutate,dirty,setDirty,accept,reload}){
+function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
   const {modal,message}=AntApp.useApp();
   const [form]=Form.useForm();
   const [saving,setSaving]=useState(false);
   const profiles=snapshot.profiles??[];
   const byAdapter=Object.fromEntries((snapshot.adapters??[]).map(adapter=>[adapter.id,adapter]));
 
-  function updateRoute(taskId,model,label){
-    if(dirty||saving)return;
-    modal.confirm({
-      title:'Cập nhật phân công model?',content:label+' · '+(model||'Chưa gán')+' · Revision '+snapshot.revision,
-      okText:'Xác nhận',cancelText:'Hủy',
-      onOk:async()=>{
-        setSaving(true);
-        try{
-          const result=await mutate(model?'/api/model-hub/route':'/api/model-hub/reset',{
-            ack:model?'SET_MODEL_ROUTE':'RESET_MODEL_ROUTE',expected_revision:snapshot.revision,task_id:taskId,
-            ...(model?{model_ref:model}:{}),
-          });
-          if(result){accept(result);message.success('Đã lưu phân công model');}
-          else await reload();
-        }finally{setSaving(false);}
-      },
-    });
+  const [routeChanges,setRouteChanges]=useState({});
+  function updateRoute(taskId,model){
+    setRouteChanges(changes=>({...changes,[taskId]:model||null}));
+    setDirty(true);
   }
   const {policy,owner_override}=snapshot.orchestrator;
   const runTools=Form.useWatch(['permissions','run_tools'],form)??policy.permissions.run_tools;
@@ -106,7 +93,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept,reload}){
   function save(values){
     const next={mode:values.mode,permissions:values.permissions,
       tools:form.getFieldValue('tools')??initial.tools,cloud_call_limit:values.cloud_call_limit};
-    confirm('SAVE_ORCHESTRATOR',{policy:next});
+    confirm('SAVE_ORCHESTRATOR',{policy:next,route_changes:routeChanges});
   }
 
   return <Form form={form} layout="vertical" initialValues={initial}
@@ -122,7 +109,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept,reload}){
       </>}
       actions={<>
         <Button className={!dirty?'orchestrator-cancel-idle':undefined} disabled={!dirty}
-          onClick={()=>{form.resetFields();setDirty(false);}}>Hủy thay đổi</Button>
+          onClick={()=>{form.resetFields();setRouteChanges({});setDirty(false);}}>Hủy thay đổi</Button>
         <Button type="primary" icon={<SaveOutlined/>} htmlType="submit" disabled={!dirty} loading={saving}>Lưu cấu hình</Button>
       </>}/>
     <Card className="env-panel" title={<SectionTitle icon={<ApartmentOutlined/>}
@@ -137,17 +124,19 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept,reload}){
     {snapshot.routes?.some(route=>route.kind!=='rules')&&<Card className="env-panel"
       title={<SectionTitle icon={<TeamOutlined/>} title="Phân công model"
         description="Chọn model đã đăng ký tại Model AI cho từng năng lực. Phân công được lưu riêng với chính sách."/>}>
-      {dirty&&<Text type="secondary">Lưu hoặc hủy thay đổi chính sách trước khi phân công model.</Text>}
       <div className="model-route-list">{snapshot.routes.filter(route=>route.kind!=='rules').map(route=>{
         const options=configurableProfiles(profiles,route.id);
+        const selected=Object.hasOwn(routeChanges,route.id)?routeChanges[route.id]:route.model_ref;
         return <label key={route.id} className="model-route">
           <strong>{route.label}</strong>
-          <Select disabled={dirty||saving} showSearch optionFilterProp="label" aria-label={'Model cho '+route.label} value={route.model_ref??''}
+          <Select disabled={saving} showSearch optionFilterProp="label" aria-label={'Model cho '+route.label} value={selected??''}
             options={[{value:'',label:'Chưa gán'},...options.map(profile=>({value:profile.id,
-              label:profile.id+' · '+profile.model+(byAdapter[profile.provider]?.connection==='cloud'?' · Cloud':' · Local')})),
+              label:(profile.id.toLowerCase().replace(/[._-]/g,'')===profile.model.toLowerCase().replace(/[._-]/g,'')
+                ?profile.model:profile.id+' · '+profile.model)
+                +(byAdapter[profile.provider]?.connection==='cloud'?' · Cloud':' · Local')})),
               ...(route.model_ref&&!options.some(profile=>profile.id===route.model_ref)
                 ?[{value:route.model_ref,label:route.model_ref+' · Không khả dụng',disabled:true}]:[])]}
-            onChange={model=>updateRoute(route.id,model,route.label)}/>
+            onChange={model=>updateRoute(route.id,model)}/>
         </label>;
       })}</div>
     </Card>}

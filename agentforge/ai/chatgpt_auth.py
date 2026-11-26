@@ -257,6 +257,12 @@ def sign_in(ref):
     return {"account_ref": ref, "email": record["email"], "plan_usage": True}
 
 
+def is_connected(ref):
+    with _db() as conn:
+        record = _load(conn, ref)
+        return {PLAN_SCOPE, "resource.invoke"}.issubset(record.get("scope", "").split())
+
+
 def access_token(ref):
     # SQLite write transaction serializes rotating refresh tokens across CLI and Studio.
     with _db() as conn:

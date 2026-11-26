@@ -1,4 +1,4 @@
-import {Fragment,useRef,useState} from 'react';
+import {Fragment,useEffect,useEffectEvent,useRef,useState} from 'react';
 import {Alert,Button,Form,Input,Modal,Radio,Select,Space,Switch} from 'antd';
 import {NumberField} from '../components/NumberField.jsx';
 import {ApiOutlined,CloudOutlined,DesktopOutlined} from '@ant-design/icons';
@@ -40,6 +40,24 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
   const [chatgpt,setChatgpt]=useState(null);
   const [chatgptError,setChatgptError]=useState(null);
   const currentChatGPT=chatgpt?.account_ref===accountRef?chatgpt:null;
+  const [checkedAccount,setCheckedAccount]=useState(null);
+  const checkingChatGPT=/^[a-z][a-z0-9_]{2,39}$/.test(accountRef??'')&&checkedAccount!==accountRef;
+  const fetchChatGPTStatus=useEffectEvent(ref=>onChatGPTAction('CHATGPT_STATUS',ref));
+  useEffect(()=>{
+    if(provider!=='chatgpt'||!/^[a-z][a-z0-9_]{2,39}$/.test(accountRef??''))return;
+    let cancelled=false;
+    setCheckedAccount(null);
+    setChatgpt(null);
+    setChatgptError(null);
+    fetchChatGPTStatus(accountRef).then(result=>{
+      if(!cancelled)setChatgpt(result);
+    }).catch(error=>{
+      if(!cancelled)setChatgptError(requestError(error));
+    }).finally(()=>{
+      if(!cancelled)setCheckedAccount(accountRef);
+    });
+    return ()=>{cancelled=true;};
+  },[provider,accountRef]);
   const adapter=adapters.find(item=>item.id===provider);
   const [useEnv,setUseEnv]=useState(Boolean(profile?.api_key_env));
   const directCloud=connection==='cloud'&&!useEnv&&provider!=='chatgpt';
@@ -136,7 +154,8 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
   }
 
   const supported=contracts.filter(item=>item.runtime_compatible||item.route_configurable);
-  return <Modal open width={620} className="model-profile-dialog"
+  return <Modal open centered width={620} className="model-profile-dialog"
+    styles={{body:{maxHeight:'calc(100dvh - 180px)',overflowY:'auto'}}}
     title={<SectionTitle icon={<ApiOutlined/>}
       title={editing?'Chỉnh sửa hồ sơ model':'Đăng ký model mới'}
       description={review?'Kiểm tra thông tin trước khi lưu vào AgentForge.':
@@ -195,30 +214,32 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         <Input placeholder={directCloud?'https://api.example.com':example} spellCheck={false}/>
       </Form.Item>)}
       {provider==='chatgpt'&&<>
-        <Alert type="info" showIcon message="Kết nối ChatGPT qua OAuth"
-          description={<>
-            <p>Liên kết mở trình duyệt OpenAI trên máy chạy AgentForge. Không nhập mật khẩu, cookie hoặc token tại đây.</p>
+        <Alert type="info" showIcon message={currentChatGPT?.connected?'Đã kết nối tài khoản ChatGPT':'Kết nối ChatGPT qua OAuth'} style={{marginBottom:12}}
+          description={<div style={{display:'grid',gridTemplateColumns:'minmax(0, 1fr)',gap:8}}>
+            {!currentChatGPT?.connected&&<p style={{margin:0}}>Liên kết mở trình duyệt OpenAI trên máy chạy AgentForge. Không nhập mật khẩu, cookie hoặc token tại đây.</p>}
             <Space wrap>
-              <Button type="primary" onClick={()=>chatgptAction('CONNECT_CHATGPT')}>Liên kết ChatGPT</Button>
-              <Button onClick={()=>chatgptAction('LIST_CHATGPT_MODELS')}>Lấy danh sách model</Button>
-              <Button danger onClick={()=>Modal.confirm({
+              {!currentChatGPT?.connected&&<Button type="primary" loading={checkingChatGPT}
+                onClick={()=>chatgptAction('CONNECT_CHATGPT')}>{checkingChatGPT?'Đang kiểm tra liên kết':'Liên kết ChatGPT'}</Button>}
+              {currentChatGPT?.connected&&<Button onClick={()=>chatgptAction('LIST_CHATGPT_MODELS')}>Lấy danh sách model</Button>}
+              {currentChatGPT?.connected&&<Button danger onClick={()=>Modal.confirm({
                 title:'Ngắt kết nối tài khoản ChatGPT?',
                 content:'Phiên OAuth local sẽ bị xóa; các hồ sơ dùng tài khoản này cần kết nối lại để chạy.',
                 onOk:()=>chatgptAction('DISCONNECT_CHATGPT'),
-              })}>Ngắt kết nối</Button>
+              })}>Ngắt kết nối</Button>}
             </Space>
-            {currentChatGPT&&<p>{currentChatGPT.connected?'Đã kết nối tài khoản':'Đã ngắt kết nối local'}
-              {currentChatGPT.remote_revocation==='NOT_CONFIRMED'?' · Chưa xác nhận thu hồi quyền từ xa':''}</p>}
+            {currentChatGPT?.remote_revocation==='NOT_CONFIRMED'&&
+              <p style={{margin:0}}>Đã ngắt kết nối local. Chưa xác nhận thu hồi quyền từ xa.</p>}
             {chatgptError&&<Alert type="error" showIcon message={chatgptError}/>}
             <a href="https://chatgpt.com/#settings/Usage" target="_blank" rel="noreferrer">Quản lý hạn mức ChatGPT</a>
-          </>}/>
+          </div>}/>
         <Form.Item name="model" label="Model ChatGPT" rules={[{required:true,message:'Lấy danh sách rồi chọn model.'}]}>
-          <Select showSearch optionFilterProp="label" placeholder="Liên kết hoặc lấy danh sách model"
+          {currentChatGPT?.models?.length>0?<Select showSearch={false} autoComplete="off"
+            placeholder="Liên kết hoặc lấy danh sách model"
             options={[
               ...(profile?.model&&!currentChatGPT?.models?.some(item=>item.slug===profile.model)&&profile.account_ref===accountRef
                 ?[{value:profile.model,label:profile.model+' · Đã lưu'}]:[]),
-              ...(currentChatGPT?.models||[]).map(item=>({value:item.slug,label:item.display_name+' · '+item.slug})),
-            ]}/>
+              ...(currentChatGPT?.models||[]).map(item=>({value:item.slug,label:item.display_name||item.slug})),
+            ]}/>:<Input className="model-dialog-locked-value" disabled readOnly placeholder="Liên kết hoặc lấy danh sách model"/>}
         </Form.Item>
       </>}
       {directCloud&&<Form.Item name="api_key" label="API key" dependencies={['base_url']}

@@ -864,9 +864,26 @@ def _tables(conn):
         at TEXT NOT NULL)""")
 
 
+def _update_route(updated, task_id, model_ref):
+    routes = route_catalog()
+    if task_id not in routes or routes[task_id]["kind"] == "rules":
+        raise ModelConfigError("Unknown or deterministic task")
+    if model_ref is not None:
+        _required_text(model_ref, ID_RE, "model reference")
+        profiles = _profiles(state=updated)
+        if model_ref not in profiles or not profiles[model_ref]["enabled"]:
+            raise ModelConfigError("Model is missing or disabled")
+        kind = routes[task_id]["kind"]
+        if not orchestrator_policy.compatible(kind, profiles[model_ref]):
+            raise ModelConfigError("Selected model does not support task")
+        updated["routes"][task_id] = model_ref
+    else:
+        updated["routes"].pop(task_id, None)
+
+
 def change(action, *, expected_revision, db_path=None, profile=None, profile_id=None,
            task_id=None, model_ref=None, target_revision=None, policy=None,
-           api_key=None, intent=None):
+           api_key=None, intent=None, route_changes=None):
     """CAS-guarded Owner mutation; snapshot history supports explicit rollback."""
     if type(expected_revision) is not int or expected_revision < 0:
         raise ValueError("Expected non-negative revision")
@@ -909,22 +926,16 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
                 raise ModelConfigError("Model is assigned; unassign it before deleting")
             del updated["profiles"][profile_id]
         elif action in {"SET_MODEL_ROUTE", "RESET_MODEL_ROUTE"}:
-            routes = route_catalog()
-            if task_id not in routes or routes[task_id]["kind"] == "rules":
-                raise ModelConfigError("Unknown or deterministic task")
             if action == "SET_MODEL_ROUTE":
                 _required_text(model_ref, ID_RE, "model reference")
-                profiles = _profiles(state=updated)
-                if model_ref not in profiles or not profiles[model_ref]["enabled"]:
-                    raise ModelConfigError("Model is missing or disabled")
-                kind = routes[task_id]["kind"]
-                if not orchestrator_policy.compatible(kind, profiles[model_ref]):
-                    raise ModelConfigError("Selected model does not support task")
-                updated["routes"][task_id] = model_ref
-            else:
-                updated["routes"].pop(task_id, None)
+            _update_route(updated, task_id, model_ref if action == "SET_MODEL_ROUTE" else None)
         elif action == "SAVE_ORCHESTRATOR":
             updated["orchestrator"] = orchestrator_policy.validate(policy)
+            if route_changes is not None:
+                if not isinstance(route_changes, dict):
+                    raise ModelConfigError("Invalid model assignments")
+                for task, model in route_changes.items():
+                    _update_route(updated, task, model)
         elif action == "RESET_ORCHESTRATOR":
             # Reset execution permissions, not model assignments.
             updated.pop("orchestrator", None)

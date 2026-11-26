@@ -13,6 +13,9 @@ _CHATGPT_ACTION = threading.Lock()
 def _chatgpt_action(server, request, session):
     from agentforge.ai import chatgpt_auth
     from agentforge.ops_control import require_active
+    if session is not None and set(request) == {"ack", "account_ref"} and request["ack"] == "CHATGPT_STATUS":
+        ref = chatgpt_auth._ref(request["account_ref"])
+        return {"account_ref": ref, "connected": chatgpt_auth.is_connected(ref)}
     if (session is None or not server.allow_external_actions
             or set(request) != {"ack", "account_ref"}
             or request["ack"] not in {"CONNECT_CHATGPT", "LIST_CHATGPT_MODELS", "DISCONNECT_CHATGPT"}):
@@ -55,11 +58,11 @@ def handle(server, path, request, session=None):
         return _chatgpt_action(server, request, session)
     if path == "/api/model-hub/orchestrator":
         action = request.get("ack")
-        if action == "SAVE_ORCHESTRATOR" and set(request) == {
+        if action == "SAVE_ORCHESTRATOR" and set(request) - {"route_changes"} == {
                 "ack", "expected_revision", "policy"}:
             return model_hub.change(
                 action, expected_revision=request["expected_revision"],
-                policy=request["policy"])
+                policy=request["policy"], route_changes=request.get("route_changes"))
         if action == "RESET_ORCHESTRATOR" and set(request) == {"ack", "expected_revision"}:
             return model_hub.change(action, expected_revision=request["expected_revision"])
         raise PermissionError("Cần xác nhận lưu hoặc đặt lại chính sách điều phối")

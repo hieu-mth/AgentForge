@@ -419,6 +419,7 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .model-dialog-grid .ant-form-item{margin-bottom:8px}
 .model-dialog-help{margin:0 0 14px;font-size:12px;line-height:1.55;color:var(--muted)}
 .model-dialog-divider{margin:16px 0;border-top:1px solid var(--line)}
+.model-dialog-locked-value:disabled{caret-color:transparent}
 .model-profile-dialog .model-dialog-mode.ant-btn{
   height:28px;padding-inline:0;border-inline-width:0;margin-bottom:6px;
 }
@@ -445,9 +446,15 @@ code{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:.88em
 .model-conflict-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px}
 .model-conflict-grid pre{max-height:180px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;
   padding:10px;border:1px solid var(--line);border-radius:8px;font-size:12px}
-.model-route-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:14px}
-.model-route{display:grid;gap:6px;min-width:0}
+.model-route-list{width:100%;max-width:780px}
+.model-route{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);
+  align-items:center;gap:20px;padding:10px 0}
+.model-route + .model-route{border-top:1px solid var(--env-border)}
+.model-route strong{font-size:13px;font-weight:600;color:var(--text)}
 .model-route .ant-select{width:100%}
+@media(max-width:600px){
+  .model-route{grid-template-columns:minmax(0,1fr);gap:6px}
+}
 @media(width < 768px){
   .hub-table .ant-table-content > table{table-layout:fixed!important}
   .hub-table col{width:auto!important}
