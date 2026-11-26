@@ -1654,6 +1654,53 @@ class DraftTests(unittest.TestCase):
             self.assertEqual(draft._read(self.ident)["created_at"], submitted["created_at"])
             self.assertEqual(draft.submit({"id": "b" * 32, **self.submission})["status"], "QUEUED")
 
+    def test_worker_launch_failure_restores_prior_checkpoint_and_releases_slot(self):
+        job = {"id": self.ident, "brief": self.brief, "status": "QUEUED",
+               "stage": "MOTION", "board": self.board(), "attempt_started_at": "prior-start",
+               "attempt_finished_at": "prior-finish", "error_code": "prior-error"}
+        draft._save(job)
+        prior = draft._read(self.ident)
+        with (patch.object(draft, "ACTIVE", None),
+              patch.object(draft.threading, "Thread", side_effect=RuntimeError("secret-provider-payload")),
+              self.assertLogs(draft.LOG, level="ERROR") as logs):
+            with self.assertRaisesRegex(RuntimeError, "^STUDIO_WORKER_START_FAILED$"):
+                draft._dispatch()
+            self.assertIsNone(draft.ACTIVE)
+            with draft._worker_slot():
+                pass
+        restored = draft._read(self.ident)
+        restored.pop("updated_at")
+        prior.pop("updated_at")
+        self.assertEqual(restored, prior)
+        self.assertNotIn("secret-provider-payload", str(logs.output))
+
+    def test_cancel_checks_production_identity_not_any_active_worker(self):
+        job = {"id": self.ident, "brief": self.brief, "status": "RUNNING",
+               "stage": "MOTION", "storyboard_version": 1}
+        draft._save(job)
+        with (patch.object(draft, "ACTIVE", "b"*32), patch.object(draft, "_dispatch") as dispatch):
+            with self.assertRaisesRegex(ValueError, "đối soát"):
+                draft.act(self.ident, "cancel", {})
+            self.assertFalse(draft._cancellation(self.ident))
+            self.assertEqual(draft._read(self.ident)["status"], "RUNNING")
+            draft._save({**job, "stage": "STORYBOARD"})
+            result = draft.act(self.ident, "cancel", {})
+            self.assertEqual(result["status"], "CANCELLED")
+            self.assertEqual(draft._read(self.ident)["status"], "CANCELLED")
+            self.assertTrue(draft._cancellation(self.ident))
+            dispatch.assert_called_once()
+
+    def test_lifecycle_keeps_reconciliation_visible_on_cancellation(self):
+        from agentforge.features.film_studio import draft_lifecycle
+
+        job = {"status": "NEEDS_RECONCILIATION", "error": "Unknown remote outcome",
+               "attempt_started_at": "start", "activity": {"scene": 2}}
+        draft_lifecycle.finish_attempt(job, "finish", cancelled=True)
+        self.assertEqual(job["status"], "NEEDS_RECONCILIATION")
+        self.assertEqual(job["error"], "Unknown remote outcome")
+        self.assertEqual(job["attempt_finished_at"], "finish")
+        self.assertNotIn("activity", job)
+
     def test_running_cancel_keeps_committed_scene_and_skips_render(self):
         job = {"id": self.ident, "brief": self.brief, "status": "RUNNING", "stage": "IMAGES",
                "board": draft._story(self.board(), 2, 6, {"cat": {}}), "cast": {}}
