@@ -17,8 +17,8 @@ def choose(brief, candidates, infer):
                                  "reason": {"type": "string", "minLength": 1, "maxLength": 350}}}
         answer = infer("Choose one permitted production route, prioritizing local unless the script needs longer "
                        "continuous motion, native audio or lower GPU load. Never assume an unverified provider is better. "
-                       "Hybrid uses a local reference image for each shot; cloud generates from prompt and may use the "
-                       "previous actual frame for continuity. Cloud bills at least 6 seconds per shot. "
+                       "Hybrid uses an assigned reference image for each shot; cloud generates from prompt and may use the "
+                       "previous actual frame for continuity. Use each option\'s billable durations and native-audio support. "
                        "Choose based on narrative, reference consistency and explicit seconds cap. "
                        "execution_ready is configuration admission only, not a quality benchmark. "
                        "Prefer ready routes when equally suitable; missing media permission does not prevent planning. "
@@ -34,4 +34,5 @@ def choose(brief, candidates, infer):
             "reason": reason.strip(), "max_cloud_seconds": brief["max_cloud_seconds"]}
     if "billable_durations_seconds" in selected:
         plan["billable_durations_seconds"] = selected["billable_durations_seconds"]
+        plan["native_audio"] = selected.get("native_audio", True)
     return plan

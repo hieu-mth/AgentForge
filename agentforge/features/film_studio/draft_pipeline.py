@@ -53,8 +53,8 @@ def _cancellation(ident, *, mark=False):
 def _measured(job, operation, comfy_profile=None):
     if _cancellation(job["id"]):
         raise DraftCancelled
-    if (operation in {"plan", "duration", "creative_direction", "cast", "storyboard"}
-            and job.get("activity", {}).get("provider") in {"openai", "anthropic", "chatgpt"}):
+    if (operation in {"plan", "duration", "creative_direction", "cast", "storyboard", "image"}
+            and model_hub.is_cloud(job.get("activity"))):
         yield
         if _cancellation(job["id"]):
             raise DraftCancelled
@@ -74,7 +74,7 @@ def _measured(job, operation, comfy_profile=None):
                 reason = draft_resources.pressure(admission_sample, operation)
         if reason:
             raise ResourceWait(reason)
-        if not text_only and operation in {"plan", "cast", "storyboard"}:
+        if not text_only and operation in {"plan", "cast", "storyboard"} and not model_hub.is_cloud(comfy_profile):
             draft_resources.require_gpu("image", admission_sample)
         yield
     finally:
@@ -179,7 +179,7 @@ def _plan_production(job, bindings):
 
 def _ask(profile, instructions, data, schema, comfy_profile, *, cpu_only=False, extended_plan=False, job=None):
     adapter = studio_runtime.text_adapter(profile)
-    if profile.get("provider") in {"openai", "anthropic", "chatgpt"}:
+    if model_hub.is_cloud(profile):
         if job is None:
             raise PermissionError("Cloud inference requires a production context.")
         ops_control.require_active()
@@ -740,7 +740,7 @@ def _image(job, index, scene, revision, profile):
         except KeyError:
             pass
     if prior and prior["status"] in {"SUBMITTING", "SUBMITTED", "SUBMIT_UNCERTAIN", "COLLECTING"}:
-        raise ValueError("The prior ComfyUI scene job needs reconciliation before retry")
+        raise NeedsReconciliation("The prior image job needs reconciliation before retry")
     if not prior or prior["status"] != "ASSET_READY":
         if ("storyboard_version" in job or job["brief"].get("mode") == "motion") and scene["job_id"]:
             raise ValueError("Cần kiểm tra tác vụ tạo ảnh cũ trước khi duyệt phiên bản sửa.")
@@ -760,6 +760,15 @@ def _image(job, index, scene, revision, profile):
                                               f"{job['id']}/episode-01/scene-{index+1:02d}",
                                               scene["job_id"], revision, lambda: _dispatch_guard(job))
         try:
+            if model_hub.is_cloud(profile):
+                limit = model_hub.cloud_call_limit(profile, moving=job["brief"].get("mode") == "motion",
+                    planning=False, allow_image=True,
+                    validate=lambda rev, bindings: _check_studio_routing(job, rev, bindings), **_route_kwargs(job))
+                limit = min(limit, job.get("cloud_call_limit", limit))
+                if job.get("cloud_calls", 0) >= limit:
+                    raise model_hub.ModelConfigError("Cloud image call budget exhausted.")
+                job.update(cloud_calls=job.get("cloud_calls", 0)+1, cloud_call_limit=limit)
+                _save(job)
             output = studio_runtime.image_adapter(profile).generate(profile, request)
         except (comfy_service.StartupError, draft_resources.ResourceBlocked, model_hub.ModelConfigError, DraftCancelled):
             scene["job_id"] = previous_job
@@ -768,7 +777,7 @@ def _image(job, index, scene, revision, profile):
         if output["status"] == "GPU_RESOURCE_FAILURE":
             raise ResourceWait("GPU_RESOURCE_FAILURE")
         if output["status"] != "ASSET_READY":
-            raise ValueError("ComfyUI scene result: " + output["status"])
+            raise ValueError("Image scene result: " + output["status"])
     temporary = ensure_local_root(path.with_name(uuid4().hex + ".tmp"))
     try:
         with visual_jobs.open_image_for_job(scene["job_id"]) as (source, digest), temporary.open("xb") as stream:
@@ -800,7 +809,7 @@ def _render(job):
     ffmpeg = render._ffmpeg()
     command = [ffmpeg, "-nostdin", "-n", "-v", "error"]
     filters, streams, audio_streams = [], [], []
-    native_audio = moving and job.get("production_plan", {}).get("method") in {"cloud", "hybrid"} and not job.get("audio_plan")
+    native_audio = moving and job.get("production_plan", {}).get("method") in {"cloud", "hybrid"} and job.get("production_plan", {}).get("native_audio", True) and not job.get("audio_plan")
     input_bytes = 0
     for index, scene in enumerate(job["board"]["scenes"]):
         if moving:
@@ -985,8 +994,7 @@ def _work(job, slot, retry_motion_job=None):
         moving = job["brief"].get("mode") == "motion"
         reviewing = "storyboard_version" in job and not job.get("approved_storyboard_sha")
         revision, bindings, identity_revision = _studio_bindings(job)
-        cloud_only = (reviewing and job.get("deferred_media_binding") and bool(bindings)
-                      and all(profile.get("provider") in {"openai", "anthropic", "chatgpt"} for profile in bindings.values()))
+        cloud_only = bool(bindings) and all(model_hub.is_cloud(profile) for profile in bindings.values())
         with (nullcontext() if cloud_only else model_hub.local_inference_slot()):
             if not cloud_only:
                 revision, bindings, identity_revision = _studio_bindings(job)
@@ -1090,7 +1098,7 @@ def _work(job, slot, retry_motion_job=None):
         LOG.error("Studio failure production=%s stage=%s code=%s", job["id"], job["stage"], code)
     finally:
         try:
-            if used_image and job.get("status") != "WAITING_RESOURCES" and image_profile.get("base_url"):
+            if used_image and job.get("status") != "WAITING_RESOURCES" and not model_hub.is_cloud(image_profile) and image_profile.get("base_url"):
                 try:
                     with model_hub.local_inference_slot():
                         _release_idle_image(image_profile)
@@ -1263,7 +1271,7 @@ def _approve_storyboard(job):
             job["motion_plan"] = identity
         else:
             adapter, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
-        if bindings["film.motion"]["provider"] == "ltx_cloud":
+        if model_hub.is_cloud(bindings["film.motion"]):
             from agentforge.features.film_studio import draft_motion_cloud
             plan = job.get("production_plan")
             if not plan or plan["method"] not in {"hybrid", "cloud"}:

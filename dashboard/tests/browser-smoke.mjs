@@ -756,6 +756,7 @@ try {
   if(oauthChecks!==1||oauthLists||await listOAuth.count())
     throw new Error('Disconnected account must not expose the model catalog');
   oauthConnected=true;
+  await settings.waitForFunction(()=>{const b=document.querySelector('.model-profile-dialog button[aria-label="Kiểm tra"]');return b&&!b.disabled&&!b.classList.contains("ant-btn-loading");});
   await checkOAuth.click();
   await registerDialog.getByText('Đã kết nối tài khoản ChatGPT',{exact:true}).waitFor();
   await listOAuth.waitFor();
@@ -765,7 +766,7 @@ try {
   if(oauthLists!==1)throw new Error('Explicit catalog request missing');
   const cloudAdapter=registerDialog.getByRole('combobox',{name:'Chuẩn kết nối'});
   await cloudAdapter.click();
-  const cloudLabels=['ChatGPT','OpenAI API','Anthropic API','LTX Video API','ElevenLabs API'];
+  const cloudLabels=['ChatGPT','OpenAI API','Anthropic API','LTX Video API','Agnes AI','ElevenLabs API'];
   await settings.waitForFunction(expected=>{
     const combo=document.querySelector('.model-profile-dialog [aria-expanded="true"][role="combobox"]');
     if(!combo)return false;

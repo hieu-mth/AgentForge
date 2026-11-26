@@ -32,7 +32,7 @@ const readinessReasons={
   TEXT_ADAPTER_REQUIRED:'Chưa có adapter văn bản tương thích.',
   VISION_ADAPTER_UNAVAILABLE:'Chưa có adapter kiểm tra hình ảnh.',
   COMFYUI_TIMEOUT:'ComfyUI phản hồi quá thời gian chờ.',COMFYUI_HTTP_ERROR:'ComfyUI từ chối yêu cầu metadata.',
-  AUTH_REQUIRED:'Chưa kết nối hoặc endpoint yêu cầu xác thực.',AUDIO_GENERATION_NOT_PROBED:'Chưa thử sinh âm thanh.',CLOUD_VIDEO_NOT_PROBED:'Chưa thử sinh video cloud.',HTTP_ERROR:'Endpoint từ chối yêu cầu metadata.',
+  AUTH_REQUIRED:'Chưa kết nối hoặc endpoint yêu cầu xác thực.',AUDIO_GENERATION_NOT_PROBED:'Chưa thử sinh âm thanh.',CLOUD_VIDEO_NOT_PROBED:'Chưa thử sinh video cloud.',CLOUD_IMAGE_NOT_PROBED:'Chưa thử sinh ảnh cloud.',HTTP_ERROR:'Endpoint từ chối yêu cầu metadata.',
   INVALID_RESPONSE:'Endpoint trả metadata không hợp lệ.',
   COMFYUI_INVALID_RESPONSE:'ComfyUI trả metadata không hợp lệ.',
 };

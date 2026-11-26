@@ -141,6 +141,14 @@ ADAPTERS = {
         "environment_defaults": {"base_url_env": "LTX_BASE_URL", "api_key_env": "LTX_API_KEY"},
         "local_probe": False, "cloud_probe": False,
     },
+    "agnes": {
+        "label": "Agnes AI", "connection": "cloud", "model_label": "Model ID",
+        "model_example": "agnes-image-2.5-flash",
+        "description": "Agnes Image / Video Flash. Kiểm tra hạn mức trước khi tạo nội dung.",
+        "defaults": {"base_url": "https://apihub.agnes-ai.com/v1"},
+        "environment_defaults": {"base_url_env": "AGNES_BASE_URL", "api_key_env": "AGNES_API_KEY"},
+        "local_probe": False, "cloud_probe": False,
+    },
     "elevenlabs": {
         "label": "ElevenLabs API", "connection": "cloud", "model_label": "Model ID",
         "model_example": "model-id-da-cap",
@@ -150,6 +158,10 @@ ADAPTERS = {
         "local_probe": False, "cloud_probe": False,
     },
 }
+
+
+def is_cloud(profile):
+    return ADAPTERS.get((profile or {}).get("provider"), {}).get("connection") == "cloud"
 
 
 def _required_text(value, pattern, name):
@@ -255,13 +267,15 @@ def validate_profile(value, *, profile_id=None, preview=False):
         raise ModelConfigError("Fields do not match the selected Cloud credentials")
     if provider == "ltx_cloud" and "base_url" in common and common["base_url"] not in {"https://api.ltx.io", "https://api.ltx.io/v2"}:
         raise ModelConfigError("LTX video chỉ chấp nhận endpoint HTTPS chính thức.")
+    if provider == "agnes" and "base_url" in common and common["base_url"] != "https://apihub.agnes-ai.com/v1":
+        raise ModelConfigError("Agnes chỉ chấp nhận endpoint HTTPS chính thức.")
     return common
 
 
 def _save_profile(value, api_key, profiles):
     if not isinstance(value, dict) or "api_key_protected" in value:
         raise ModelConfigError("Invalid model profile")
-    if value.get("provider") not in {"anthropic", "openai", "elevenlabs", "ltx_cloud"} or "base_url" not in value:
+    if value.get("provider") not in {"anthropic", "openai", "elevenlabs", "ltx_cloud", "agnes"} or "base_url" not in value:
         if api_key is not None:
             raise ModelConfigError("API key chỉ dùng với endpoint Cloud nhập trực tiếp")
         return validate_profile(value)
@@ -434,6 +448,9 @@ def capability_contract(capability, profile):
     elif adapter and kind == "audio":
         adapter_id = "openai_compatible_speech"
         output = {"format": "wav", "max_input_chars": 180, "max_output_bytes": adapter.MAX_WAV_BYTES}
+    elif adapter and kind == "image" and not local:
+        adapter_id = adapter.ADAPTER_ID
+        output = adapter.output_limits()
     elif adapter and kind == "image":
         adapter_id = "comfyui_flux_gguf"
         graph = json.dumps(profile["flux"]["workflow"], sort_keys=True, separators=(",", ":"),
@@ -495,8 +512,8 @@ def capability_readiness(profile_id, capability, *, expected_revision, db_path=N
         observation = contract["reason"]
     elif kind in {"sound", "music"}:
         observation = "AUDIO_GENERATION_NOT_PROBED"
-    elif profile["provider"] == "ltx_cloud":
-        observation = "CLOUD_VIDEO_NOT_PROBED"
+    elif kind in {"image", "video"} and is_cloud(profile):
+        observation = "CLOUD_VIDEO_NOT_PROBED" if kind == "video" else "CLOUD_IMAGE_NOT_PROBED"
     elif kind in {"text", "vision", "audio"}:
         if profile["provider"] == "ollama":
             observation = _check_ollama(profile)["status"]
@@ -522,7 +539,7 @@ def capability_readiness(profile_id, capability, *, expected_revision, db_path=N
 
 
 def _preflight_result(observation, contract):
-    if observation in {"DISABLED", "AUDIO_GENERATION_NOT_PROBED", "CLOUD_VIDEO_NOT_PROBED"}:
+    if observation in {"DISABLED", "AUDIO_GENERATION_NOT_PROBED", "CLOUD_VIDEO_NOT_PROBED", "CLOUD_IMAGE_NOT_PROBED"}:
         return "NOT_CHECKED", None, None
     if not contract["runtime_compatible"] or observation == "MOTION_ENDPOINT_MISMATCH":
         return "UNSUPPORTED", None, None
@@ -635,7 +652,7 @@ def _draft_bindings(state, *, moving, planning=False, motion_ref=None, direct_cl
             raise PermissionError(f"{capability}: chưa cấp quyền {permission} trong AI điều phối.")
         if not orchestrator_policy.runtime_adapter(orchestrator_policy.KINDS[capability], profile):
             raise ModelConfigError(f"{capability}: hồ sơ {ref} không tương thích với adapter Studio.")
-        if capability == "film.motion" and direct_cloud and profile["provider"] != "ltx_cloud":
+        if capability == "film.motion" and direct_cloud and not is_cloud(profile):
             raise ModelConfigError("Cloud trực tiếp cần adapter cloud video.")
         bindings[capability] = profile
     return bindings
@@ -670,8 +687,8 @@ def _catalog(revision, state):
             "has_api_key": "api_key_protected" in v, "source": (
             "owner"),
             "health": "UNVERIFIED",
-            "runtime_supported": v["provider"] in {"ollama", "anthropic", "openai", "elevenlabs", "chatgpt", "ltx_cloud"} or "flux" in v
-                or orchestrator_policy.local_adapter("video", v) is not None,
+            "runtime_supported": any(orchestrator_policy.runtime_adapter(kind, v) is not None
+                                     for kind in set(orchestrator_policy.KINDS.values()) - {"tool"}),
             "capability_contracts": [capability_contract(key, v) for key, kind in orchestrator_policy.KINDS.items()
                                      if kind != "tool"]}
             for k, v in sorted(profiles.items())],
@@ -749,13 +766,14 @@ def vision_binding(*, db_path=None):
     return revision, profile, policy["cloud_call_limit"]
 
 
-def cloud_call_limit(profile, *, moving, planning, validate, db_path=None, motion_ref=None, direct_cloud=False, allow_motion=False):
+def cloud_call_limit(profile, *, moving, planning, validate, db_path=None, motion_ref=None, direct_cloud=False, allow_motion=False, allow_image=False):
     """Check permission and pinned routes against one snapshot before each dispatch."""
     revision, state = _read_state(db_path=db_path)
     bindings = _draft_bindings(state, moving=moving, planning=planning, motion_ref=motion_ref, direct_cloud=direct_cloud)
     validate(revision, bindings)
-    capabilities = (*PLANNING_CAPABILITIES, "film.motion") if allow_motion else PLANNING_CAPABILITIES
-    if not any(bindings.get(key) == profile for key in capabilities):
+    capabilities = (*PLANNING_CAPABILITIES, *(("film.motion",) if allow_motion else ()),
+                    *(("image.generate",) if allow_image else ()))
+    if not is_cloud(profile) or not any(bindings.get(key) == profile for key in capabilities):
         raise ModelConfigError("Hồ sơ cloud không khớp phân công.")
     return _active_policy(state)["cloud_call_limit"]
 
@@ -979,7 +997,7 @@ def _production_candidates(state, strategy):
     for ident, profile in _profiles(state=state).items():
         if not orchestrator_policy.compatible("video", profile):
             continue
-        methods = ("cloud", "hybrid") if profile["provider"] == "ltx_cloud" else ("local",)
+        methods = ("cloud", "hybrid") if is_cloud(profile) else ("local",)
         for method in methods:
             if strategy not in {"auto", method}:
                 continue
@@ -995,8 +1013,9 @@ def _production_candidates(state, strategy):
                     "fps": adapter.output_profile().fps, "min_billable_seconds": 0,
                     "execution_ready": execution_ready}
             if method != "local":
-                from agentforge.features.film_studio.studio_ltx_cloud import DURATIONS
-                item.update(billable_durations_seconds=list(DURATIONS), min_billable_seconds=min(DURATIONS))
+                durations = adapter.billable_durations(profile)
+                item.update(billable_durations_seconds=list(durations), min_billable_seconds=min(durations),
+                            native_audio=adapter.native_audio(profile))
             candidates.append(item)
     return candidates
 
@@ -1008,7 +1027,7 @@ def production_profile(profile_id, method, *, db_path=None):
     _, state = _read_state(db_path=db_path)
     profile = _profiles(state=state).get(profile_id)
     if (not orchestrator_policy.compatible("video", profile)
-            or (method == "local") != (profile["provider"] != "ltx_cloud")):
+            or (method == "local") == is_cloud(profile)):
         raise ModelConfigError("Model video đã thay đổi khi lập kế hoạch.")
     return profile
 
@@ -1028,8 +1047,8 @@ def _production_options(state):
     except (ValueError, PermissionError):
         assigned_ready = False
     else:
-        assigned_ready = motion.get("provider") != "ltx_cloud"
-    assigned_cloud = motion.get("provider") == "ltx_cloud"
+        assigned_ready = not is_cloud(motion)
+    assigned_cloud = is_cloud(motion)
     return {"methods": [
         {"id": "assigned", "available": not assigned_cloud, "execution_ready": assigned_ready},
         {"id": "auto", "available": bool(candidates), "execution_ready": any(ready.values())},
