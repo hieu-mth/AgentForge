@@ -100,7 +100,7 @@ def pending(db_path):
     with connect(db_path) as conn:
         return bool(conn and conn.execute(
             "SELECT 1 FROM drafts WHERE json_extract(body,'$.status') IN "
-            "('QUEUED','RUNNING','WAITING_RESOURCES','WAITING_CLOUD_RESOURCES','WAITING_CLOUD_RESOURCES') LIMIT 1").fetchone())
+            "('QUEUED','RUNNING','WAITING_RESOURCES','WAITING_CLOUD_RESOURCES') LIMIT 1").fetchone())
 
 
 def next_queued(db_path):
@@ -117,7 +117,7 @@ def next_queued(db_path):
 def queue_full(conn, limit):
     statuses = [row[0] for row in conn.execute(
         "SELECT json_extract(body,'$.status') FROM drafts "
-        "WHERE json_extract(body,'$.status') IN ('QUEUED','RUNNING','WAITING_RESOURCES','WAITING_CLOUD_RESOURCES','WAITING_CLOUD_RESOURCES')")]
+        "WHERE json_extract(body,'$.status') IN ('QUEUED','RUNNING','WAITING_RESOURCES','WAITING_CLOUD_RESOURCES')")]
     return any(s in statuses for s in ("WAITING_RESOURCES", "WAITING_CLOUD_RESOURCES")) or len(statuses) >= limit
 
 

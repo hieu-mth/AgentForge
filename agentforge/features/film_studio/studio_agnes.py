@@ -82,7 +82,7 @@ def _http_error(response):
                     code = candidate
                 if result.get("video_id") or result.get("id") or result.get("data") not in (None, {}):
                     # Unexpected acceptance evidence must not authorize a retry.
-                    return AgnesHTTPError(response.status) if response.status >= 500 else ValueError("Agnes response contains possible job evidence.")
+                    return ValueError(f"Agnes HTTP {response.status}: response contains possible job evidence; outcome unknown.")
     except (ValueError, TypeError, OSError, http.client.HTTPException):
         pass
     raw_retry = response.getheader("Retry-After")

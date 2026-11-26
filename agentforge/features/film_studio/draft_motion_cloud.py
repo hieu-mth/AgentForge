@@ -360,10 +360,19 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
     if retry_motion_job:
         if scene.get("motion_job") != retry_motion_job:
             raise ValueError("Cloud retry checkpoint changed.")
-        _shot_row(production, scene, profile)
+        row = _shot_row(production, scene, profile)
         retryable_motion_job(retry_motion_job)
-        draft_continuity.clear_motion(scene)
-        save()
+        if row["state"] == "REJECTED":
+            # Owner explicitly authorizes another attempt at the same rejected
+            # request; keep original seconds reservation and lifetime call count.
+            with closing(_db(True)) as conn, conn:
+                changed = conn.execute("UPDATE submission_errors SET retry_at=? WHERE id=?",
+                                       (time.time(), retry_motion_job))
+                if changed.rowcount != 1:
+                    raise NeedsReconciliation("Rejected request has no error receipt.")
+        else:
+            draft_continuity.clear_motion(scene)
+            save()
     if scene.get("motion_sha"):
         _shot_row(production, scene, profile)
         clip_path(scene)

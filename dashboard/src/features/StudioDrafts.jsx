@@ -279,7 +279,7 @@ export function StudioDrafts({mutate,onCharacters}) {
                 if(retryJob){
                   modal.confirm({
                     title:'Thử lại shot chuyển động bị lỗi?',
-                    content:'Studio sẽ tạo lần chạy mới cho shot lỗi và tiếp tục từ checkpoint. Các ảnh và clip đã xác minh được dùng lại.',
+                    content:'Studio sẽ thử lại shot đã được xác nhận thất bại hoặc bị từ chối, không gửi lại job chưa rõ kết quả. Ảnh và clip đã xác minh được dùng lại.',
                     okText:'Thử lại và tiếp tục',
                     cancelText:'Để sau',
                     onOk:()=>run('/'+job.id+'/resume',{retry_motion_job:retryJob}),
