@@ -272,6 +272,38 @@ class ModelHubTests(unittest.TestCase):
                 model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0,
                                  db_path=db, profile=profile)
 
+    def test_combined_policy_and_route_save_is_atomic(self):
+        with tempfile.TemporaryDirectory() as folder:
+            db = Path(folder) / "hub.sqlite3"
+            profile = {"id": "studio_local", "provider": "ollama",
+                       "model": "example-local:8b", "enabled": True,
+                       "base_url": "http://127.0.0.1:11434"}
+            saved = model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0,
+                                     db_path=db, profile=profile)
+            policy = model_hub.orchestrator_policy.defaults()
+            policy["permissions"]["plan"] = True
+            combined = model_hub.change("SAVE_ORCHESTRATOR", expected_revision=1,
+                                        db_path=db, policy=policy,
+                                        route_changes={"general.text": "studio_local"})
+            self.assertEqual(saved["revision"], 1)
+            self.assertEqual(combined["revision"], 2)
+            self.assertTrue(combined["orchestrator"]["policy"]["permissions"]["plan"])
+            self.assertEqual(next(r for r in combined["routes"] if r["id"] == "general.text")["model_ref"],
+                             "studio_local")
+            with self.assertRaises(model_hub.ModelConfigError):
+                model_hub.change("SAVE_ORCHESTRATOR", expected_revision=2, db_path=db,
+                                 policy=model_hub.orchestrator_policy.defaults(),
+                                 route_changes={"general.text": None, "film.motion": "studio_local"})
+            self.assertEqual(model_hub.catalog(db_path=db), combined)
+            reset = model_hub.change("RESET_ORCHESTRATOR", expected_revision=2, db_path=db)
+            self.assertFalse(reset["orchestrator"]["policy"]["permissions"]["plan"])
+            self.assertEqual(next(r for r in reset["routes"] if r["id"] == "general.text")["model_ref"],
+                             "studio_local")
+            cleared = model_hub.change("SAVE_ORCHESTRATOR", expected_revision=3, db_path=db,
+                                       policy=model_hub.orchestrator_policy.defaults(),
+                                       route_changes={"general.text": None})
+            self.assertIsNone(next(r for r in cleared["routes"] if r["id"] == "general.text")["model_ref"])
+
     def test_unknown_route_and_deterministic_route_are_rejected(self):
         with self.assertRaises(model_hub.ModelConfigError):
             model_hub._validate_state({

@@ -73,7 +73,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
     modal.confirm({
       title:reset?'Đặt lại chính sách điều phối?':'Lưu chính sách điều phối?',
       content:reset?'Đặt lại quyền thực thi, công cụ và ngân sách. Phân công model không thay đổi.':
-        'Áp dụng quyền thực thi và ngân sách cho Studio. Phân công model và dữ liệu lịch sử không thay đổi.',
+        'Lưu phân công model, quyền thực thi và ngân sách cho Studio trong cùng một phiên bản. Dữ liệu lịch sử không thay đổi.',
       okText:reset?'Đặt lại':'Lưu cấu hình',cancelText:'Hủy',
       onOk:async()=>{
         setSaving(true);
@@ -123,7 +123,7 @@ function PolicyEditor({snapshot,mutate,dirty,setDirty,accept}){
     </Card>
     {snapshot.routes?.some(route=>route.kind!=='rules')&&<Card className="env-panel"
       title={<SectionTitle icon={<TeamOutlined/>} title="Phân công model"
-        description="Chọn model đã đăng ký tại Model AI cho từng năng lực. Phân công được lưu riêng với chính sách."/>}>
+        description="Chọn model đã đăng ký tại Model AI cho từng năng lực. Phân công và chính sách được lưu cùng nhau khi chọn Lưu cấu hình."/>}>
       <div className="model-route-list">{snapshot.routes.filter(route=>route.kind!=='rules').map(route=>{
         const options=configurableProfiles(profiles,route.id);
         const selected=Object.hasOwn(routeChanges,route.id)?routeChanges[route.id]:route.model_ref;

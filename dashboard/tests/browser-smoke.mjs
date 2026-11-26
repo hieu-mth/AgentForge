@@ -703,7 +703,7 @@ try {
   const planToggle=settings.getByRole('switch',{name:'Lập kế hoạch',exact:true});
   await planToggle.click();
   await settings.getByText('Có thay đổi chưa lưu',{exact:true}).waitFor();
-  if(await motionModel.isEnabled())throw new Error('Assignment can overwrite unsaved policy edits');
+  if(!await motionModel.isEnabled())throw new Error('Combined policy draft must allow model assignment');
   await settings.setViewportSize({width:1280,height:850});
   const tabs=settings.locator('.af-section-tabs');
   const modelTab=tabs.locator('[data-node-key="models"] [role="tab"]');
@@ -812,10 +812,10 @@ try {
   await settings.goto(policyOrigin+'/dashboard/#/orchestrator');
   await planModel.click();
   await openOptions.filter({hasText:/local_primary/}).click();
-  await settings.getByRole('dialog').getByRole('button',{name:'Xác nhận'}).click();
-  await settings.getByRole('dialog').waitFor({state:'hidden'});
-  await settings.goto(policyOrigin+'/dashboard/#/orchestrator');
-  await settings.getByRole('heading',{name:'AI điều phối tác vụ',exact:true}).waitFor();
+  await settings.getByText('Có thay đổi chưa lưu',{exact:true}).waitFor();
+  const draftAssignment=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
+  if(draftAssignment.revision!==1||draftAssignment.routes.find(row=>row.id==='general.text')?.model_ref)
+    throw new Error('Assignment was persisted before the combined save');
   await planToggle.click();
   const cloudToggle=settings.getByRole('switch',{name:'Gọi AI cloud',exact:true});
   await cloudToggle.click();
@@ -832,9 +832,9 @@ try {
   await toolsSelect.waitFor({state:'hidden'});
   await savePolicy.click();
   await settings.getByRole('dialog').getByRole('button',{name:'Lưu cấu hình'}).click();
-  await settings.getByText('Owner tùy chỉnh · Phiên bản 3',{exact:true}).waitFor();
+  await settings.getByText('Owner tùy chỉnh · Phiên bản 2',{exact:true}).waitFor();
   await settings.reload();
-  await settings.getByText('Owner tùy chỉnh · Phiên bản 3',{exact:true}).waitFor();
+  await settings.getByText('Owner tùy chỉnh · Phiên bản 2',{exact:true}).waitFor();
   if((await planToggle.getAttribute('aria-checked'))!=='true')
     throw new Error('Settings did not persist after reload');
   const persisted=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
@@ -849,20 +849,22 @@ try {
     throw new Error('Saved model was not read back from real Model Hub');
   const {csrf}=await (await settings.request.get(policyOrigin+'/api/session')).json();
   const invalid=await settings.request.post(policyOrigin+'/api/model-hub/route',{headers:{...postOptions.headers,'X-CSRF-Token':csrf},
-    data:{ack:'SET_MODEL_ROUTE',expected_revision:3,task_id:'film.motion',model_ref:'local_primary'}});
+    data:{ack:'SET_MODEL_ROUTE',expected_revision:2,task_id:'film.motion',model_ref:'local_primary'}});
   if(invalid.status()!==400)throw new Error('API accepted a text model for video');
   const obsolete=await settings.request.post(endpoint,{headers:{...postOptions.headers,'X-CSRF-Token':csrf},
-    data:{ack:'SAVE_ORCHESTRATOR',expected_revision:3,policy:persisted.orchestrator.policy,
+    data:{ack:'SAVE_ORCHESTRATOR',expected_revision:2,policy:persisted.orchestrator.policy,
       route_changes:{'film.motion':'local_primary'}}});
-  if(obsolete.status()===200)throw new Error('Retired policy assignment API accepted a write');
+  if(obsolete.status()!==400)throw new Error('Combined policy API accepted an incompatible route');
+  const afterInvalid=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
+  if(JSON.stringify(afterInvalid)!==JSON.stringify(persisted))throw new Error('Invalid combined save changed the persisted snapshot');
   const assignedDelete=await settings.request.post(policyOrigin+'/api/model-hub/profile/delete',{
     headers:{Origin:policyOrigin,'X-CSRF-Token':csrf},
-    data:{ack:'DELETE_MODEL_PROFILE',expected_revision:3,profile_id:'local_primary'},
+    data:{ack:'DELETE_MODEL_PROFILE',expected_revision:2,profile_id:'local_primary'},
   });
   if(assignedDelete.status()!==400)throw new Error('API deleted assigned AI model');
   await settings.getByRole('button',{name:'Đặt lại mặc định'}).click();
   await settings.getByRole('dialog').getByRole('button',{name:'Đặt lại',exact:true}).click();
-  await settings.getByText('Mặc định · Phiên bản 4',{exact:true}).waitFor();
+  await settings.getByText('Mặc định · Phiên bản 3',{exact:true}).waitFor();
   if((await planToggle.getAttribute('aria-checked'))==='true'||(await cloudToggle.getAttribute('aria-checked'))==='true')
     throw new Error('Reset did not restore defaults');
   for(const width of [390,900,1440]){
@@ -890,14 +892,21 @@ try {
   if(!(await settings.locator('.model-route').filter({has:planModel}).innerText()).includes('local_primary'))throw new Error('Policy reset removed the assignment');
   await planModel.click();
   await openOptions.filter({hasText:'Chưa gán'}).click();
-  await settings.getByRole('dialog').getByRole('button',{name:'Xác nhận'}).click();
-  await settings.getByRole('dialog').waitFor({state:'hidden'});
+  await settings.getByText('Có thay đổi chưa lưu',{exact:true}).waitFor();
+  await settings.getByRole('button',{name:'Hủy thay đổi'}).click();
+  if(!(await settings.locator('.model-route').filter({has:planModel}).innerText()).includes('local_primary'))
+    throw new Error('Cancelling the draft did not restore the assigned model');
+  await planModel.click();
+  await openOptions.filter({hasText:'Chưa gán'}).click();
+  await savePolicy.click();
+  await settings.getByRole('dialog').getByRole('button',{name:'Lưu cấu hình'}).click();
+  await settings.getByText('Owner tùy chỉnh · Phiên bản 4',{exact:true}).waitFor();
   await settings.goto(policyOrigin+'/dashboard/#/models');
   await modelRow.getByText('Xóa',{exact:true}).click();
   await settings.getByRole('dialog').getByRole('button',{name:'Xác nhận'}).click();
   await settings.getByText('Chưa đăng ký model. Chọn Đăng ký model để bắt đầu.',{exact:true}).waitFor();
   const cleaned=await (await settings.request.get(policyOrigin+'/api/model-hub')).json();
-  if(cleaned.profiles.length!==0||cleaned.revision!==6)
+  if(cleaned.profiles.length!==0||cleaned.revision!==5)
     throw new Error('Owner profile removal did not persist in SQLite');
   if(process.platform==='win32'){
     const fixtureKey='smoke-credential-not-a-real-key';
