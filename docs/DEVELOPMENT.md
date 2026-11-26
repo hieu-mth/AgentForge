@@ -19,6 +19,8 @@ Trong lúc chạy motion, worker chỉ đọc RAM và Windows commit để quy�
 Nếu không xác nhận được lệnh ngắt, production chuyển sang **Cần đối soát** và giữ attempt hiện tại.
 Lần chạy mới phải được Owner xác nhận cho đúng checkpoint đã kết thúc lỗi.
 
+Script `scripts/setup_windows.ps1 -Install -AllowNetwork` cài cùng extras `[media,chatgpt]` như README và CI; không cài `[youtube]` mặc định. Không có quyền mạng nếu thiếu consent.
+
 Để chạy Dashboard:
 ```powershell
 .\.venv\Scripts\python.exe -m agentforge --port 8780
