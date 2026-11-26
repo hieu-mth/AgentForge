@@ -12,7 +12,7 @@ import {StoryboardReview} from './StoryboardReview.jsx';
 import {ProductionProgress} from './ProductionProgress.jsx';
 import {ScriptContent} from './ScriptContent.jsx';
 import {draftTitle} from './scriptPresentation.js';
-import {storyboardShotLimits} from './studioDuration.js';
+import {storyboardShotLimits,videoModes} from './studioDuration.js';
 import './studio-draft-progress.css';
 
 const API='/api/film/drafts';
