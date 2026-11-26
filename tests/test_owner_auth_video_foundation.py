@@ -137,9 +137,13 @@ class OwnerAuthVideoFoundationTests(unittest.TestCase):
               patch.object(drafts, "ACTIVE", None)):
             status, created, _ = self.request("POST", endpoint + "/start", {"id": identifier, **brief})
             self.assertEqual((status, created["status"]), (200, "RUNNING"))
+            self.assertFalse(created["editor_constraints"]["layout_editable"])
+            self.assertEqual(created["editor_constraints"]["duration"], {"min": 6, "max": 60})
             self.assertTrue(done.wait(3))
             restored = self.request("GET", endpoint)[1]["drafts"]
             self.assertEqual([(row["id"], row["stage"]) for row in restored], [(identifier, "STORYBOARD")])
+            self.assertEqual(restored[0]["editor_constraints"], created["editor_constraints"])
+            self.assertNotIn("editor_constraints", drafts._read(identifier))
             done.clear()
             status, resumed, _ = self.request("POST", endpoint + "/" + identifier + "/resume")
             self.assertEqual((status, resumed["id"], resumed["stage"]), (200, identifier, "STORYBOARD"))
