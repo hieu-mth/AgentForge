@@ -45,6 +45,8 @@ scripts/         # Windows setup, preflight, verification and source/docs hygien
 tests/           # only current video/security tests
 ```
 
+`draft_store.py` sở hữu truy vấn SQLite và checkpoint; `draft_lifecycle.py` sở hữu chuyển trạng thái attempt; `draft_timeline.py` sở hữu phân bổ frame và digest storyboard. `draft_pipeline.py` điều phối worker, khóa, approval và adapter.
+
 Film Studio giữ SHA-bound receipts và explicit Owner approval. GPU tasks, external subprocess/YouTube upload không tự chạy khi truy cập GET/UI. Schema và receipt cần thiết để đọc dữ liệu Owner đã lưu vẫn được bảo toàn.
 
 Model profiles, model-route assignments và chính sách AI điều phối được lưu ở `data/company/model_hub.sqlite3` (Owner-managed). Một checkout mới không có model mặc định. Catalog capability chỉ nằm trong Python; `config/` đã bị loại bỏ.
@@ -96,7 +98,7 @@ Preflight trả `METADATA_COMPATIBLE`, `UNAVAILABLE`, `UNSUPPORTED`, `MISSING_DE
 
 ## Creative Director
 
-Bản nháp motion có tiêu đề cảnh và chế độ thời lượng hiện hành dùng Creative Director. Bản nháp cũ, ý tưởng tự do và sản xuất ảnh tĩnh vẫn dùng planner hiện tại. Không cần migrate SQLite. AI đề xuất nhóm hành động theo thứ tự, góc quay, ý đồ và thời lượng tương đối; nhận thời lượng cảnh bằng giây thay vì số frame kỹ thuật. `creative_plan.validate_scene_shots` kiểm tra hợp đồng sáng tạo không phụ thuộc output profile. `compile_plan` chuyển nội dung đã kiểm tra thành segment theo output profile và ngân sách runtime hiện hành. Định dạng creative plan đã lưu và cách kiểm tra digest không đổi.
+Bản nháp motion có tiêu đề cảnh và chế độ thời lượng hiện hành dùng Creative Director. Ý tưởng tự do và sản xuất ảnh tĩnh dùng planner hiện hành. Planner preset lịch sử đã bị gỡ; bản nháp cũ chưa có storyboard phải tạo production mới. Storyboard lịch sử đã lưu vẫn giữ timeline và digest để tiếp tục hoặc xác minh. Không tự migrate SQLite. AI đề xuất nhóm hành động theo thứ tự, góc quay, ý đồ và thời lượng tương đối; nhận thời lượng cảnh bằng giây thay vì số frame kỹ thuật. `creative_plan.validate_scene_shots` kiểm tra hợp đồng sáng tạo không phụ thuộc output profile. `compile_plan` chuyển nội dung đã kiểm tra thành segment theo output profile và ngân sách runtime hiện hành. Định dạng creative plan đã lưu và cách kiểm tra digest không đổi.
 
 Đây là ranh giới đầu tiên trong đường chạy authored script, chưa phải planner độc lập hoàn toàn với runtime. Free-form planning và authored script đều phải tuân theo output profile của phương pháp đã chọn, thời lượng và ngân sách; không suy ra chất lượng API thật từ fixture.
 
