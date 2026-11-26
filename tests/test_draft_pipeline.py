@@ -1146,6 +1146,7 @@ class DraftTests(unittest.TestCase):
             self.assertNotIn("character.select", bindings)
             job.update(board=draft._story(self.board(), 2, 4, {"cat": {}}),
                        cast={"cat": {"name": "Miu", "appearance": "orange cat"}})
+            job["brief"]["scene_count"] = 2
 
         patches = (patch.object(draft, "_dispatch"), patch.object(draft, "_write_board", side_effect=storyboard),
               patch.object(draft, "_measured", return_value=nullcontext()),
