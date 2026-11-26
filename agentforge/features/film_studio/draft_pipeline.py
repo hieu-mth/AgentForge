@@ -17,7 +17,8 @@ from agentforge.features.film_studio import characters, creative_plan, script_an
 from agentforge.features.film_studio import draft_audio, draft_continuity, draft_lifecycle, draft_resources, draft_store, draft_timeline, studio_runtime
 from agentforge.features.media import render, visual_jobs
 from agentforge.features.film_studio.draft_resources import NeedsReconciliation, ResourceWait
-from agentforge.features.film_studio.draft_store import DraftNotFound, DraftStoreUnavailable, validate_id as _id
+from agentforge.features.film_studio.draft_store import DraftNotFound as DraftNotFound, DraftStoreUnavailable as DraftStoreUnavailable, validate_id as _id
+from agentforge.features.film_studio.studio_contracts import BRIEF_LIMIT
 from agentforge.integrations import comfy_service
 from agentforge.paths import COMPANY_DATA_DIR, WORKSPACE_DIR, ensure_local_root
 
@@ -29,7 +30,6 @@ LOCK = threading.Lock()
 ACTIVE = None
 LOG = logging.getLogger(__name__)
 IMG_RETRIES = 3
-BRIEF_LIMIT = 20_000
 _QUEUE_STATES = {"QUEUED", "RUNNING", "WAITING_RESOURCES"}
 
 
