@@ -1058,6 +1058,19 @@ class DraftTests(unittest.TestCase):
                              {"index": 0, "description": "New scene", "image_prompt": "Cat"})[0], 400)
             act.assert_not_called()
 
+    def test_current_30_second_plan_does_not_request_legacy_duration_weight(self):
+        profile = {"provider": "ollama", "model": "fixture"}
+        job = {"id": self.ident, "brief": {**self.brief, "mode": "motion",
+                "seconds": 30, "scene_count": 15, "duration_mode": "manual"}}
+        proposed = {"action": "Cat walks", "reason": "Opening", "timeline_seconds": 2}
+        with (patch.object(draft, "_measured", return_value=nullcontext()),
+              patch.object(draft, "_ask", return_value={}) as ask):
+            draft._script_scene(job, profile, None, "Cat walks", "", 0, proposed_shot=proposed)
+        _, instructions, context, schema, _ = ask.call_args.args
+        self.assertNotIn("duration_weight", schema["properties"])
+        self.assertNotIn("duration_weight", instructions)
+        self.assertEqual(context["seconds"], 2)
+
     def test_submission_validation_and_idempotence(self):
         with self.assertRaises(ValueError):
             draft.submit({"id": self.ident, **self.submission, "ratio": "4:3"})
