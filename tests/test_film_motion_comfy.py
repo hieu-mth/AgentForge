@@ -1,5 +1,4 @@
 """Local motion adapter contracts: trusted JSON, owner approvals, no implicit retries."""
-import copy
 import json
 import sqlite3
 import tempfile
