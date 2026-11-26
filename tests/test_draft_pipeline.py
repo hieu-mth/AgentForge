@@ -1602,6 +1602,41 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(restored["status"], "CANCELLED")
         self.assertEqual(restored["board"]["scenes"][0]["asset"], "committed")
 
+    def test_cleanup_failure_preserves_cancelled_checkpoint_and_dispatch(self):
+        job = {"id": self.ident, "brief": self.brief, "status": "RUNNING", "stage": "IMAGES",
+               "board": draft._story(self.board(), 2, 6, {"cat": {}}), "cast": {},
+               "attempt_started_at": "2026-11-26T00:00:00Z"}
+        draft._save(job)
+
+        def complete_scene(job, index, scene, revision, profile):
+            scene["asset"] = "committed"
+            draft._save(job)
+            draft._cancellation(job["id"], mark=True)
+
+        profile = {**flux_profile(), "base_url": "http://127.0.0.1:8188"}
+        with (patch.object(draft.model_hub, "draft_routes", return_value=(1, {"image.generate": profile})),
+              patch.object(draft.comfy_service, "require_other_queue_idle"),
+              patch.object(draft.comfy_service, "require_idle_queue"),
+              patch.object(draft, "_image", side_effect=complete_scene) as image,
+              patch.object(draft, "_render") as render,
+              patch.object(draft, "_dispatch") as dispatch,
+              patch.object(draft, "_release_idle_image", side_effect=RuntimeError("secret-provider-payload")) as release,
+              self.assertLogs(draft.LOG, level="WARNING") as logs):
+            draft._work(job, nullcontext())
+        image.assert_called_once()
+        render.assert_not_called()
+        release.assert_called_once_with(profile)
+        dispatch.assert_called_once()
+        restored = draft._read(self.ident)
+        self.assertEqual(restored["status"], "CANCELLED")
+        self.assertEqual(restored["board"]["scenes"][0]["asset"], "committed")
+        self.assertTrue(restored["attempt_finished_at"])
+        self.assertNotIn("activity", restored)
+        self.assertIsNone(draft.ACTIVE)
+        self.assertIn("STUDIO_IMAGE_CLEANUP_FAILED", str(logs.output))
+        self.assertNotIn("secret-provider-payload", str(logs.output))
+        self.assertNotIn("secret-provider-payload", str(restored))
+
     def test_comfy_offload_skipped_during_commit_pressure(self):
         with (patch.dict(self.capacity, {"commit_used": 31 << 30}),
               patch.object(flux_runtime, "_json") as request):
