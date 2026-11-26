@@ -43,8 +43,10 @@ export function MediaProbeDialog({profile,revision,mutate,onCancel}){
       {pending&&<Alert type="info" showIcon message="Đang xử lý yêu cầu đã xác nhận…"/>}
       {error&&<Alert type="error" showIcon message={error}/>}
       {result?.status==='NEEDS_RECONCILIATION'&&<Alert type="warning" showIcon message="Chưa xác định kết quả gửi. Kiểm tra nhà cung cấp, không tạo lại tự động."/>}
+      {result?.error&&<Alert type={result.status==='REJECTED'?'error':'warning'} showIcon message={result.error}/>}
+      {result?.status==='REJECTED'&&<Button onClick={()=>{setId(null);setResult(null);setError(null);}}>Tạo lượt thử mới</Button>}
       {result?.status==='FAILED'&&<Alert type="error" showIcon message="Nhà cung cấp báo tác vụ thất bại."/>}
-      {id&&result?.status!=='ASSET_READY'&&result?.status!=='FAILED'&&<Button disabled={pending}
+      {id&&result?.status!=='ASSET_READY'&&result?.status!=='FAILED'&&result?.status!=='REJECTED'&&<Button disabled={pending}
         onClick={()=>invoke('POLL_MEDIA_MODEL_PROBE',id)}>Kiểm tra kết quả</Button>}
       {result?.status==='ASSET_READY'&&(video?<video controls preload="metadata" src={result.preview_url} style={{width:'100%'}}/>:
         <Image width="100%" alt="Ảnh chạy thử Cloud" src={result.preview_url}/>)}

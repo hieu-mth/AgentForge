@@ -5,7 +5,7 @@ const productionStages = [
 ];
 
 const verifiedStatuses=new Set(['REVIEW','APPROVED','REJECTED']);
-const blockedStatuses=new Set(['WAITING_RESOURCES','STORYBOARD_REVIEW','INTERRUPTED','NEEDS_RECONCILIATION','QUEUED','CANCELLED']);
+const blockedStatuses=new Set(['WAITING_RESOURCES','WAITING_CLOUD_RESOURCES','STORYBOARD_REVIEW','INTERRUPTED','NEEDS_RECONCILIATION','QUEUED','CANCELLED']);
 
 export function productionElapsed(job,active,now) {
   const sample=job?.resources?.findLast(point=>point.before?.checked_at&&point.after?.checked_at);

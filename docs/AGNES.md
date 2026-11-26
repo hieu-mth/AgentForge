@@ -20,3 +20,7 @@ prompt; the action explicitly authorizes one image or one four-second video.
 Use the same probe ID to poll the existing video; it never submits again.
 Probe image and video previews are served locally after verification. Cloud
 billing and account entitlement remain unverified until the Owner runs a test.
+
+## Cloud error handling
+
+Agnes HTTP 503 with the exact `video_queue_full` code, or HTTP 429, is treated as a rejected submission when no job evidence is returned. Studio reserves the original seconds budget once, counts every HTTP submission against the cloud-call cap, and retries the same shot at 60/120/300 seconds (honoring longer numeric Retry-After up to 900 seconds). The worker waits outside the dispatch guard; it does not regenerate images or verified clips. The retry deadline and rejection are persisted. After backend restart, explicitly resume the waiting production. Permanent rejections display sanitized HTTP status; no automatic retry. Unclassified 5xx, malformed success responses, and transport failures remain uncertain. Old ambiguous records are not automatically reclassified. An explicitly approved new attempt after exhaustion uses the existing conservative budget accounting. Probes never automatically submit again.

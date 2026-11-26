@@ -70,6 +70,15 @@ def generate(profile, request):
                            (digest, visual_jobs._now(), ident))
                 metadata["duration_seconds"] = round(time.monotonic() - started, 3)
                 db.execute("UPDATE visual_runtime SET metadata=? WHERE job_id=?", (json.dumps(metadata), ident))
+        except studio_agnes.AgnesHTTPError as exc:
+            metadata["error"] = str(exc)
+            with closing(visual_jobs._db(create=True)) as db, db:
+                db.execute("UPDATE visual_jobs SET status=?,updated_at=? WHERE job_id=?",
+                           ("REJECTED" if exc.rejected else "SUBMIT_UNCERTAIN", visual_jobs._now(), ident))
+                db.execute("UPDATE visual_runtime SET metadata=? WHERE job_id=?", (json.dumps(metadata), ident))
+            if exc.rejected:
+                raise
+            raise NeedsReconciliation(str(exc) + "; image outcome uncertain.") from None
         except Exception:
             with closing(visual_jobs._db(create=True)) as db, db:
                 db.execute("UPDATE visual_jobs SET status='SUBMIT_UNCERTAIN',updated_at=? WHERE job_id=?",

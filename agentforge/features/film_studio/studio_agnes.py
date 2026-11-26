@@ -51,6 +51,45 @@ def _id(value):
     return value
 
 
+class AgnesHTTPError(ValueError):
+    """Sanitized classification: never persist provider body, prompts or credentials."""
+
+    def __init__(self, status, code=None, retry_after=None):
+        self.status = status
+        self.code = code if code in {"video_queue_full", "rate_limit_exceeded", "too_many_requests"} else None
+        self.retry_after = retry_after
+        self.retryable = (status == 503 and self.code == "video_queue_full") or status == 429
+        self.rejected = self.retryable or status in {400, 401, 402, 403, 404, 413, 415, 422}
+        label = {400: "Invalid request", 401: "Invalid API key", 402: "Payment or quota required",
+                 403: "Access denied", 404: "Endpoint or model not found", 413: "Request too large",
+                 415: "Unsupported media type", 422: "Invalid request parameters",
+                 429: "Rate limited"}.get(status, "Video queue full" if self.code == "video_queue_full" else "Provider error")
+        super().__init__(f"Agnes HTTP {status}: {label}" + (f" ({self.code})" if self.code else ""))
+
+
+def _http_error(response):
+    # Read a bounded response to distinguish a definitive queue rejection
+    # from arbitrary 503/5xx. Never echo untrusted message text.
+    code = None
+    try:
+        data = response.read(64 * 1024 + 1)
+        if len(data) <= 64 * 1024:
+            result = json.loads(data)
+            if isinstance(result, dict):
+                error = result.get("error")
+                candidate = result.get("code") or (error.get("code") if isinstance(error, dict) else None)
+                if isinstance(candidate, str):
+                    code = candidate
+                if result.get("video_id") or result.get("id") or result.get("data") not in (None, {}):
+                    # Unexpected acceptance evidence must not authorize a retry.
+                    return AgnesHTTPError(response.status) if response.status >= 500 else ValueError("Agnes response contains possible job evidence.")
+    except (ValueError, TypeError, OSError, http.client.HTTPException):
+        pass
+    raw_retry = response.getheader("Retry-After")
+    retry_after = int(raw_retry) if isinstance(raw_retry, str) and re.fullmatch(r"[0-9]{1,9}", raw_retry) else None
+    return AgnesHTTPError(response.status, code, retry_after)
+
+
 def _request(method, path, token, body=None):
     conn = http.client.HTTPSConnection(HOST, timeout=120)
     try:
@@ -58,7 +97,7 @@ def _request(method, path, token, body=None):
                      {"Authorization": "Bearer " + token, "Content-Type": "application/json"})
         response = conn.getresponse()
         if response.status not in ({200, 201, 202} if method == "POST" else {200}):
-            raise ValueError("Agnes HTTP " + str(response.status))
+            raise _http_error(response)
         data = response.read(MAX_JSON + 1)
         if len(data) > MAX_JSON:
             raise ValueError("Agnes response exceeds limit.")
@@ -66,8 +105,10 @@ def _request(method, path, token, body=None):
         if not isinstance(result, dict):
             raise ValueError("Invalid Agnes response.")
         return result
+    except TimeoutError:
+        raise ValueError("Agnes request timed out; outcome unknown.") from None
     except (OSError, http.client.HTTPException, UnicodeError):
-        raise ValueError("Agnes transport failed; do not repeat an uncertain submission.") from None
+        raise ValueError("Agnes transport failed; outcome unknown.") from None
     finally:
         conn.close()
 
@@ -125,7 +166,11 @@ def payload(model, prompt, duration, *, image=None, audio=False):
 
 
 def submit(body, token):
-    return _id(_request("POST", "/v1/videos", token, body).get("video_id"))
+    response = _request("POST", "/v1/videos", token, body)
+    try:
+        return _id(response.get("video_id"))
+    except ValueError:
+        raise ValueError("Agnes accepted HTTP response without a valid video ID; outcome unknown.") from None
 
 
 def submit_video(body, key, endpoint):

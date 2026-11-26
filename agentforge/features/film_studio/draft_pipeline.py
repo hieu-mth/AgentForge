@@ -30,7 +30,7 @@ LOCK = threading.Lock()
 ACTIVE = None
 LOG = logging.getLogger(__name__)
 IMG_RETRIES = 3
-_QUEUE_STATES = {"QUEUED", "RUNNING", "WAITING_RESOURCES"}
+_QUEUE_STATES = {"QUEUED", "RUNNING", "WAITING_RESOURCES", "WAITING_CLOUD_RESOURCES"}
 
 
 class DraftCancelled(Exception):
@@ -743,7 +743,8 @@ def _image(job, index, scene, revision, profile):
     if prior and prior["status"] in {"SUBMITTING", "SUBMITTED", "SUBMIT_UNCERTAIN", "COLLECTING"}:
         raise NeedsReconciliation("The prior image job needs reconciliation before retry")
     if not prior or prior["status"] != "ASSET_READY":
-        if ("storyboard_version" in job or job["brief"].get("mode") == "motion") and scene["job_id"]:
+        if (("storyboard_version" in job or job["brief"].get("mode") == "motion") and scene["job_id"]
+                and not (prior and prior["status"] == "REJECTED")):
             raise ValueError("Cần kiểm tra tác vụ tạo ảnh cũ trước khi duyệt phiên bản sửa.")
         if scene["attempts"] >= IMG_RETRIES:
             raise ValueError("Scene reached its retry limit")
@@ -1111,6 +1112,7 @@ def _work(job, slot, retry_motion_job=None):
                                 job["id"], job["stage"])
             with comfy_service.LOCK:
                 cancelled = job["status"] != "NEEDS_RECONCILIATION" and _cancellation(job["id"])
+                job.pop("cloud_wait", None)
                 draft_lifecycle.finish_attempt(job, visual_jobs._now(), cancelled=cancelled)
                 _save(job)
         finally:
@@ -1542,7 +1544,7 @@ def act(ident, action, data):
             if job["status"] == "RUNNING" and not active_here and job.get("stage") == "MOTION":
                 raise ValueError("Cần đối soát tác vụ chuyển động trước khi hủy.")
             _cancellation(ident, mark=True)
-            if job["status"] != "RUNNING" or not active_here:
+            if job["status"] not in {"RUNNING", "WAITING_CLOUD_RESOURCES"} or not active_here:
                 job.update(status="CANCELLED", error=None)
                 _save(job)
         _dispatch()
@@ -1580,7 +1582,7 @@ def act(ident, action, data):
             job["status"] = "APPROVED" if action == "approve" else "REJECTED"
             _save(job)
             return job
-        if action != "resume" or job["status"] not in {"RUNNING", "FAILED", "WAITING_RESOURCES", "NEEDS_RECONCILIATION"}:
+        if action != "resume" or job["status"] not in {"RUNNING", "FAILED", "WAITING_RESOURCES", "WAITING_CLOUD_RESOURCES", "NEEDS_RECONCILIATION"}:
             raise ValueError("Draft cannot be resumed")
         if job["status"] == "NEEDS_RECONCILIATION" and _cancellation(ident):
             if studio_runtime.motion_artifacts(job).reconcile_cancelled(job):
