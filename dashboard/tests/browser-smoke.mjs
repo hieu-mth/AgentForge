@@ -727,6 +727,17 @@ try {
   await settings.goto(policyOrigin+'/dashboard/#/models');
   await settings.getByRole('button',{name:'Đăng ký model'}).click();
   const registerDialog=settings.getByRole('dialog');
+  // OAuth status is an external-account observation, not part of the real SQLite
+  // profile registration fixture. Exercise both states without depending on runner credentials.
+  let oauthConnected=false;
+  let oauthChecks=0;
+  await settings.route('**/api/model-hub/chatgpt',route=>{
+    const body=route.request().postDataJSON();
+    if(body.ack!=='CHATGPT_STATUS'||body.account_ref!=='owner')
+      throw new Error('Unexpected OAuth action in profile registration: '+body.ack);
+    oauthChecks++;
+    return route.fulfill({json:{account_ref:'owner',connected:oauthConnected}});
+  });
   await registerDialog.getByText('Cloud',{exact:true}).click();
   await registerDialog.getByText('Kết nối ChatGPT qua OAuth',{exact:true}).waitFor();
   await registerDialog.getByRole('button',{name:'Liên kết ChatGPT',exact:true}).waitFor();
@@ -917,8 +928,10 @@ try {
   if(process.platform==='win32'){
     const fixtureKey='smoke-credential-not-a-real-key';
     await settings.getByRole('button',{name:'Đăng ký model'}).click();
+    oauthConnected=true;
     await registerDialog.getByText('Cloud',{exact:true}).click();
-    await registerDialog.getByRole('button',{name:'Liên kết ChatGPT',exact:true}).waitFor();
+    await registerDialog.getByText('Đã kết nối tài khoản ChatGPT',{exact:true}).waitFor();
+    await registerDialog.getByRole('button',{name:'Lấy danh sách model',exact:true}).waitFor();
     await registerDialog.getByRole('combobox',{name:'Chuẩn kết nối'}).click();
     await openOptions.filter({hasText:/^Anthropic API$/}).click();
     await registerDialog.getByLabel('Model ID',{exact:true}).fill('fixture-cloud');
@@ -941,6 +954,9 @@ try {
     await settings.getByText('Chưa kiểm tra',{exact:true}).first().waitFor();
     await settings.getByText('Đã lưu hồ sơ model',{exact:true}).waitFor();
   }
+  if(oauthChecks<(process.platform==='win32'?2:1))
+    throw new Error('OAuth status was not requested for each Cloud registration');
+  await settings.unroute('**/api/model-hub/chatgpt');
   const concurrent=await browser.newContext();
   const login2=await concurrent.request.post(policyOrigin+'/api/login',{
     headers:{Origin:policyOrigin},data:{code:ownerCode},
