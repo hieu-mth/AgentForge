@@ -336,7 +336,9 @@ def _script_scene(job, profile, comfy, source, continuity, index, *, proposed_sh
         source = facts
     fields = {key: {**STRING, "minLength": 1, "maxLength": limit} for key, limit in
               (("title", 100), ("continuity", 240), ("description", 350), ("image_prompt", 600), ("audio", 160))}
-    weighted = job["brief"]["seconds"] == 30 and job["brief"].get("mode") == "motion"
+    # Historical 30-second presets used weights; current plans already own timing.
+    weighted = (proposed_shot is None and "duration_mode" not in job["brief"]
+                and job["brief"]["seconds"] == 30 and job["brief"].get("mode") == "motion")
     if weighted:
         fields["duration_weight"] = {"type": "integer", "minimum": 1, "maximum": 3}
     context = {"source": source, "prior_continuity": continuity, "scene": index + 1,
@@ -1323,21 +1325,26 @@ def _dispatch():
             slot.__exit__(None, None, None)
 
 
+def validate_submission_shape(data):
+    """The current Studio brief is the only supported creation contract."""
+    required = {"id", "idea", "seconds", "ratio", "scene_count", "mode", "duration_mode"}
+    if (not isinstance(data, dict)
+            or data.keys() not in (required, required | {"route_strategy", "max_cloud_seconds"})
+            or data["duration_mode"] not in ("auto", "manual")
+            or data["scene_count"] is not None):
+        raise ValueError("Use the current Studio brief: auto or manual duration, with AI-planned scenes.")
+
+
 def submit(data):
+    validate_submission_shape(data)
     ident = _id(data["id"])
-    motion_mode = data.get("mode") == "motion"
-    duration_mode = data.get("duration_mode")
-    if duration_mode is None:
-        seconds = _number(data["seconds"], 4 if motion_mode else 6, 60)
-        count = _number(data["scene_count"], 2, draft_timeline.shot_limits(seconds)[1] if motion_mode else 6)
-        if not motion_mode and seconds < count * 2:
-            raise ValueError("Choose at least two seconds per scene")
-    else:
-        seconds, count = data["seconds"], data["scene_count"]
-        if duration_mode not in ("auto", "manual") or count is not None or (duration_mode == "auto" and seconds is not None):
-            raise ValueError("Thiết lập thời lượng không hợp lệ.")
-        if duration_mode == "manual":
-            draft_timeline.duration_limits(seconds, motion_mode)
+    motion_mode = data["mode"] == "motion"
+    duration_mode = data["duration_mode"]
+    seconds = data["seconds"]
+    if duration_mode == "auto" and seconds is not None:
+        raise ValueError("Thiết lập thời lượng không hợp lệ.")
+    if duration_mode == "manual":
+        draft_timeline.duration_limits(seconds, motion_mode)
     if not isinstance(data["ratio"], str) or data["ratio"] not in SIZES:
         raise ValueError("Choose a supported ratio and at least two seconds per scene")
     idea = data["idea"]
@@ -1347,28 +1354,17 @@ def submit(data):
         idea.encode("utf-8")
     except UnicodeError:
         raise ValueError("Nội dung có ký tự Unicode không hợp lệ.") from None
-    if duration_mode is None and script_analysis.needs_scene_analysis(idea):
-        if motion_mode and seconds == 30:
-            minimum, maximum = draft_timeline.shot_limits(seconds)
-            count_for_script = min(maximum, max(minimum, len(script_analysis.SCRIPT_HEADING.findall(idea))))
-        else:
-            count_for_script = count
-        script_analysis.script_ranges(idea, count_for_script, seconds)
-    brief = {"idea": idea, "seconds": seconds,
-             "scene_count": count, "ratio": data["ratio"]}
-    mode = data.get("mode", "still")
+    brief = {"idea": idea, "seconds": seconds, "scene_count": None,
+             "ratio": data["ratio"], "duration_mode": duration_mode}
+    mode = data["mode"]
     if mode not in ("still", "motion"):
         raise ValueError("Invalid video mode")
     if mode == "motion":
-        if duration_mode is None:
-            draft_timeline.timeline(seconds, count)
         if brief["ratio"] != "16:9":
             raise ValueError("Phim chuyển động hiện hỗ trợ khung hình 16:9.")
         brief["mode"] = mode
-    if duration_mode is not None:
-        brief["duration_mode"] = duration_mode
     if "route_strategy" in data or "max_cloud_seconds" in data:
-        if not motion_mode or duration_mode is None or data.get("route_strategy") not in {"auto", "local", "hybrid", "cloud"}:
+        if not motion_mode or data.get("route_strategy") not in {"auto", "local", "hybrid", "cloud"}:
             raise ValueError("Chọn tuyến sản xuất chỉ áp dụng storyboard motion mới.")
         from agentforge.features.film_studio import production_router
         cap = _number(data.get("max_cloud_seconds"), 0, production_router.MAX_CLOUD_SECONDS)
@@ -1389,7 +1385,7 @@ def submit(data):
     job = {"id": ident, "brief": brief, "stage": "QUEUED", "status": "QUEUED",
            "video_sha": None, "created_at": created_at, "updated_at": created_at}
     job["storyboard_version"] = 1
-    if motion_mode and duration_mode is not None and script_analysis.AUTHORED_HEADING.search(idea):
+    if motion_mode and script_analysis.AUTHORED_HEADING.search(idea):
         job["creative_director_version"] = 1
     job["studio_plan"] = studio_runtime.routing_identity(bindings, moving=motion_mode)
     job["deferred_media_binding"] = True

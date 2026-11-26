@@ -28,6 +28,7 @@ class DraftTests(unittest.TestCase):
         self.enterContext(patch.object(draft.model_hub, "DB_PATH", self.root / "hub.sqlite3"))
         self.ident = "a" * 32
         self.brief = {"idea": "Chú mèo cam", "scene_count": 2, "ratio": "16:9", "seconds": 6}
+        self.submission = {**self.brief, "scene_count": None, "mode": "still", "duration_mode": "manual"}
         self.capacity = {"ram_available": 16 << 30, "commit_used": 8 << 30,
                          "commit_limit": 32 << 30, "vram_free_mib": 8000}
         capacity = patch.object(draft.draft_resources, "snapshot", return_value=self.capacity)
@@ -83,7 +84,7 @@ class DraftTests(unittest.TestCase):
               patch.object(studio_runtime, "image_adapter", side_effect=AssertionError("image adapter")),
               patch.object(studio_runtime, "motion_artifacts", side_effect=AssertionError("motion adapter")),
               patch.dict(self.capacity, {"vram_free_mib": 0})):
-            job = draft.submit({"id": self.ident, **self.brief})
+            job = draft.submit({"id": self.ident, **self.submission})
             draft._work(job, nullcontext())
         saved = draft._read(self.ident)
         self.assertEqual(saved["status"], "STORYBOARD_REVIEW", saved.get("error"))
@@ -125,7 +126,7 @@ class DraftTests(unittest.TestCase):
             job.update(board=draft._story(self.board(), 2, 4, {"cat": {}}), cast={})
         with (patch.object(draft, "_dispatch"), patch.object(draft, "_write_board", side_effect=storyboard),
               patch.object(studio_runtime, "motion_adapter", side_effect=AssertionError("motion before review"))):
-            job = draft.submit({"id": self.ident, **self.brief, "mode": "motion", "seconds": 4})
+            job = draft.submit({"id": self.ident, **self.submission, "mode": "motion", "seconds": 4})
             draft._work(job, nullcontext())
         saved = draft._read(self.ident)
         self.assertEqual(saved["status"], "STORYBOARD_REVIEW", saved.get("error"))
@@ -168,7 +169,7 @@ class DraftTests(unittest.TestCase):
               patch.object(draft_motion_cloud, "bind", side_effect=AssertionError("video readiness")),
               patch.object(draft_motion_cloud.ltx, "_request", side_effect=AssertionError("cloud video API")),
               patch.object(draft.render, "_ffmpeg", side_effect=AssertionError("FFmpeg"))):
-            job = draft.submit({"id": self.ident, **self.brief, "mode": "motion", "seconds": 4,
+            job = draft.submit({"id": self.ident, **self.submission, "mode": "motion", "seconds": 4,
                                 "scene_count": None, "duration_mode": "manual",
                                 "route_strategy": "cloud", "max_cloud_seconds": 12})
             draft._work(job, nullcontext())
@@ -1057,13 +1058,30 @@ class DraftTests(unittest.TestCase):
                              {"index": 0, "description": "New scene", "image_prompt": "Cat"})[0], 400)
             act.assert_not_called()
 
+    def test_current_30_second_plan_does_not_request_legacy_duration_weight(self):
+        profile = {"provider": "ollama", "model": "fixture"}
+        job = {"id": self.ident, "brief": {**self.brief, "mode": "motion",
+                "seconds": 30, "scene_count": 15, "duration_mode": "manual"}}
+        proposed = {"action": "Cat walks", "reason": "Opening", "timeline_seconds": 2}
+        with (patch.object(draft, "_measured", return_value=nullcontext()),
+              patch.object(draft, "_ask", return_value={}) as ask):
+            draft._script_scene(job, profile, None, "Cat walks", "", 0, proposed_shot=proposed)
+        _, instructions, context, schema, _ = ask.call_args.args
+        self.assertNotIn("duration_weight", schema["properties"])
+        self.assertNotIn("duration_weight", instructions)
+        self.assertEqual(context["seconds"], 2)
+
     def test_submission_validation_and_idempotence(self):
         with self.assertRaises(ValueError):
-            draft.submit({"id": self.ident, **self.brief, "ratio": "4:3"})
-        draft._save({"id": self.ident, "brief": self.brief, "status": "RUNNING"})
-        self.assertEqual(draft.submit({"id": self.ident, **self.brief})["id"], self.ident)
+            draft.submit({"id": self.ident, **self.submission, "ratio": "4:3"})
+        with self.assertRaisesRegex(ValueError, "current Studio brief"):
+            draft.submit({"id": self.ident, **self.brief})
+        self.assertEqual(draft.list_drafts(), [])
+        stored = {key: value for key, value in self.submission.items() if key != "mode"}
+        draft._save({"id": self.ident, "brief": stored, "status": "RUNNING"})
+        self.assertEqual(draft.submit({"id": self.ident, **self.submission})["id"], self.ident)
         with self.assertRaises(ValueError):
-            draft.submit({"id": self.ident, **self.brief, "idea": "Khác"})
+            draft.submit({"id": self.ident, **self.submission, "idea": "Khác"})
         self.assertEqual(len(draft.list_drafts()), 1)
 
     def test_list_includes_an_older_draft_updated_after_the_newest_thirty(self):
@@ -1344,7 +1362,7 @@ class DraftTests(unittest.TestCase):
               patch.object(draft, "_write_board", side_effect=storyboard),
               patch.object(draft, "_dispatch"), patch.object(draft, "_image") as image,
               patch.object(draft_motion, "require_resolved_ledger")):
-            job = draft.submit({"id": self.ident, **self.brief})
+            job = draft.submit({"id": self.ident, **self.submission})
             draft._work(job, nullcontext())
             self.assertEqual(draft._read(self.ident)["status"], "STORYBOARD_REVIEW")
             image.assert_not_called()
@@ -1591,16 +1609,16 @@ class DraftTests(unittest.TestCase):
     def test_queue_limit_idempotence_and_queued_cancel(self):
         with (patch.object(draft.model_hub, "draft_routes", return_value=(1, {})), patch.object(draft.render, "_ffmpeg"),
               patch.object(draft, "_queue_limit", return_value=1), patch.object(draft, "_dispatch")):
-            submitted = draft.submit({"id": self.ident, **self.brief})
+            submitted = draft.submit({"id": self.ident, **self.submission})
             self.assertEqual(submitted["status"], "QUEUED")
             self.assertEqual(submitted["created_at"], submitted["updated_at"])
-            self.assertEqual(draft.submit({"id": self.ident, **self.brief})["id"], self.ident)
+            self.assertEqual(draft.submit({"id": self.ident, **self.submission})["id"], self.ident)
             with self.assertRaisesRegex(ValueError, "queue"):
-                draft.submit({"id": "b" * 32, **self.brief})
+                draft.submit({"id": "b" * 32, **self.submission})
             cancelled = draft.act(self.ident, "cancel", {})
             self.assertEqual(cancelled["status"], "CANCELLED")
             self.assertEqual(draft._read(self.ident)["created_at"], submitted["created_at"])
-            self.assertEqual(draft.submit({"id": "b" * 32, **self.brief})["status"], "QUEUED")
+            self.assertEqual(draft.submit({"id": "b" * 32, **self.submission})["status"], "QUEUED")
 
     def test_running_cancel_keeps_committed_scene_and_skips_render(self):
         job = {"id": self.ident, "brief": self.brief, "status": "RUNNING", "stage": "IMAGES",

@@ -45,15 +45,21 @@ class CloudTextTests(unittest.TestCase):
             model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0, profile=profile)
             policy = orchestrator_policy.defaults()
             policy["permissions"].update(plan=True, assign_models=True, call_cloud=True)
-            policy["cloud_call_limit"] = 2
+            policy["cloud_call_limit"] = 3
             model_hub.change("SET_MODEL_ROUTE", expected_revision=1, task_id="general.text", model_ref=profile["id"])
             model_hub.change("SET_MODEL_ROUTE", expected_revision=2, task_id="film.storyboard", model_ref=profile["id"])
             model_hub.change("SAVE_ORCHESTRATOR", expected_revision=3, policy=policy)
-            brief = {"id": "a"*32, "idea": "A cat", "seconds": 6, "scene_count": 2, "ratio": "16:9"}
+            brief = {"id": "a"*32, "idea": "A cat", "seconds": 6, "scene_count": None, "ratio": "16:9",
+                     "mode": "still", "duration_mode": "manual"}
             job = draft.submit(brief)
-            board = {"title": "Cat", "continuity": "Same cat", "scenes": [
-                {"description": "Cat sits", "image_prompt": "Cat in room", "audio": "Quiet", "character_ids": []},
-                {"description": "Cat stands", "image_prompt": "Cat stands in room", "audio": "Quiet", "character_ids": []}]}
+            plan = {"estimated_duration_seconds": 6, "production_feasibility": "feasible",
+                    "duration_reasoning": "Two actions.", "shots": [
+                        {"action": "Cat sits", "reason": "Opening", "suggested_seconds": 3},
+                        {"action": "Cat stands", "reason": "Ending", "suggested_seconds": 3}]}
+            shots = [{"title": "Cat", "continuity": "Same cat", "description": desc,
+                      "image_prompt": prompt, "audio": "Quiet"}
+                     for desc, prompt in (("Cat sits", "Cat in room"),
+                                          ("Cat stands", "Cat stands in room"))]
             with (patch.object(model_hub, "local_inference_slot", side_effect=AssertionError("local inference")),
                   patch.object(draft.draft_resources, "snapshot", side_effect=AssertionError("local resource check")),
                   patch.object(draft.characters, "list_characters", return_value={"characters": []}),
@@ -63,14 +69,14 @@ class CloudTextTests(unittest.TestCase):
                 response.status = 200
                 response.read.side_effect = [
                     json.dumps({"choices": [{"finish_reason": "stop", "message": {"content": json.dumps(result)}}]}).encode()
-                    for result in ({"outline": "Cat sits and stands."}, board)]
+                    for result in (plan, *shots)]
                 draft._work(job, nullcontext())
-                self.assertEqual(connection.return_value.request.call_count, 2)
+                self.assertEqual(connection.return_value.request.call_count, 3)
                 self.assertEqual(connection.return_value.request.call_args.args[:2],
                                  ("POST", "/v1/chat/completions"))
             saved = draft._read(job["id"])
             self.assertEqual(saved["status"], "STORYBOARD_REVIEW", saved.get("error"))
-            self.assertEqual(saved["cloud_calls"], 2)
+            self.assertEqual(saved["cloud_calls"], 3)
             with patch.object(studio_cloud, "infer_structured", side_effect=AssertionError("budget bypass")):
                 with self.assertRaisesRegex(ValueError, "ngân sách"):
                     draft._ask(profile, "Test", {}, {}, None, job=saved)
