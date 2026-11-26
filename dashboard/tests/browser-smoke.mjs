@@ -484,6 +484,7 @@ try {
   const scene={seconds:2,description:'Miu quay đầu',character_ids:[],audio:'',asset:'fixture-image'};
   draftFixture={...draftFixture,status:'STORYBOARD_REVIEW',stage:'STORYBOARD',worker_active:false,
     storyboard_version:1,storyboard_sha:'a'.repeat(64),
+    editor_constraints:{layout_editable:true,duration_editable:true,min_scenes:3,max_scenes:6,duration:{min:4,max:60}},
     brief:{...draftFixture.brief,idea:'Miu tìm đường về nhà.\n'.repeat(450)},
     duration_plan:{estimated_duration_seconds:6,recommended_shot_count:3,duration_reasoning:'Ba hành động chính.'},
     board:{title:'Ý tưởng mới',scenes:[scene,scene,scene]}};
