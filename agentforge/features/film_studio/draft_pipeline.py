@@ -1187,7 +1187,7 @@ def submit(data):
     if duration_mode == "auto" and seconds is not None:
         raise ValueError("Thiết lập thời lượng không hợp lệ.")
     if duration_mode == "manual":
-        draft_timeline.duration_limits(seconds, motion_mode)
+        draft_timeline.validate_duration(seconds, motion_mode)
     if not isinstance(data["ratio"], str) or data["ratio"] not in SIZES:
         raise ValueError("Choose a supported ratio and at least two seconds per scene")
     idea = data["idea"]
@@ -1236,6 +1236,11 @@ def submit(data):
         job["creative_director_version"] = 1
     job["studio_plan"] = studio_runtime.routing_identity(bindings, moving=motion_mode)
     job["deferred_media_binding"] = True
+    if motion_mode:
+        # This is read-only configuration, not runtime binding, approval or dispatch.
+        # An explicit production strategy resolves its actual contract during planning.
+        assigned = model_hub.assigned_motion_profile() if not brief.get("route_strategy") else None
+        job["planning_output"] = studio_runtime.planning_output(assigned)
     job["submitted_brief"] = dict(brief)
     with comfy_service.LOCK, draft_store.connect(DB, True) as conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -1268,14 +1273,29 @@ def _approve_storyboard(job):
     if moving:
         if deferred:
             adapter = studio_runtime.motion_adapter(bindings.get("film.motion"))
-            if adapter.output_profile(bindings["film.motion"]) != studio_runtime.job_output(job):
-                raise ValueError("Model chuyển động không khớp timeline I2V đã xem. Hãy lập lại storyboard.")
+            spec = adapter.output_profile(bindings["film.motion"])
+            reviewed = studio_runtime.job_output(job)
+            if job.get("production_plan") or "planning_output" not in job:
+                # Historical and explicitly selected routes retain exact contract matching.
+                compatible = spec == reviewed
+            else:
+                # An unbound editorial timeline can use a different model resolution
+                # or clip ceiling without changing any reviewed frame or shot duration.
+                frames = [scene.get("frames") for scene in job["board"]["scenes"]]
+                compatible = (spec.fps == reviewed.fps
+                              and all(type(n) is int and 1 <= n <= spec.max_frames for n in frames)
+                              and sum(frames) == job["brief"]["seconds"] * spec.fps)
+            if not compatible:
+                raise ValueError("Model chuyển động không khớp timeline đã xem. Hãy lập lại storyboard theo model đã phân công.")
             identity = studio_runtime.motion_identity(adapter, bindings["film.motion"])
             if job.get("production_plan"):
                 pinned = studio_runtime.routing_identity({"film.motion": bindings["film.motion"]}, moving=True)["film.motion"]
                 if pinned != job["production_plan"]["motion_profile_sha"] or identity != job["motion_plan"]:
                     raise ValueError("Model video đã thay đổi; lập production mới để chọn lại.")
             job["motion_plan"] = identity
+            # Authored segment boundaries must also survive the chosen contract.
+            # Never regenerate or alter a reviewed storyboard during approval.
+            _validate_creative_frames(job)
         else:
             adapter, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
         if model_hub.is_cloud(bindings["film.motion"]):
