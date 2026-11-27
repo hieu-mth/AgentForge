@@ -148,7 +148,7 @@ class AgnesContractTests(unittest.TestCase):
         errors = [studio_agnes.AgnesHTTPError(503, "video_queue_full") for _ in range(3)]
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            prepared = (job["id"], job, root, motion.workflow_sha())
+            prepared = (job["id"], job, root, motion.workflow_sha(profile))
             states = []
             def save():
                 states.append(job["status"])
@@ -181,7 +181,7 @@ class AgnesContractTests(unittest.TestCase):
                "board": {"scenes": [scene]}}
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            prepared = (job["id"], job, root, motion.workflow_sha())
+            prepared = (job["id"], job, root, motion.workflow_sha(profile))
             with (patch.object(motion, "DB", root/"ledger.db"),
                   patch.object(motion, "RETRY_DELAYS", (0, 0, 0)),
                   patch.object(motion, "_key", return_value="fixture"),
@@ -214,7 +214,7 @@ class AgnesContractTests(unittest.TestCase):
             "method": "cloud", "motion_ref": profile["id"], "max_cloud_seconds": 4}}
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            prepared = (job["id"], job, root, motion.workflow_sha())
+            prepared = (job["id"], job, root, motion.workflow_sha(profile))
             with (patch.object(motion, "DB", root/"ledger.db"),
                   patch.object(motion, "RETRY_DELAYS", (0, 0, 0)),
                   patch.object(motion, "_key", return_value="fixture"),
@@ -238,7 +238,7 @@ class AgnesContractTests(unittest.TestCase):
             "method": "cloud", "motion_ref": profile["id"], "max_cloud_seconds": 4}}
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
-            prepared = (job["id"], job, root, motion.workflow_sha())
+            prepared = (job["id"], job, root, motion.workflow_sha(profile))
             with (patch.object(motion, "DB", root/"ledger.db"),
                   patch.object(motion, "_key", return_value="fixture"),
                   patch.object(motion.ops_control, "require_active"),

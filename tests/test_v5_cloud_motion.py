@@ -124,7 +124,7 @@ class CloudMotionIntegrationTests(unittest.TestCase):
             job = {"production_plan": {"method": "cloud", "max_cloud_seconds": 6}}
             scene = {"frames": 144, "image_prompt": "Cat", "description": "Cat walks", "audio": "Quiet"}
             profile = {"model": "ltx-2-3-fast"}
-            prepared = ("a"*32, job, Path(tmp), motion.workflow_sha())
+            prepared = ("a"*32, job, Path(tmp), motion.workflow_sha(profile))
             with (patch.object(motion, "_key", return_value="fixture"),
                   patch.object(motion, "_reserve"),
                   patch.object(motion.ops_control, "require_active"),
@@ -151,7 +151,7 @@ class CloudMotionIntegrationTests(unittest.TestCase):
             job = {"production_plan": {"method": "cloud", "max_cloud_seconds": 6}}
             scene = {"frames": 144, "image_prompt": "Cat", "description": "Cat walks", "audio": "Quiet"}
             profile = {"model": "ltx-2-3-fast"}
-            prepared = ("e"*32, job, Path(tmp), motion.workflow_sha())
+            prepared = ("e"*32, job, Path(tmp), motion.workflow_sha(profile))
             with (patch.object(motion, "_key", return_value="fixture"),
                   patch.object(motion, "_reserve"),
                   patch.object(motion.ops_control, "require_active"),
