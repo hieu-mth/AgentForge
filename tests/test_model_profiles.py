@@ -37,9 +37,9 @@ class ModelProfileTests(unittest.TestCase):
         self.assertEqual(removed["profiles"], [])
         self.assertEqual(model_hub.catalog(db_path=self.db), removed)
         self.assertTrue(self.db.exists())
-        restored = model_hub.change("ROLLBACK_MODEL_HUB", db_path=self.db,
-                                    expected_revision=3, target_revision=2)
-        self.assertEqual(restored["profiles"][0]["model"], "another:8b")
+        with self.assertRaisesRegex(PermissionError, "Unknown Model Hub action"):
+            model_hub.change("ROLLBACK_MODEL_HUB", db_path=self.db, expected_revision=3)
+        self.assertEqual(model_hub.catalog(db_path=self.db), removed)
 
     def test_assigned_model_cannot_be_deleted_until_unassigned(self):
         self.save(self.local())

@@ -140,4 +140,4 @@ Get-ChildItem -LiteralPath .\data\company -File |
     Move-Item -Destination $backup
 ```
 
-Đăng ký lại model, phân công và cấp quyền trong Dashboard. Việc này đặt lại revision/config/rollback Model Hub. Bản nháp đã duyệt bằng cấu hình cũ có thể không tiếp tục được: tạo production mới, không sửa digest thủ công. Không xóa các ledger motion/cloud, workspace, weights, DB nhân vật hoặc credential OAuth. ChatGPT account token nằm riêng; đăng ký lại profile dùng account reference đã kết nối nếu phiên còn hợp lệ. Không chạy lệnh khi backend hoặc công cụ khác còn sử dụng DB.
+Đăng ký lại model, phân công và cấp quyền trong Dashboard. Việc này đặt lại revision, cấu hình và lịch sử snapshot Model Hub. Bản nháp đã duyệt bằng cấu hình cũ có thể không tiếp tục được: tạo production mới, không sửa digest thủ công. Không xóa các ledger motion/cloud, workspace, weights, DB nhân vật hoặc credential OAuth. ChatGPT account token nằm riêng; đăng ký lại profile dùng account reference đã kết nối nếu phiên còn hợp lệ. Không chạy lệnh khi backend hoặc công cụ khác còn sử dụng DB.

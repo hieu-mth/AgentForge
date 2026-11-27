@@ -217,7 +217,10 @@ class DraftTests(unittest.TestCase):
         self.registry_change("DELETE_MODEL_PROFILE", profile_id="owner_planner")
         with self.assertRaisesRegex(ValueError, "chưa phân công"):
             draft._studio_bindings(saved)
-        self.registry_change("ROLLBACK_MODEL_HUB", target_revision=revision)
+        self.registry_change("SAVE_MODEL_PROFILE", profile={
+            "id": "owner_planner", "provider": "ollama", "enabled": True,
+            "model": "planner:8b", "base_url": "http://127.0.0.1:11434"})
+        self.registry_change("SET_MODEL_ROUTE", task_id="general.text", model_ref="owner_planner")
         self.assertEqual(draft._studio_bindings(saved)[2], revision)
 
     def test_flux_dispatch_checks_approved_profile_again_before_gpu_admission(self):
@@ -1121,7 +1124,7 @@ class DraftTests(unittest.TestCase):
         profile = {"id": "selected_by_registry", "provider": "comfyui", "model": ltx.CHECKPOINT, "enabled": True,
                    "motion_encoder": str(self.root / ltx.ENCODER), "base_url": "http://127.0.0.1:8188"}
         image_profile = flux_profile()
-        approved_revision = self.seed_registry(image_profile, profile)
+        self.seed_registry(image_profile, profile)
         output = self.root / "output"
         output.mkdir()
         asset = b"FLUX fixture"
@@ -1215,7 +1218,7 @@ class DraftTests(unittest.TestCase):
                 self.assertEqual(status, 400)
                 self.assertIn("film.storyboard", rejected["message"])
                 self.assertNotIn("approved_storyboard_sha", draft._read(self.ident))
-                self.registry_change("ROLLBACK_MODEL_HUB", target_revision=approved_revision)
+                self.registry_change("SAVE_MODEL_PROFILE", profile=writer)
             self.assertEqual(client.req("POST", approval, {"sha256": job["storyboard_sha"]})[0], 200)
             pinned = draft._read(self.ident)
             if legacy:
@@ -1237,7 +1240,7 @@ class DraftTests(unittest.TestCase):
                     self.assertRegex(blocked["error"], capability + "|model gốc")
                     self.assertEqual(blocked["approved_storyboard_sha"], pinned["approved_storyboard_sha"])
                     self.assertEqual(calls, [])
-                    self.registry_change("ROLLBACK_MODEL_HUB", target_revision=approved_revision)
+                    self.registry_change("SAVE_MODEL_PROFILE", profile=image_profile if changed["id"] == image_profile["id"] else profile)
             self.registry_change("SAVE_MODEL_PROFILE", profile={
                 "id": "unrelated", "provider": "ollama", "model": "unrelated:latest", "enabled": True,
                 "base_url": "http://127.0.0.1:11434"})
@@ -1262,7 +1265,7 @@ class DraftTests(unittest.TestCase):
             self.assertRegex(blocked["error"], "film.motion|model gốc")
             self.assertEqual(calls, ["image", "image"])
             self.assertTrue(all(not scene.get("motion_job") for scene in blocked["board"]["scenes"]))
-            self.registry_change("ROLLBACK_MODEL_HUB", target_revision=approved_revision)
+            self.registry_change("SAVE_MODEL_PROFILE", profile=profile)
             runner.comfy_service.ensure_running.side_effect = None
             if legacy:
                 runner.comfy_service.ensure_running.side_effect = [
@@ -1273,7 +1276,7 @@ class DraftTests(unittest.TestCase):
                 self.assertTrue(first["motion_sha"])
                 self.assertEqual(calls, ["image", "image", "motion"])
                 self.registry_change("SAVE_MODEL_PROFILE", profile=replacement)
-                self.registry_change("ROLLBACK_MODEL_HUB", target_revision=approved_revision)
+                self.registry_change("DELETE_MODEL_PROFILE", profile_id=replacement["id"])
                 runner.comfy_service.ensure_running.side_effect = None
 
                 def resume_now(job, slot):

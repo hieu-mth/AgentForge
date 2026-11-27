@@ -146,12 +146,4 @@ def handle(server, path, request, session=None):
         with model_hub.local_inference_slot():
             return model_hub.probe_local_profile(
                 request["profile_id"], expected_revision=request["expected_revision"])
-    if path == "/api/model-hub/rollback":
-        if (set(request) != {"ack", "expected_revision", "target_revision"} or
-                request["ack"] != "ROLLBACK_MODEL_HUB"):
-            raise PermissionError("Explicit model config rollback required")
-        return model_hub.change(
-            "ROLLBACK_MODEL_HUB",
-            expected_revision=request["expected_revision"],
-            target_revision=request["target_revision"])
     return UNHANDLED
