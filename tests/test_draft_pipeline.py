@@ -10,7 +10,7 @@ from contextlib import ExitStack, closing, nullcontext
 from types import SimpleNamespace
 from uuid import uuid4
 
-from agentforge.features.film_studio import draft_motion, draft_pipeline as draft, studio_ollama, studio_runtime, script_analysis
+from agentforge.features.film_studio import draft_motion, draft_pipeline as draft, studio_ollama, studio_runtime, script_analysis, studio_ltx_cloud
 from agentforge.features.media import flux_runtime, studio_flux
 from tests import owner_http_fixture
 from tests.test_flux_runtime import profile as flux_profile
@@ -167,7 +167,7 @@ class DraftTests(unittest.TestCase):
               patch.object(draft, "_write_board", side_effect=storyboard),
               patch.object(draft, "_image", side_effect=AssertionError("image generation")),
               patch.object(draft_motion_cloud, "bind", side_effect=AssertionError("video readiness")),
-              patch.object(draft_motion_cloud.ltx, "_request", side_effect=AssertionError("cloud video API")),
+              patch.object(studio_ltx_cloud, "_request", side_effect=AssertionError("cloud video API")),
               patch.object(draft.render, "_ffmpeg", side_effect=AssertionError("FFmpeg"))):
             job = draft.submit({"id": self.ident, **self.submission, "mode": "motion", "seconds": 4,
                                 "scene_count": None, "duration_mode": "manual",

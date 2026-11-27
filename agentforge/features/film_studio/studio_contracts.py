@@ -67,3 +67,19 @@ class VideoMotion(Protocol):
     def reconcile_cancelled(self, job: dict) -> bool: ...
     def clip_path(self, scene: dict) -> Path: ...
     def verify_clip(self, scene: dict, stream: BinaryIO) -> None: ...
+
+
+class ProviderRequestError(ValueError):
+    """Adapter-classified response; messages must be sanitized before construction.
+
+    Rejection is positive evidence that a new remote job was not accepted.
+    Unknown outcomes must never authorize an automatic resubmission.
+    """
+
+    def __init__(self, message, *, rejected=False, retryable=False, retry_after=None):
+        if retryable and not rejected:
+            raise ValueError("A retryable provider error must be a definite rejection")
+        self.rejected = rejected
+        self.retryable = retryable
+        self.retry_after = retry_after
+        super().__init__(message)

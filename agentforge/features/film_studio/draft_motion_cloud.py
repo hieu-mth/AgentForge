@@ -8,31 +8,36 @@ from contextlib import closing, nullcontext
 from uuid import uuid4
 
 from agentforge import ops_control
-from agentforge.ai import model_hub
-from agentforge.features.film_studio import draft_continuity, studio_ltx_cloud as ltx, studio_agnes as agnes
+from agentforge.ai import model_hub, registry
+from agentforge.features.film_studio import draft_continuity
 from agentforge.features.film_studio.draft_resources import NeedsReconciliation, ResourceBlocked
-from agentforge.features.film_studio.studio_contracts import MotionOutput
-from agentforge.features.media import render
+from agentforge.features.film_studio.studio_contracts import MotionOutput, ProviderRequestError
+from agentforge.features.media import mp4, render, visual_jobs
 from agentforge.paths import COMPANY_DATA_DIR, ensure_local_root
 
 ADAPTER_ID = "cloud-motion-720p"
-MAX_CLIP_BYTES = ltx.MAX_MP4
+MAX_CLIP_BYTES = mp4.MAX_VIDEO_BYTES
 DB = COMPANY_DATA_DIR / "cloud_motion.sqlite3"
 RETRY_DELAYS = (60, 120, 300)
 
 
-TRANSPORTS = (ltx, agnes)
+# Historical plans may omit provider duration metadata. Keep their original
+# approved budget semantics until receipt migration; new routes pin durations.
+_LEGACY_DURATIONS = (6, 8, 10)
 
 
 def _transport(profile):
-    matches = [transport for transport in TRANSPORTS if transport.supports_video(profile)]
-    if len(matches) != 1:
-        raise ValueError("Unsupported cloud video model.")
-    return matches[0]
+    return registry.resolve("cloud_video_transport", profile)
 
 
 def supports(profile):
-    return bool(profile.get("provider")) and any(transport.supports_video(profile) for transport in TRANSPORTS)
+    if not profile.get("provider"):
+        return False
+    try:
+        _transport(profile)
+    except ValueError:
+        return False
+    return True
 
 
 def billable_durations(profile):
@@ -45,6 +50,12 @@ def native_audio(profile):
 
 def output_profile():
     return MotionOutput(24, 240, (1280, 720))
+
+
+def verify_download(path, seconds, profile):
+    spec = output_profile()
+    return mp4.verify_video(path, seconds, fps=spec.fps, resolution=spec.resolution,
+                            require_audio=native_audio(profile))
 
 
 def workflow_sha():
@@ -76,7 +87,7 @@ def bind(profile):
     return profile
 
 
-def billed_seconds(frames, durations=ltx.DURATIONS):
+def billed_seconds(frames, durations=_LEGACY_DURATIONS):
     if type(frames) is not int or not 1 <= frames <= 240:
         raise ValueError("Cloud shot exceeds 10 seconds.")
     return next(s for s in durations if s * 24 >= frames)
@@ -100,7 +111,7 @@ def _db(create=False):
 
 
 def _row(ident):
-    ltx._id(ident)
+    visual_jobs._id(ident)
     conn = _db()
     row = None
     if conn is not None:
@@ -123,6 +134,8 @@ def submission_error(ident):
 
 def reject_submission(ident, error, *, automatic=False):
     """Persist definitive rejection before allowing another POST. Unknown stays SUBMITTING."""
+    if not isinstance(error, ProviderRequestError) or not error.rejected:
+        raise NeedsReconciliation("Provider rejection has not been established.")
     with closing(_db(True)) as conn, conn:
         conn.execute("BEGIN IMMEDIATE")
         prior = conn.execute("SELECT attempts FROM submission_errors WHERE id=?", (ident,)).fetchone()
@@ -186,7 +199,7 @@ def reconciliation_jobs(job):
 
 def recover_provider_id(job, data, profile):
     """Owner-attested mapping, checked with provider GET only. Never sends another POST."""
-    ident = ltx._id(data["motion_job"])
+    ident = visual_jobs._id(data["motion_job"])
     remote = _transport(profile)._id(data["provider_id"])
     if (data.get("owner_matched") is not True or job.get("status") != "NEEDS_RECONCILIATION"
             or not any(scene.get("motion_job") == ident and not scene.get("motion_sha")
@@ -216,7 +229,7 @@ def recover_provider_id(job, data, profile):
 
 def confirm_rejected_submission(job, data, profile):
     """Explicit Owner attestation of the original rejected POST, never a new POST."""
-    ident = ltx._id(data["motion_job"])
+    ident = visual_jobs._id(data["motion_job"])
     evidence = data.get("provider_request_id")
     if (data.get("owner_confirmed_rejected") is not True
             or not isinstance(evidence, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,160}", evidence)
@@ -267,7 +280,7 @@ def require_draft_removable(ident):
 
 def _path(row):
     from agentforge.features.film_studio import draft_pipeline as draft
-    ident = ltx._id(row["id"])
+    ident = visual_jobs._id(row["id"])
     if row["production"].startswith("probe:"):
         from agentforge.paths import WORKSPACE_DIR
         return ensure_local_root(WORKSPACE_DIR / "model-probes" / (ident + ".mp4"))
@@ -297,7 +310,7 @@ def clip_path(scene):
 
 
 def remaining_seconds(job):
-    durations = job.get("production_plan", {}).get("billable_durations_seconds", ltx.DURATIONS)
+    durations = job.get("production_plan", {}).get("billable_durations_seconds", _LEGACY_DURATIONS)
     return sum(billed_seconds(scene["frames"], durations) for scene in job["board"]["scenes"]
                if not scene.get("motion_job"))
 
@@ -354,7 +367,7 @@ def _poll(row, profile):
         raise NeedsReconciliation("Cloud job does not match the assigned model.")
     try:
         return _transport(profile).poll_video(row, _key(profile))
-    except agnes.AgnesHTTPError as exc:
+    except ProviderRequestError as exc:
         raise NeedsReconciliation(str(exc) + "; poll the existing job, do not resubmit.") from None
     except ValueError:
         raise NeedsReconciliation("Cloud job status could not be verified.") from None
@@ -449,18 +462,13 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
             try:
                 remote = transport.submit_video(body, key, endpoint)
                 _state(ident, "SUBMITTED", provider_id=remote)
-            except agnes.AgnesHTTPError as exc:
+            except ProviderRequestError as exc:
                 if not exc.rejected:
                     raise NeedsReconciliation(str(exc) + "; outcome unknown, do not resubmit.") from None
                 reject_submission(ident, exc, automatic=True)
                 continue
-            except (ValueError, OSError, TypeError, sqlite3.Error) as exc:
-                reason = str(exc) if transport is agnes and str(exc) in {
-                    "Agnes request timed out; outcome unknown.",
-                    "Agnes transport failed; outcome unknown.",
-                    "Agnes accepted HTTP response without a valid video ID; outcome unknown."
-                } else "Cloud POST outcome uncertain"
-                raise NeedsReconciliation(reason + "; inspect provider dashboard, never resubmit.") from None
+            except (ValueError, OSError, TypeError, sqlite3.Error):
+                raise NeedsReconciliation("Cloud POST outcome uncertain; inspect provider dashboard, never resubmit.") from None
         break
     row = _shot_row(production, scene, profile)
     if row["state"] == "VERIFIED":
@@ -491,10 +499,10 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
             try:
                 if output.exists():
                     # Recover an interrupted finalization only after technical re-verification.
-                    digest = ltx._verify(output, seconds, require_audio=native_audio(profile))
+                    digest = verify_download(output, seconds, profile)
                 else:
                     transport.download_video(response, temp, seconds)
-                    digest = ltx._verify(temp, seconds, require_audio=native_audio(profile))
+                    digest = verify_download(temp, seconds, profile)
                     temp.replace(output)
                 _state(row["id"], "VERIFIED", digest=digest)
                 scene["motion_sha"] = digest

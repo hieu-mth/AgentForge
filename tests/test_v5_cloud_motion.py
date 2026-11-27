@@ -1,6 +1,6 @@
 import unittest
 from agentforge.features.film_studio import draft_motion_cloud as motion
-from agentforge.features.film_studio import studio_runtime
+from agentforge.features.film_studio import studio_runtime, studio_ltx_cloud
 
 
 class CloudMotionTests(unittest.TestCase):
@@ -101,8 +101,8 @@ class CloudMotionIntegrationTests(unittest.TestCase):
                     return {"id": path.rsplit("/", 1)[1], "status": "completed",
                             "result": {"video_url": "https://storage.googleapis.com/fixture/video.mp4"}}
 
-                with (patch.object(motion.ltx, "_request", side_effect=request),
-                      patch.object(motion.ltx, "_download", side_effect=lambda _, target: shutil.copyfile(fixture, target))):
+                with (patch.object(studio_ltx_cloud, "_request", side_effect=request),
+                      patch.object(studio_ltx_cloud, "_download", side_effect=lambda _, target: shutil.copyfile(fixture, target))):
                     draft._work(job, nullcontext())
                 result = draft._read(job["id"])
                 self.assertEqual(result["status"], "REVIEW", result.get("error"))
@@ -128,7 +128,7 @@ class CloudMotionIntegrationTests(unittest.TestCase):
             with (patch.object(motion, "_key", return_value="fixture"),
                   patch.object(motion, "_reserve"),
                   patch.object(motion.ops_control, "require_active"),
-                  patch.object(motion.ltx, "_request", side_effect=ValueError("timeout")) as request):
+                  patch.object(studio_ltx_cloud, "_request", side_effect=ValueError("timeout")) as request):
                 for _ in range(2):
                     with self.assertRaises(NeedsReconciliation):
                         motion.run_shot(scene, 0, prepared, profile, lambda: None, lambda: False)
@@ -155,7 +155,7 @@ class CloudMotionIntegrationTests(unittest.TestCase):
             with (patch.object(motion, "_key", return_value="fixture"),
                   patch.object(motion, "_reserve"),
                   patch.object(motion.ops_control, "require_active"),
-                  patch.object(motion.ltx, "_request", return_value={"id": remote}) as request):
+                  patch.object(studio_ltx_cloud, "_request", return_value={"id": remote}) as request):
                 for _ in range(2):
                     with self.assertRaises(NeedsReconciliation):
                         motion.run_shot(scene, 0, prepared, profile, lambda: None, lambda: False)
@@ -181,7 +181,7 @@ class CloudMotionIntegrationTests(unittest.TestCase):
                     (ident, job["id"], "text-to-video", "ltx-2-3-fast", 6, data["request_sha"], "SUBMITTING", None, None))
             with (patch.object(motion.ops_control, "require_active"),
                   patch.object(motion, "_key", return_value="fixture"),
-                  patch.object(motion.ltx, "_request", return_value={"id": remote, "status": "processing"}) as request):
+                  patch.object(studio_ltx_cloud, "_request", return_value={"id": remote, "status": "processing"}) as request):
                 with self.assertRaises(PermissionError):
                     motion.recover_provider_id(job, {**data, "owner_matched": False}, {"model": "ltx-2-3-fast"})
                 result = motion.recover_provider_id(job, data, {"model": "ltx-2-3-fast"})
@@ -209,7 +209,7 @@ class CloudMotionIntegrationTests(unittest.TestCase):
                     (ident, other, "text-to-video", profile["model"], 6, "e"*64, "SUBMITTED", remote, None))
             with (patch.object(draft, "_studio_bindings", return_value=(1, {"film.motion": profile}, 1)),
                   patch.object(motion, "_key", return_value="fixture"),
-                  patch.object(motion.ltx, "_request", return_value={"id": remote, "status": "completed"}) as request):
+                  patch.object(studio_ltx_cloud, "_request", return_value={"id": remote, "status": "completed"}) as request):
                 self.assertFalse(motion.reconcile_cancelled(job))
                 request.assert_not_called()
                 with closing(motion._db(True)) as conn, conn:
@@ -238,7 +238,7 @@ class CloudMotionIntegrationTests(unittest.TestCase):
         row = {"endpoint": "../other", "provider_id": remote,
                "model": "ltx-2-3-fast", "seconds": 6}
         with (patch.object(motion, "_key", return_value="fixture"),
-              patch.object(motion.ltx, "_request", return_value={
+              patch.object(studio_ltx_cloud, "_request", return_value={
                   "id": remote, "status": "completed", "duration": 8}) as request):
             with self.assertRaises(NeedsReconciliation):
                 motion._poll(row, {})

@@ -79,15 +79,16 @@ class Registration:
     kind: str
     load: Callable[[], Any]
     providers: tuple[str, ...] = ()
+    predicate: str = "supports"
 
     def matches(self, profile):
         if self.providers:
             return profile.get("provider") in self.providers
-        return self.load().supports(profile)
+        return getattr(self.load(), self.predicate)(profile)
 
 
-def _module(kind, path, *providers):
-    return Registration(kind, lambda: import_module(path), providers)
+def _module(kind, path, *providers, predicate="supports"):
+    return Registration(kind, lambda: import_module(path), providers, predicate)
 
 
 _STUDIO = "agentforge.features.film_studio."
@@ -100,6 +101,8 @@ REGISTRATIONS = (
     _module("image", _MEDIA + "studio_agnes_image"),
     _module("video", _STUDIO + "draft_motion"),
     _module("video", _STUDIO + "draft_motion_cloud"),
+    _module("cloud_video_transport", _STUDIO + "studio_ltx_cloud", predicate="supports_video"),
+    _module("cloud_video_transport", _STUDIO + "studio_agnes", predicate="supports_video"),
     _module("vision", _STUDIO + "studio_vision"),
     _module("audio", _STUDIO + "studio_speech"),
     _module("sound", _STUDIO + "studio_audio_generation"),

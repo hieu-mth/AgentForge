@@ -1,5 +1,13 @@
-"""Bounded ISO-BMFF structural inspection for local Film Studio fixtures."""
+"""Bounded structural and technical MP4 verification for Film Studio."""
+import hashlib
+import json
+import re
+from fractions import Fraction
 from pathlib import Path
+
+from agentforge.features.media import render
+
+MAX_VIDEO_BYTES = 160 * 1024 * 1024
 
 
 def _mp4_structural(path):
@@ -39,3 +47,28 @@ def _mp4_structural(path):
     return {"container": "mp4", "audio_track_present": True,
             "video_track_present": True, "structure_only": True}
 
+
+def verify_video(path, seconds, *, fps, resolution, require_audio=False):
+    """Verify a normalized video against its explicit execution contract."""
+    if not 1024 <= path.stat().st_size <= MAX_VIDEO_BYTES:
+        raise ValueError("MP4 outside permitted size range.")
+    ffprobe = render.find_media_tool("ffprobe")
+    if not ffprobe:
+        raise ValueError("ffprobe required.")
+    meta = render._run_process([ffprobe, "-v", "error", "-select_streams", "v:0",
+        "-show_entries", "stream=width,height,avg_frame_rate", "-of", "json", str(path)],
+        cwd=path.parent, timeout=30)
+    video = json.loads(meta.stdout)["streams"][0]
+    if (video["width"], video["height"]) != tuple(resolution) or Fraction(video["avg_frame_rate"]) != fps:
+        raise ValueError("Video output does not match the approved profile.")
+    decoded = render._run_process([render._ffmpeg(), "-nostdin", "-v", "error", "-xerror",
+        "-i", str(path), "-map", "0:v:0", "-progress", "pipe:1", "-f", "null", "-"],
+        cwd=path.parent, timeout=90)
+    frames = re.findall(r"(?m)^frame=(\d+)", decoded.stdout)
+    if not frames or int(frames[-1]) != seconds * fps:
+        raise ValueError("Video frame count differs from approved duration.")
+    if require_audio:
+        render._run_process([render._ffmpeg(), "-nostdin", "-v", "error", "-xerror", "-i", str(path),
+                             "-map", "0:a:0", "-f", "null", "-"], cwd=path.parent, timeout=90)
+    with path.open("rb") as f:
+        return hashlib.file_digest(f, "sha256").hexdigest()

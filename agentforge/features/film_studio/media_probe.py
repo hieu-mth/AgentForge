@@ -6,7 +6,8 @@ from contextlib import closing
 
 from agentforge import ops_control
 from agentforge.ai import model_hub
-from agentforge.features.film_studio import draft_motion_cloud as motion, studio_runtime, studio_agnes
+from agentforge.features.film_studio import draft_motion_cloud as motion, studio_runtime
+from agentforge.features.film_studio.studio_contracts import ProviderRequestError
 from agentforge.features.film_studio.draft_resources import NeedsReconciliation
 from agentforge.features.media import visual_jobs
 from agentforge.paths import ensure_local_root
@@ -79,7 +80,7 @@ def _start_video(ident, profile, prompt):
     try:
         remote = transport.submit_video(body, token, "text-to-video")
         motion._state(ident, "SUBMITTED", provider_id=remote)
-    except studio_agnes.AgnesHTTPError as exc:
+    except ProviderRequestError as exc:
         if exc.rejected:
             motion.reject_submission(ident, exc)
             return _video_reply(video_record(ident))
@@ -106,10 +107,10 @@ def _poll_video(ident, profile):
             if not target.exists():
                 temporary.unlink(missing_ok=True)
                 motion._transport(profile).download_video(response, temporary, row["seconds"])
-                digest = motion.ltx._verify(temporary, row["seconds"], require_audio=motion.native_audio(profile))
+                digest = motion.verify_download(temporary, row["seconds"], profile)
                 temporary.replace(target)
             else:
-                digest = motion.ltx._verify(target, row["seconds"], require_audio=motion.native_audio(profile))
+                digest = motion.verify_download(target, row["seconds"], profile)
             motion._state(ident, "VERIFIED", digest=digest)
         finally:
             temporary.unlink(missing_ok=True)
@@ -140,7 +141,7 @@ def handle(request):
                 request_data = studio_runtime.ImageRequest(prompt, "16:9", "", ident, request["expected_revision"])
                 try:
                     studio_runtime.image_adapter(profile).generate(profile, request_data)
-                except (NeedsReconciliation, studio_agnes.AgnesHTTPError):
+                except (NeedsReconciliation, ProviderRequestError):
                     pass
             return _image_reply(ident, profile)
         if model_hub.orchestrator_policy.compatible("video", profile):
