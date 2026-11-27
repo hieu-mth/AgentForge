@@ -19,7 +19,7 @@ const fieldLabels={
 const localUrl=/^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):([0-9]{1,5})\/?$/;
 const envName=/^[A-Z_][A-Z0-9_]*$/;
 
-const comparisonFields=['id','provider','model','enabled','base_url','base_url_env','api_key_env','motion_encoder','flux','account_ref'];
+const comparisonFields=['id','provider','model','enabled','base_url','base_url_env','api_key_env','motion_encoder','flux','comfy_image','account_ref'];
 const comparisonData=profile=>Object.fromEntries(comparisonFields.filter(key=>key in profile)
   .map(key=>[key,profile[key]]));
 
@@ -27,11 +27,12 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
   const [form]=Form.useForm();
   const limitsPanel=useRef(null);
   const initialAdapter=adapters.find(item=>item.id===profile?.provider)??adapters[0];
+  const imageWorkflow=profile?.comfy_image??profile?.flux;
   const initial={connection:initialAdapter.connection,provider:initialAdapter.id,
     enabled:true,...initialAdapter.defaults,...profile,
-    flux_enabled:Boolean(profile?.flux),flux_settings:{
+    flux_enabled:Boolean(imageWorkflow),flux_settings:{
       max_resolution:1024,max_steps:4,timeout_seconds:180,output_dir:'visuals',
-      ...profile?.flux,workflow:profile?.flux?JSON.stringify(profile.flux.workflow,null,2):'',
+      ...imageWorkflow,workflow:imageWorkflow?JSON.stringify(imageWorkflow.workflow,null,2):'',
     }};
   const connection=Form.useWatch('connection',form)??initial.connection;
   const provider=Form.useWatch('provider',form)??initial.provider;
@@ -256,9 +257,9 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         <Input.Password autoComplete="new-password"/>
       </Form.Item>}
       {provider==='comfyui'&&!adapter.flux_workflow_max_bytes&&
-        <Alert type="warning" showIcon message="Backend đang chạy chưa hỗ trợ đăng ký workflow FLUX."/>}
+        <Alert type="warning" showIcon message="Backend đang chạy chưa hỗ trợ đăng ký workflow ảnh."/>}
       {provider==='comfyui'&&adapter.flux_workflow_max_bytes&&<>
-        <Form.Item name="flux_enabled" label="Workflow FLUX GGUF" valuePropName="checked"><Switch/></Form.Item>
+        <Form.Item name="flux_enabled" label="Workflow tạo ảnh ComfyUI" valuePropName="checked"><Switch/></Form.Item>
         {!fluxEnabled&&adapter.motion_encoder_supported&&
           <Form.Item name="motion_encoder" label="Đường dẫn tuyệt đối tới encoder LTX">
             <Input placeholder="t5xxl_fp8_e4m3fn.safetensors" spellCheck={false}/>
@@ -268,13 +269,13 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
             {required:true},{validator:(_,value)=>{
               try {
                 const graph=JSON.parse(value);
-                if(graph&&Object.values(graph).filter(node=>node?.class_type==='UnetLoaderGGUF').length===1) {
+                if(graph&&typeof graph==='object'&&!Array.isArray(graph)&&Object.keys(graph).length>0) {
                   if(new TextEncoder().encode(JSON.stringify(graph)).length<=adapter.flux_workflow_max_bytes)
                     return Promise.resolve();
                   return Promise.reject(new Error('Workflow vượt giới hạn '+adapter.flux_workflow_max_bytes+' byte.'));
                 }
               } catch { /* Show validation below. */ }
-              return Promise.reject(new Error('Dán workflow FLUX ở định dạng ComfyUI API JSON.'));
+              return Promise.reject(new Error('Dán workflow ảnh ở định dạng ComfyUI API JSON.'));
             }},
            ]}><Input.TextArea rows={6} spellCheck={false}/></Form.Item>
           <details ref={limitsPanel} className="model-workflow-details"><summary>Giới hạn và thư mục đầu ra</summary>
@@ -313,9 +314,9 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         {Object.keys(fields).map(key=><Fragment key={key}><dt>{directCloud?'Endpoint Cloud':fieldLabels[key]}</dt><dd>{review[key]}</dd></Fragment>)}
         {directCloud&&<><dt>API key</dt><dd>••••••••</dd></>}
         <dt>Trạng thái</dt><dd>{review.enabled?'Đã bật':'Đã tắt'}</dd>
-        {review.flux&&<><dt>Workflow FLUX</dt><dd>{Object.keys(review.flux.workflow).length} node</dd>
-          <dt>Giới hạn</dt><dd>{review.flux.max_resolution} px · {review.flux.max_steps} bước · {review.flux.timeout_seconds} giây</dd>
-          <dt>Đầu ra</dt><dd>workspace/{review.flux.output_dir}</dd></>}
+        {(review.comfy_image??review.flux)&&<><dt>Workflow ảnh</dt><dd>{Object.keys((review.comfy_image??review.flux).workflow).length} node</dd>
+          <dt>Giới hạn</dt><dd>{(review.comfy_image??review.flux).max_resolution} px · {(review.comfy_image??review.flux).max_steps} bước · {(review.comfy_image??review.flux).timeout_seconds} giây</dd>
+          <dt>Đầu ra</dt><dd>workspace/{(review.comfy_image??review.flux).output_dir}</dd></>}
       </dl>
       {supported.length?<ul className="model-contract-list">{supported.map(item=><li key={item.capability}>
         <strong>{labels[item.capability]??item.capability}</strong>

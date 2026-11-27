@@ -5,7 +5,9 @@ export function profilePayload(values,adapter) {
   for(const key of Object.keys(adapter.defaults))profile[key]=values[key]?.trim();
   if(adapter.id==='comfyui'&&adapter.flux_workflow_max_bytes&&values.flux_enabled) {
     const {workflow,max_resolution,max_steps,timeout_seconds,output_dir}=values.flux_settings;
-    profile.flux={workflow:JSON.parse(workflow),max_resolution,max_steps,timeout_seconds,output_dir};
+    const graph=JSON.parse(workflow);
+    const key=adapter.image_workflow_max_bytes&&Object.values(graph).some(node=>node?.class_type==='CheckpointLoaderSimple')?'comfy_image':'flux';
+    profile[key]={workflow:graph,max_resolution,max_steps,timeout_seconds,output_dir};
   } else if(adapter.id==='comfyui'&&adapter.motion_encoder_supported&&values.motion_encoder?.trim()) {
     profile.motion_encoder=values.motion_encoder.trim();
   }
@@ -22,12 +24,12 @@ const readinessReasons={
   DISABLED:'Hồ sơ đang tắt.',INVALID_ENDPOINT:'Endpoint HTTPS không hợp lệ.',RATE_OR_QUOTA_LIMIT:'API giới hạn lượt gọi hoặc hết quota.',ACCESS_DENIED:'API từ chối quyền truy cập.',MODEL_OR_ENDPOINT_NOT_FOUND:'Không tìm thấy model hoặc endpoint metadata; có thể thử inference riêng.',PAYMENT_REQUIRED:'API yêu cầu thanh toán.',
   COMFYUI_UNAVAILABLE:'Không kết nối được ComfyUI.',UNAVAILABLE:'Không kết nối được runtime local.',
   MODEL_NOT_INSTALLED:'Ollama chưa có model này.',MODEL_UNAVAILABLE:'ComfyUI thiếu một hoặc nhiều weights.',
-  WORKFLOW_NODE_UNAVAILABLE:'ComfyUI thiếu node hoặc input của workflow FLUX.',
+  WORKFLOW_NODE_UNAVAILABLE:'ComfyUI thiếu node hoặc input của workflow ảnh.',
   GPU_UNAVAILABLE:'Runtime không báo GPU CUDA.',MOTION_ENDPOINT_MISMATCH:'Endpoint không khớp preset Motion.',
   MOTION_WORKFLOW_UNAVAILABLE:'Preset LTX thiếu node, input hoặc weights trong ComfyUI.',
   MOTION_LAUNCHER_REQUIRED:'Chưa đăng ký thư mục Portable cho endpoint Motion.',
   MOTION_WEIGHTS_UNAVAILABLE:'Thiếu checkpoint hoặc encoder LTX đúng tên và kích thước.',
-  MEDIA_TOOLS_UNAVAILABLE:'Thiếu FFmpeg hoặc ffprobe.',FLUX_WORKFLOW_REQUIRED:'Cần workflow FLUX GGUF tương thích.',
+  MEDIA_TOOLS_UNAVAILABLE:'Thiếu FFmpeg hoặc ffprobe.',FLUX_WORKFLOW_REQUIRED:'Cần workflow ảnh ComfyUI tương thích.',
   MOTION_PROFILE_INCOMPATIBLE:'Checkpoint hoặc encoder không khớp adapter chuyển động.',
   TEXT_ADAPTER_REQUIRED:'Chưa có adapter văn bản tương thích.',
   VISION_ADAPTER_UNAVAILABLE:'Chưa có adapter kiểm tra hình ảnh.',

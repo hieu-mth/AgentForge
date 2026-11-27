@@ -1,4 +1,4 @@
-"""ComfyUI image adapter for Studio using the verified FLUX workflow."""
+"""ComfyUI image adapter using validated image workflow dialects."""
 import time
 import hashlib
 import json
@@ -6,21 +6,25 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 from agentforge.features.film_studio import draft_resources
-from agentforge.features.media import flux_runtime, flux_workflow
+from agentforge.features.media import flux_runtime, comfy_image_workflow
 from agentforge.integrations import comfy_service, comfyui
 
 
-ADAPTER_ID = "comfyui_flux_gguf"
+ADAPTER_ID = "comfyui_flux_gguf"  # Stable legacy receipt identifier.
+
+
+def local_image_config(profile):
+    return comfy_image_workflow.profile_config(profile)
 
 
 def output_limits(profile):
     return {"format": "png", "batch": 1, "min_resolution": 256,
-            "max_resolution": profile["flux"]["max_resolution"], "dimension_multiple": 16,
-            "min_steps": 1, "max_steps": profile["flux"]["max_steps"]}
+            "max_resolution": local_image_config(profile)["max_resolution"], "dimension_multiple": 16,
+            "min_steps": 1, "max_steps": local_image_config(profile)["max_steps"]}
 
 
 def workflow_sha(profile):
-    graph = json.dumps(profile["flux"]["workflow"], sort_keys=True, separators=(",", ":"),
+    graph = json.dumps(local_image_config(profile)["workflow"], sort_keys=True, separators=(",", ":"),
                        ensure_ascii=False).encode("utf-8")
     return hashlib.sha256(graph).hexdigest()
 
@@ -29,19 +33,19 @@ def supports(profile):
     if profile.get("provider") != "comfyui" or "motion_encoder" in profile:
         return False
     try:
-        flux_workflow.validate(profile["flux"], profile["model"], profile["base_url"])
+        local_image_config(profile)
     except (ValueError, KeyError, TypeError):
         return False
     return True
 
 
 def registry_readiness(profile):
-    return flux_runtime.readiness(profile["flux"], urlsplit(profile["base_url"]).port, inspect_all_nodes=True)
+    return flux_runtime.readiness(local_image_config(profile), urlsplit(profile["base_url"]).port, inspect_all_nodes=True)
 
 
 def check_metadata(profile, *, opener=None):
     return {"profile_id": profile["id"],
-            "status": flux_runtime.readiness(profile["flux"], urlsplit(profile["base_url"]).port),
+            "status": flux_runtime.readiness(local_image_config(profile), urlsplit(profile["base_url"]).port),
             "checked_at": datetime.now(timezone.utc).isoformat(), "inference_invoked": False}
 
 
@@ -79,7 +83,7 @@ def release_idle_models(profile):
 
 
 def generate(profile, request):
-    limit = profile["flux"]["max_resolution"]
+    limit = local_image_config(profile)["max_resolution"]
     long = min(768, limit // 16 * 16)
     short = max(256, (long * 9 // 16) // 16 * 16)
     width, height = (short, long) if request.ratio == "9:16" else (long, short)

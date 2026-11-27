@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from agentforge.ai import model_hub, orchestrator_policy
-from agentforge.features.media import flux_runtime, flux_workflow, visual_jobs
+from agentforge.features.media import comfy_image_workflow, flux_runtime, flux_workflow, visual_jobs
 
 
 def profile():
@@ -34,7 +34,93 @@ def profile():
                      "timeout_seconds": 5, "output_dir": "frames/flux"}}
 
 
+def checkpoint_profile():
+    row = profile()
+    config = row.pop("flux")
+    graph = config["workflow"]
+    graph["38"] = {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "alternate.safetensors"}}
+    graph["27"]["class_type"] = "EmptyLatentImage"
+    for key in ("6", "33"):
+        graph[key]["inputs"]["clip"] = ["38", 1]
+    graph["8"]["inputs"]["vae"] = ["38", 2]
+    graph["31"]["inputs"].update(cfg=7, scheduler="normal")
+    graph["33"]["inputs"]["text"] = "blurry"
+    del graph["39"], graph["40"]
+    return {**row, "id": "alternate_image", "model": "alternate.safetensors", "comfy_image": config}
+
+
 class FluxRuntimeTests(unittest.TestCase):
+    def test_checkpoint_workflow_uses_existing_registry_and_receipt_pipeline(self):
+        from PIL import Image
+
+        row = checkpoint_profile()
+        config = row["comfy_image"]
+        original = copy.deepcopy(config["workflow"])
+        model_hub.validate_profile(row)
+        bound = comfy_image_workflow.bind(config, "a"*32, "cat", 256, 256, 7, 5)
+        self.assertEqual(bound["6"]["inputs"]["text"], "cat")
+        self.assertEqual(bound["33"]["inputs"]["text"], "blurry")
+        self.assertEqual(original, config["workflow"])
+        self.assertEqual(bound["9"]["inputs"]["filename_prefix"], "af_"+"a"*32)
+        for mutate in (
+            lambda graph: graph.update({"99": {"class_type": "ArbitraryCustomNode", "inputs": {}}}),
+            lambda graph: graph["38"]["inputs"].update(ckpt_name="../other.safetensors"),
+            lambda graph: graph["27"]["inputs"].update(batch_size=2),
+            lambda graph: graph["31"]["inputs"].update(positive=["33", 0]),
+        ):
+            invalid = copy.deepcopy(row)
+            mutate(invalid["comfy_image"]["workflow"])
+            with self.assertRaises(ValueError):
+                model_hub.validate_profile(invalid)
+        png = io.BytesIO()
+        Image.new("RGB", (256, 256)).save(png, "PNG")
+        pid = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        filename = None
+        calls = []
+
+        def provider(path, **kwargs):
+            nonlocal filename
+            calls.append(path)
+            if path == "/system_stats":
+                return {"devices": [{"type": "cuda"}]}
+            if path.startswith("/object_info/"):
+                kind = path.rsplit("/", 1)[-1]
+                node = next(n for n in original.values() if n["class_type"] == kind)
+                return {kind: {"input": {"required": {k: [[v]] for k, v in node["inputs"].items()}}}}
+            if path == "/queue":
+                return {"queue_running": [], "queue_pending": []}
+            if path == "/prompt":
+                sent = kwargs["body"]["prompt"]
+                self.assertEqual(sent["38"]["inputs"]["ckpt_name"], row["model"])
+                self.assertEqual(sent["6"]["inputs"]["text"], "cat")
+                filename = sent["9"]["inputs"]["filename_prefix"] + "_00001_.png"
+                return {"prompt_id": pid}
+            if path == "/history/" + pid:
+                return {pid: {"status": {"status_str": "success", "completed": True},
+                              "outputs": {"9": {"images": [{"filename": filename, "subfolder": "", "type": "output"}]}}}}
+            self.fail(path)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            hub, db = root / "hub.db", root / "visual.db"
+            saved = model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0, profile=row, db_path=hub)
+            self.assertTrue(next(c for c in saved["profiles"][0]["capability_contracts"]
+                                if c["capability"] == "image.generate")["runtime_compatible"])
+            model_hub.change("SET_MODEL_ROUTE", expected_revision=1, task_id="image.generate",
+                             model_ref=row["id"], db_path=hub)
+            with (patch.object(flux_runtime, "WORKSPACE_DIR", root / "workspace"),
+                  patch.object(flux_runtime.comfy_service, "require_idle_queue"),
+                  patch.object(flux_runtime, "_json", side_effect=provider),
+                  patch.object(flux_runtime.comfyui, "request_image_bytes",
+                               side_effect=lambda *args, sink, **kwargs: sink.write(png.getvalue()) and b"")):
+                result = flux_runtime.generate("cat", profile_id=row["id"], expected_revision=2,
+                                               width=256, height=256, seed=7, hub_db=hub, db_path=db)
+                self.assertEqual(result["status"], "ASSET_READY")
+                self.assertEqual(visual_jobs.image_for_job(result["job_id"], db_path=db)[0], png.getvalue())
+            self.assertEqual(calls.count("/prompt"), 1)
+            self.assertIn("/object_info/CheckpointLoaderSimple", calls)
+
+
     def test_registry_readiness_checks_non_loader_nodes_and_installed_weights(self):
         config = profile()["flux"]
         graph = config["workflow"]

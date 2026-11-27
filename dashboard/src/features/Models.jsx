@@ -115,7 +115,7 @@ export function ModelHub({mutate}) {
           aria-label={checkResult(row)?.error?'Thử lại':'Kiểm tra'}
           onClick={()=>checkProfile(row)}>{checkResult(row)?.error?'Thử lại':'Kiểm tra'}</Button>
       </AppTooltip>}
-    {row.flux&&<Button size="small" disabled={!row.enabled}
+    {(row.flux||row.comfy_image)&&<Button size="small" disabled={!row.enabled}
       onClick={()=>setFluxProbe({profile:row,revision:hub.revision})}>Chạy thử</Button>}
     {byAdapter[row.provider]?.media_probe&&profileCapability(row)?.runtime_compatible&&
       <Button size="small" disabled={!row.enabled}

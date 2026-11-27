@@ -15,7 +15,7 @@ from uuid import UUID, uuid4
 from agentforge import ops_control
 from agentforge.ai import model_hub
 from agentforge.features.film_studio import draft_resources
-from agentforge.features.media import flux_workflow, visual_jobs
+from agentforge.features.media import comfy_image_workflow, visual_jobs
 from agentforge.integrations import comfy_service, comfyui
 from agentforge.paths import WORKSPACE_DIR, ensure_local_root
 
@@ -27,7 +27,7 @@ class JobError(RuntimeError):
 
 
 def output_directory(folder):
-    if not isinstance(folder, str) or not flux_workflow.FOLDER.fullmatch(folder):
+    if not isinstance(folder, str) or not comfy_image_workflow.FOLDER.fullmatch(folder):
         raise ValueError("Invalid workspace output folder")
     return ensure_local_root(WORKSPACE_DIR / folder)
 
@@ -39,13 +39,13 @@ def _json(path, *, port, body=None, timeout=5):
 
 def readiness(config, port, *, inspect_all_nodes=False):
     graph = config["workflow"]
-    ids = flux_workflow.node_ids(graph)
+    ids = comfy_image_workflow.node_ids(graph)
     try:
         stats = _json("/system_stats", port=port, timeout=5)
         if not any(isinstance(device, dict) and device.get("type") == "cuda"
                    for device in stats["devices"]):
             return "GPU_UNAVAILABLE"
-        loaders = {"38": ("unet_name",), "39": ("clip_name1", "clip_name2"), "40": ("vae_name",)}
+        loaders = comfy_image_workflow.model_fields(graph)
         for node_id in ids if inspect_all_nodes else loaders:
             fields = loaders.get(node_id, ())
             node = graph[ids[node_id]]
@@ -92,7 +92,7 @@ def _output(history, ident, output_node):
 
 
 def _collect(provider_id, ident, port, config, metadata, *, sink=None):
-    output_node = flux_workflow.node_ids(config["workflow"])["9"]
+    output_node = comfy_image_workflow.node_ids(config["workflow"])["9"]
     deadline = time.monotonic() + config["timeout_seconds"]
     while (remaining := deadline - time.monotonic()) > 0:
         try:
@@ -145,25 +145,25 @@ def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=No
                                  profile_id, expected_revision=expected_revision, db_path=hub_db))
         if production_revision is not None and revision != production_revision:
             raise ValueError("Image routing changed; resume using the updated configuration")
-    config = flux_workflow.validate(profile["flux"], profile["model"], profile["base_url"])
+    config = comfy_image_workflow.profile_config(profile)
     port = urlsplit(profile["base_url"]).port
     if scene is not None and (not isinstance(scene, str) or not re.fullmatch(
             r"[a-z0-9][a-z0-9_/-]{0,119}", scene)):
         raise ValueError("Invalid scene reference")
     graph = config["workflow"]
-    ids = flux_workflow.node_ids(graph)
+    ids = comfy_image_workflow.node_ids(graph)
     width = graph[ids["27"]]["inputs"]["width"] if width is None else width
     height = graph[ids["27"]]["inputs"]["height"] if height is None else height
     steps = graph[ids["31"]]["inputs"]["steps"] if steps is None else steps
     seed = secrets.randbelow(2**53) if seed is None else seed
     ident = visual_jobs._id(production_job) if production_job is not None else uuid4().hex
-    bound = flux_workflow.bind(config, ident, prompt, width, height, seed, steps)
+    bound = comfy_image_workflow.bind(config, ident, prompt, width, height, seed, steps)
     directory = output_directory(config["output_dir"])
     target = ensure_local_root(directory / (ident + ".png"))
     try:
         import_module("PIL.Image")  # Require the decoder before submitting GPU work.
     except ImportError:
-        raise ValueError("FLUX image verification requires the AgentForge media extra") from None
+        raise ValueError("ComfyUI image verification requires the AgentForge media extra") from None
     draft_resources.require_gpu("image")
     ready = readiness(config, port)
     if ready == "COMFYUI_UNAVAILABLE":
