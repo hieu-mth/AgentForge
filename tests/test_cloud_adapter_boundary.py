@@ -7,21 +7,31 @@ from unittest.mock import patch
 
 from agentforge.ai import registry
 from agentforge.features.film_studio import draft_motion_cloud, studio_agnes
-from agentforge.features.film_studio.studio_contracts import ProviderRequestError
+from agentforge.features.film_studio.studio_contracts import MotionOutput, ProviderRequestError
 from agentforge.features.media import mp4
 
 
 class CloudBoundaryTests(unittest.TestCase):
     def test_new_transport_resolves_without_lifecycle_change(self):
         adapter = SimpleNamespace(supports_video=lambda profile: profile.get("provider") == "fixture",
-                                  DURATIONS=(5, 10), NATIVE_AUDIO=False)
+                                  billable_durations=lambda profile: (5, 10, 15),
+                                  native_audio=lambda profile: False,
+                                  output_profile=lambda profile: MotionOutput(30, 450, (1920, 1080)))
         entry = registry.Registration("cloud_video_transport", lambda: adapter, predicate="supports_video")
         with patch.object(registry, "REGISTRATIONS", (*registry.REGISTRATIONS, entry)):
             profile = {"provider": "fixture", "model": "alternate"}
             self.assertTrue(draft_motion_cloud.supports(profile))
             self.assertIs(draft_motion_cloud._transport(profile), adapter)
-            self.assertEqual(draft_motion_cloud.billable_durations(profile), (5, 10))
+            self.assertEqual(draft_motion_cloud.billable_durations(profile), (5, 10, 15))
             self.assertFalse(draft_motion_cloud.native_audio(profile))
+            self.assertEqual(draft_motion_cloud.output_profile(profile), MotionOutput(30, 450, (1920, 1080)))
+            self.assertEqual(draft_motion_cloud._profile_seconds(301, profile), 15)
+            job = {"motion_plan": {"output": {"fps": 30, "max_frames": 450, "resolution": [1920, 1080]}},
+                   "production_plan": {"billable_durations_seconds": [5, 10, 15]},
+                   "board": {"scenes": [{"frames": 150}, {"frames": 301}, {"frames": 450, "motion_job": "done"}]}}
+            self.assertEqual(draft_motion_cloud.remaining_seconds(job), 20)
+            with self.assertRaises(ValueError):
+                draft_motion_cloud._profile_seconds(451, profile)
 
     def test_unknown_provider_error_cannot_authorize_retry(self):
         with self.assertRaises(ValueError):

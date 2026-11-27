@@ -346,8 +346,8 @@ def capability_contract(capability, profile):
         output = adapter.output_limits(profile)
     elif adapter and kind == "video":
         adapter_id = adapter.ADAPTER_ID
-        workflow_sha = adapter.workflow_sha()
-        spec = adapter.output_profile()
+        workflow_sha = adapter.workflow_sha(profile)
+        spec = adapter.output_profile(profile)
         output = {"format": "mp4", "fps": spec.fps, "max_frames": spec.max_frames,
                   "resolution": list(spec.resolution)}
     reason = None
@@ -825,9 +825,10 @@ def _production_candidates(state, strategy):
             else:
                 execution_ready = True
             adapter = orchestrator_policy.runtime_adapter("video", profile)
+            spec = adapter.output_profile(profile)
             item = {"id": ident, "method": method, "model": profile["model"],
-                    "max_frames": adapter.output_profile().max_frames,
-                    "fps": adapter.output_profile().fps, "min_billable_seconds": 0,
+                    "max_frames": spec.max_frames,
+                    "fps": spec.fps, "min_billable_seconds": 0,
                     "execution_ready": execution_ready}
             if method != "local":
                 durations = adapter.billable_durations(profile)

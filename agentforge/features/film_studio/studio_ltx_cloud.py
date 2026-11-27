@@ -15,6 +15,7 @@ from uuid import uuid4
 from agentforge.paths import ensure_local_root
 from agentforge.ai import cloud_credentials
 from agentforge.features.media import mp4
+from agentforge.features.film_studio.studio_contracts import MotionOutput
 
 HOST = "api.ltx.io"
 MODELS = {"ltx-2-3-fast", "ltx-2-3-pro"}
@@ -52,6 +53,18 @@ def payload(model, prompt, duration, *, image=None, audio=True):
 
 PROVIDER = "ltx_cloud"
 NATIVE_AUDIO = True
+
+
+def output_profile(profile):
+    return MotionOutput(24, max(DURATIONS) * 24, (1280, 720))
+
+
+def billable_durations(profile):
+    return DURATIONS
+
+
+def native_audio(profile):
+    return NATIVE_AUDIO
 
 
 def supports_video(profile):

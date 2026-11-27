@@ -919,7 +919,7 @@ def _resolve_job_motion(job, profile, *, planning=False, revision=None):
     elif planning and not job.get("board"):
         job["motion_plan"] = identity
     elif (adapter is not studio_runtime.motion_artifacts()
-          or adapter.output_profile() != studio_runtime.LEGACY_MOTION_OUTPUT
+          or adapter.output_profile(profile) != studio_runtime.LEGACY_MOTION_OUTPUT
           or job.get("motion_revision", revision) != revision):
         raise ValueError("This stored draft requires its original motion runtime and revision; create a new production.")
     else:
@@ -1268,7 +1268,7 @@ def _approve_storyboard(job):
     if moving:
         if deferred:
             adapter = studio_runtime.motion_adapter(bindings.get("film.motion"))
-            if adapter.output_profile() != studio_runtime.job_output(job):
+            if adapter.output_profile(bindings["film.motion"]) != studio_runtime.job_output(job):
                 raise ValueError("Model chuyển động không khớp timeline I2V đã xem. Hãy lập lại storyboard.")
             identity = studio_runtime.motion_identity(adapter, bindings["film.motion"])
             if job.get("production_plan"):

@@ -11,7 +11,7 @@ from agentforge import ops_control
 from agentforge.ai import model_hub, registry
 from agentforge.features.film_studio import draft_continuity
 from agentforge.features.film_studio.draft_resources import NeedsReconciliation, ResourceBlocked
-from agentforge.features.film_studio.studio_contracts import MotionOutput, ProviderRequestError
+from agentforge.features.film_studio.studio_contracts import ProviderRequestError
 from agentforge.features.media import mp4, render, visual_jobs
 from agentforge.paths import COMPANY_DATA_DIR, ensure_local_root
 
@@ -41,28 +41,32 @@ def supports(profile):
 
 
 def billable_durations(profile):
-    return _transport(profile).DURATIONS
+    return _transport(profile).billable_durations(profile)
 
 
 def native_audio(profile):
-    return _transport(profile).NATIVE_AUDIO
+    return _transport(profile).native_audio(profile)
 
 
-def output_profile():
-    return MotionOutput(24, 240, (1280, 720))
+def output_profile(profile):
+    return _transport(profile).output_profile(profile)
 
 
 def verify_download(path, seconds, profile):
-    spec = output_profile()
+    spec = output_profile(profile)
     return mp4.verify_video(path, seconds, fps=spec.fps, resolution=spec.resolution,
                             require_audio=native_audio(profile))
 
 
-def workflow_sha():
-    return hashlib.sha256(b"cloud-motion:720p:24fps:provider-duration-v1").hexdigest()
+def workflow_sha(profile):
+    spec = output_profile(profile)
+    # Preserve the historical fingerprint for the existing 720p/24fps contract.
+    width, height = spec.resolution
+    shape = "720p" if (width, height) == (1280, 720) else f"{width}x{height}"
+    return hashlib.sha256(f"cloud-motion:{shape}:{spec.fps}fps:provider-duration-v1".encode()).hexdigest()
 
 
-def weights_identity():
+def weights_identity(profile):
     return {}  # Provider-managed weights cannot be fingerprinted locally.
 
 
@@ -87,10 +91,20 @@ def bind(profile):
     return profile
 
 
-def billed_seconds(frames, durations=_LEGACY_DURATIONS):
-    if type(frames) is not int or not 1 <= frames <= 240:
-        raise ValueError("Cloud shot exceeds 10 seconds.")
-    return next(s for s in durations if s * 24 >= frames)
+def billed_seconds(frames, durations, *, fps, max_frames):
+    if (type(frames) is not int or not 1 <= frames <= max_frames
+            or type(fps) is not int or fps <= 0
+            or not durations or any(type(s) is not int or s <= 0 for s in durations)):
+        raise ValueError("Cloud shot exceeds the approved video contract.")
+    eligible = [seconds for seconds in durations if seconds * fps >= frames]
+    if not eligible:
+        raise ValueError("No billable duration covers the approved video shot.")
+    return min(eligible)
+
+
+def _profile_seconds(frames, profile):
+    spec = output_profile(profile)
+    return billed_seconds(frames, billable_durations(profile), fps=spec.fps, max_frames=spec.max_frames)
 
 
 def _db(create=False):
@@ -311,8 +325,11 @@ def clip_path(scene):
 
 def remaining_seconds(job):
     durations = job.get("production_plan", {}).get("billable_durations_seconds", _LEGACY_DURATIONS)
-    return sum(billed_seconds(scene["frames"], durations) for scene in job["board"]["scenes"]
-               if not scene.get("motion_job"))
+    identity = job.get("approved_motion") or job.get("motion_plan") or {}
+    # Historical cloud jobs stored only the original 24fps contract.
+    output = identity.get("output", {"fps": 24, "max_frames": 240})
+    return sum(billed_seconds(scene["frames"], durations, fps=output["fps"], max_frames=output["max_frames"])
+               for scene in job["board"]["scenes"] if not scene.get("motion_job"))
 
 
 def prepare(job, folder):
@@ -322,7 +339,8 @@ def prepare(job, folder):
     missing = remaining_seconds(job)
     if job.get("cloud_motion_seconds", 0) + missing > plan["max_cloud_seconds"]:
         raise ValueError("Cloud video seconds budget exceeded before rendering.")
-    return job["id"], job, folder, workflow_sha()
+    identity = job.get("approved_motion") or job.get("motion_plan") or {}
+    return job["id"], job, folder, identity.get("workflow_sha")
 
 
 def _source(job, scene, index, previous, folder):
@@ -395,7 +413,7 @@ def _state(ident, state, *, provider_id=None, digest=None):
 def _shot_row(production, scene, profile):
     row = _row(scene["motion_job"])
     if (row["production"] != production or row["model"] != profile["model"]
-            or row["seconds"] != billed_seconds(scene["frames"], billable_durations(profile))):
+            or row["seconds"] != _profile_seconds(scene["frames"], profile)):
         raise NeedsReconciliation("Cloud motion ledger does not match this approved shot.")
     return row
 
@@ -424,7 +442,7 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
         clip_path(scene)
         return
     transport = _transport(profile)
-    seconds = billed_seconds(scene["frames"], billable_durations(profile))
+    seconds = _profile_seconds(scene["frames"], profile)
     while True:
         existing = _shot_row(production, scene, profile) if scene.get("motion_job") else None
         if existing and existing["state"] != "REJECTED":

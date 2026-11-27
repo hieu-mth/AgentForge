@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from agentforge.ai import cloud_credentials
 from agentforge.features.media import mp4, render
-from agentforge.features.film_studio.studio_contracts import ProviderRequestError
+from agentforge.features.film_studio.studio_contracts import MotionOutput, ProviderRequestError
 from agentforge.paths import ensure_local_root
 
 HOST = "apihub.agnes-ai.com"
@@ -22,6 +22,18 @@ IMAGE_MODEL = "agnes-image-2.5-flash"
 VIDEO_MODELS = {"agnes-video-2.5-flash"}
 PROVIDER = "agnes"
 NATIVE_AUDIO = False
+
+
+def output_profile(profile):
+    return MotionOutput(24, max(DURATIONS) * 24, (1280, 720))
+
+
+def billable_durations(profile):
+    return DURATIONS
+
+
+def native_audio(profile):
+    return NATIVE_AUDIO
 
 
 def supports_video(profile):
