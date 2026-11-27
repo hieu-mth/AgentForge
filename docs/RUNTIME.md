@@ -141,3 +141,20 @@ Get-ChildItem -LiteralPath .\data\company -File |
 ```
 
 Đăng ký lại model, phân công và cấp quyền trong Dashboard. Việc này đặt lại revision, cấu hình và lịch sử snapshot Model Hub. Bản nháp đã duyệt bằng cấu hình cũ có thể không tiếp tục được: tạo production mới, không sửa digest thủ công. Không xóa các ledger motion/cloud, workspace, weights, DB nhân vật hoặc credential OAuth. ChatGPT account token nằm riêng; đăng ký lại profile dùng account reference đã kết nối nếu phiên còn hợp lệ. Không chạy lệnh khi backend hoặc công cụ khác còn sử dụng DB.
+
+### Checkpoint image workflows
+
+Model Hub accepts a ComfyUI API-format image workflow using a supported graph
+dialect. Existing `flux` profiles retain the original nine-node FLUX GGUF
+validation. The `comfy_image` option also accepts the seven-node checkpoint
+graph: CheckpointLoaderSimple, two CLIPTextEncode nodes, EmptyLatentImage,
+KSampler, VAEDecode and SaveImage, with the approved conditioning and VAE links.
+The registered model ID must match the loader's installed safetensors filename.
+Node IDs may vary; batch is one, dimensions are multiples of 16, and the
+configured maximum is 1536 pixels per side, 20 steps and 600 seconds.
+Metadata checks do not generate images. Only an explicit probe or an approved
+Studio production dispatches inference. Both dialects use the existing
+visual-job ledger, output filename binding and verified PNG import.
+Unsupported topology, custom nodes and mismatched model IDs are rejected.
+This is not arbitrary ComfyUI graph support or runtime certification of every
+checkpoint. Local motion retains its existing reviewed LTX path.

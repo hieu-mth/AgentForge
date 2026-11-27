@@ -65,7 +65,8 @@ def node_ids(graph):
     for role, field in (("6", "positive"), ("33", "negative")):
         link = sampler.get(field)
         if (not isinstance(link, list) or len(link) != 2
-                or link[0] not in classes.get("CLIPTextEncode", ()) or link[1] != 0):
+                or not isinstance(link[0], str) or link[0] not in classes.get("CLIPTextEncode", ())
+                or type(link[1]) is not int or link[1] != 0):
             raise ValueError("Invalid checkpoint text conditioning link")
         ids[role] = link[0]
     if len(set(ids.values())) != len(_CHECKPOINT_NODES):
@@ -109,14 +110,16 @@ def validate(config, model, endpoint):
             if node["inputs"][field] != [ids[target], slot]:
                 raise ValueError("Invalid checkpoint workflow link")
     inputs = {role: graph[key]["inputs"] for role, key in ids.items()}
-    if (inputs["38"]["ckpt_name"] != model or not flux_workflow.MODEL_FILE.fullmatch(model)
+    if (not isinstance(model, str) or inputs["38"]["ckpt_name"] != model or not flux_workflow.MODEL_FILE.fullmatch(model)
             or not model.lower().endswith(".safetensors")):
         raise ValueError("Checkpoint loader must match the registered safetensors model")
     sampler = inputs["31"]
     if (type(inputs["27"]["batch_size"]) is not int or inputs["27"]["batch_size"] != 1
-            or sampler["sampler_name"] not in _SAMPLERS or sampler["scheduler"] not in _SCHEDULERS
+            or not isinstance(sampler["sampler_name"], str) or sampler["sampler_name"] not in _SAMPLERS
+            or not isinstance(sampler["scheduler"], str) or sampler["scheduler"] not in _SCHEDULERS
             or type(sampler["cfg"]) not in (int, float) or not math.isfinite(sampler["cfg"])
-            or not 1 <= sampler["cfg"] <= 12 or sampler["denoise"] != 1
+            or not 1 <= sampler["cfg"] <= 12
+            or type(sampler["denoise"]) not in (int, float) or sampler["denoise"] != 1
             or type(sampler["seed"]) is not int or not 0 <= sampler["seed"] <= 2**64 - 1):
         raise ValueError("Unsupported checkpoint sampling settings")
     dimensions(inputs["27"]["width"], inputs["27"]["height"], sampler["steps"], config)

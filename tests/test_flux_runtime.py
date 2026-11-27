@@ -67,6 +67,9 @@ class FluxRuntimeTests(unittest.TestCase):
             lambda graph: graph["38"]["inputs"].update(ckpt_name="../other.safetensors"),
             lambda graph: graph["27"]["inputs"].update(batch_size=2),
             lambda graph: graph["31"]["inputs"].update(positive=["33", 0]),
+            lambda graph: graph["31"]["inputs"].update(scheduler=[]),
+            lambda graph: graph["31"]["inputs"].update(sampler_name={}),
+            lambda graph: graph["31"]["inputs"].update(denoise=True),
         ):
             invalid = copy.deepcopy(row)
             mutate(invalid["comfy_image"]["workflow"])
@@ -119,6 +122,8 @@ class FluxRuntimeTests(unittest.TestCase):
                 self.assertEqual(visual_jobs.image_for_job(result["job_id"], db_path=db)[0], png.getvalue())
             self.assertEqual(calls.count("/prompt"), 1)
             self.assertIn("/object_info/CheckpointLoaderSimple", calls)
+            self.assertIn("/object_info/KSampler", calls)
+            self.assertIn("/object_info/EmptyLatentImage", calls)
 
 
     def test_registry_readiness_checks_non_loader_nodes_and_installed_weights(self):

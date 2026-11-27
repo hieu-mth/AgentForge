@@ -18,9 +18,10 @@ def local_image_config(profile):
 
 
 def output_limits(profile):
+    config = local_image_config(profile)
     return {"format": "png", "batch": 1, "min_resolution": 256,
-            "max_resolution": local_image_config(profile)["max_resolution"], "dimension_multiple": 16,
-            "min_steps": 1, "max_steps": local_image_config(profile)["max_steps"]}
+            "max_resolution": config["max_resolution"], "dimension_multiple": 16,
+            "min_steps": 1, "max_steps": config["max_steps"]}
 
 
 def workflow_sha(profile):

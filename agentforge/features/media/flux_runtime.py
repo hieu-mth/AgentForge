@@ -46,6 +46,9 @@ def readiness(config, port, *, inspect_all_nodes=False):
                    for device in stats["devices"]):
             return "GPU_UNAVAILABLE"
         loaders = comfy_image_workflow.model_fields(graph)
+        # Check every node before dispatching a checkpoint workflow. Legacy
+        # callers can retain the original loader-only metadata query.
+        inspect_all_nodes = inspect_all_nodes or len(loaders) == 1
         for node_id in ids if inspect_all_nodes else loaders:
             fields = loaders.get(node_id, ())
             node = graph[ids[node_id]]
