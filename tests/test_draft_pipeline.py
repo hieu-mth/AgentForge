@@ -1820,6 +1820,47 @@ class DraftTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             timeline.storyboard_layout(moving, 2)
 
+    def test_mixed_cloud_image_does_not_hold_local_inference_slot(self):
+        profile = {"id": "cloud_image", "provider": "agnes", "model": "agnes-image-2.5-flash"}
+        writer = {"id": "local_writer", "provider": "ollama", "model": "fixture"}
+        job = {"id": self.ident, "brief": self.brief, "status": "RUNNING", "stage": "IMAGES",
+               "board": draft._story(self.board(), 2, 6, {"cat": {}}), "cast": {}}
+
+        def complete_image(job, index, scene, revision, profile):
+            self.assertFalse(draft.model_hub.local_inference_busy())
+            # Another local job may acquire the reservation while cloud inference runs.
+            with draft.model_hub.local_inference_slot():
+                self.assertTrue(draft.model_hub.local_inference_busy())
+            scene["asset"] = "verified"
+
+        def render(job):
+            self.assertTrue(draft.model_hub.local_inference_busy())
+            return "verified"
+
+        with (patch.object(draft.model_hub, "draft_routes", return_value=(1, {
+                  "general.text": writer, "image.generate": profile})),
+              patch.object(draft, "_image", side_effect=complete_image) as image,
+              patch.object(draft, "_render", side_effect=render),
+              patch.object(draft, "_dispatch")):
+            draft._work(job, nullcontext())
+        self.assertEqual(job["status"], "REVIEW", job.get("error"))
+        self.assertEqual(image.call_count, 2)
+        self.assertFalse(draft.model_hub.local_inference_busy())
+
+    def test_operation_lock_is_scoped_to_local_work_and_text_has_no_image_gate(self):
+        job = {"id": self.ident, "status": "RUNNING", "stage": "STORYBOARD"}
+        with (patch.dict(self.capacity, {"vram_free_mib": 0}),
+              patch.object(draft.draft_resources, "require_gpu", side_effect=AssertionError("image GPU gate")),
+              patch.object(draft, "_release_idle_image", side_effect=AssertionError("image runtime used by text"))):
+            draft._activity(job, "STORYBOARD", "storyboard", {"provider": "ollama", "model": "fixture"})
+            with draft._measured(job, "storyboard", flux_profile()):
+                self.assertTrue(draft.model_hub.local_inference_busy())
+            self.assertFalse(draft.model_hub.local_inference_busy())
+            draft._activity(job, "STORYBOARD", "storyboard", {"provider": "anthropic", "model": "fixture"})
+            with draft.model_hub.local_inference_slot(), draft._measured(job, "storyboard"):
+                self.assertTrue(draft.model_hub.local_inference_busy())
+            self.assertFalse(draft.model_hub.local_inference_busy())
+
     def test_cleanup_failure_preserves_cancelled_checkpoint_and_dispatch(self):
         job = {"id": self.ident, "brief": self.brief, "status": "RUNNING", "stage": "IMAGES",
                "board": draft._story(self.board(), 2, 6, {"cat": {}}), "cast": {},
