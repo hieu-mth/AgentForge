@@ -34,7 +34,7 @@ _LEGACY_MOTION_ADAPTER_ID = "agentforge.film.comfy.ltx_i2v.v1"
 
 
 def motion_identity(adapter: VideoMotion, profile: Profile) -> dict:
-    output = asdict(adapter.output_profile())
+    output = asdict(adapter.output_profile(profile))
     output["resolution"] = list(output["resolution"])
     encoder = profile.get("motion_encoder")
     encoder_path_sha = (hashlib.sha256(os.path.normcase(os.path.normpath(encoder)).encode()).hexdigest()
@@ -42,7 +42,7 @@ def motion_identity(adapter: VideoMotion, profile: Profile) -> dict:
     return {"adapter": adapter.ADAPTER_ID, "model": profile["model"], "profile": profile.get("id"),
             "endpoint": profile.get("base_url"),
             "encoder_path_sha": encoder_path_sha,
-            "workflow_sha": adapter.workflow_sha(), "weights": adapter.weights_identity(), "output": output}
+            "workflow_sha": adapter.workflow_sha(profile), "weights": adapter.weights_identity(profile), "output": output}
 
 
 def motion_artifacts(job=None) -> VideoMotion:

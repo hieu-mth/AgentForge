@@ -22,11 +22,11 @@ FRAMES = 49  # Studio's approved preset, independent of experimental pilot prese
 ADAPTER_ID = motion_ltx.FORMAT
 
 
-def workflow_sha():
+def workflow_sha(profile=None):
     return hashlib.sha256(_workflow_bytes()).hexdigest()
 
 
-def weights_identity():
+def weights_identity(profile=None):
     return {motion_ltx.CHECKPOINT: motion_ltx.CHECKPOINT_SHA, motion_ltx.ENCODER: motion_ltx.ENCODER_SHA}
 
 
@@ -40,9 +40,9 @@ def _workflow_bytes():
     return (json.dumps(motion_ltx.workflow(FRAMES), indent=2) + "\n").encode()
 
 
-def output_profile():
-    profile = motion_ltx.profile(FRAMES)
-    return MotionOutput(profile["fps"], profile["frames"], (profile["width"], profile["height"]))
+def output_profile(profile):
+    preset = motion_ltx.profile(FRAMES)
+    return MotionOutput(preset["fps"], preset["frames"], (preset["width"], preset["height"]))
 
 
 def supports(profile):

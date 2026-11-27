@@ -376,13 +376,13 @@ class DraftTests(unittest.TestCase):
             def supports(self, profile):
                 return profile.get("provider") == "comfyui" and profile.get("model") == "fixture-motion"
 
-            def workflow_sha(self):
+            def workflow_sha(self, profile):
                 return self.digest
 
-            def weights_identity(self):
+            def weights_identity(self, profile):
                 return {"fixture-motion": "b" * 64}
 
-            def output_profile(self):
+            def output_profile(self, profile):
                 return studio_runtime.MotionOutput(12, 36, (320, 192))
 
             def bind(self, profile):
