@@ -131,6 +131,8 @@ class DraftTests(unittest.TestCase):
         saved = draft._read(self.ident)
         self.assertEqual(saved["status"], "STORYBOARD_REVIEW", saved.get("error"))
         self.assertNotIn("motion_plan", saved)
+        self.assertEqual(studio_runtime.job_output(saved), studio_runtime.EDITORIAL_MOTION_OUTPUT)
+        self.assertEqual(saved["planning_output"]["max_frames"], 240)
         image = flux_profile()
         motion = {**self.motion_profile(), "enabled": True}
         self.registry_change("SAVE_MODEL_PROFILE", profile=image)
@@ -146,6 +148,44 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(approved["approved_storyboard_sha"], draft.draft_timeline.digest(approved))
         self.assertEqual(approved["board"], saved["board"])
         self.assertEqual(approved["status"], "QUEUED")
+
+    def test_assigned_video_metadata_shapes_new_storyboard_without_media_execution(self):
+        adapter = SimpleNamespace(
+            ADAPTER_ID="fixture.video.30fps",
+            supports=lambda profile: profile.get("model") == "alternate-video",
+            output_profile=lambda profile: studio_runtime.MotionOutput(30, 450, (1920, 1080)),
+            workflow_sha=lambda profile: "a" * 64,
+            weights_identity=lambda profile: {},
+            bind=lambda profile: profile,
+        )
+        entry = studio_runtime.registry.Registration("video", lambda: adapter)
+        profile = {"id": "alternate_video", "provider": "comfyui", "enabled": True,
+                   "model": "alternate-video", "base_url": "http://127.0.0.1:8188"}
+        with patch.object(studio_runtime.registry, "REGISTRATIONS",
+                          (*studio_runtime.registry.REGISTRATIONS, entry)):
+            self.seed_registry(flux_profile(), profile)
+            def storyboard(job, bindings):
+                self.assertNotIn("film.motion", bindings)
+                self.assertEqual(studio_runtime.job_output(job).fps, 30)
+                job.update(board=draft._story(self.board(), 2, 6, {"cat": {}}), cast={})
+            with (patch.object(draft, "_dispatch"), patch.object(draft, "_write_board", side_effect=storyboard),
+                  patch.object(adapter, "bind", side_effect=AssertionError("runtime before review"))):
+                job = draft.submit({"id": self.ident, **self.submission, "mode": "motion", "seconds": 6})
+                draft._work(job, nullcontext())
+            saved = draft._read(self.ident)
+            self.assertEqual(saved["status"], "STORYBOARD_REVIEW", saved.get("error"))
+            self.assertEqual([s["frames"] for s in saved["board"]["scenes"]], [90, 90])
+            self.assertNotIn("motion_plan", saved)
+            changed = {**saved, "planning_output": {**saved["planning_output"], "fps": 24}}
+            self.assertNotEqual(draft.draft_timeline.digest(changed), saved["storyboard_sha"])
+            with patch.object(adapter, "output_profile", return_value=studio_runtime.MotionOutput(24, 240, (1280, 720))):
+                with self.assertRaisesRegex(ValueError, "không khớp timeline"):
+                    draft.act(self.ident, "storyboard-approve", {"sha256": saved["storyboard_sha"]})
+            self.assertEqual(draft._read(self.ident), saved)
+            approved = draft.act(self.ident, "storyboard-approve", {"sha256": saved["storyboard_sha"]})
+            self.assertEqual(approved["status"], "QUEUED")
+            self.assertEqual(approved["board"], saved["board"])
+            self.assertEqual(approved["approved_motion"]["output"]["fps"], 30)
 
     def test_explicit_cloud_storyboard_without_media_permission_or_tools(self):
         writer = {"id": "owner_writer", "provider": "ollama", "enabled": True,

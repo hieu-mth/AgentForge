@@ -22,11 +22,15 @@ def duration_bounds(moving):
     return {"min": 4 if moving else 6, "max": MAX_DURATION_SECONDS}
 
 
-def duration_limits(seconds, moving, output=LEGACY_MOTION_OUTPUT):
+def validate_duration(seconds, moving):
     minimum = duration_bounds(moving)["min"]
     if type(seconds) is not int or not minimum <= seconds <= MAX_DURATION_SECONDS:
         raise ValueError(f"Thời lượng phải là số nguyên từ {minimum} đến {MAX_DURATION_SECONDS} giây. "
                          "Hãy rút gọn hành động hoặc chia kịch bản thành nhiều video.")
+
+
+def duration_limits(seconds, moving, output=LEGACY_MOTION_OUTPUT):
+    validate_duration(seconds, moving)
     if moving:
         budget = max(16, math.ceil(seconds * MOTION_PRODUCTION_SHOT_BUDGET / MAX_DURATION_SECONDS))
         return max(2, math.ceil(seconds * output.fps / output.max_frames)), min(seconds, budget)
@@ -179,6 +183,8 @@ def snapshot(job):
                        for scene in board["scenes"]]}
     if "audio_plan" in job:
         value["audio_plan"] = job["audio_plan"]
+    if "planning_output" in job:
+        value["planning_output"] = job["planning_output"]
     if "motion_plan" in job:
         value["motion_plan"] = job["motion_plan"]
     if "studio_plan" in job:

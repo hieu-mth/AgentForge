@@ -801,6 +801,15 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
     return result
 
 
+def assigned_motion_profile(*, db_path=None):
+    """Read the assigned video profile for planning only; no media admission or I/O."""
+    _, state = _read_state(db_path=db_path)
+    profile = _profiles(state=state).get(state["routes"].get("film.motion"))
+    if orchestrator_policy.compatible("video", profile):
+        return profile
+    return None
+
+
 def production_candidates(strategy, *, db_path=None):
     """Planning candidates: compatible profiles, with separate execution-admission metadata."""
     if strategy not in {"auto", "local", "hybrid", "cloud"}:

@@ -28,14 +28,28 @@ def motion_adapter(profile: Profile | None) -> VideoMotion:
     return registry.resolve("video", profile)
 
 
+# An unbound storyboard uses an editorial timing grid, not a model promise.
+# The Owner may plan before registering any media runtime.
+EDITORIAL_MOTION_OUTPUT = MotionOutput(24, 240, (1280, 720))
+
 # Historical receipts without an adapter identifier predate the registry.
 LEGACY_MOTION_OUTPUT = MotionOutput(24, 49, (512, 288))
 _LEGACY_MOTION_ADAPTER_ID = "agentforge.film.comfy.ltx_i2v.v1"
 
 
-def motion_identity(adapter: VideoMotion, profile: Profile) -> dict:
-    output = asdict(adapter.output_profile(profile))
+def _output_record(spec: MotionOutput) -> dict:
+    output = asdict(spec)
     output["resolution"] = list(output["resolution"])
+    return output
+
+
+def planning_output(profile: Profile | None = None) -> dict:
+    spec = motion_adapter(profile).output_profile(profile) if profile else EDITORIAL_MOTION_OUTPUT
+    return _output_record(spec)
+
+
+def motion_identity(adapter: VideoMotion, profile: Profile) -> dict:
+    output = _output_record(adapter.output_profile(profile))
     encoder = profile.get("motion_encoder")
     encoder_path_sha = (hashlib.sha256(os.path.normcase(os.path.normpath(encoder)).encode()).hexdigest()
                         if encoder else None)
@@ -53,7 +67,7 @@ def motion_artifacts(job=None) -> VideoMotion:
 
 def job_output(job) -> MotionOutput:
     identity = job.get("motion_plan") or job.get("approved_motion")
-    if not identity:
+    output = identity["output"] if identity else job.get("planning_output")
+    if output is None:
         return LEGACY_MOTION_OUTPUT
-    output = identity["output"]
     return MotionOutput(output["fps"], output["max_frames"], tuple(output["resolution"]))
