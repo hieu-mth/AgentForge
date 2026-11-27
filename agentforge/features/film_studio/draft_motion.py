@@ -40,6 +40,10 @@ def _workflow_bytes():
     return (json.dumps(motion_ltx.workflow(FRAMES), indent=2) + "\n").encode()
 
 
+def input_modes(profile):
+    return ("image-to-video",)
+
+
 def output_profile(profile):
     preset = motion_ltx.profile(FRAMES)
     return MotionOutput(preset["fps"], preset["frames"], (preset["width"], preset["height"]))

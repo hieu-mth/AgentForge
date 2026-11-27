@@ -173,8 +173,10 @@ def _plan_production(job, bindings):
             _ask(planner, instructions, data, schema, bindings.get("image.generate"), job=job))
     profile = model_hub.production_profile(choice["motion_ref"], choice["method"])
     choice["motion_profile_sha"] = studio_runtime.routing_identity({"film.motion": profile}, moving=True)["film.motion"]
+    adapter = studio_runtime.motion_adapter(profile)
+    choice["input_modes"] = list(adapter.input_modes(profile))
     job["production_plan"] = choice
-    job["motion_plan"] = studio_runtime.motion_identity(studio_runtime.motion_adapter(profile), profile)
+    job["motion_plan"] = studio_runtime.motion_identity(adapter, profile)
     _save(job)
 
 
@@ -1022,6 +1024,7 @@ def _work(job, slot, retry_motion_job=None):
             draft_continuity.validate(job)
             if moving:
                 motion, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
+                draft_continuity.validate(job, input_modes=motion.input_modes(bindings["film.motion"]))
                 motion_profile = motion.bind(bindings["film.motion"])
                 motion.require_resolved_ledger(job)
             image_profile = bindings.get("image.generate")
@@ -1298,6 +1301,7 @@ def _approve_storyboard(job):
             _validate_creative_frames(job)
         else:
             adapter, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
+        draft_continuity.validate(job, input_modes=adapter.input_modes(bindings["film.motion"]))
         if model_hub.is_cloud(bindings["film.motion"]):
             from agentforge.features.film_studio import draft_motion_cloud
             plan = job.get("production_plan")

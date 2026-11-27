@@ -154,6 +154,7 @@ class DraftTests(unittest.TestCase):
             ADAPTER_ID="fixture.video.30fps",
             supports=lambda profile: profile.get("model") == "alternate-video",
             output_profile=lambda profile: studio_runtime.MotionOutput(30, 450, (1920, 1080)),
+            input_modes=lambda profile: ("image-to-video",),
             workflow_sha=lambda profile: "a" * 64,
             weights_identity=lambda profile: {},
             bind=lambda profile: profile,
@@ -424,6 +425,9 @@ class DraftTests(unittest.TestCase):
 
             def output_profile(self, profile):
                 return studio_runtime.MotionOutput(12, 36, (320, 192))
+
+            def input_modes(self, profile):
+                return ("image-to-video",)
 
             def bind(self, profile):
                 return profile

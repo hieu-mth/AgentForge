@@ -48,6 +48,10 @@ def native_audio(profile):
     return _transport(profile).native_audio(profile)
 
 
+def input_modes(profile):
+    return _transport(profile).input_modes(profile)
+
+
 def output_profile(profile):
     return _transport(profile).output_profile(profile)
 
@@ -449,12 +453,16 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
             break
         if existing:
             _wait_rejected(job, existing, save, cancelled)
+        endpoint = "image-to-video" if previous_motion is not None or job["production_plan"]["method"] == "hybrid" else "text-to-video"
+        if endpoint not in input_modes(profile):
+            raise ValueError("Video adapter does not support the approved shot input mode.")
         image, source = _source(job, scene, index, previous_motion, folder)
+        if (image is not None) != (endpoint == "image-to-video"):
+            raise ValueError("Video shot source does not match the approved input mode.")
         prompt = (scene["image_prompt"] + ". " + draft_continuity.prompt(scene) +
                   "\nAudio direction: " + scene.get("audio", "") +
                   ". Keep the original actions; do not invent dialogue.")[:5000]
         body = transport.payload(profile["model"], prompt, seconds, image=image, audio=native_audio(profile))
-        endpoint = "image-to-video" if image is not None else "text-to-video"
         request_sha = hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
         ident = existing["id"] if existing else uuid4().hex
         key = _key(profile)
