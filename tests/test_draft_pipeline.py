@@ -396,7 +396,9 @@ class DraftTests(unittest.TestCase):
         bindings = {"film.motion": profile}
         job = {"id": self.ident, "brief": {**self.brief, "mode": "motion", "duration_mode": "manual"},
                "board": self.board(), "storyboard_version": 1, "status": "RUNNING", "video_sha": None}
-        with (patch.object(studio_runtime, "MOTION_ADAPTERS", (draft_motion, adapter)),
+        with (patch.object(studio_runtime.registry, "REGISTRATIONS",
+                           (*studio_runtime.registry.REGISTRATIONS,
+                            studio_runtime.registry.Registration("video", lambda: adapter))),
               patch.object(draft.model_hub, "draft_routes", return_value=(8, bindings))):
             self.assertIs(studio_runtime.motion_adapter(profile), adapter)
             with self.assertRaises(ValueError):

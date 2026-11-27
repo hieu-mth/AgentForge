@@ -22,6 +22,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from agentforge.ai import cloud_credentials, orchestrator_policy
+from agentforge.ai.registry import ADAPTERS
 from agentforge.ai.orchestrator_policy import ModelConfigError
 from agentforge.features.media import flux_workflow
 from agentforge.paths import COMPANY_DATA_DIR, ensure_local_root
@@ -94,69 +95,7 @@ def local_inference_slot(*, observe=True):
         last_local_inference = monotonic()
         _LOCAL_INFERENCE.release()
 
-# These are the profile adapters accepted by Model Hub. Registration is
-# configuration only, including for providers with an existing runtime.
-ADAPTERS = {
-    "ollama": {
-        "label": "Ollama", "connection": "local", "model_label": "Tên model",
-        "model_example": "qwen3:8b",
-        "description": "Model văn bản chạy qua Ollama trên máy này.",
-        "defaults": {"base_url": "http://127.0.0.1:11434"}, "local_probe": True,
-    },
-    "comfyui": {
-        "label": "ComfyUI", "connection": "local", "model_label": "Mã checkpoint",
-        "model_example": "ltxv-2b-0.9.8-distilled-fp8.safetensors",
-        "description": "Hồ sơ ảnh hoặc video. Đăng ký chỉ lưu cấu hình cho ComfyUI.",
-        "defaults": {"base_url": "http://127.0.0.1:8188"}, "local_probe": False,
-        "flux_workflow_max_bytes": flux_workflow.MAX_WORKFLOW_BYTES,
-        "motion_encoder_supported": True,
-    },
-    "chatgpt": {
-        "label": "ChatGPT", "connection": "cloud", "model_label": "Model slug",
-        "model_example": "model-tu-lenh-models", "description": "Kết nối local bằng OAuth chính thức; không nhập API key. Chạy CLI chatgpt_auth login trước.",
-        "defaults": {"account_ref": "owner"}, "local_probe": False, "cloud_probe": True,
-    },
-    "openai": {
-        "label": "OpenAI API", "connection": "cloud", "model_label": "Model ID",
-        "model_example": "model-id-da-cap",
-        "description": "API HTTPS tương thích Chat Completions; nhập API base URL và model ID.",
-        "defaults": {"base_url": ""},
-        "environment_defaults": {"base_url_env": "OPENAI_BASE_URL", "api_key_env": "OPENAI_API_KEY"},
-        "local_probe": False, "cloud_probe": True,
-    },
-    "anthropic": {
-        "label": "Anthropic API", "connection": "cloud", "model_label": "Model ID",
-        "model_example": "model-id-da-cap",
-        "description": "API HTTPS tương thích Anthropic Messages; nhập API base URL và model ID.",
-        "defaults": {"base_url": ""},
-        "environment_defaults": {"base_url_env": "ANTHROPIC_BASE_URL",
-                            "api_key_env": "ANTHROPIC_AUTH_TOKEN"}, "local_probe": False,
-        "cloud_probe": True,
-    },
-    "ltx_cloud": {
-        "label": "LTX Video API", "connection": "cloud", "model_label": "Model ID",
-        "model_example": "ltx-2-3-fast", "description": "LTX V2 video; 720p, 24 fps, 6/8/10 giây. Chỉ gửi sau duyệt ngân sách.",
-        "defaults": {"base_url": "https://api.ltx.io"},
-        "environment_defaults": {"base_url_env": "LTX_BASE_URL", "api_key_env": "LTX_API_KEY"},
-        "local_probe": False, "cloud_probe": False,
-    },
-    "agnes": {
-        "label": "Agnes AI", "connection": "cloud", "model_label": "Model ID",
-        "model_example": "agnes-image-2.5-flash",
-        "description": "Agnes Image / Video Flash. Kiểm tra hạn mức trước khi tạo nội dung.",
-        "defaults": {"base_url": "https://apihub.agnes-ai.com/v1"},
-        "environment_defaults": {"base_url_env": "AGNES_BASE_URL", "api_key_env": "AGNES_API_KEY"},
-        "local_probe": False, "cloud_probe": False, "media_probe": True,
-    },
-    "elevenlabs": {
-        "label": "ElevenLabs API", "connection": "cloud", "model_label": "Model ID",
-        "model_example": "model-id-da-cap",
-        "description": "API HTTPS tạo hiệu ứng âm thanh hoặc nhạc; Owner tự chọn model và endpoint.",
-        "defaults": {"base_url": ""},
-        "environment_defaults": {"base_url_env": "ELEVENLABS_BASE_URL", "api_key_env": "ELEVENLABS_API_KEY"},
-        "local_probe": False, "cloud_probe": False,
-    },
-}
+
 
 
 def is_cloud(profile):
@@ -392,7 +331,7 @@ def effective_models(*, db_path=None):
     state = _read_state(db_path=db_path)[1]
     return {key: {k: v for k, v in value.items() if k != "id"}
             for key, value in _profiles(state=state).items()
-            if value["provider"] in {"ollama", "anthropic", "openai", "chatgpt"}}
+            if orchestrator_policy.runtime_adapter("text", value) is not None}
 
 
 def _active_policy(state):
