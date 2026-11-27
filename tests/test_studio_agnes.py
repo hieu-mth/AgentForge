@@ -161,7 +161,7 @@ class AgnesContractTests(unittest.TestCase):
                   patch.object(motion, "_poll", return_value={"status": "completed", "url": "fixture"}),
                   patch.object(motion, "_path", return_value=root/"clip.mp4"),
                   patch.object(studio_agnes, "download_video", side_effect=lambda _, target, seconds: target.write_bytes(b"fixture")),
-                  patch.object(motion.ltx, "_verify", return_value="f"*64)):
+                  patch.object(motion.mp4, "verify_video", return_value="f"*64)):
                 motion.run_shot(scene, 0, prepared, profile, save, lambda: False)
                 self.assertEqual(submit.call_count, 4)
                 self.assertEqual(job["cloud_calls"], 4)

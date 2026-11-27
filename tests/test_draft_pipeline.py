@@ -10,7 +10,7 @@ from contextlib import ExitStack, closing, nullcontext
 from types import SimpleNamespace
 from uuid import uuid4
 
-from agentforge.features.film_studio import draft_motion, draft_pipeline as draft, studio_ollama, studio_runtime, script_analysis
+from agentforge.features.film_studio import draft_motion, draft_pipeline as draft, studio_ollama, studio_runtime, script_analysis, studio_ltx_cloud
 from agentforge.features.media import flux_runtime, studio_flux
 from tests import owner_http_fixture
 from tests.test_flux_runtime import profile as flux_profile
@@ -167,7 +167,7 @@ class DraftTests(unittest.TestCase):
               patch.object(draft, "_write_board", side_effect=storyboard),
               patch.object(draft, "_image", side_effect=AssertionError("image generation")),
               patch.object(draft_motion_cloud, "bind", side_effect=AssertionError("video readiness")),
-              patch.object(draft_motion_cloud.ltx, "_request", side_effect=AssertionError("cloud video API")),
+              patch.object(studio_ltx_cloud, "_request", side_effect=AssertionError("cloud video API")),
               patch.object(draft.render, "_ffmpeg", side_effect=AssertionError("FFmpeg"))):
             job = draft.submit({"id": self.ident, **self.submission, "mode": "motion", "seconds": 4,
                                 "scene_count": None, "duration_mode": "manual",
@@ -396,7 +396,9 @@ class DraftTests(unittest.TestCase):
         bindings = {"film.motion": profile}
         job = {"id": self.ident, "brief": {**self.brief, "mode": "motion", "duration_mode": "manual"},
                "board": self.board(), "storyboard_version": 1, "status": "RUNNING", "video_sha": None}
-        with (patch.object(studio_runtime, "MOTION_ADAPTERS", (draft_motion, adapter)),
+        with (patch.object(studio_runtime.registry, "REGISTRATIONS",
+                           (*studio_runtime.registry.REGISTRATIONS,
+                            studio_runtime.registry.Registration("video", lambda: adapter))),
               patch.object(draft.model_hub, "draft_routes", return_value=(8, bindings))):
             self.assertIs(studio_runtime.motion_adapter(profile), adapter)
             with self.assertRaises(ValueError):
@@ -444,7 +446,7 @@ class DraftTests(unittest.TestCase):
                            "base_url": "http://127.0.0.1:11434"}
                 self.assertEqual(draft._ask(profile, "Plan", {}, {}, None), {"ready": True})
                 self.assertEqual(call.call_args.kwargs["payload"]["model"], name)
-            with self.assertRaisesRegex(ValueError, "supported text API or local runtime"):
+            with self.assertRaisesRegex(ValueError, "No unique runtime adapter for text"):
                 draft._ask({"provider": "unsupported"}, "Plan", {}, {}, None)
             self.assertEqual(call.call_count, 2)
         self.assertIs(studio_runtime.image_adapter(flux_profile()), studio_flux)

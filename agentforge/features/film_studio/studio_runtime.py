@@ -3,15 +3,10 @@ from dataclasses import asdict
 import hashlib
 import json
 import os.path
-from pathlib import Path
-from typing import Any, BinaryIO, Callable, Protocol
-
-from agentforge.features.film_studio import draft_motion, studio_ollama, studio_cloud, draft_motion_cloud
-from agentforge.features.film_studio.studio_contracts import DispatchGuard, ImageRequest, MotionOutput
-from agentforge.features.media import studio_flux, studio_agnes_image
-
-Profile = dict[str, Any]
-PreparedMotion = tuple[str, Any, Path, str]
+from agentforge.ai import registry
+from agentforge.features.film_studio.studio_contracts import (
+    ImageRequest as ImageRequest, MotionOutput, Profile, TextInference, ImageGeneration, VideoMotion,
+)
 
 
 def routing_identity(bindings, *, moving):
@@ -21,76 +16,21 @@ def routing_identity(bindings, *, moving):
             for capability, profile in bindings.items() if moving or capability != "film.motion"}
 
 
-class TextInference(Protocol):
-    def infer_structured(self, profile: Profile, instructions: str, data: dict, schema: dict, *,
-                         cpu_only: bool = False, extended_plan: bool = False) -> Any: ...
-
-
-class ImageGeneration(Protocol):
-    ADAPTER_ID: str
-
-    def output_limits(self, profile: Profile) -> dict: ...
-    def workflow_sha(self, profile: Profile) -> str | None: ...
-    def supports(self, profile: Profile) -> bool: ...
-    def preflight(self, profile: Profile, *, include_profiles: bool = False) -> None: ...
-    def release_idle_models(self, profile: Profile) -> bool: ...
-    def generate(self, profile: Profile, request: ImageRequest) -> dict: ...
-
-
-class VideoMotion(Protocol):
-    ADAPTER_ID: str
-    MAX_CLIP_BYTES: int
-
-    def supports(self, profile: Profile) -> bool: ...
-    def workflow_sha(self) -> str: ...
-    def check_legacy_workflow(self, folder: Path) -> None: ...
-    def weights_identity(self) -> dict[str, str]: ...
-    def output_profile(self) -> MotionOutput: ...
-    def registry_readiness(self, profile: Profile) -> str: ...
-    def bind(self, profile: Profile) -> Profile: ...
-    def prepare(self, job: dict, folder: Path) -> PreparedMotion: ...
-    def run_shot(self, scene: dict, index: int, prepared: PreparedMotion, profile: Profile,
-                 save: Callable[[], None], cancelled: Callable[[], bool], *,
-                 dispatch_guard: DispatchGuard, retry_motion_job: str | None = None,
-                 previous_motion: dict | None = None) -> None: ...
-    def require_resolved_ledger(self, job: dict) -> None: ...
-    def require_draft_removable(self, ident: str) -> None: ...
-    def reconcile_cancelled(self, job: dict) -> bool: ...
-    def clip_path(self, scene: dict) -> Path: ...
-    def verify_clip(self, scene: dict, stream: BinaryIO) -> None: ...
-
-
 def text_adapter(profile: Profile | None) -> TextInference:
-    provider = (profile or {}).get("provider")
-    if provider == "ollama":
-        return studio_ollama
-    if provider == "chatgpt":
-        from agentforge.features.film_studio import studio_chatgpt
-        return studio_chatgpt
-    if provider in studio_cloud.PROVIDERS:
-        return studio_cloud
-    raise ValueError("Studio requires a supported text API or local runtime.")
-
-
-IMAGE_ADAPTERS: tuple[ImageGeneration, ...] = (studio_flux, studio_agnes_image)
+    return registry.resolve("text", profile)
 
 
 def image_adapter(profile: Profile | None) -> ImageGeneration:
-    matches = [adapter for adapter in IMAGE_ADAPTERS if profile and adapter.supports(profile)]
-    if len(matches) != 1:
-        raise ValueError("Studio requires a compatible image adapter and profile.")
-    return matches[0]
-
-
-MOTION_ADAPTERS: tuple[VideoMotion, ...] = (draft_motion, draft_motion_cloud)
-LEGACY_MOTION_OUTPUT = MotionOutput(24, 49, (512, 288))
+    return registry.resolve("image", profile)
 
 
 def motion_adapter(profile: Profile | None) -> VideoMotion:
-    matches = [adapter for adapter in MOTION_ADAPTERS if profile and adapter.supports(profile)]
-    if len(matches) != 1:
-        raise ValueError("Studio requires a compatible motion adapter and profile.")
-    return matches[0]
+    return registry.resolve("video", profile)
+
+
+# Historical receipts without an adapter identifier predate the registry.
+LEGACY_MOTION_OUTPUT = MotionOutput(24, 49, (512, 288))
+_LEGACY_MOTION_ADAPTER_ID = "agentforge.film.comfy.ltx_i2v.v1"
 
 
 def motion_identity(adapter: VideoMotion, profile: Profile) -> dict:
@@ -108,12 +48,7 @@ def motion_identity(adapter: VideoMotion, profile: Profile) -> dict:
 def motion_artifacts(job=None) -> VideoMotion:
     """Locate artifacts by stored adapter identity, independent of current routing."""
     identity = (job or {}).get("approved_motion") or (job or {}).get("motion_plan")
-    if identity is None:
-        return draft_motion
-    matches = [adapter for adapter in MOTION_ADAPTERS if adapter.ADAPTER_ID == identity["adapter"]]
-    if len(matches) != 1:
-        raise ValueError("Stored motion adapter unavailable.")
-    return matches[0]
+    return registry.by_id("video", identity["adapter"] if identity else _LEGACY_MOTION_ADAPTER_ID)
 
 
 def job_output(job) -> MotionOutput:

@@ -25,23 +25,10 @@ def compatible(kind, profile):
 
 def runtime_adapter(kind, profile):
     """Resolve against the same adapter predicates used by the runtime."""
-    from agentforge.features.film_studio import studio_runtime
+    from agentforge.ai import registry
 
-    if kind in {"sound", "music"}:
-        from agentforge.features.film_studio import studio_audio_generation
-        return studio_audio_generation if studio_audio_generation.supports(profile) else None
-    if kind == "audio":
-        from agentforge.features.film_studio import studio_speech
-        return studio_speech if studio_speech.supports(profile) else None
-    if kind == "vision":
-        from agentforge.features.film_studio import studio_vision
-        return studio_vision if studio_vision.supports(profile) else None
-    resolve = {"text": studio_runtime.text_adapter, "image": studio_runtime.image_adapter,
-               "video": studio_runtime.motion_adapter}.get(kind)
-    if resolve is None:
-        return None
     try:
-        return resolve(profile)
+        return registry.resolve(kind, profile)
     except ValueError:
         return None
 

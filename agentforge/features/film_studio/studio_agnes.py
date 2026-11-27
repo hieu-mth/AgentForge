@@ -12,8 +12,8 @@ from urllib.parse import urlencode, urlsplit
 from uuid import uuid4
 
 from agentforge.ai import cloud_credentials
-from agentforge.features.media import render
-from agentforge.features.film_studio import studio_ltx_cloud
+from agentforge.features.media import mp4, render
+from agentforge.features.film_studio.studio_contracts import ProviderRequestError
 from agentforge.paths import ensure_local_root
 
 HOST = "apihub.agnes-ai.com"
@@ -51,20 +51,20 @@ def _id(value):
     return value
 
 
-class AgnesHTTPError(ValueError):
+class AgnesHTTPError(ProviderRequestError):
     """Sanitized classification: never persist provider body, prompts or credentials."""
 
     def __init__(self, status, code=None, retry_after=None):
         self.status = status
         self.code = code if code in {"video_queue_full", "rate_limit_exceeded", "too_many_requests"} else None
-        self.retry_after = retry_after
-        self.retryable = (status == 503 and self.code == "video_queue_full") or status == 429
-        self.rejected = self.retryable or status in {400, 401, 402, 403, 404, 413, 415, 422}
+        retryable = (status == 503 and self.code == "video_queue_full") or status == 429
+        rejected = retryable or status in {400, 401, 402, 403, 404, 413, 415, 422}
         label = {400: "Invalid request", 401: "Invalid API key", 402: "Payment or quota required",
                  403: "Access denied", 404: "Endpoint or model not found", 413: "Request too large",
                  415: "Unsupported media type", 422: "Invalid request parameters",
                  429: "Rate limited"}.get(status, "Video queue full" if self.code == "video_queue_full" else "Provider error")
-        super().__init__(f"Agnes HTTP {status}: {label}" + (f" ({self.code})" if self.code else ""))
+        super().__init__(f"Agnes HTTP {status}: {label}" + (f" ({self.code})" if self.code else ""),
+                         rejected=rejected, retryable=retryable, retry_after=retry_after)
 
 
 def _http_error(response):
@@ -106,9 +106,9 @@ def _request(method, path, token, body=None):
             raise ValueError("Invalid Agnes response.")
         return result
     except TimeoutError:
-        raise ValueError("Agnes request timed out; outcome unknown.") from None
+        raise ProviderRequestError("Agnes request timed out; outcome unknown.") from None
     except (OSError, http.client.HTTPException, UnicodeError):
-        raise ValueError("Agnes transport failed; outcome unknown.") from None
+        raise ProviderRequestError("Agnes transport failed; outcome unknown.") from None
     finally:
         conn.close()
 
@@ -170,7 +170,7 @@ def submit(body, token):
     try:
         return _id(response.get("video_id"))
     except ValueError:
-        raise ValueError("Agnes accepted HTTP response without a valid video ID; outcome unknown.") from None
+        raise ProviderRequestError("Agnes accepted HTTP response without a valid video ID; outcome unknown.") from None
 
 
 def submit_video(body, key, endpoint):
@@ -242,7 +242,7 @@ def _download_to(url, stream, max_bytes):
 
 def _download(url, target):
     with target.open("xb") as stream:
-        _download_to(url, stream, studio_ltx_cloud.MAX_MP4)
+        _download_to(url, stream, mp4.MAX_VIDEO_BYTES)
 
 
 def download_normalized(url, target, seconds):

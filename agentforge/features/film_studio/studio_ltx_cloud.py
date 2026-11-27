@@ -14,12 +14,12 @@ from uuid import uuid4
 
 from agentforge.paths import ensure_local_root
 from agentforge.ai import cloud_credentials
-from agentforge.features.media import render
+from agentforge.features.media import mp4
 
 HOST = "api.ltx.io"
 MODELS = {"ltx-2-3-fast", "ltx-2-3-pro"}
 DURATIONS = (6, 8, 10)
-MAX_MP4 = 160 * 1024 * 1024
+MAX_MP4 = mp4.MAX_VIDEO_BYTES
 DB_PATH = Path.home() / ".agentforge" / "ltx-pilot.sqlite3"
 
 
@@ -189,30 +189,6 @@ def _download(url, target):
         conn.close()
 
 
-def _verify(path, seconds, *, require_audio=False):
-    if path.stat().st_size < 1024:
-        raise ValueError("Incomplete MP4.")
-    ffprobe = render.find_media_tool("ffprobe")
-    if not ffprobe:
-        raise ValueError("ffprobe required.")
-    meta = render._run_process([ffprobe, "-v", "error", "-select_streams", "v:0",
-        "-show_entries", "stream=width,height,avg_frame_rate", "-of", "json", str(path)],
-        cwd=path.parent, timeout=30)
-    video = json.loads(meta.stdout)["streams"][0]
-    if (video["width"], video["height"], video["avg_frame_rate"]) != (1280, 720, "24/1"):
-        raise ValueError("LTX output does not match pilot profile.")
-    decoded = render._run_process([render._ffmpeg(), "-nostdin", "-v", "error", "-xerror",
-        "-i", str(path), "-map", "0:v:0", "-progress", "pipe:1", "-f", "null", "-"],
-        cwd=path.parent, timeout=90)
-    frames = re.findall(r"(?m)^frame=(\d+)", decoded.stdout)
-    if not frames or int(frames[-1]) != seconds * 24:
-        raise ValueError("LTX frame count differs from purchased duration.")
-    if require_audio:
-        render._run_process([render._ffmpeg(), "-nostdin", "-v", "error", "-xerror", "-i", str(path),
-                             "-map", "0:a:0", "-f", "null", "-"], cwd=path.parent, timeout=90)
-    with path.open("rb") as f:
-        return hashlib.file_digest(f, "sha256").hexdigest()
-
 
 def poll(request_id, output_dir):
     _id(request_id)
@@ -242,7 +218,7 @@ def poll(request_id, output_dir):
             if output.exists():
                 raise ValueError("Output already exists; inspect before further action.")
             _download(response["result"]["video_url"], temp)
-            digest = _verify(temp, row["seconds"])
+            digest = mp4.verify_video(temp, row["seconds"], fps=24, resolution=(1280, 720))
             # Exclusive output creation even if concurrent polling is attempted.
             with output.open("xb") as dest, temp.open("rb") as src:
                 import shutil
