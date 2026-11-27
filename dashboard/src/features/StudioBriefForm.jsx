@@ -30,6 +30,7 @@ export function StudioBriefForm({hub,pending,waiting,onCharacters,onSubmit}){
   const cloudBounds=cloudSecondsBounds(hub.data,method);
   const targetBounds=durationBounds(hub.data,moving?'motion':'still');
   const needsCloudBudget=['auto','hybrid','cloud'].includes(method);
+  const methodUnavailable=moving&&!methodOptions.some(option=>option.value===method&&!option.disabled);
   function resetBrief(){
     form.setFieldsValue(briefDefaults);
     try {
@@ -73,7 +74,8 @@ export function StudioBriefForm({hub,pending,waiting,onCharacters,onSubmit}){
         <Button className="draft-submit" type="primary" htmlType="submit"
           loading={pending} disabled={waiting>0||!Number.isInteger(limit)||characterCount>limit||(manual&&!targetBounds)||(moving&&needsCloudBudget&&!cloudBounds)}>Tạo storyboard</Button>
       </div>
-      {moving&&<details className="draft-resource-details">
+      {methodUnavailable&&<Alert type="warning" showIcon message="Phương pháp đang chọn không tương thích với model video." description="Mở phần phương pháp sản xuất và chọn tuyến khả dụng. Không cần đổi model để lập storyboard nếu chưa phân công video."/>}
+      {moving&&<details className="draft-resource-details" open={methodUnavailable||undefined}>
         <summary>Phương pháp sản xuất · {productionMethodLabels[method]??'Chưa chọn'}</summary>
         <Space wrap align="start">
           <Form.Item name="routeStrategy" label="Phương pháp" rules={[{validator:(_,value)=>

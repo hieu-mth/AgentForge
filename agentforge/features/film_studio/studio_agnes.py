@@ -24,6 +24,10 @@ PROVIDER = "agnes"
 NATIVE_AUDIO = False
 
 
+def input_modes(profile):
+    return ("text-to-video", "image-to-video")
+
+
 def output_profile(profile):
     return MotionOutput(24, max(DURATIONS) * 24, (1280, 720))
 

@@ -61,6 +61,8 @@ def _image_reply(ident, profile):
 
 def _start_video(ident, profile, prompt):
     adapter = studio_runtime.motion_adapter(profile)
+    if "text-to-video" not in adapter.input_modes(profile):
+        raise ValueError("Video probe currently requires a text-to-video model; image input is not implemented in this probe.")
     adapter.bind(profile)
     transport = motion._transport(profile)
     seconds = min(adapter.billable_durations(profile))

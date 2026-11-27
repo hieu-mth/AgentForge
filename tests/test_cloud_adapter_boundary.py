@@ -16,6 +16,7 @@ class CloudBoundaryTests(unittest.TestCase):
         adapter = SimpleNamespace(supports_video=lambda profile: profile.get("provider") == "fixture",
                                   billable_durations=lambda profile: (5, 10, 15),
                                   native_audio=lambda profile: False,
+                                  input_modes=lambda profile: ("image-to-video",),
                                   output_profile=lambda profile: MotionOutput(30, 450, (1920, 1080)))
         entry = registry.Registration("cloud_video_transport", lambda: adapter, predicate="supports_video")
         with patch.object(registry, "REGISTRATIONS", (*registry.REGISTRATIONS, entry)):
@@ -24,6 +25,7 @@ class CloudBoundaryTests(unittest.TestCase):
             self.assertIs(draft_motion_cloud._transport(profile), adapter)
             self.assertEqual(draft_motion_cloud.billable_durations(profile), (5, 10, 15))
             self.assertFalse(draft_motion_cloud.native_audio(profile))
+            self.assertEqual(draft_motion_cloud.input_modes(profile), ("image-to-video",))
             self.assertEqual(draft_motion_cloud.output_profile(profile), MotionOutput(30, 450, (1920, 1080)))
             self.assertEqual(draft_motion_cloud._profile_seconds(301, profile), 15)
             job = {"motion_plan": {"output": {"fps": 30, "max_frames": 450, "resolution": [1920, 1080]}},
@@ -32,6 +34,22 @@ class CloudBoundaryTests(unittest.TestCase):
             self.assertEqual(draft_motion_cloud.remaining_seconds(job), 20)
             with self.assertRaises(ValueError):
                 draft_motion_cloud._profile_seconds(451, profile)
+
+    def test_text_only_model_refuses_frame_continuation_before_dispatch(self):
+        from agentforge.features.film_studio import draft_continuity, media_probe
+
+        job = {"brief": {"mode": "motion"}, "board": {"scenes": [
+            {"shot_id": "first"}, {"shot_id": "second", "continuity_plan": {
+                "transition": "CONTINUE", "previous_shot_id": "first", "start_state": "cat sits", "end_state": "cat stands"}}]}}
+        with self.assertRaisesRegex(ValueError, "CONTINUE"):
+            draft_continuity.validate(job, input_modes=("text-to-video",))
+        draft_continuity.validate(job, input_modes=("image-to-video",))
+        adapter = SimpleNamespace(input_modes=lambda profile: ("image-to-video",))
+        with (patch.object(media_probe.studio_runtime, "motion_adapter", return_value=adapter),
+              patch.object(draft_motion_cloud, "_db") as db):
+            with self.assertRaisesRegex(ValueError, "text-to-video"):
+                media_probe._start_video("a" * 32, {}, "Cat")
+            db.assert_not_called()
 
     def test_unknown_provider_error_cannot_authorize_retry(self):
         with self.assertRaises(ValueError):

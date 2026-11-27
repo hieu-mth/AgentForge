@@ -179,6 +179,40 @@ class OrchestratorTests(unittest.TestCase):
                          {"assigned": False, "auto": True, "local": False, "hybrid": True, "cloud": True})
         self.assertEqual(snapshot["production_options"]["auto_min_cloud_seconds"], 12)
 
+    def test_video_routes_follow_declared_input_modes(self):
+        from agentforge.features.film_studio import studio_ltx_cloud
+
+        self.seed()
+        base = {"provider": "ltx_cloud", "enabled": True,
+                **model_hub.ADAPTERS["ltx_cloud"]["environment_defaults"]}
+        text_video = {**base, "id": "text_video", "model": "ltx-2-3-fast"}
+        image_video = {**base, "id": "image_video", "model": "ltx-2-3-pro"}
+
+        def modes(profile):
+            return ("text-to-video",) if profile["model"] == text_video["model"] else ("image-to-video",)
+
+        with patch.object(studio_ltx_cloud, "input_modes", side_effect=modes):
+            for revision, profile in enumerate((text_video, image_video), 2):
+                model_hub.change("SAVE_MODEL_PROFILE", expected_revision=revision, db_path=self.db, profile=profile)
+            self.assertEqual(model_hub.capability_contract("film.motion", text_video)["input_modes"], ["text-to-video"])
+            _, candidates = model_hub.production_candidates("auto", db_path=self.db)
+            self.assertEqual({(c["id"], c["method"]) for c in candidates},
+                             {("text_video", "cloud"), ("image_video", "hybrid")})
+            for profile, bad in ((text_video, "hybrid"), (image_video, "cloud")):
+                with self.assertRaises(ValueError):
+                    model_hub.production_profile(profile["id"], bad, db_path=self.db)
+            self.assertEqual(model_hub.production_profile("text_video", "cloud", db_path=self.db), text_video)
+            self.assertEqual(model_hub.production_profile("image_video", "hybrid", db_path=self.db), image_video)
+            self.assign("general.text", "cloud_primary", revision=4)
+            self.assign("film.storyboard", "cloud_primary", revision=5)
+            p = policy.defaults()
+            p.update(permissions=dict.fromkeys(p["permissions"], True), tools=["ffmpeg"])
+            self.save(p, revision=6)
+            _, bindings = model_hub.draft_routes(db_path=self.db, moving=True, motion_ref="text_video", direct_cloud=True)
+            self.assertNotIn("image.generate", bindings)
+            with self.assertRaisesRegex(ValueError, "text-to-video"):
+                model_hub.draft_routes(db_path=self.db, moving=True, motion_ref="image_video", direct_cloud=True)
+
     def test_planning_candidates_do_not_require_media_permissions(self):
         self.seed()
         video = {"id": "cloud_video", "provider": "ltx_cloud", "model": "ltx-2-3-fast",

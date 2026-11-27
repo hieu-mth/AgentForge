@@ -328,6 +328,7 @@ def capability_contract(capability, profile):
     output = None
     adapter_id = None
     workflow_sha = None
+    input_modes = None
     if adapter and kind in {"text", "vision"}:
         adapter_id = profile["provider"] if kind == "text" else profile["provider"] + "_vision"
         output = {"format": "structured_json"}
@@ -348,6 +349,7 @@ def capability_contract(capability, profile):
         adapter_id = adapter.ADAPTER_ID
         workflow_sha = adapter.workflow_sha(profile)
         spec = adapter.output_profile(profile)
+        input_modes = list(adapter.input_modes(profile))
         output = {"format": "mp4", "fps": spec.fps, "max_frames": spec.max_frames,
                   "resolution": list(spec.resolution)}
     reason = None
@@ -363,6 +365,7 @@ def capability_contract(capability, profile):
             "runtime_compatible": adapter is not None, "local_runtime_compatible": local and adapter is not None,
             "adapter": adapter_id,
             "reason": reason, "output_limits": output, "workflow_sha256": workflow_sha,
+            **({"input_modes": input_modes} if input_modes is not None else {}),
             "configuration_status": "CONFIGURED", "readiness": "NOT_CHECKED"}
 
 
@@ -521,10 +524,15 @@ def _draft_bindings(state, *, moving, planning=False, motion_ref=None, direct_cl
         permission = "call_cloud" if is_cloud(profile) else "call_local"
         if not permissions[permission]:
             raise PermissionError(f"{capability}: chưa cấp quyền {permission} trong AI điều phối.")
-        if not orchestrator_policy.runtime_adapter(orchestrator_policy.KINDS[capability], profile):
+        adapter = orchestrator_policy.runtime_adapter(orchestrator_policy.KINDS[capability], profile)
+        if not adapter:
             raise ModelConfigError(f"{capability}: hồ sơ {ref} không tương thích với adapter Studio.")
-        if capability == "film.motion" and direct_cloud and not is_cloud(profile):
-            raise ModelConfigError("Cloud trực tiếp cần adapter cloud video.")
+        if capability == "film.motion":
+            if direct_cloud and not is_cloud(profile):
+                raise ModelConfigError("Cloud trực tiếp cần adapter cloud video.")
+            mode = "text-to-video" if direct_cloud else "image-to-video"
+            if mode not in adapter.input_modes(profile):
+                raise ModelConfigError(f"film.motion: adapter không hỗ trợ {mode}.")
         bindings[capability] = profile
     return bindings
 
@@ -818,13 +826,22 @@ def production_candidates(strategy, *, db_path=None):
     return revision, _production_candidates(state, strategy)
 
 
+def _video_methods(profile, adapter):
+    modes = adapter.input_modes(profile)
+    if is_cloud(profile):
+        return tuple(method for method, mode in (("cloud", "text-to-video"), ("hybrid", "image-to-video"))
+                     if mode in modes)
+    # Local production currently implements I2V. Do not advertise unimplemented local T2V.
+    return ("local",) if "image-to-video" in modes else ()
+
+
 def _production_candidates(state, strategy):
     candidates = []
     for ident, profile in _profiles(state=state).items():
         if not orchestrator_policy.compatible("video", profile):
             continue
-        methods = ("cloud", "hybrid") if is_cloud(profile) else ("local",)
-        for method in methods:
+        adapter = orchestrator_policy.runtime_adapter("video", profile)
+        for method in _video_methods(profile, adapter):
             if strategy not in {"auto", method}:
                 continue
             try:
@@ -833,11 +850,11 @@ def _production_candidates(state, strategy):
                 execution_ready = False
             else:
                 execution_ready = True
-            adapter = orchestrator_policy.runtime_adapter("video", profile)
             spec = adapter.output_profile(profile)
             item = {"id": ident, "method": method, "model": profile["model"],
                     "max_frames": spec.max_frames,
                     "fps": spec.fps, "min_billable_seconds": 0,
+                    "input_modes": list(adapter.input_modes(profile)),
                     "execution_ready": execution_ready}
             if method != "local":
                 durations = adapter.billable_durations(profile)
@@ -854,7 +871,7 @@ def production_profile(profile_id, method, *, db_path=None):
     _, state = _read_state(db_path=db_path)
     profile = _profiles(state=state).get(profile_id)
     if (not orchestrator_policy.compatible("video", profile)
-            or (method == "local") == is_cloud(profile)):
+            or method not in _video_methods(profile, orchestrator_policy.runtime_adapter("video", profile))):
         raise ModelConfigError("Model video đã thay đổi khi lập kế hoạch.")
     return profile
 

@@ -17,13 +17,20 @@ def validate_entry(entry, index, previous_id):
     return entry
 
 
-def validate(job):
+def validate(job, *, input_modes=None):
+    if input_modes is not None:
+        pinned = job.get("production_plan", {}).get("input_modes")
+        if pinned is not None and set(pinned) != set(input_modes):
+            raise ValueError("Video input capabilities changed; review a new production plan.")
     scenes = job.get("board", {}).get("scenes", []) if job.get("board") else []
     for index, scene in enumerate(scenes):
         if "continuity_plan" in scene:
             if job["brief"].get("mode") != "motion":
                 raise ValueError("Motion continuity needs motion mode")
             validate_entry(scene["continuity_plan"], index, scenes[index-1]["shot_id"] if index else None)
+            if (input_modes is not None and scene["continuity_plan"]["transition"] == "CONTINUE"
+                    and "image-to-video" not in input_modes):
+                raise ValueError("CONTINUE requires a video model accepting the preceding image frame.")
 
 
 def propose(job, infer):
