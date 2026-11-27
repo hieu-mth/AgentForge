@@ -20,6 +20,7 @@ from pathlib import Path
 
 from agentforge.features.film_studio import motion_comfy as motion
 from agentforge.features.media import render
+from agentforge.integrations.comfyui import MAX_MOTION_INPUT_BYTES
 from agentforge.paths import ensure_local_root
 
 MAX_MP4_BYTES = 160 * 1024 * 1024
@@ -27,7 +28,6 @@ MAX_PROBE_BYTES = 16_384
 MAX_PROBE_SECONDS = 30
 MAX_DECODE_SECONDS = 80
 TECHNICAL = "MP4_TECHNICAL_PASS_OWNER_REVIEW_REQUIRED"
-MODEL_ID = "wan2.2_ti2v_5B_fp16"
 CODECS = frozenset({"h264", "hevc", "av1", "mpeg4"})
 
 
@@ -56,14 +56,12 @@ def _job(job_id, db_path):
     if row is None:
         raise KeyError("Motion job not found")
     source = dict(source) if source else {}
-    model_id = source.get("model_id", MODEL_ID)
-    frames = source["frames"] if model_id == motion.motion_ltx.MODEL_ID else None
-    return {**row, "model_id": model_id, "ltx_frames": frames}
+    return {**row, **motion.receipt_contract(source)}
 
 
-def _output_source(root: Path, name: str, job_id: str, *, ltx=False) -> Path:
-    if (not isinstance(name, str) or not re.fullmatch(
-            r"af_motion_" + job_id + r"_[0-9]{5}" + (r"_" if ltx else "") + r"\.mp4", name)):
+def _output_source(root: Path, name: str, job_id: str, *, filename_suffix) -> Path:
+    if (filename_suffix not in {"", "_"} or not isinstance(name, str) or not re.fullmatch(
+            r"af_motion_" + job_id + r"_[0-9]{5}" + filename_suffix + r"\.mp4", name)):
         raise MotionVerificationError("MP4 filename must match this ComfyUI job")
     root = ensure_local_root(Path(root))
     if not root.is_dir():
@@ -93,11 +91,9 @@ def _run(tool: str, args: list[str], *, seconds: int):
     return result.stdout
 
 
-def _probe(path: Path, *, ltx_frames=None):
-    ltx = ltx_frames is not None
-    profile = motion.motion_ltx.profile(ltx_frames) if ltx else motion.PROFILE
-    expected = profile["frames"] / profile["fps"]
-    duration_min, duration_max = (expected - 0.15, expected + 0.15) if ltx else (3.8, 4.5)
+def _probe(path: Path, *, profile, duration_range):
+    """Verify exact decoded frames, dimensions and timing against the receipt contract."""
+    duration_min, duration_max = duration_range
     raw = _run("ffprobe", [
         "-v", "error", "-count_frames", "-select_streams", "v:0",
         "-show_entries", "stream=codec_name,width,height,avg_frame_rate,nb_read_frames"
@@ -123,9 +119,9 @@ def _probe(path: Path, *, ltx_frames=None):
                 or not math.isfinite(duration) or not duration_min <= duration <= duration_max
                 or codec not in CODECS
                 or "mp4" not in info["format_name"]):
-            raise ValueError("Clip is outside the pinned pilot profile")
+            raise ValueError("Clip is outside the approved output profile")
     except (KeyError, IndexError, ValueError, TypeError, AttributeError) as exc:
-        raise MotionVerificationError("MP4 metadata does not meet fixed pilot profile") from exc
+        raise MotionVerificationError("MP4 metadata does not meet approved output profile") from exc
     _run("ffmpeg", ["-hide_banner", "-nostdin", "-v", "error",
                     "-xerror", "-threads", "2", "-i", str(path),
                     "-map", "0:v:0", "-f", "null", "-"],
@@ -178,14 +174,13 @@ def inspect_receipt(job_id, *, film_root=motion.FILMS, db_path=motion.DB, video_
                        ("peak_vram_automatically_measured", "motion_quality_verified",
                         "owner_watched", "video_accepted", "youtube_uploaded"))):
             raise ValueError("Invalid receipt contents")
-        if row["ltx_frames"] is not None:
-            profile = motion.motion_ltx.profile(row["ltx_frames"])
-            technical = value["technical"]
-            if not isinstance(technical, dict) or any(
-                    technical.get(key) != profile[field] for key, field in
-                    (("width", "width"), ("height", "height"), ("fps", "fps"),
-                     ("frames_decoded", "frames"))):
-                raise ValueError("Motion receipt disagrees with its ledger profile")
+        profile = row["profile"]
+        technical = value["technical"]
+        if not isinstance(technical, dict) or any(
+                technical.get(key) != profile[field] for key, field in
+                (("width", "width"), ("height", "height"), ("fps", "fps"),
+                 ("frames_decoded", "frames"))):
+            raise ValueError("Motion receipt disagrees with its ledger profile")
         clip = folder / "clip.mp4"
         ensure_local_root(clip)
         if not clip.is_file() or clip.stat().st_size != value["bytes"]:
@@ -229,7 +224,7 @@ def read_continuation_frame(source, target_slug, *, film_root=motion.FILMS, db_p
         render._run_process([render._ffmpeg(), "-nostdin", "-v", "error", "-xerror", "-threads", "1",
                              "-i", str(clip), "-vf", expression, "-frames:v", "1",
                              "-threads", "1", str(output)], cwd=folder, timeout=60)
-        if not output.is_file() or not 1 <= output.stat().st_size <= motion.motion_ltx.MAX_INPUT_BYTES:
+        if not output.is_file() or not 1 <= output.stat().st_size <= MAX_MOTION_INPUT_BYTES:
             raise MotionVerificationError("Continuation frame unavailable")
         data = output.read_bytes()
     inspect_receipt(source["motion_job"], film_root=film_root, db_path=db_path)
@@ -279,8 +274,7 @@ def import_clip(*, job_id: str, filename: str, output_dir: Path,
              or not math.isfinite(owner_reported_peak_vram_gib)
              or not 0 < owner_reported_peak_vram_gib <= 128)):
         raise MotionVerificationError("Peak VRAM must be a real Owner-observed GiB value")
-    ltx = row["model_id"] == motion.motion_ltx.MODEL_ID
-    source = _output_source(output_dir, filename, job_id, ltx=ltx)
+    source = _output_source(output_dir, filename, job_id, filename_suffix=row["filename_suffix"])
     folder = _dir(row, film_root)
     if folder.exists():
         raise FileExistsError("Motion receipt or staging already exists; never overwrite")
@@ -303,7 +297,7 @@ def import_clip(*, job_id: str, filename: str, output_dir: Path,
                 digest.update(block)
         if length != source.stat().st_size or length < 1024:
             raise MotionVerificationError("MP4 changed during local import")
-        technical = _probe(destination, ltx_frames=row["ltx_frames"])
+        technical = _probe(destination, profile=row["profile"], duration_range=row["duration_range"])
         elapsed = (datetime.now(timezone.utc)
                    - datetime.fromisoformat(row["created_at"])).total_seconds()
         body = {"format": "agentforge.film.motion.receipt.v1",

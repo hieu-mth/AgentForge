@@ -147,12 +147,12 @@ class MotionAdapterTests(unittest.TestCase):
                 (motion.comfy_service, "_settings", {"port": motion.PORT, "install_root": self.root}),
                 (motion.comfy_service, "ensure_running", True),
                 (ltx, "verify_weights", None),
-                (ltx, "read_source", b"fixture image"),
-                (ltx, "upload_source", "af_motion_source_" + "c" * 32 + ".png"),
+                (motion.visual_jobs, "read_motion_source", b"fixture image"),
+                (motion._comfyui, "upload_motion_source", "af_motion_source_" + "c" * 32 + ".png"),
                 (ltx, "check_runtime", []),
             ):
                 mocks.enter_context(patch.object(target, name, return_value=value))
-            with (patch.object(ltx, "upload_source", side_effect=ValueError("Invalid ComfyUI upload response")) as upload,
+            with (patch.object(motion._comfyui, "upload_motion_source", side_effect=ValueError("Invalid ComfyUI upload response")) as upload,
                   patch.object(motion, "_json_request") as request,
                   patch.object(motion.ops_control, "require_active"),
                   patch.object(motion, "health", return_value={"status": "GPU_DETECTED_UNBENCHMARKED"}),
@@ -206,10 +206,10 @@ class MotionAdapterTests(unittest.TestCase):
                 (ltx, "check_runtime", []),
             ):
                 mocks.enter_context(patch.object(target, name, return_value=value))
-            mocks.enter_context(patch.object(ltx, "read_source", side_effect=AssertionError("FLUX source used")))
+            mocks.enter_context(patch.object(motion.visual_jobs, "read_motion_source", side_effect=AssertionError("FLUX source used")))
             extract = mocks.enter_context(patch.object(motion_verify, "read_continuation_frame",
                                                        return_value=(marker, png)))
-            upload = mocks.enter_context(patch.object(ltx, "upload_source", return_value="frame.png"))
+            upload = mocks.enter_context(patch.object(motion._comfyui, "upload_motion_source", return_value="frame.png"))
             result, transport = self.submit(confirm_ltx_gate_b=True, image_job="c"*32,
                                             image_sha="d"*64, ltx_encoder=self.root / ltx.ENCODER,
                                             previous_motion=source)
@@ -221,8 +221,7 @@ class MotionAdapterTests(unittest.TestCase):
                                (result["job_id"],)).fetchone()
         self.assertEqual(tuple(row), (marker, hashlib.sha256(png).hexdigest()))
 
-    def test_ltx_upload_response_contract(self):
-        ltx = motion.motion_ltx
+    def test_motion_upload_response_contract(self):
         job_id = "c" * 32
         name = f"af_motion_source_{job_id}.png"
         core = {"name": name, "subfolder": "", "type": "input"}
@@ -236,16 +235,16 @@ class MotionAdapterTests(unittest.TestCase):
         cases.extend((raw, False) for raw in (b"{", b"<html>", b"[]", b"null", b" " * 4097,
                                               b"\xff", b'{"name":"missing-fields.png"}'))
         for raw, accepted in cases:
-            with self.subTest(raw=raw[:150], accepted=accepted), patch.object(ltx.http.client, "HTTPConnection") as client:
+            with self.subTest(raw=raw[:150], accepted=accepted), patch.object(motion._comfyui.http.client, "HTTPConnection") as client:
                 connection = client.return_value
                 response = connection.getresponse.return_value
                 response.status = 200
                 response.read.return_value = raw
                 if accepted:
-                    self.assertEqual(ltx.upload_source(8188, job_id, b"fixture"), name)
+                    self.assertEqual(motion._comfyui.upload_motion_source(8188, job_id, b"fixture"), name)
                 else:
                     with self.assertRaisesRegex(ValueError, "ComfyUI .*upload response|unexpected input filename"):
-                        ltx.upload_source(8188, job_id, b"fixture")
+                        motion._comfyui.upload_motion_source(8188, job_id, b"fixture")
                 connection.request.assert_called_once()
                 self.assertEqual(connection.request.call_args.args, ("POST", "/upload/image"))
                 response.read.assert_called_once_with(4097)
