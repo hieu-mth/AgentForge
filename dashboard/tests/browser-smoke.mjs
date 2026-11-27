@@ -762,10 +762,20 @@ try {
   await listOAuth.waitFor();
   if(oauthChecks!==2||oauthLists||await checkOAuth.count()||await recheckOAuth.count())
     throw new Error('Connected OAuth must hide redundant check and not fetch models automatically');
+  const catalogResponse=settings.waitForResponse(response=>response.url().endsWith('/api/model-hub/chatgpt')&&
+    response.request().method()==='POST'&&response.request().postDataJSON().ack==='LIST_CHATGPT_MODELS');
   await listOAuth.click();
+  const catalogReply=await catalogResponse;
+  if(!catalogReply.ok())throw new Error('Explicit OAuth catalog request failed: '+catalogReply.status());
   await registerDialog.getByRole('combobox',{name:'Model ChatGPT',exact:true}).waitFor();
-  await registerDialog.getByRole('button',{name:'Cập nhật danh sách model',exact:true}).waitFor();
-  if(oauthLists!==1||await checkOAuth.count()||await recheckOAuth.count()||await listOAuth.count())
+  const catalogAction=registerDialog.getByTestId('chatgpt-catalog-action');
+  await settings.waitForFunction(()=>{
+    const button=document.querySelector('.model-profile-dialog [data-testid="chatgpt-catalog-action"]');
+    return button&&!button.disabled&&button.getAttribute('aria-label')==='Cập nhật danh sách model'&&
+      !button.classList.contains('ant-btn-loading');
+  });
+  if(oauthLists!==1||await checkOAuth.count()||await recheckOAuth.count()||await listOAuth.count()||
+     (await catalogAction.innerText()).trim()!=='Cập nhật danh sách model')
     throw new Error('Explicit catalog request missing or obsolete OAuth actions remain');
   const cloudAdapter=registerDialog.getByRole('combobox',{name:'Chuẩn kết nối'});
   await cloudAdapter.click();
