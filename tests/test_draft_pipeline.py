@@ -446,7 +446,7 @@ class DraftTests(unittest.TestCase):
                            "base_url": "http://127.0.0.1:11434"}
                 self.assertEqual(draft._ask(profile, "Plan", {}, {}, None), {"ready": True})
                 self.assertEqual(call.call_args.kwargs["payload"]["model"], name)
-            with self.assertRaisesRegex(ValueError, "supported text API or local runtime"):
+            with self.assertRaisesRegex(ValueError, "No unique runtime adapter for text"):
                 draft._ask({"provider": "unsupported"}, "Plan", {}, {}, None)
             self.assertEqual(call.call_count, 2)
         self.assertIs(studio_runtime.image_adapter(flux_profile()), studio_flux)
