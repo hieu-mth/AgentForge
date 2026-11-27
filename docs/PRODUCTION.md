@@ -95,7 +95,7 @@ Kết quả PASS/FAIL/UNCERTAIN chỉ đánh giá các frame mẫu, không xác 
 
 ## Kiểm tra chất lượng và so sánh video
 
-On an executable rollback, leave drafts using the creative plan paused until the compatible build is restored. Older builds do not understand this layout or its approval digest. Registry rollback to the exact pinned profile remains supported by the existing dispatch guard.
+On an executable rollback, leave drafts using the creative plan paused until the compatible build is restored. Older builds do not understand this layout or its approval digest. Restoring the exact pinned profile and assignments through normal registry edits remains supported by the existing dispatch guard.
 
 Use separate draft, visual and motion ledgers and workspace paths for the baseline and candidate. Hold the script, enabled Model Hub assignments, workflow, encoder and rendering settings constant. Approve each storyboard through the existing Owner gate before media dispatch.
 

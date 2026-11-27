@@ -216,9 +216,8 @@ try {
   await page2.waitForURL('**/#/models');
   const hub=page2.locator('.model-hub');
   await hub.getByText('Đã bật',{exact:true}).waitFor();
-  await hub.getByRole('button',{name:'Khôi phục phiên bản trước'}).click();
-  const restoreDialog=page2.getByRole('dialog',{name:'Khôi phục cấu hình về phiên bản 1?'});
-  await restoreDialog.getByRole('button',{name:'Hủy'}).click();
+  if(await hub.getByRole('button',{name:'Khôi phục phiên bản trước',exact:true}).count())
+    throw new Error('Obsolete Model Hub rollback action is still visible');
   await page2.setViewportSize({width:390,height:850});
   const modelDetails=hub.locator('.hub-table').first().getByText('Chi tiết',{exact:true});
   await modelDetails.click();
@@ -746,7 +745,8 @@ try {
   });
   await registerDialog.getByText('Cloud',{exact:true}).click();
   await registerDialog.getByText('Kết nối ChatGPT qua OAuth',{exact:true}).waitFor();
-  const checkOAuth=registerDialog.locator('button[aria-label="Kiểm tra"]');
+  const checkOAuth=registerDialog.getByRole('button',{name:'Kiểm tra',exact:true});
+  const recheckOAuth=registerDialog.getByRole('button',{name:'Kiểm tra lại',exact:true});
   const listOAuth=registerDialog.getByRole('button',{name:'Lấy danh sách model',exact:true});
   await checkOAuth.waitFor();
   if(oauthChecks||oauthLists||await listOAuth.count())
@@ -755,16 +755,28 @@ try {
   await registerDialog.getByRole('button',{name:'Liên kết ChatGPT',exact:true}).waitFor();
   if(oauthChecks!==1||oauthLists||await listOAuth.count())
     throw new Error('Disconnected account must not expose the model catalog');
+  if(await checkOAuth.count())throw new Error('Initial OAuth check is still visible after disconnected result');
   oauthConnected=true;
-  await settings.waitForFunction(()=>{const b=document.querySelector('.model-profile-dialog button[aria-label="Kiểm tra"]');return b&&!b.disabled&&!b.classList.contains("ant-btn-loading");});
-  await checkOAuth.click();
+  await recheckOAuth.click();
   await registerDialog.getByText('Đã kết nối tài khoản ChatGPT',{exact:true}).waitFor();
   await listOAuth.waitFor();
-  if(oauthChecks!==2||oauthLists)throw new Error('Checking OAuth must not fetch models automatically');
+  if(oauthChecks!==2||oauthLists||await checkOAuth.count()||await recheckOAuth.count())
+    throw new Error('Connected OAuth must hide redundant check and not fetch models automatically');
+  const catalogResponse=settings.waitForResponse(response=>response.url().endsWith('/api/model-hub/chatgpt')&&
+    response.request().method()==='POST'&&response.request().postDataJSON().ack==='LIST_CHATGPT_MODELS');
   await listOAuth.click();
+  const catalogReply=await catalogResponse;
+  if(!catalogReply.ok())throw new Error('Explicit OAuth catalog request failed: '+catalogReply.status());
   await registerDialog.getByRole('combobox',{name:'Model ChatGPT',exact:true}).waitFor();
-  await settings.waitForFunction(()=>{const b=document.querySelector('.model-profile-dialog button[aria-label="Kiểm tra"]');return b&&!b.disabled&&!b.classList.contains("ant-btn-loading");});
-  if(oauthLists!==1)throw new Error('Explicit catalog request missing');
+  const catalogAction=registerDialog.getByTestId('chatgpt-catalog-action');
+  await settings.waitForFunction(()=>{
+    const button=document.querySelector('.model-profile-dialog [data-testid="chatgpt-catalog-action"]');
+    return button&&!button.disabled&&button.getAttribute('aria-label')==='Cập nhật danh sách model'&&
+      !button.classList.contains('ant-btn-loading');
+  });
+  if(oauthLists!==1||await checkOAuth.count()||await recheckOAuth.count()||await listOAuth.count()||
+     (await catalogAction.innerText()).trim()!=='Cập nhật danh sách model')
+    throw new Error('Explicit catalog request missing or obsolete OAuth actions remain');
   const cloudAdapter=registerDialog.getByRole('combobox',{name:'Chuẩn kết nối'});
   await cloudAdapter.click();
   const cloudLabels=['ChatGPT','OpenAI API','Anthropic API','LTX Video API','Agnes AI','ElevenLabs API'];

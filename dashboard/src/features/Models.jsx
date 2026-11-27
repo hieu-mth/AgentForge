@@ -108,11 +108,6 @@ export function ModelHub({mutate}) {
   },'Xóa hồ sơ model '+row.id+'?',
   'Chỉ xóa hồ sơ cấu hình khỏi SQLite. Không xóa weights hay file của Owner. Nếu hồ sơ đang được phân công, backend sẽ từ chối.');
 
-  const rollback=()=>update('/api/model-hub/rollback',{
-    ack:'ROLLBACK_MODEL_HUB',expected_revision:hub.revision,target_revision:hub.revision-1,
-  },'Khôi phục cấu hình về phiên bản '+(hub.revision-1)+'?',
-  'Danh sách model và chính sách điều phối sẽ được khôi phục cùng nhau. Hệ thống sẽ lưu kết quả thành một phiên bản mới.');
-
   const profileActions=row=><Space wrap size={6}>
     {profileCapability(row)?.runtime_compatible&&
       <AppTooltip title="Kiểm tra metadata endpoint; không sinh nội dung">
@@ -209,11 +204,6 @@ export function ModelHub({mutate}) {
           {title:'Thao tác',responsive:desktopColumns,render:(_,row)=>profileActions(row)},
         ]}/>
     </Card>
-    <div className="model-history">
-      <Button type="text" size="small" icon={<HistoryOutlined/>} disabled={!hub?.revision} onClick={rollback}>
-        Khôi phục phiên bản trước
-      </Button>
-    </div>
     {editor&&<ModelProfileDialog adapters={adapters} profile={editor.profile}
       profiles={profiles} revision={editor.revision} labels={labels} onCancel={()=>setEditor(null)} onSave={saveProfile}
       onReload={reloadEditor}

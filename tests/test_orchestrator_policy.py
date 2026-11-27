@@ -1,4 +1,4 @@
-"""Current DB policy persistence, guardrails, and rollback."""
+"""Current DB policy persistence and guardrails."""
 import copy
 import json
 from contextlib import closing
@@ -88,7 +88,7 @@ class OrchestratorTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "does not support task"):
             self.assign("film.motion", "local_primary", revision=2)
 
-    def test_save_reset_and_rollback_share_existing_route_and_revision(self):
+    def test_save_reset_and_resave_share_existing_route_and_revision(self):
         self.seed()
         values = {**policy.defaults(), "permissions": {**policy.defaults()["permissions"], "plan": True}}
         self.assign("general.text", "cloud_primary", revision=2)
@@ -101,10 +101,9 @@ class OrchestratorTests(unittest.TestCase):
         reset = model_hub.change("RESET_ORCHESTRATOR", expected_revision=4, db_path=self.db)
         self.assertFalse(reset["orchestrator"]["owner_override"])
         self.assertEqual(reset["routes"], result["routes"])
-        restored = model_hub.change("ROLLBACK_MODEL_HUB", expected_revision=5,
-                                    target_revision=4, db_path=self.db)
-        self.assertEqual(restored["orchestrator"]["policy"], values)
-        self.assertEqual(model_hub.catalog(db_path=self.db), restored)
+        resaved = self.save(values, revision=5)
+        self.assertEqual(resaved["orchestrator"]["policy"], values)
+        self.assertEqual(model_hub.catalog(db_path=self.db), resaved)
 
     def test_obsolete_policy_is_rejected_without_rewriting_database(self):
         self.seed()

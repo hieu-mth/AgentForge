@@ -40,6 +40,8 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
   const [chatgpt,setChatgpt]=useState(null);
   const [chatgptError,setChatgptError]=useState(null);
   const currentChatGPT=chatgpt?.account_ref===accountRef?chatgpt:null;
+  const catalogLoaded=Boolean(currentChatGPT?.models?.length);
+  const catalogActionLabel=catalogLoaded?'Cập nhật danh sách model':'Lấy danh sách model';
   const adapter=adapters.find(item=>item.id===provider);
   const [useEnv,setUseEnv]=useState(Boolean(profile?.api_key_env));
   const directCloud=connection==='cloud'&&!useEnv&&provider!=='chatgpt';
@@ -84,7 +86,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
     setOauthAction(ack);
     setSaving(true);
     setChatgptError(null);
-    if(ack==='CHATGPT_STATUS'||ack==='DISCONNECT_CHATGPT')setChatgpt(null);
+    if(ack==='CHATGPT_STATUS')setChatgpt(null);
     try{
       const {account_ref}=await form.validateFields(['account_ref']);
       const result=await onChatGPTAction(ack,account_ref);
@@ -94,6 +96,9 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
       if(ack==='DISCONNECT_CHATGPT'||!result.connected)
         form.setFieldValue('model',undefined);
     }catch(error){
+      // An account action may have failed after changing local credentials.
+      // Do not continue to present a possibly stale connected state or catalog.
+      setChatgpt(null);
       setChatgptError(requestError(error));
     }finally{
       oauthLock.current=false;
@@ -207,16 +212,22 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         <Input placeholder={directCloud?'https://api.example.com':example} spellCheck={false}/>
       </Form.Item>)}
       {provider==='chatgpt'&&<>
-        <Alert type="info" showIcon message={currentChatGPT?.connected?'Đã kết nối tài khoản ChatGPT':currentChatGPT?'Chưa kết nối tài khoản ChatGPT':'Kết nối ChatGPT qua OAuth'} style={{marginBottom:12}}
+        <Alert type={currentChatGPT?.connected?'success':'info'} showIcon message={currentChatGPT?.connected?'Đã kết nối tài khoản ChatGPT':currentChatGPT?'Chưa kết nối tài khoản ChatGPT':'Kết nối ChatGPT qua OAuth'} style={{marginBottom:12}}
           description={<div style={{display:'grid',gridTemplateColumns:'minmax(0, 1fr)',gap:8}}>
             {!currentChatGPT?.connected&&<p style={{margin:0}}>Liên kết mở trình duyệt OpenAI trên máy chạy AgentForge. Không nhập mật khẩu, cookie hoặc token tại đây.</p>}
             <Space wrap>
-              <Button type="primary" aria-label="Kiểm tra" loading={oauthAction==='CHATGPT_STATUS'}
-                onClick={()=>chatgptAction('CHATGPT_STATUS')}>Kiểm tra</Button>
-              {currentChatGPT?.connected===false&&<Button loading={oauthAction==='CONNECT_CHATGPT'}
-                onClick={()=>chatgptAction('CONNECT_CHATGPT')}>Liên kết ChatGPT</Button>}
-              {currentChatGPT?.connected&&<Button onClick={()=>chatgptAction('LIST_CHATGPT_MODELS')}>Lấy danh sách model</Button>}
-              {currentChatGPT?.connected&&<Button danger onClick={()=>Modal.confirm({
+              {!currentChatGPT&&<Button key="check-account" type="primary" aria-label="Kiểm tra" disabled={saving} loading={oauthAction==='CHATGPT_STATUS'}
+                onClick={()=>chatgptAction('CHATGPT_STATUS')}>Kiểm tra</Button>}
+              {currentChatGPT?.connected===false&&<>
+                <Button key="connect-account" type="primary" disabled={saving} loading={oauthAction==='CONNECT_CHATGPT'}
+                  onClick={()=>chatgptAction('CONNECT_CHATGPT')}>Liên kết ChatGPT</Button>
+                <Button key="recheck-account" type="text" aria-label="Kiểm tra lại" disabled={saving} onClick={()=>chatgptAction('CHATGPT_STATUS')}>Kiểm tra lại</Button>
+              </>}
+              {currentChatGPT?.connected&&<Button key="catalog" type={catalogLoaded?'default':'primary'}
+                aria-label={catalogActionLabel} data-testid="chatgpt-catalog-action" disabled={saving}
+                loading={oauthAction==='LIST_CHATGPT_MODELS'}
+                onClick={()=>chatgptAction('LIST_CHATGPT_MODELS')}>{catalogActionLabel}</Button>}
+              {currentChatGPT?.connected&&<Button key="disconnect-account" danger disabled={saving} loading={oauthAction==='DISCONNECT_CHATGPT'} onClick={()=>Modal.confirm({
                 title:'Ngắt kết nối tài khoản ChatGPT?',
                 content:'Phiên OAuth local sẽ bị xóa; các hồ sơ dùng tài khoản này cần kết nối lại để chạy.',
                 onOk:()=>chatgptAction('DISCONNECT_CHATGPT'),
@@ -229,12 +240,12 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
           </div>}/>
         <Form.Item name="model" label="Model ChatGPT" rules={[{required:true,message:'Lấy danh sách rồi chọn model.'}]}>
           {currentChatGPT?.models?.length>0?<Select showSearch={false} autoComplete="off"
-            placeholder="Kiểm tra kết nối rồi lấy danh sách model"
+            placeholder="Chọn model ChatGPT"
             options={[
               ...(profile?.model&&!currentChatGPT?.models?.some(item=>item.slug===profile.model)&&profile.account_ref===accountRef
                 ?[{value:profile.model,label:profile.model+' · Đã lưu'}]:[]),
               ...(currentChatGPT?.models||[]).map(item=>({value:item.slug,label:item.display_name||item.slug})),
-            ]}/>:<Input className="model-dialog-locked-value" disabled readOnly placeholder="Kiểm tra kết nối rồi lấy danh sách model"/>}
+            ]}/>:<Input className="model-dialog-locked-value" disabled readOnly placeholder={currentChatGPT?.connected?'Lấy danh sách model để chọn':'Kiểm tra kết nối trước'}/>}
         </Form.Item>
       </>}
       {directCloud&&<Form.Item name="api_key" label="API key" dependencies={['base_url']}

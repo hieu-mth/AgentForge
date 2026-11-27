@@ -322,7 +322,7 @@ class ModelHubTests(unittest.TestCase):
 
 
 class ModelHubReadinessHttpTests(OwnerHttpFixture):
-    def test_workflow_preview_crud_routes_and_rollback(self):
+    def test_workflow_preview_crud_routes_and_removed_rollback(self):
         db = self.root / "hub.sqlite3"
         profile = flux_profile()
         preview_path = "/api/model-hub/profile/preview"
@@ -369,11 +369,10 @@ class ModelHubReadinessHttpTests(OwnerHttpFixture):
             new = next(c for c in edited["profiles"][0]["capability_contracts"] if c["capability"] == "image.generate")
             self.assertNotEqual(initial["workflow_sha256"], new["workflow_sha256"])
             self.assertFalse(new["route_configurable"])
-            status, restored = post("/api/model-hub/rollback", "ROLLBACK_MODEL_HUB", 3, target_revision=2)
-            self.assertEqual(status, 200)
-            self.assertTrue(restored["profiles"][0]["enabled"])
-            self.assertEqual(post("/api/model-hub/reset", "RESET_MODEL_ROUTE", 4, task_id="image.generate")[0], 200)
-            status, deleted = post("/api/model-hub/profile/delete", "DELETE_MODEL_PROFILE", 5,
+            self.assertNotEqual(post("/api/model-hub/rollback", "ROLLBACK_MODEL_HUB", 3, target_revision=2)[0], 200)
+            self.assertEqual(model_hub.catalog()["revision"], 3)
+            self.assertEqual(post("/api/model-hub/reset", "RESET_MODEL_ROUTE", 3, task_id="image.generate")[0], 200)
+            status, deleted = post("/api/model-hub/profile/delete", "DELETE_MODEL_PROFILE", 4,
                                    profile_id=profile["id"])
             self.assertEqual(status, 200)
             self.assertEqual(deleted["profiles"], [])

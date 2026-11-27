@@ -903,13 +903,13 @@ def _update_route(updated, task_id, model_ref):
 
 
 def change(action, *, expected_revision, db_path=None, profile=None, profile_id=None,
-           task_id=None, model_ref=None, target_revision=None, policy=None,
+           task_id=None, model_ref=None, policy=None,
            api_key=None, intent=None, route_changes=None):
-    """CAS-guarded Owner mutation; snapshot history supports explicit rollback."""
+    """CAS-guarded Owner mutation; history verifies pinned Studio bindings."""
     if type(expected_revision) is not int or expected_revision < 0:
         raise ValueError("Expected non-negative revision")
     if action not in {"SAVE_MODEL_PROFILE", "DELETE_MODEL_PROFILE",
-                      "SET_MODEL_ROUTE", "RESET_MODEL_ROUTE", "ROLLBACK_MODEL_HUB",
+                      "SET_MODEL_ROUTE", "RESET_MODEL_ROUTE",
                       "SAVE_ORCHESTRATOR", "RESET_ORCHESTRATOR"}:
         raise PermissionError("Unknown Model Hub action")
     path = _database(db_path)
@@ -960,16 +960,6 @@ def change(action, *, expected_revision, db_path=None, profile=None, profile_id=
         elif action == "RESET_ORCHESTRATOR":
             # Reset execution permissions, not model assignments.
             updated.pop("orchestrator", None)
-        else:
-            if (type(target_revision) is not int or target_revision < 0
-                    or target_revision >= revision):
-                raise ValueError("Invalid rollback revision")
-            row = conn.execute(
-                "SELECT payload FROM hub_history WHERE revision=?",
-                (target_revision,)).fetchone()
-            if row is None:
-                raise ValueError("Rollback snapshot not available")
-            updated = json.loads(row[0])
         _validate_state(updated)
         moment = datetime.now(timezone.utc).isoformat(timespec="seconds")
         conn.execute("INSERT OR IGNORE INTO hub_history VALUES(?,?,?,?)",
