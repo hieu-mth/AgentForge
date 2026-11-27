@@ -26,7 +26,7 @@ const labels={QUEUED:'Đã tiếp nhận',PLANNING:'Đang lập kế hoạch',ST
   IMAGES:'Đang tạo ảnh từng cảnh',MOTION:'Đang tạo chuyển động',RENDER:'Đang dựng MP4',VERIFY:'Đang xác minh MP4',
   REVIEW:'Video hoàn chỉnh · chờ duyệt',RUNNING:'Đang sản xuất',
   FAILED:'Cần xử lý',APPROVED:'Đã duyệt',REJECTED:'Đã từ chối',
-  WAITING_RESOURCES:'Chờ tài nguyên',CANCELLED:'Đã hủy'};
+  WAITING_RESOURCES:'Chờ tài nguyên',WAITING_CLOUD_RESOURCES:'Chờ tài nguyên Cloud',CANCELLED:'Đã hủy'};
 const warnings={RAM_LOW:'RAM khả dụng không đủ',COMMIT_LOW:'Hạn mức bộ nhớ cam kết không đủ',
   VRAM_LOW:'VRAM khả dụng không đủ',GPU_BUSY:'Một tác vụ local đang sử dụng GPU',
   RAM_UNAVAILABLE:'Không đo được RAM khả dụng',COMMIT_UNAVAILABLE:'Không đo được dư địa commit Windows',
@@ -48,7 +48,7 @@ function usage(total,available,format) {
 
 const historyStates=new Set(['APPROVED','REJECTED','CANCELLED']);
 const statusColors={RUNNING:'processing',QUEUED:'blue',STORYBOARD_REVIEW:'orange',REVIEW:'orange',FAILED:'error',
-  WAITING_RESOURCES:'warning',APPROVED:'success'};
+  WAITING_RESOURCES:'warning',WAITING_CLOUD_RESOURCES:'warning',APPROVED:'success'};
 const draftDate=new Intl.DateTimeFormat('vi-VN',{dateStyle:'short',timeStyle:'short'});
 
 const draftTimestamp=job=>Number.isFinite(Date.parse(job.updated_at))?job.updated_at:job.created_at;
@@ -112,7 +112,7 @@ export function StudioDrafts({mutate,onCharacters}) {
   const preview=drafts.find(job=>job.id===previewId&&job.video_sha);
   const listError=resource.error?draftError(resource.error):
     data&&!Array.isArray(data.drafts)?'API bản nháp trả dữ liệu không hợp lệ.':null;
-  const active=drafts.find(job=>job.status==='RUNNING'&&job.worker_active);
+  const active=drafts.find(job=>['RUNNING','WAITING_CLOUD_RESOURCES'].includes(job.status)&&job.worker_active);
   const featured=selectedId===null?visibleDrafts[0]:visibleDrafts.find(job=>job.id===selectedId);
   const reviewing=drafts.find(job=>job.id===storyboardId&&job.board);
   const sourceDraft=drafts.find(job=>job.id===sourceId);
@@ -122,7 +122,7 @@ export function StudioDrafts({mutate,onCharacters}) {
   const [minScenes,maxScenes]=storyboardShotLimits(reviewing);
   const running=!listError&&Boolean(active);
   const queued=drafts.filter(job=>job.status==='QUEUED').length;
-  const waiting=drafts.filter(job=>job.status==='WAITING_RESOURCES').length;
+  const waiting=drafts.filter(job=>['WAITING_RESOURCES','WAITING_CLOUD_RESOURCES'].includes(job.status)).length;
   useEffect(()=>{
     if(!running&&!waiting&&!queued)return;
     const timer=setInterval(refreshCapacity,15000);
@@ -170,7 +170,7 @@ export function StudioDrafts({mutate,onCharacters}) {
   function draftAction(job) {
     const canDelete=['CANCELLED','FAILED','STORYBOARD_REVIEW'].includes(job.status)&&
       !job.video_sha&&!job.storyboard_history?.some(entry=>entry.video_sha);
-    const canCancel=['QUEUED','RUNNING','WAITING_RESOURCES'].includes(job.status)||
+    const canCancel=['QUEUED','RUNNING','WAITING_RESOURCES','WAITING_CLOUD_RESOURCES'].includes(job.status)||
       (job.status==='INTERRUPTED'&&job.stage!=='MOTION');
     if(!canCancel&&!canDelete)return null;
     const label=canDelete?'Xóa bản nháp':'Hủy tác vụ';
@@ -265,7 +265,7 @@ export function StudioDrafts({mutate,onCharacters}) {
       items={visibleDrafts.map(job=>({key:job.id,
         label:<DraftLabel job={job}/>,
         extra:<div className="draft-row-actions">
-          {['QUEUED','WAITING_RESOURCES','INTERRUPTED','NEEDS_RECONCILIATION','FAILED'].includes(job.status)&&
+          {['QUEUED','WAITING_RESOURCES','WAITING_CLOUD_RESOURCES','INTERRUPTED','NEEDS_RECONCILIATION','FAILED'].includes(job.status)&&
             <AppTooltip title="Tiếp tục từ checkpoint"><Button size="small" type="text" className="draft-icon-action"
               disabled={pending||running} icon={<CaretRightFilled/>}
               aria-label="Tiếp tục từ checkpoint"
@@ -279,7 +279,7 @@ export function StudioDrafts({mutate,onCharacters}) {
                 if(retryJob){
                   modal.confirm({
                     title:'Thử lại shot chuyển động bị lỗi?',
-                    content:'Studio sẽ tạo lần chạy mới cho shot lỗi và tiếp tục từ checkpoint. Các ảnh và clip đã xác minh được dùng lại.',
+                    content:'Studio sẽ thử lại shot đã được xác nhận thất bại hoặc bị từ chối, không gửi lại job chưa rõ kết quả. Ảnh và clip đã xác minh được dùng lại.',
                     okText:'Thử lại và tiếp tục',
                     cancelText:'Để sau',
                     onOk:()=>run('/'+job.id+'/resume',{retry_motion_job:retryJob}),
@@ -292,6 +292,9 @@ export function StudioDrafts({mutate,onCharacters}) {
         </div>,
         children:<>
           <ProductionProgress job={job} labels={labels} warnings={warnings}/>
+          {job.status==='WAITING_CLOUD_RESOURCES'&&job.cloud_wait&&<Alert type="info" showIcon
+            message={`Cloud đang đầy · lần thử lại ${job.cloud_wait.attempt}/${job.cloud_wait.max_retries}`}
+            description={`Dự kiến gửi lại lúc ${new Date(job.cloud_wait.retry_at*1000).toLocaleTimeString('vi-VN')}. Giữ nguyên ảnh và clip đã tạo.`}/> }
           {job.status==='NEEDS_RECONCILIATION'&&['cloud','hybrid'].includes(job.production_plan?.method)&&
             <Button disabled={pending||running} onClick={()=>inspectCloudJobs(job)}>Đối soát job cloud</Button>}
           {!job.board&&<Button type="default" aria-label="Xem nội dung video" icon={<FileTextOutlined/>}
@@ -356,13 +359,31 @@ export function StudioDrafts({mutate,onCharacters}) {
             provider_id:values.provider_id,owner_matched:true,
           },()=>setReconcile(null))}>
             <Form.Item name="provider_id" label="Provider job ID đã đối chiếu" rules={[{required:true,pattern:/^[A-Za-z0-9_-]{1,160}$/}]}>
-              <Input maxLength={32}/>
+              <Input maxLength={160}/>
             </Form.Item>
             <Form.Item name="owner_matched" rules={[{validator:(_,v)=>v?Promise.resolve():Promise.reject(new Error('Cần xác nhận đối chiếu'))}]}>
               <Select placeholder="Xác nhận đã đối chiếu" options={[{value:true,label:'Tôi đã xác nhận đây là request cũ'}]}/>
             </Form.Item>
             <Button htmlType="submit" disabled={pending} type="primary">Gắn lại ID (không tạo video mới)</Button>
           </Form>}
+        {!row.provider_id&&<details style={{marginTop:12}}>
+          <summary>Nhà cung cấp đã xác nhận request cũ bị từ chối</summary>
+          <Alert type="warning" showIcon message="Chỉ dùng nếu có xác nhận cho đúng request gốc."
+            description="Lỗi từ một lần test PowerShell khác không phải bằng chứng. Không dùng khi chỉ không tìm thấy video. AgentForge không xác minh được lời xác nhận này độc lập."/>
+          <Form layout="vertical" onFinish={values=>run('/'+reconcile.job.id+'/cloud-rejected',{
+            sha256:reconcile.job.approved_storyboard_sha,motion_job:row.id,request_sha:row.request_sha,
+            provider_request_id:values.provider_request_id,owner_confirmed_rejected:true,
+          },()=>setReconcile(null))}>
+            <Form.Item name="provider_request_id" label="Mã request gốc được nhà cung cấp xác nhận từ chối"
+              rules={[{required:true,pattern:/^[A-Za-z0-9_-]{8,160}$/}]}>
+              <Input maxLength={160}/>
+            </Form.Item>
+            <Form.Item name="confirmed" rules={[{validator:(_,v)=>v===true?Promise.resolve():Promise.reject(new Error('Cần xác nhận bằng chứng'))}]}>
+              <Select placeholder="Xác nhận bằng chứng" options={[{value:true,label:'Đúng request gốc, đã xác nhận không tạo job'}]}/>
+            </Form.Item>
+            <Button htmlType="submit" disabled={pending}>Ghi nhận từ chối (không tự tạo lại)</Button>
+          </Form>
+        </details>}
       </Card>)}
     </Modal>}
     {sourceDraft&&<Modal open centered width={760} rootClassName="script-reader" title="Nội dung video"

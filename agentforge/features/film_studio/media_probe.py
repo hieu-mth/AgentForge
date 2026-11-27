@@ -6,7 +6,7 @@ from contextlib import closing
 
 from agentforge import ops_control
 from agentforge.ai import model_hub
-from agentforge.features.film_studio import draft_motion_cloud as motion, studio_runtime
+from agentforge.features.film_studio import draft_motion_cloud as motion, studio_runtime, studio_agnes
 from agentforge.features.film_studio.draft_resources import NeedsReconciliation
 from agentforge.features.media import visual_jobs
 from agentforge.paths import ensure_local_root
@@ -37,8 +37,10 @@ def verify_video(row, stream):
 
 def _video_reply(row):
     state = row["state"]
+    detail = motion.submission_error(row["id"]) if state == "REJECTED" else None
     return {"probe_id": row["id"], "status": {"VERIFIED": "ASSET_READY", "SUBMITTING": "NEEDS_RECONCILIATION"}.get(state, state),
-            "preview_url": "/api/model-hub/media-probe/" + row["id"] + "/preview" if state == "VERIFIED" else None}
+            "preview_url": "/api/model-hub/media-probe/" + row["id"] + "/preview" if state == "VERIFIED" else None,
+            **({"error": detail["message"]} if detail else {})}
 
 
 def _image_reply(ident, profile):
@@ -50,8 +52,10 @@ def _image_reply(ident, profile):
     if ready:
         with visual_jobs.open_image_for_job(ident):
             pass
-    return {"probe_id": ident, "status": "ASSET_READY" if ready else "NEEDS_RECONCILIATION",
-            "preview_url": "/api/visuals/" + ident + "/preview" if ready else None}
+    return {"probe_id": ident, "status": "ASSET_READY" if ready else
+            ("REJECTED" if row["status"] == "REJECTED" else "NEEDS_RECONCILIATION"),
+            "preview_url": "/api/visuals/" + ident + "/preview" if ready else None,
+            **({"error": metadata["error"]} if "error" in metadata else {})}
 
 
 def _start_video(ident, profile, prompt):
@@ -75,6 +79,11 @@ def _start_video(ident, profile, prompt):
     try:
         remote = transport.submit_video(body, token, "text-to-video")
         motion._state(ident, "SUBMITTED", provider_id=remote)
+    except studio_agnes.AgnesHTTPError as exc:
+        if exc.rejected:
+            motion.reject_submission(ident, exc)
+            return _video_reply(video_record(ident))
+        return {"probe_id": ident, "status": "NEEDS_RECONCILIATION", "preview_url": None, "error": str(exc)}
     except (ValueError, OSError, TypeError, sqlite3.Error):
         return {"probe_id": ident, "status": "NEEDS_RECONCILIATION", "preview_url": None}
     return _video_reply(video_record(ident))
@@ -131,7 +140,7 @@ def handle(request):
                 request_data = studio_runtime.ImageRequest(prompt, "16:9", "", ident, request["expected_revision"])
                 try:
                     studio_runtime.image_adapter(profile).generate(profile, request_data)
-                except NeedsReconciliation:
+                except (NeedsReconciliation, studio_agnes.AgnesHTTPError):
                     pass
             return _image_reply(ident, profile)
         if model_hub.orchestrator_policy.compatible("video", profile):

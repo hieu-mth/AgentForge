@@ -100,14 +100,14 @@ def pending(db_path):
     with connect(db_path) as conn:
         return bool(conn and conn.execute(
             "SELECT 1 FROM drafts WHERE json_extract(body,'$.status') IN "
-            "('QUEUED','RUNNING','WAITING_RESOURCES') LIMIT 1").fetchone())
+            "('QUEUED','RUNNING','WAITING_RESOURCES','WAITING_CLOUD_RESOURCES') LIMIT 1").fetchone())
 
 
 def next_queued(db_path):
     with connect(db_path) as conn:
         if conn is None or conn.execute(
                 "SELECT 1 FROM drafts WHERE json_extract(body,'$.status') IN "
-                "('RUNNING','WAITING_RESOURCES') LIMIT 1").fetchone():
+                "('RUNNING','WAITING_RESOURCES','WAITING_CLOUD_RESOURCES') LIMIT 1").fetchone():
             return None
         row = conn.execute("SELECT body FROM drafts WHERE json_extract(body,'$.status')='QUEUED' "
                            "ORDER BY rowid LIMIT 1").fetchone()
@@ -117,8 +117,8 @@ def next_queued(db_path):
 def queue_full(conn, limit):
     statuses = [row[0] for row in conn.execute(
         "SELECT json_extract(body,'$.status') FROM drafts "
-        "WHERE json_extract(body,'$.status') IN ('QUEUED','RUNNING','WAITING_RESOURCES')")]
-    return "WAITING_RESOURCES" in statuses or len(statuses) >= limit
+        "WHERE json_extract(body,'$.status') IN ('QUEUED','RUNNING','WAITING_RESOURCES','WAITING_CLOUD_RESOURCES')")]
+    return any(s in statuses for s in ("WAITING_RESOURCES", "WAITING_CLOUD_RESOURCES")) or len(statuses) >= limit
 
 
 def insert_queued(conn, job, limit):
@@ -150,5 +150,5 @@ def delete_record(conn, ident):
 def other_waiting(db_path, ident):
     with connect(db_path) as conn:
         return bool(conn and conn.execute(
-            "SELECT 1 FROM drafts WHERE id<>? AND json_extract(body,'$.status')="
-            "'WAITING_RESOURCES' LIMIT 1", (ident,)).fetchone())
+            "SELECT 1 FROM drafts WHERE id<>? AND json_extract(body,'$.status') IN "
+            "('WAITING_RESOURCES','WAITING_CLOUD_RESOURCES') LIMIT 1", (ident,)).fetchone())
