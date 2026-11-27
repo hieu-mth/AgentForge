@@ -2,6 +2,7 @@
 import time
 import hashlib
 import json
+from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 from agentforge.features.film_studio import draft_resources
@@ -32,6 +33,16 @@ def supports(profile):
     except (ValueError, KeyError, TypeError):
         return False
     return True
+
+
+def registry_readiness(profile):
+    return flux_runtime.readiness(profile["flux"], urlsplit(profile["base_url"]).port, inspect_all_nodes=True)
+
+
+def check_metadata(profile, *, opener=None):
+    return {"profile_id": profile["id"],
+            "status": flux_runtime.readiness(profile["flux"], urlsplit(profile["base_url"]).port),
+            "checked_at": datetime.now(timezone.utc).isoformat(), "inference_invoked": False}
 
 
 def preflight(profile, *, include_profiles=False):

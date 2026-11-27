@@ -26,6 +26,10 @@ def workflow_sha(profile):
     return None
 
 
+def registry_readiness(profile):
+    return "CLOUD_IMAGE_NOT_PROBED"
+
+
 def preflight(profile, *, include_profiles=False):
     if not supports(profile):
         raise ValueError("Unsupported Agnes image model.")

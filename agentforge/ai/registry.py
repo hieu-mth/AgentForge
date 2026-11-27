@@ -7,7 +7,9 @@ from dataclasses import dataclass
 from importlib import import_module
 from typing import Any, Callable
 
+from agentforge.ai.orchestrator_policy import ModelConfigError
 from agentforge.features.media import flux_workflow
+from agentforge.integrations import comfy_profile
 
 # These are the profile adapters accepted by Model Hub. Registration is
 # configuration only, including for providers with an existing runtime.
@@ -72,6 +74,46 @@ ADAPTERS = {
         "local_probe": False, "cloud_probe": False,
     },
 }
+
+
+@dataclass(frozen=True)
+class ProfileOptions:
+    """Registered adapter option sets, independent of credential mode."""
+    variants: tuple[frozenset[str], ...] = (frozenset(),)
+    validator: Callable | None = None
+
+    @property
+    def fields(self):
+        return frozenset().union(*self.variants)
+
+    def validate(self, profile, options):
+        try:
+            validated = self.validator(profile, options) if self.validator else {}
+            if not isinstance(validated, dict) or validated.keys() != options.keys():
+                raise ModelConfigError("Adapter returned invalid profile options")
+            return validated
+        except ValueError as exc:
+            raise ModelConfigError(str(exc)) from None
+
+
+def _endpoint_options(path):
+    def validate(profile, options):
+        if "base_url" in profile:
+            import_module(path).validate_endpoint(profile["base_url"])
+        return {}
+    return ProfileOptions(validator=validate)
+
+
+PROFILE_OPTIONS = {
+    "comfyui": ProfileOptions((frozenset(), frozenset({"flux"}), frozenset({"motion_encoder"})),
+                              comfy_profile.validate_settings),
+    "ltx_cloud": _endpoint_options("agentforge.features.film_studio.studio_ltx_cloud"),
+    "agnes": _endpoint_options("agentforge.features.film_studio.studio_agnes"),
+}
+
+
+def profile_options(provider):
+    return PROFILE_OPTIONS.get(provider, ProfileOptions())
 
 
 @dataclass(frozen=True)

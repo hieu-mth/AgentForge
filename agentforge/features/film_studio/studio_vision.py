@@ -2,6 +2,7 @@
 import base64
 import json
 
+from agentforge.ai import registry
 from agentforge.features.film_studio import studio_cloud
 from agentforge.ops import runtime_certification as runtime
 
@@ -31,6 +32,12 @@ INSTRUCTIONS = (
 
 def supports(profile):
     return bool(profile and profile.get("provider") in PROVIDERS)
+
+
+def registry_readiness(profile):
+    adapter = registry.resolve("text", profile)
+    check = getattr(adapter, "registry_readiness", None) or adapter.readiness
+    return check(profile)
 
 
 def validate_result(value):

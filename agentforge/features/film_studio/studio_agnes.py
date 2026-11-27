@@ -31,10 +31,14 @@ DURATIONS = tuple(range(4, 11))
 MAX_JSON = 12 * 1024 * 1024
 
 
-def credential(profile):
-    endpoint = profile.get("base_url") or os.environ.get(profile.get("base_url_env", ""), "")
+def validate_endpoint(endpoint):
     if endpoint.rstrip("/") != BASE:
         raise ValueError("Agnes endpoint must be the official HTTPS endpoint.")
+
+
+def credential(profile):
+    endpoint = profile.get("base_url") or os.environ.get(profile.get("base_url_env", ""), "")
+    validate_endpoint(endpoint)
     value = (cloud_credentials.unprotect_api_key(profile["api_key_protected"])
              if "api_key_protected" in profile else os.environ.get(profile.get("api_key_env", ""), ""))
     if not re.fullmatch(r"[!-~]{1,4096}", value):

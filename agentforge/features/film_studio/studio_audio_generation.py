@@ -47,3 +47,7 @@ def generate(profile, kind, text, seconds):
         raise studio_cloud.CloudRequestError("AUDIO_GENERATION_UNAVAILABLE") from None
     finally:
         conn.close()
+
+
+def registry_readiness(profile):
+    return "AUDIO_GENERATION_NOT_PROBED"

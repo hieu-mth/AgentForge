@@ -19,12 +19,11 @@ import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlsplit
 
-from agentforge.ai import cloud_credentials, orchestrator_policy
+from agentforge.ai import cloud_credentials, orchestrator_policy, registry
+from agentforge.ai.profile_config import local_url, cloud_url
 from agentforge.ai.registry import ADAPTERS
 from agentforge.ai.orchestrator_policy import ModelConfigError
-from agentforge.features.media import flux_workflow
 from agentforge.paths import COMPANY_DATA_DIR, ensure_local_root
 
 DB_PATH = COMPANY_DATA_DIR / "model_hub.sqlite3"
@@ -108,60 +107,24 @@ def _required_text(value, pattern, name):
     return value
 
 
-def _local_url(value):
-    """Reject SSRF endpoints, loopback aliases, userinfo and nested paths."""
-    if not isinstance(value, str) or len(value) > 120:
-        raise ModelConfigError("Invalid local provider URL")
-    parsed = urlsplit(value)
-    try:
-        good = (parsed.scheme == "http" and
-                parsed.hostname in {"127.0.0.1", "localhost", "::1"} and
-                parsed.port is not None and 1 <= parsed.port <= 65535 and
-                parsed.path in {"", "/"} and not parsed.username and
-                not parsed.password and not parsed.query and not parsed.fragment)
-    except ValueError:
-        good = False
-    if not good:
-        raise ModelConfigError("Only a local loopback HTTP provider is allowed")
-    return value.rstrip("/")
-
-
-def _cloud_url(value):
-    if not isinstance(value, str) or len(value) > 512 or any(
-            c.isspace() or ord(c) < 32 or c in "\\?#" for c in value):
-        raise ModelConfigError("Nhập URL HTTPS hợp lệ cho endpoint Cloud")
-    try:
-        parsed = urlsplit(value)
-        valid = (parsed.scheme == "https" and parsed.hostname and
-                 parsed.username is None and parsed.password is None and
-                 (parsed.port is None or 1 <= parsed.port <= 65535))
-    except ValueError:
-        valid = False
-    if not valid:
-        raise ModelConfigError("Nhập URL HTTPS hợp lệ cho endpoint Cloud")
-    return value.rstrip("/")
-
-
 def validate_profile(value, *, profile_id=None, preview=False):
     """Return canonical allowlisted profile; secrets are never accepted."""
     if not isinstance(value, dict):
         raise ModelConfigError("Model profile must be an object")
-    allowed = {
-        "id", "provider", "model", "enabled", "base_url",
-        "base_url_env", "api_key_env", "api_key_protected",
-    }
-    if value.get("provider") == "chatgpt":
-        allowed.add("account_ref")
-    if value.get("provider") == "comfyui":
-        allowed.update(("flux", "motion_encoder"))
+    provider = value.get("provider")
+    if not isinstance(provider, str) or provider not in ADAPTERS:
+        raise ModelConfigError("Unsupported provider")
+    descriptor = ADAPTERS[provider]
+    options = registry.profile_options(provider)
+    allowed = {"id", "provider", "model", "enabled", "base_url",
+               "base_url_env", "api_key_env", "api_key_protected"}
+    allowed.update(descriptor["defaults"])
+    allowed.update(options.fields)
     if not value.keys() <= allowed:
         raise ModelConfigError("Unknown or sensitive model profile fields")
     ident = _required_text(value.get("id", profile_id), ID_RE, "model ID")
     if profile_id is not None and ident != profile_id:
         raise ModelConfigError("Profile ID mismatch")
-    provider = value.get("provider")
-    if not isinstance(provider, str) or provider not in ADAPTERS:
-        raise ModelConfigError("Unsupported provider")
     model = _required_text(value.get("model"), MODEL_RE, "model/checkpoint name")
     enabled = value.get("enabled")
     if type(enabled) is not bool:
@@ -169,26 +132,20 @@ def validate_profile(value, *, profile_id=None, preview=False):
     common = {"id": ident, "provider": provider, "model": model,
               "enabled": enabled}
     fields = value.keys() - common.keys()
-    if provider == "chatgpt":
+    extra = fields & options.fields
+    if extra not in options.variants:
+        raise ModelConfigError("Fields do not match the selected adapter")
+    fields -= extra
+    if "account_ref" in descriptor["defaults"]:
         if fields != {"account_ref"}:
-            raise ModelConfigError("ChatGPT requires an account reference, not a key or URL")
-        common["account_ref"] = _required_text(value["account_ref"], ID_RE, "ChatGPT account reference")
-    elif ADAPTERS[provider]["connection"] == "local":
-        if fields != {"base_url"} and not (
-                provider == "comfyui" and fields in ({"base_url", "flux"}, {"base_url", "motion_encoder"})):
+            raise ModelConfigError("OAuth requires an account reference, not a key or URL")
+        common["account_ref"] = _required_text(value["account_ref"], ID_RE, "account reference")
+    elif descriptor["connection"] == "local":
+        if fields != {"base_url"}:
             raise ModelConfigError("Fields do not match the selected adapter")
-        common["base_url"] = _local_url(value.get("base_url"))
-        if "flux" in fields:
-            common["flux"] = flux_workflow.validate(value["flux"], model, common["base_url"])
-        if "motion_encoder" in fields:
-            encoder = value["motion_encoder"]
-            if (not isinstance(encoder, str) or not 1 <= len(encoder) <= 512
-                    or not Path(encoder).is_absolute() or encoder.startswith(("\\\\", "//"))
-                    or any(ord(char) < 32 for char in encoder)):
-                raise ModelConfigError("Motion encoder must be a local absolute file path")
-            common["motion_encoder"] = encoder
+        common["base_url"] = local_url(value.get("base_url"))
     elif preview and fields == {"base_url"}:
-        common["base_url"] = _cloud_url(value["base_url"])
+        common["base_url"] = cloud_url(value["base_url"])
     elif fields == {"base_url", "api_key_protected"} and profile_id is not None:
         key = value["api_key_protected"]
         try:
@@ -197,16 +154,13 @@ def validate_profile(value, *, profile_id=None, preview=False):
             valid_key = False
         if not valid_key:
             raise ModelConfigError("Invalid protected API key")
-        common.update(base_url=_cloud_url(value["base_url"]), api_key_protected=key)
-    elif fields == ADAPTERS[provider]["environment_defaults"].keys():
+        common.update(base_url=cloud_url(value["base_url"]), api_key_protected=key)
+    elif fields == descriptor.get("environment_defaults", {}).keys() and fields:
         for key in fields:
             common[key] = _required_text(value[key], ENV_NAME, "environment variable name")
     else:
         raise ModelConfigError("Fields do not match the selected Cloud credentials")
-    if provider == "ltx_cloud" and "base_url" in common and common["base_url"] not in {"https://api.ltx.io", "https://api.ltx.io/v2"}:
-        raise ModelConfigError("LTX video chỉ chấp nhận endpoint HTTPS chính thức.")
-    if provider == "agnes" and "base_url" in common and common["base_url"] != "https://apihub.agnes-ai.com/v1":
-        raise ModelConfigError("Agnes chỉ chấp nhận endpoint HTTPS chính thức.")
+    common.update(options.validate(common, {key: value[key] for key in extra}))
     return common
 
 
@@ -219,7 +173,7 @@ def _save_profile(value, api_key, profiles):
             raise ModelConfigError("API key chỉ dùng với endpoint Cloud nhập trực tiếp")
         return validate_profile(value)
     ident = _required_text(value.get("id"), ID_RE, "model ID")
-    endpoint = _cloud_url(value["base_url"])
+    endpoint = cloud_url(value["base_url"])
     previous = profiles.get(ident, {})
     if api_key is None:
         if previous.get("base_url") != endpoint:
@@ -441,24 +395,10 @@ def capability_readiness(profile_id, capability, *, expected_revision, db_path=N
         observation = "DISABLED"
     elif not contract["runtime_compatible"]:
         observation = contract["reason"]
-    elif kind in {"sound", "music"}:
-        observation = "AUDIO_GENERATION_NOT_PROBED"
-    elif kind in {"image", "video"} and is_cloud(profile):
-        observation = "CLOUD_VIDEO_NOT_PROBED" if kind == "video" else "CLOUD_IMAGE_NOT_PROBED"
-    elif kind in {"text", "vision", "audio"}:
-        if profile["provider"] == "ollama":
-            observation = _check_ollama(profile)["status"]
-        elif profile["provider"] == "chatgpt":
-            from agentforge.features.film_studio import studio_chatgpt
-            observation = studio_chatgpt.readiness(profile)
-        else:
-            from agentforge.features.film_studio import studio_cloud
-            observation = studio_cloud.readiness(profile)
-    elif kind == "image":
-        from agentforge.features.media.flux_runtime import readiness
-        observation = readiness(profile["flux"], urlsplit(profile["base_url"]).port, inspect_all_nodes=True)
     else:
-        observation = orchestrator_policy.local_adapter(kind, profile).registry_readiness(profile)
+        adapter = registry.resolve(kind, profile)
+        check = getattr(adapter, "registry_readiness", None) or getattr(adapter, "readiness", None)
+        observation = check(profile) if check else "NOT_CHECKED"
     status, available, metadata_compatible = _preflight_result(observation, contract)
     return {**contract, "profile_id": profile_id, "revision": revision, "configuration_valid": True,
             "enabled": profile["enabled"], "status": status, "readiness": status,
@@ -470,7 +410,7 @@ def capability_readiness(profile_id, capability, *, expected_revision, db_path=N
 
 
 def _preflight_result(observation, contract):
-    if observation in {"DISABLED", "AUDIO_GENERATION_NOT_PROBED", "CLOUD_VIDEO_NOT_PROBED", "CLOUD_IMAGE_NOT_PROBED"}:
+    if observation in {"DISABLED", "NOT_CHECKED", "AUDIO_GENERATION_NOT_PROBED", "CLOUD_VIDEO_NOT_PROBED", "CLOUD_IMAGE_NOT_PROBED"}:
         return "NOT_CHECKED", None, None
     if not contract["runtime_compatible"] or observation == "MOTION_ENDPOINT_MISMATCH":
         return "UNSUPPORTED", None, None
@@ -633,22 +573,24 @@ def _catalog(revision, state):
     }
 
 
-def probe_cloud_profile(profile_id, *, expected_revision, db_path=None):
-    """Explicit one-call structured inference probe; no project data sent."""
-    from agentforge.features.film_studio import studio_cloud
+def _probe_text(profile_id, *, expected_revision, connection, db_path=None):
+    """Explicit fixed-prompt probe through the resolved text capability."""
     _required_text(profile_id, ID_RE, "model ID")
     revision, state = _read_state(db_path=db_path)
     if type(expected_revision) is not int or revision != expected_revision:
         raise ModelConfigError("MODEL_HUB_REVISION_CONFLICT")
     profile = _profiles(state=state).get(profile_id)
-    if profile and profile["enabled"] and profile["provider"] == "chatgpt":
-        from agentforge.features.film_studio import studio_chatgpt
-        return {**studio_chatgpt.probe(profile), "model": profile["model"], "revision": revision,
-                "checked_at": datetime.now(timezone.utc).isoformat()}
-    if not profile or not profile["enabled"] or profile["provider"] not in studio_cloud.PROVIDERS:
-        raise ModelConfigError("Probe requires an enabled cloud text profile")
-    return {**studio_cloud.probe(profile), "model": profile["model"], "revision": revision,
+    adapter = orchestrator_policy.runtime_adapter("text", profile)
+    if (not profile or not profile["enabled"] or
+            ADAPTERS[profile["provider"]]["connection"] != connection or
+            not callable(getattr(adapter, "probe", None))):
+        raise ModelConfigError("Probe requires an enabled " + connection + " text profile")
+    return {**adapter.probe(profile), "model": profile["model"], "revision": revision,
             "checked_at": datetime.now(timezone.utc).isoformat()}
+
+
+def probe_cloud_profile(profile_id, *, expected_revision, db_path=None):
+    return _probe_text(profile_id, expected_revision=expected_revision, connection="cloud", db_path=db_path)
 
 
 def audio_generation_binding(capability, *, db_path=None, optional=False):
@@ -710,23 +652,7 @@ def cloud_call_limit(profile, *, moving, planning, validate, db_path=None, motio
 
 
 def probe_local_profile(profile_id, *, expected_revision, db_path=None):
-    """Run an explicitly authorized fixed-prompt probe from one config snapshot."""
-    from datetime import datetime, timezone
-    from agentforge.ops import runtime_certification as runtime
-
-    _required_text(profile_id, ID_RE, "model ID")
-    revision, state = _read_state(db_path=db_path)
-    if type(expected_revision) is not int or revision != expected_revision:
-        raise ModelConfigError("MODEL_HUB_REVISION_CONFLICT")
-    profile = _profiles(state=state).get(profile_id)
-    if not profile or not profile["enabled"] or profile["provider"] != "ollama":
-        raise ModelConfigError("Probe requires an enabled local Ollama profile")
-    host, port = runtime._local_endpoint(profile["base_url"])
-    name = profile["model"]
-    result = runtime._safe_probe(
-        lambda: runtime._ollama_inference(profile_id, profile=(host, port, name)))
-    return {**result, "model": name, "revision": revision,
-            "checked_at": datetime.now(timezone.utc).isoformat()}
+    return _probe_text(profile_id, expected_revision=expected_revision, connection="local", db_path=db_path)
 
 
 def media_probe_profile(profile_id, *, expected_revision, db_path=None):
@@ -760,55 +686,14 @@ def check_local_profile(profile_id, *, db_path=None, opener=None):
     if not profile["enabled"]:
         return {"profile_id": profile_id, "status": "DISABLED",
                 "inference_invoked": False}
-    if "flux" in profile:
-        from agentforge.features.media.flux_runtime import readiness
-        status = readiness(profile["flux"], urlsplit(profile["base_url"]).port)
-        return {"profile_id": profile_id, "status": status, "checked_at": datetime.now(timezone.utc).isoformat(),
-                "inference_invoked": False}
-    if profile["provider"] != "ollama":
-        return {"profile_id": profile_id, "status": "NOT_CHECKED",
-                "reason": "Only local Ollama metadata preflight is supported",
-                "inference_invoked": False}
-    return _check_ollama(profile, opener=opener)
-
-
-def _check_ollama(profile, *, opener=None):
-    import urllib.error
-    import urllib.request
-
-    profile_id = profile["id"]
-    url = _local_url(profile["base_url"]) + "/api/tags"
-    request = urllib.request.Request(
-        url, headers={"Accept": "application/json"}, method="GET")
-    # A local server could redirect requests to the Internet, or environment
-    # proxies could intercept even loopback URLs. Never follow redirects and
-    # never route this Owner metadata probe through OS/environment proxies.
-    class NoRedirect(urllib.request.HTTPRedirectHandler):
-        def redirect_request(self, req, fp, code, msg, headers, newurl):
-            return None
-    safe_open = urllib.request.build_opener(
-        urllib.request.ProxyHandler({}), NoRedirect()).open
-    try:
-        with (opener or safe_open)(request, timeout=3) as response:
-            if response.status != 200:
-                return {"profile_id": profile_id, "status": "HTTP_ERROR",
-                        "inference_invoked": False}
-            raw = response.read(262145)
-        if len(raw) > 262144:
-            raise ValueError("Too many model metadata bytes")
-        models = json.loads(raw).get("models")
-        if not isinstance(models, list):
-            raise ValueError("Invalid Ollama tags metadata")
-        found = any(isinstance(item, dict) and
-                    item.get("name") == profile["model"] for item in models)
-        status = "LOCAL_MODEL_FOUND" if found else "MODEL_NOT_INSTALLED"
-    except urllib.error.HTTPError:
-        status = "HTTP_ERROR"
-    except (TimeoutError, urllib.error.URLError, OSError):
-        status = "UNAVAILABLE"
-    except (ValueError, UnicodeError, TypeError, AttributeError):
-        status = "INVALID_RESPONSE"
-    return {"profile_id": profile_id, "status": status,
+    if not is_cloud(profile):
+        for kind in ("text", "image", "video"):
+            adapter = orchestrator_policy.runtime_adapter(kind, profile)
+            check = getattr(adapter, "check_metadata", None)
+            if callable(check):
+                return check(profile, opener=opener)
+    return {"profile_id": profile_id, "status": "NOT_CHECKED",
+            "reason": "No local metadata probe for this profile",
             "inference_invoked": False}
 
 
