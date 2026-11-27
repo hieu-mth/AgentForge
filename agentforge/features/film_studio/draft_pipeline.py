@@ -49,40 +49,50 @@ def _cancellation(ident, *, mark=False):
     return draft_store.cancellation(DB, ident, mark=mark)
 
 
+_TEXT_OPERATIONS = frozenset({"plan", "duration", "creative_direction", "cast", "storyboard"})
+
+
+def _local_slot(profile):
+    """Reserve only local execution; provider waits never own this reservation."""
+    return nullcontext() if model_hub.is_cloud(profile) else model_hub.local_inference_slot()
+
+
 @contextmanager
 def _measured(job, operation, comfy_profile=None):
     if _cancellation(job["id"]):
         raise DraftCancelled
-    if (operation in {"plan", "duration", "creative_direction", "cast", "storyboard", "image"}
-            and model_hub.is_cloud(job.get("activity"))):
+    # Render remains a bounded local workload, regardless of the last AI provider.
+    remote = operation in _TEXT_OPERATIONS | {"image"} and model_hub.is_cloud(job.get("activity"))
+    if remote:
         yield
         if _cancellation(job["id"]):
             raise DraftCancelled
         return
-    before = draft_resources.snapshot()
-    point = {"operation": operation, "before": before}
-    job["resources"] = (job.get("resources", []) + [point])[-24:]
-    _save(job)
-    try:
-        admission_sample = before
-        text_only = (job.get("deferred_media_binding") or job.get("production_plan", {}).get("method") == "cloud"
-                     or model_hub.is_cloud(comfy_profile)) and operation in {
-            "plan", "duration", "creative_direction", "cast", "storyboard"}
-        reason = draft_resources.pressure(admission_sample, "text" if text_only else operation)
-        if reason == "VRAM_LOW" and comfy_profile and comfy_profile.get("base_url"):
-            if _release_idle_image(comfy_profile):
-                admission_sample = point["after_release"] = draft_resources.snapshot()
-                reason = draft_resources.pressure(admission_sample, operation)
-        if reason:
-            raise ResourceWait(reason)
-        if not text_only and operation in {"plan", "cast", "storyboard"} and not model_hub.is_cloud(comfy_profile):
-            draft_resources.require_gpu("image", admission_sample)
-        yield
-    finally:
-        point["after"] = draft_resources.snapshot()
-        _save(job)
+    with model_hub.local_inference_slot():
         if _cancellation(job["id"]):
             raise DraftCancelled
+        before = draft_resources.snapshot()
+        point = {"operation": operation, "before": before}
+        job["resources"] = (job.get("resources", []) + [point])[-24:]
+        _save(job)
+        try:
+            # Text planning must not require an image runtime or an image-sized GPU
+            # allocation. Local text adapters own their inference-specific checks.
+            resource_kind = "text" if operation in _TEXT_OPERATIONS else operation
+            reason = draft_resources.pressure(before, resource_kind)
+            if (reason == "VRAM_LOW" and operation == "image" and comfy_profile
+                    and not model_hub.is_cloud(comfy_profile) and comfy_profile.get("base_url")):
+                if _release_idle_image(comfy_profile):
+                    admission_sample = point["after_release"] = draft_resources.snapshot()
+                    reason = draft_resources.pressure(admission_sample, resource_kind)
+            if reason:
+                raise ResourceWait(reason)
+            yield
+        finally:
+            point["after"] = draft_resources.snapshot()
+            _save(job)
+            if _cancellation(job["id"]):
+                raise DraftCancelled
 
 
 def _text(value, max_length, *, label="Văn bản bản nháp"):
@@ -998,58 +1008,58 @@ def _work(job, slot, retry_motion_job=None):
         moving = job["brief"].get("mode") == "motion"
         reviewing = "storyboard_version" in job and not job.get("approved_storyboard_sha")
         revision, bindings, identity_revision = _studio_bindings(job)
-        cloud_only = bool(bindings) and all(model_hub.is_cloud(profile) for profile in bindings.values())
-        with (nullcontext() if cloud_only else model_hub.local_inference_slot()):
-            if not cloud_only:
-                revision, bindings, identity_revision = _studio_bindings(job)
-            if reviewing:
-                if not job.get("deferred_media_binding"):
-                    if moving:
-                        _resolve_job_motion(job, bindings.get("film.motion"), planning=True, revision=identity_revision)
-                    studio_runtime.motion_artifacts(job).require_resolved_ledger(job)
-                    if bindings.get("image.generate", {}).get("base_url"):
-                        profile = bindings["image.generate"]
+        if reviewing:
+            if not job.get("deferred_media_binding"):
+                if moving:
+                    _resolve_job_motion(job, bindings.get("film.motion"), planning=True, revision=identity_revision)
+                studio_runtime.motion_artifacts(job).require_resolved_ledger(job)
+                if bindings.get("image.generate", {}).get("base_url"):
+                    profile = bindings["image.generate"]
+                    with _local_slot(profile):
                         studio_runtime.image_adapter(profile).preflight(profile, include_profiles=True)
-                if not job.get("board"):
-                    _plan_production(job, bindings)
-                    _write_board(job, bindings)
-                if _cancellation(job["id"]):
-                    raise DraftCancelled
-                _stamp_storyboard(job)
-                return
-            if "storyboard_version" in job and (
-                    job["approved_storyboard_sha"] != draft_timeline.digest(job)):
-                raise ValueError("Storyboard đã thay đổi. Cần Owner duyệt lại.")
-            _validate_creative_frames(job)
-            draft_continuity.validate(job)
-            if moving:
-                motion, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
-                draft_continuity.validate(job, input_modes=motion.input_modes(bindings["film.motion"]))
-                motion_profile = motion.bind(bindings["film.motion"])
-                motion.require_resolved_ledger(job)
-            image_profile = bindings.get("image.generate")
-            board = job.get("board")
-            needs_gpu = image_profile is not None and (not board or any(not scene["asset"] for scene in board["scenes"]))
-            if needs_gpu and image_profile.get("base_url"):
-                studio_runtime.image_adapter(image_profile).preflight(image_profile)
-            folder = _folder(job["id"])
-            folder.mkdir(parents=True, exist_ok=True)
             if not job.get("board"):
+                _plan_production(job, bindings)
                 _write_board(job, bindings)
-            for index, scene in enumerate(job["board"]["scenes"]):
-                ops_control.require_active()
-                if image_profile is None:
-                    continue
-                if scene["asset"]:
+            if _cancellation(job["id"]):
+                raise DraftCancelled
+            _stamp_storyboard(job)
+            return
+        if "storyboard_version" in job and (
+                job["approved_storyboard_sha"] != draft_timeline.digest(job)):
+            raise ValueError("Storyboard đã thay đổi. Cần Owner duyệt lại.")
+        _validate_creative_frames(job)
+        draft_continuity.validate(job)
+        if moving:
+            motion, identity = _resolve_job_motion(job, bindings.get("film.motion"), revision=identity_revision)
+            draft_continuity.validate(job, input_modes=motion.input_modes(bindings["film.motion"]))
+            motion_profile = motion.bind(bindings["film.motion"])
+            motion.require_resolved_ledger(job)
+        image_profile = bindings.get("image.generate")
+        board = job.get("board")
+        needs_images = image_profile is not None and (not board or any(not scene["asset"] for scene in board["scenes"]))
+        if needs_images and image_profile.get("base_url"):
+            with _local_slot(image_profile):
+                studio_runtime.image_adapter(image_profile).preflight(image_profile)
+        folder = _folder(job["id"])
+        folder.mkdir(parents=True, exist_ok=True)
+        if not job.get("board"):
+            _write_board(job, bindings)
+        for index, scene in enumerate(job["board"]["scenes"]):
+            ops_control.require_active()
+            if image_profile is None:
+                continue
+            if scene["asset"]:
+                _image(job, index, scene, revision, bindings["image.generate"])
+            else:
+                revision, _, _ = _studio_bindings(job)
+                _activity(job, "IMAGES", "image", image_profile, scene=index + 1)
+                with _measured(job, "image", image_profile):
+                    used_image = True
                     _image(job, index, scene, revision, bindings["image.generate"])
-                else:
-                    revision, _, _ = _studio_bindings(job)
-                    _activity(job, "IMAGES", "image", image_profile, scene=index + 1)
-                    with _measured(job, "image", image_profile):
-                        used_image = True
-                        _image(job, index, scene, revision, bindings["image.generate"])
-            if moving and used_image:
-                _release_idle_image(image_profile)
+        if moving and used_image and not model_hub.is_cloud(image_profile):
+            with _local_slot(image_profile):
+                if _release_idle_image(image_profile):
+                    used_image = False
         if moving:
             prepared = motion.prepare(job, folder)
             if prepared[3] != identity["workflow_sha"]:
@@ -1076,13 +1086,12 @@ def _work(job, slot, retry_motion_job=None):
                     raise
                 if _cancellation(job["id"]):
                     raise DraftCancelled
-        with model_hub.local_inference_slot():
+        _activity(job, "RENDER", "render")
+        with _measured(job, "render"):
             ops_control.require_active()
             _studio_bindings(job)
-            _activity(job, "RENDER", "render")
-            with _measured(job, "render"):
-                job["video_sha"] = _render(job)
-            job["status"] = "REVIEW"
+            job["video_sha"] = _render(job)
+        job["status"] = "REVIEW"
     except (ResourceWait, comfy_service.StartupPressure, draft_resources.ResourceBlocked) as exc:
         job.update(status="WAITING_RESOURCES", error=str(exc))
     except DraftCancelled:
@@ -1373,9 +1382,8 @@ def _storyboard_action(job, action, data):
             raise PermissionError("Cần xác nhận gửi thông tin cảnh lỗi đến AI cloud.")
         ops_control.require_active()
         proposals = []
-        slot = nullcontext() if cloud else model_hub.local_inference_slot()
         _activity(job, "STORYBOARD", "storyboard", writer)
-        with slot, _measured(job, "storyboard", bindings.get("image.generate")):
+        with _measured(job, "storyboard", bindings.get("image.generate")):
             for i, report in targets:
                 scene = scenes[i]
                 result = _ask(writer,
@@ -1403,8 +1411,8 @@ def _storyboard_action(job, action, data):
         _, bindings, _ = _studio_bindings(job)
         writer = bindings["film.storyboard"]
         ops_control.require_active()
-        slot = nullcontext() if model_hub.is_cloud(writer) else model_hub.local_inference_slot()
-        with slot, _measured(job, "storyboard", bindings.get("image.generate")):
+        _activity(job, "STORYBOARD", "storyboard", writer)
+        with _measured(job, "storyboard", bindings.get("image.generate")):
             entries = draft_continuity.propose(job, lambda instructions, payload, schema:
                 _ask(writer, instructions, payload, schema, bindings.get("image.generate"), job=job))
         if all(scene.get("continuity_plan") == entry for scene, entry in zip(scenes, entries)):
@@ -1419,8 +1427,8 @@ def _storyboard_action(job, action, data):
         _, bindings, _ = _studio_bindings(job)
         writer = bindings["film.storyboard"]
         ops_control.require_active()
-        slot = nullcontext() if model_hub.is_cloud(writer) else model_hub.local_inference_slot()
-        with slot, _measured(job, "storyboard", bindings.get("image.generate")):
+        _activity(job, "STORYBOARD", "storyboard", writer)
+        with _measured(job, "storyboard", bindings.get("image.generate")):
             audio = audio_director.propose(job, data["engine"], data["voice_name"], data["voices"],
                 lambda instructions, payload, schema:
                     _ask(writer, instructions, payload, schema, bindings.get("image.generate"), job=job),
@@ -1488,8 +1496,7 @@ def _storyboard_action(job, action, data):
                 shot["original_script_excerpt"] = job["brief"]["idea"][start:min(end, start + 1000)]
             writer = bindings["film.storyboard"]
             _activity(job, "STORYBOARD", "storyboard", writer)
-            slot = nullcontext() if model_hub.is_cloud(writer) else model_hub.local_inference_slot()
-            with slot, _measured(job, "storyboard", bindings.get("image.generate")):
+            with _measured(job, "storyboard", bindings.get("image.generate")):
                 data = _ask(bindings["film.storyboard"], "Rewrite only this shot. Preserve the cast and its role "
                             "in the original scene when a script excerpt is provided. "
                             "Use neighboring shots for character, setting, action and prop continuity. "
