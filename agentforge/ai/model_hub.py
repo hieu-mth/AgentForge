@@ -132,16 +132,18 @@ def validate_profile(value, *, profile_id=None, preview=False):
     common = {"id": ident, "provider": provider, "model": model,
               "enabled": enabled}
     fields = value.keys() - common.keys()
+    extra = fields & options.fields
+    if extra not in options.variants:
+        raise ModelConfigError("Fields do not match the selected adapter")
+    fields -= extra
     if "account_ref" in descriptor["defaults"]:
         if fields != {"account_ref"}:
             raise ModelConfigError("OAuth requires an account reference, not a key or URL")
         common["account_ref"] = _required_text(value["account_ref"], ID_RE, "account reference")
     elif descriptor["connection"] == "local":
-        extra = fields - {"base_url"}
-        if "base_url" not in fields or extra not in options.variants:
+        if fields != {"base_url"}:
             raise ModelConfigError("Fields do not match the selected adapter")
         common["base_url"] = local_url(value.get("base_url"))
-        common.update(options.validate(common, {key: value[key] for key in extra}))
     elif preview and fields == {"base_url"}:
         common["base_url"] = cloud_url(value["base_url"])
     elif fields == {"base_url", "api_key_protected"} and profile_id is not None:
@@ -158,8 +160,7 @@ def validate_profile(value, *, profile_id=None, preview=False):
             common[key] = _required_text(value[key], ENV_NAME, "environment variable name")
     else:
         raise ModelConfigError("Fields do not match the selected Cloud credentials")
-    if descriptor["connection"] == "cloud" and "base_url" in common:
-        options.validate(common, {})
+    common.update(options.validate(common, {key: value[key] for key in extra}))
     return common
 
 

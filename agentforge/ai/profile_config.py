@@ -8,8 +8,8 @@ def local_url(value):
     """Reject SSRF endpoints, loopback aliases, userinfo and nested paths."""
     if not isinstance(value, str) or len(value) > 120:
         raise ModelConfigError("Invalid local provider URL")
-    parsed = urlsplit(value)
     try:
+        parsed = urlsplit(value)
         good = (parsed.scheme == "http" and
                 parsed.hostname in {"127.0.0.1", "localhost", "::1"} and
                 parsed.port is not None and 1 <= parsed.port <= 65535 and

@@ -57,6 +57,26 @@ class RegistryTests(unittest.TestCase):
                 self.assertEqual(model_hub.probe_local_profile(profile["id"],
                     expected_revision=revision * 2 + 2, db_path=db)["status"], "PASS_RUNTIME")
 
+    def test_cloud_options_are_independent_of_credentials(self):
+        provider = "fixture_cloud"
+        descriptor = {"label": "Fixture Cloud", "connection": "cloud",
+                      "model_label": "Model", "defaults": {"base_url": ""},
+                      "environment_defaults": {"base_url_env": "FIXTURE_URL", "api_key_env": "FIXTURE_KEY"}}
+        options = registry.ProfileOptions((frozenset({"quality"}),),
+                                          lambda profile, fields: fields)
+        with (patch.dict(registry.ADAPTERS, {provider: descriptor}),
+              patch.dict(registry.PROFILE_OPTIONS, {provider: options})):
+            base = {"id": "cloud_fixture", "provider": provider, "model": "demo",
+                    "enabled": True, "quality": "high"}
+            direct = {**base, "base_url": "https://example.com/v1"}
+            self.assertEqual(model_hub.validate_profile(direct, preview=True), direct)
+            env = {**base, **descriptor["environment_defaults"]}
+            self.assertEqual(model_hub.validate_profile(env), env)
+            with self.assertRaises(model_hub.ModelConfigError):
+                model_hub.validate_profile({**env, "api_key": "never accepted"})
+            with self.assertRaises(model_hub.ModelConfigError):
+                model_hub.validate_profile({key: value for key, value in env.items() if key != "quality"})
+
     def test_ambiguity_fails_closed(self):
         entry = registry.Registration("text", lambda: object(), ("ollama",))
         profile = {"provider": "ollama"}

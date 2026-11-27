@@ -78,7 +78,7 @@ ADAPTERS = {
 
 @dataclass(frozen=True)
 class ProfileOptions:
-    """Registered, mutually exclusive local option sets and optional validator."""
+    """Registered adapter option sets, independent of credential mode."""
     variants: tuple[frozenset[str], ...] = (frozenset(),)
     validator: Callable | None = None
 
@@ -88,14 +88,18 @@ class ProfileOptions:
 
     def validate(self, profile, options):
         try:
-            return self.validator(profile, options) if self.validator else {}
+            validated = self.validator(profile, options) if self.validator else {}
+            if not isinstance(validated, dict) or validated.keys() != options.keys():
+                raise ModelConfigError("Adapter returned invalid profile options")
+            return validated
         except ValueError as exc:
             raise ModelConfigError(str(exc)) from None
 
 
 def _endpoint_options(path):
     def validate(profile, options):
-        import_module(path).validate_endpoint(profile["base_url"])
+        if "base_url" in profile:
+            import_module(path).validate_endpoint(profile["base_url"])
         return {}
     return ProfileOptions(validator=validate)
 
