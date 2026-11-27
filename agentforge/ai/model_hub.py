@@ -434,8 +434,9 @@ def image_runtime(*, automated=False, db_path=None):
     ref = state["routes"].get("image.generate")
     decision = orchestrator_policy.resolve("image.generate", profiles, ref)
     profile = profiles.get(decision.get("model_ref"))
-    if not profile or "flux" not in profile:
-        raise ModelConfigError("Assign an enabled FLUX profile to image.generate")
+    adapter = orchestrator_policy.runtime_adapter("image", profile)
+    if not profile or is_cloud(profile) or not callable(getattr(adapter, "local_image_config", None)):
+        raise ModelConfigError("Assign an enabled local image workflow to image.generate")
     permissions = policy["permissions"]
     if automated and (policy["mode"] == "MANUAL" or not (
             permissions["assign_models"] and permissions["call_local"])):
@@ -680,8 +681,10 @@ def flux_probe_profile(profile_id, *, expected_revision, db_path=None):
     if type(expected_revision) is not int or revision != expected_revision:
         raise ModelConfigError("MODEL_HUB_REVISION_CONFLICT")
     profile = _profiles(state=state).get(profile_id)
-    if not profile or not profile["enabled"] or "flux" not in profile:
-        raise ModelConfigError("Probe requires an enabled ComfyUI FLUX profile")
+    adapter = orchestrator_policy.runtime_adapter("image", profile)
+    if (not profile or not profile["enabled"] or is_cloud(profile)
+            or not callable(getattr(adapter, "local_image_config", None))):
+        raise ModelConfigError("Probe requires an enabled local image workflow profile")
     return revision, profile
 
 

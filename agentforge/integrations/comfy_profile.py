@@ -2,13 +2,15 @@
 from pathlib import Path
 
 from agentforge.ai.orchestrator_policy import ModelConfigError
-from agentforge.features.media import flux_workflow
+from agentforge.features.media import comfy_image_workflow, flux_workflow
 
 
 def validate_settings(profile, options):
     result = {}
     if "flux" in options:
         result["flux"] = flux_workflow.validate(options["flux"], profile["model"], profile["base_url"])
+    if "comfy_image" in options:
+        result["comfy_image"] = comfy_image_workflow.validate(options["comfy_image"], profile["model"], profile["base_url"])
     if "motion_encoder" in options:
         encoder = options["motion_encoder"]
         if (not isinstance(encoder, str) or not 1 <= len(encoder) <= 512

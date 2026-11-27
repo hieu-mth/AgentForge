@@ -26,6 +26,7 @@ ADAPTERS = {
         "description": "Hồ sơ ảnh hoặc video. Đăng ký chỉ lưu cấu hình cho ComfyUI.",
         "defaults": {"base_url": "http://127.0.0.1:8188"}, "local_probe": False,
         "flux_workflow_max_bytes": flux_workflow.MAX_WORKFLOW_BYTES,
+        "image_workflow_max_bytes": flux_workflow.MAX_WORKFLOW_BYTES,
         "motion_encoder_supported": True,
     },
     "chatgpt": {
@@ -105,7 +106,7 @@ def _endpoint_options(path):
 
 
 PROFILE_OPTIONS = {
-    "comfyui": ProfileOptions((frozenset(), frozenset({"flux"}), frozenset({"motion_encoder"})),
+    "comfyui": ProfileOptions((frozenset(), frozenset({"flux"}), frozenset({"comfy_image"}), frozenset({"motion_encoder"})),
                               comfy_profile.validate_settings),
     "ltx_cloud": _endpoint_options("agentforge.features.film_studio.studio_ltx_cloud"),
     "agnes": _endpoint_options("agentforge.features.film_studio.studio_agnes"),

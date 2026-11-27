@@ -35,6 +35,19 @@ test('FLUX workflow is sent only for an advertising ComfyUI backend',()=>{
   });
 });
 
+test('checkpoint image workflow is serialized through the advertised backend capability',()=>{
+  const adapter={id:'comfyui',defaults:{base_url:''},flux_workflow_max_bytes:16000,image_workflow_max_bytes:16000};
+  const values={id:'checkpoint_image',model:'alternate.safetensors',enabled:true,
+    base_url:'http://127.0.0.1:8188',flux_enabled:true,flux_settings:{
+      workflow:'{"38":{"class_type":"CheckpointLoaderSimple"}}',max_resolution:1024,max_steps:20,
+      timeout_seconds:180,output_dir:'visuals',secret:'not sent',
+    }};
+  const profile=profilePayload(values,adapter);
+  assert.ok(!('flux' in profile));
+  assert.deepEqual(profile.comfy_image,{workflow:{38:{class_type:'CheckpointLoaderSimple'}},
+    max_resolution:1024,max_steps:20,timeout_seconds:180,output_dir:'visuals'});
+});
+
 test('Owner settings deep-link includes Model Hub',()=>{
   assert.equal(groupFor('models'),'settings');
   assert.equal(hashFor('models'),'#/models');

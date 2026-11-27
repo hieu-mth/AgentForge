@@ -24,7 +24,7 @@ export function FluxProbeDialog({profile,revision,mutate,onCancel}) {
   const [pending,setPending]=useState(false);
   const [result,setResult]=useState(null);
   const [error,setError]=useState(null);
-  const {max_resolution,max_steps,timeout_seconds}=profile.flux;
+  const {max_resolution,max_steps,timeout_seconds}=profile.comfy_image??profile.flux;
   const initial={width:Math.min(768,Math.floor(max_resolution/16)*16),
     height:Math.min(768,Math.floor(max_resolution/16)*16),steps:Math.min(4,max_steps)};
 
@@ -76,7 +76,7 @@ export function FluxProbeDialog({profile,revision,mutate,onCancel}) {
       {error&&<Alert type="error" showIcon message={error}/>}
       {result&&<Typography.Text>Thời gian: {result.duration_seconds} giây</Typography.Text>}
       {result?.status==='ASSET_READY'&&<>
-        <Image width="100%" alt="Ảnh chạy thử FLUX" src={result.preview_url}/>
+        <Image width="100%" alt={profile.comfy_image?"Ảnh chạy thử ComfyUI":"Ảnh chạy thử FLUX"} src={result.preview_url}/>
         <Typography.Text className="env-break" copyable>{result.workspace_path}</Typography.Text>
         <Typography.Text type="secondary">{result.width}×{result.height} · {result.steps} bước · seed {result.seed}</Typography.Text>
       </>}
