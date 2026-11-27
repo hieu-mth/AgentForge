@@ -2,6 +2,7 @@
 import http.client
 import json
 
+from agentforge.ai.profile_config import local_url
 from agentforge.features.film_studio import draft_resources
 from agentforge.ops import runtime_certification as runtime
 
@@ -35,3 +36,53 @@ def infer_structured(profile, instructions, data, schema, *, cpu_only=False, ext
     if message.get("done") is not True or message.get("done_reason") == "length":
         raise ValueError("Ollama did not complete the structured response")
     return json.loads(message["message"]["content"])
+
+
+def check_metadata(profile, *, opener=None):
+    import urllib.error
+    import urllib.request
+
+    profile_id = profile["id"]
+    url = local_url(profile["base_url"]) + "/api/tags"
+    request = urllib.request.Request(
+        url, headers={"Accept": "application/json"}, method="GET")
+    # A local server could redirect requests to the Internet, or environment
+    # proxies could intercept even loopback URLs. Never follow redirects and
+    # never route this Owner metadata probe through OS/environment proxies.
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+    safe_open = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}), NoRedirect()).open
+    try:
+        with (opener or safe_open)(request, timeout=3) as response:
+            if response.status != 200:
+                return {"profile_id": profile_id, "status": "HTTP_ERROR",
+                        "inference_invoked": False}
+            raw = response.read(262145)
+        if len(raw) > 262144:
+            raise ValueError("Too many model metadata bytes")
+        models = json.loads(raw).get("models")
+        if not isinstance(models, list):
+            raise ValueError("Invalid Ollama tags metadata")
+        found = any(isinstance(item, dict) and
+                    item.get("name") == profile["model"] for item in models)
+        status = "LOCAL_MODEL_FOUND" if found else "MODEL_NOT_INSTALLED"
+    except urllib.error.HTTPError:
+        status = "HTTP_ERROR"
+    except (TimeoutError, urllib.error.URLError, OSError):
+        status = "UNAVAILABLE"
+    except (ValueError, UnicodeError, TypeError, AttributeError):
+        status = "INVALID_RESPONSE"
+    return {"profile_id": profile_id, "status": status,
+            "inference_invoked": False}
+
+
+def registry_readiness(profile):
+    return check_metadata(profile)["status"]
+
+
+def probe(profile):
+    host, port = runtime._local_endpoint(profile["base_url"])
+    return runtime._safe_probe(lambda: runtime._ollama_inference(
+        profile["id"], profile=(host, port, profile["model"])))

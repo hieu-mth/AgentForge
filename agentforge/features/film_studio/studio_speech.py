@@ -11,6 +11,10 @@ def supports(profile):
     return bool(profile and profile.get("provider") == "openai")
 
 
+def registry_readiness(profile):
+    return studio_cloud.readiness(profile)
+
+
 def synthesize(profile, text, voice):
     if not supports(profile) or not isinstance(text, str) or not 1 <= len(text) <= 180:
         raise ValueError("Unsupported speech adapter or narration text")

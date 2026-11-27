@@ -58,10 +58,14 @@ def supports_video(profile):
     return profile.get("provider", PROVIDER) == PROVIDER and profile.get("model") in MODELS
 
 
-def credential(profile):
-    endpoint = profile.get("base_url") or os.environ.get(profile.get("base_url_env", ""), "")
+def validate_endpoint(endpoint):
     if endpoint.rstrip("/") not in {"https://api.ltx.io", "https://api.ltx.io/v2"}:
         raise ValueError("LTX cloud endpoint must be the official HTTPS endpoint.")
+
+
+def credential(profile):
+    endpoint = profile.get("base_url") or os.environ.get(profile.get("base_url_env", ""), "")
+    validate_endpoint(endpoint)
     key = (cloud_credentials.unprotect_api_key(profile["api_key_protected"])
            if "api_key_protected" in profile else os.environ.get(profile.get("api_key_env", ""), ""))
     if not re.fullmatch(r"[!-~]{1,4096}", key):

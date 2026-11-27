@@ -10,8 +10,8 @@ import threading
 import unittest
 from unittest.mock import patch
 
-from agentforge.ai import model_hub
-from agentforge.features.film_studio import draft_motion, motion_ltx
+from agentforge.ai import model_hub, profile_config
+from agentforge.features.film_studio import draft_motion, motion_ltx, studio_ollama
 from agentforge.features.media import flux_runtime
 from tests.owner_http_fixture import OwnerHttpFixture
 from tests.test_flux_runtime import profile as flux_profile
@@ -32,7 +32,7 @@ class ModelHubTests(unittest.TestCase):
             worker = threading.Thread(target=server.serve_forever, daemon=True)
             worker.start()
             try:
-                result = model_hub._check_ollama({"id": "local", "model": "sample:latest",
+                result = studio_ollama.check_metadata({"id": "local", "model": "sample:latest",
                     "base_url": f"http://127.0.0.1:{server.server_port}"})
             finally:
                 server.shutdown()
@@ -145,7 +145,7 @@ class ModelHubTests(unittest.TestCase):
                 request.return_value = {"devices": [{"type": "cuda"}]}
                 nodes.side_effect = ValueError("missing sampler")
                 self.assertEqual(check(motion, "film.motion")["reason"], "MOTION_WORKFLOW_UNAVAILABLE")
-            with patch.object(model_hub, "_check_ollama", return_value={"status": "LOCAL_MODEL_FOUND"}):
+            with patch.object(studio_ollama, "check_metadata", return_value={"status": "LOCAL_MODEL_FOUND"}):
                 self.assertEqual(check(ollama, "film.storyboard")["status"], "METADATA_COMPATIBLE")
             self.assertEqual(db.read_bytes(), before)
 
@@ -160,7 +160,7 @@ class ModelHubTests(unittest.TestCase):
             )
             for revision, profile in enumerate(profiles):
                 model_hub.change("SAVE_MODEL_PROFILE", expected_revision=revision, db_path=db, profile=profile)
-            with (patch.object(model_hub, "_check_ollama", side_effect=AssertionError("unexpected probe")),
+            with (patch.object(studio_ollama, "check_metadata", side_effect=AssertionError("unexpected probe")),
                   patch.dict("os.environ", {"ANTHROPIC_AUTH_TOKEN": "", "ANTHROPIC_BASE_URL": ""}),
                   patch("http.client.HTTPSConnection", side_effect=AssertionError("unexpected HTTPS"))):
                 disabled, cloud = [model_hub.capability_readiness(
@@ -316,8 +316,8 @@ class ModelHubTests(unittest.TestCase):
         for url in ("https://example.com:11434", "http://192.168.1.2:11434",
                     "http://127.0.0.1:11434/private", "http://evil@127.0.0.1:11434"):
             with self.subTest(url=url), self.assertRaises(model_hub.ModelConfigError):
-                model_hub._local_url(url)
-        self.assertEqual(model_hub._local_url("http://127.0.0.1:11434"),
+                profile_config.local_url(url)
+        self.assertEqual(profile_config.local_url("http://127.0.0.1:11434"),
                          "http://127.0.0.1:11434")
 
 

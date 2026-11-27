@@ -15,18 +15,33 @@ class RegistryTests(unittest.TestCase):
             def infer_structured(self, profile, instructions, data, schema, **options):
                 return {"model": profile["model"], "value": data["value"]}
 
+            def registry_readiness(self, profile):
+                return "READY"
+
+            def probe(self, profile):
+                return {"status": "PASS_RUNTIME"}
+
         adapter = Text()
         provider = "fixture_api"
         descriptor = {"label": "Fixture API", "connection": "local",
                       "model_label": "Model", "defaults": {"base_url": "http://127.0.0.1:9000"}}
         entry = registry.Registration("text", lambda: adapter, (provider,))
+        def validate_options(profile, options):
+            if options["variant"] not in {"fast", "quality"}:
+                raise ValueError("Invalid fixture variant")
+            return options
+
+        profile_options = registry.ProfileOptions((frozenset({"variant"}),), validate_options)
         with (tempfile.TemporaryDirectory() as directory,
+              patch.dict(registry.PROFILE_OPTIONS, {provider: profile_options}),
               patch.dict(registry.ADAPTERS, {provider: descriptor}),
               patch.object(registry, "REGISTRATIONS", (*registry.REGISTRATIONS, entry))):
             db = Path(directory) / "registry.sqlite3"
             for revision, model in enumerate(("fixture-a", "fixture-b")):
                 profile = {"id": "fixture_text", "provider": provider, "model": model,
-                           "enabled": True, "base_url": descriptor["defaults"]["base_url"]}
+                           "enabled": True, "base_url": descriptor["defaults"]["base_url"], "variant": "fast"}
+                with self.assertRaises(model_hub.ModelConfigError):
+                    model_hub.validate_profile({**profile, "variant": "invalid"})
                 result = model_hub.change("SAVE_MODEL_PROFILE", expected_revision=revision * 2,
                                           db_path=db, profile=profile)
                 self.assertTrue(result["profiles"][0]["runtime_supported"])
@@ -37,6 +52,10 @@ class RegistryTests(unittest.TestCase):
                 self.assertEqual(studio_runtime.text_adapter(profile).infer_structured(
                     profile, "", {"value": 7}, {}), {"model": model, "value": 7})
                 self.assertEqual(model_hub.effective_models(db_path=db)["fixture_text"]["model"], model)
+                self.assertEqual(model_hub.capability_readiness(profile["id"], "general.text",
+                    expected_revision=revision * 2 + 2, db_path=db)["status"], "METADATA_COMPATIBLE")
+                self.assertEqual(model_hub.probe_local_profile(profile["id"],
+                    expected_revision=revision * 2 + 2, db_path=db)["status"], "PASS_RUNTIME")
 
     def test_ambiguity_fails_closed(self):
         entry = registry.Registration("text", lambda: object(), ("ollama",))

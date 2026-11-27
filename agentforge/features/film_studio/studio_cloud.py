@@ -10,6 +10,7 @@ import re
 from urllib.parse import quote, urlsplit
 
 from agentforge.ai import cloud_credentials
+from agentforge.ai.profile_config import cloud_url
 
 PROVIDERS = frozenset({"openai", "anthropic"})
 MAX_RESPONSE_BYTES = 512 * 1024
@@ -22,15 +23,13 @@ class CloudRequestError(ValueError):
 
 
 def _connection(profile):
-    # Import lazily to avoid a Model Hub / adapter dependency cycle.
-    from agentforge.ai.model_hub import _cloud_url
     endpoint = profile.get("base_url") or os.environ.get(profile.get("base_url_env", ""), "")
     key = (cloud_credentials.unprotect_api_key(profile["api_key_protected"])
            if "api_key_protected" in profile else os.environ.get(profile.get("api_key_env", ""), ""))
     if not isinstance(key, str) or not re.fullmatch(r"[!-~]{1,4096}", key):
         raise CloudRequestError("AUTH_REQUIRED")
     try:
-        parsed = urlsplit(_cloud_url(endpoint))
+        parsed = urlsplit(cloud_url(endpoint))
     except ValueError:
         raise CloudRequestError("INVALID_ENDPOINT") from None
     # An endpoint is the API base, e.g. https://provider.example/v1.
