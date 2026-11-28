@@ -205,3 +205,14 @@ image workflows, with optional width, height, steps and seed. The request ID
 and profile/request hashes are persisted in the existing visual receipt before
 submission; repeating an identical request returns the receipt and changing
 its options is rejected. No separate FLUX probe API or dialog remains.
+
+### Model registration schema
+
+The registry catalog publishes `profile_schema` per adapter, including credential
+mode and an ordered list of allowed option variants with field paths, primitive
+input kinds, defaults and bounds. ComfyUI option variants also define the exact
+allowed option-key sets used by backend validation. The dashboard serializes only
+the selected variant; choosing an image workflow dialect is explicit rather than
+inferred from its nodes. OAuth uses its existing explicit account actions; the
+schema never exposes a secret or executable validator. Existing DB profile shapes
+and route/receipt identities are unchanged. Backend validation remains authoritative.
