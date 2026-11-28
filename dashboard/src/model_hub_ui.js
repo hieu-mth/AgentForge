@@ -28,7 +28,7 @@ export function profilePayload(values,adapter) {
     model:values.model?.trim(),enabled:values.enabled===true};
   for(const key of Object.keys(adapter.defaults))profile[key]=values[key]?.trim();
   const variants=optionVariants(adapter);
-  const selected=variants.find(v=>v.id===values.option_variant);
+  const selected=variants.find(v=>v.id===values.option_variant)??(values.option_variant==null&&variants.length===1?variants[0]:undefined);
   if(variants.length&&!selected)throw new Error('Chọn loại cấu hình runtime.');
   for(const field of selected?.fields??[]){
     const raw=getPath(values.adapter_options,field.path);
