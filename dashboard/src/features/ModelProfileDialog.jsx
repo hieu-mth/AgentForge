@@ -252,7 +252,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         <Input.Password autoComplete="new-password"/>
       </Form.Item>}
       {variants.length>1&&<Form.Item name="option_variant" label="Loại cấu hình runtime" rules={[{required:true}]}>
-        <Select options={variants.map(item=>({value:item.id,label:item.label}))}/>
+        <Select virtual={false} options={variants.map(item=>({value:item.id,label:item.label}))}/>
       </Form.Item>}
       {variant?.fields.map(field=>{
         const name=['adapter_options',...field.path];
