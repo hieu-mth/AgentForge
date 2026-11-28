@@ -277,14 +277,47 @@ def confirm_rejected_submission(job, data, profile):
             "association": "OWNER_ATTESTED_REJECTION", "provider_status_verified": False}
 
 
+def _ledger_provider(model):
+    """Infer the provider of a historical model-only receipt without network or DB writes.
+
+    Unknown or ambiguous model IDs deliberately remain unscoped.
+    """
+    if not isinstance(model, str) or not model:
+        return None
+    matches = []
+    for provider, descriptor in registry.ADAPTERS.items():
+        if descriptor["connection"] != "cloud":
+            continue
+        profile = {"provider": provider, "model": model}
+        matches.extend(provider for entry in registry.REGISTRATIONS
+                       if entry.kind == "cloud_video_transport" and entry.matches(profile))
+    return matches[0] if len(matches) == 1 else None
+
+
 def require_resolved_ledger(job):
+    """Block unresolved work in this production or the same cloud provider.
+
+    Legacy receipts store a model ID rather than a provider. Isolate only when
+    both providers can be uniquely resolved from the source-owned registry.
+    Never discard receipts, release reservations, or dispatch during this check.
+    """
     owned = {s.get("motion_job") for s in (job.get("board") or {}).get("scenes", [])}
+    production = job.get("id")
+    identity = job.get("approved_motion") or job.get("motion_plan") or {}
+    provider = _ledger_provider(identity.get("model"))
     conn = _db()
     if conn is not None:
         with closing(conn):
-            if any(row[0] not in owned for row in conn.execute(
-                    "SELECT id FROM jobs WHERE production NOT LIKE 'probe:%' AND state IN ('SUBMITTING','SUBMITTED')")):
-                raise ResourceBlocked("CLOUD_MOTION_RECONCILIATION_REQUIRED")
+            rows = conn.execute(
+                "SELECT id, production, model FROM jobs WHERE production NOT LIKE 'probe:%' "
+                "AND state IN ('SUBMITTING','SUBMITTED')")
+            for row in rows:
+                if row["id"] in owned and row["production"] == production:
+                    continue
+                other = _ledger_provider(row["model"])
+                if (row["production"] == production or row["id"] in owned
+                        or provider is None or other is None or provider == other):
+                    raise ResourceBlocked("CLOUD_MOTION_RECONCILIATION_REQUIRED")
 
 
 def require_draft_removable(ident):

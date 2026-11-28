@@ -1391,7 +1391,9 @@ def _storyboard_action(job, action, data):
             {"storyboard-duration", "storyboard-add", "storyboard-remove", "storyboard-move"}):
         raise ValueError("Storyboard giữ thứ tự và thời lượng của các cảnh gốc. Hãy tạo bản nháp mới để đổi cấu trúc.")
     if not job.get("deferred_media_binding"):
-        studio_runtime.motion_artifacts(job).require_resolved_ledger({})  # Reconcile possible dispatch before edit.
+        # Keep the pinned provider identity, but treat all pending shots as
+        # unresolved during editing: an edit must not invalidate a live request.
+        studio_runtime.motion_artifacts(job).require_resolved_ledger({**job, "board": {}})
     if job["storyboard_version"] >= draft_timeline.MAX_VERSIONS:
         raise ValueError("Đã đạt giới hạn phiên bản. Tạo phim mới để tiếp tục.")
     original = draft_timeline.snapshot(job)
