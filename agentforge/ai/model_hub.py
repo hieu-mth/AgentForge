@@ -680,7 +680,7 @@ def media_probe_profile(profile_id, *, expected_revision, db_path=None):
     profile = _profiles(state=state).get(profile_id)
     if (not profile or not profile["enabled"] or not ADAPTERS[profile["provider"]].get("media_probe")
             or not (orchestrator_policy.compatible("video", profile) or
-                    (is_cloud(profile) and orchestrator_policy.compatible("image", profile)))):
+                    orchestrator_policy.compatible("image", profile))):
         raise ModelConfigError("Probe requires an enabled compatible media profile")
     return profile
 
