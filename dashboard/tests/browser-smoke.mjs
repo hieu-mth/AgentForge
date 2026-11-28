@@ -670,10 +670,18 @@ try {
   await advanced.locator('summary').click();
   const routing=advanced.getByRole('combobox',{name:'Điều phối sản xuất',exact:true});
   await routing.press('ArrowDown');
-  const routeOptions=settings.locator('.ant-select-dropdown:visible .ant-select-item-option-content');
+  const listId=await routing.getAttribute('aria-controls');
+  if(!listId)throw new Error('Routing combobox is missing its controlled listbox');
+  const routeList=settings.locator('[id='+JSON.stringify(listId)+']');
+  await routeList.waitFor({state:'visible'});
+  const routeOptions=routeList.getByRole('option');
   await routeOptions.filter({hasText:'AI tự chọn model phù hợp'}).waitFor();
-  if(await routeOptions.count()!==2||await composer.getByText('Tối đa giây video cloud',{exact:true}).count())
-    throw new Error('Retired technical production options still exposed');
+  const actualOptions=(await routeOptions.allTextContents()).map(label=>label.trim()).sort();
+  const expectedOptions=['Theo model đã phân công','AI tự chọn model phù hợp'].sort();
+  if(JSON.stringify(actualOptions)!==JSON.stringify(expectedOptions))
+    throw new Error('Unexpected routing choices: '+JSON.stringify(actualOptions));
+  if(await composer.getByText('Tối đa giây video cloud',{exact:true}).count())
+    throw new Error('Retired cloud duration field still exposed');
   await routing.press('Escape');
   await advanced.locator('summary').click();
   await settings.route('**/api/film/drafts/start',route=>{
