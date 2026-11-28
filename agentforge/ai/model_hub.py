@@ -667,7 +667,7 @@ def vision_binding(*, db_path=None, require_ffmpeg=True):
     permission = "call_cloud" if is_cloud(profile) else "call_local"
     if (policy["mode"] == "MANUAL" or not permissions["assign_models"] or not permissions[permission]
             or (require_ffmpeg and (not permissions["run_tools"] or "ffmpeg" not in policy["tools"]))):
-        raise PermissionError("vision.qa: cần cấp quyền model và công cụ FFmpeg trong AI điều phối.")
+        raise PermissionError("vision.qa: cần cấp quyền model" + (" và công cụ FFmpeg" if require_ffmpeg else "") + " trong AI điều phối.")
     return revision, profile, policy["cloud_call_limit"]
 
 
