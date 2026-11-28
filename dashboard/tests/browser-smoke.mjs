@@ -670,7 +670,7 @@ try {
   const routing=advanced.getByRole('combobox',{name:'Điều phối sản xuất',exact:true});
   await routing.click();
   const routeOptions=settings.locator('.ant-select-dropdown:visible .ant-select-item-option-content');
-  await routeOptions.getByText('AI tự chọn model phù hợp',{exact:true}).waitFor();
+  await routeOptions.filter({hasText:'AI tự chọn model phù hợp'}).waitFor();
   if(await routeOptions.count()!==2||await composer.getByText('Tối đa giây video cloud',{exact:true}).count())
     throw new Error('Retired technical production options still exposed');
   await routing.press('Escape');
