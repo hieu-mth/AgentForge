@@ -12,6 +12,11 @@ class ProductionRouterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             production_router.choose(brief, options, lambda *_: {"choice": "cloud:unregistered", "reason": "x"})
 
+    def test_automatic_budget_is_deferred_to_timeline(self):
+        plan = production_router.choose({}, [{"method": "cloud", "id": "cloud"}], lambda *_: self.fail("No AI needed"))
+        self.assertEqual(plan["cloud_budget_mode"], "timeline")
+        self.assertEqual(plan["max_cloud_seconds"], 0)
+
     def test_one_route_without_ai_call(self):
         def no_inference(*args):
             self.fail("Single route does not need inference")
