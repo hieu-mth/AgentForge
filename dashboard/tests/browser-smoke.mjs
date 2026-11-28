@@ -659,10 +659,25 @@ try {
   await editor.waitFor();
   if(await editor.inputValue()!==longScript||await editor.count()!==1||await settings.getByRole('radio').count())
     throw new Error('Long Vietnamese script was not restored after refreshing');
-  await settings.getByText('Thời lượng · AI tự đề xuất',{exact:true}).waitFor();
+  const composer=settings.locator('.env-panel').filter({has:editor});
+  await composer.getByRole('combobox',{name:'Thời lượng',exact:true}).waitFor();
+  await composer.getByText('AI tự xác định',{exact:true}).waitFor();
+  await composer.getByText('AI tự chọn nhân vật',{exact:true}).waitFor();
+  const advanced=composer.locator('details').filter({hasText:'Tùy chọn nâng cao'});
+  if(await advanced.getAttribute('open')!==null)
+    throw new Error('Advanced production options should be collapsed by default');
+  await advanced.locator('summary').click();
+  const routing=advanced.getByRole('combobox',{name:'Điều phối sản xuất',exact:true});
+  await routing.click();
+  const routeOptions=settings.locator('.ant-select-dropdown:visible .ant-select-item-option-content');
+  await routeOptions.getByText('AI tự chọn model phù hợp',{exact:true}).waitFor();
+  if(await routeOptions.count()!==2||await composer.getByText('Tối đa giây video cloud',{exact:true}).count())
+    throw new Error('Retired technical production options still exposed');
+  await routing.press('Escape');
+  await advanced.locator('summary').click();
   await settings.route('**/api/film/drafts/start',route=>{
     const {id,...brief}=route.request().postDataJSON();
-    if(brief.idea!==longScript||Object.keys(brief).sort().join()!=='duration_mode,idea,mode,ratio,scene_count,seconds')
+    if(brief.idea!==longScript||brief.route_strategy!=='assigned'||Object.keys(brief).sort().join()!=='duration_mode,idea,mode,ratio,route_strategy,scene_count,seconds')
       throw new Error('Studio did not submit the single content field unchanged');
     return route.fulfill({json:{id,brief,status:'QUEUED'}});
   });
