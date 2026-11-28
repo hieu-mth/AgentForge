@@ -200,4 +200,8 @@ Unsupported input modes are rejected before reservation. Local probes use an
 isolated single-shot plan under `probe-<id>` and the existing motion ledger,
 resource checks and MP4 verifier. Polling an existing ID never submits a new
 provider job. Cloud requests may cost money; no automatic retries are authorized.
-The existing advanced local image probe retains resolution/steps/seed controls.
+The same `RUN_MEDIA_MODEL_PROBE` / `POLL_MEDIA_MODEL_PROBE` API also admits local
+image workflows, with optional width, height, steps and seed. The request ID
+and profile/request hashes are persisted in the existing visual receipt before
+submission; repeating an identical request returns the receipt and changing
+its options is rejected. No separate FLUX probe API or dialog remains.
