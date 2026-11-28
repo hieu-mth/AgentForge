@@ -19,7 +19,7 @@ def choose(brief, candidates, infer):
                        "continuous motion, native audio or lower GPU load. Never assume an unverified provider is better. "
                        "Hybrid uses an assigned reference image for each shot; cloud generates from prompt and may use the "
                        "previous actual frame for continuity. Use each option\'s billable durations and native-audio support. "
-                       "Choose based on narrative, reference consistency and explicit seconds cap. "
+                       "Choose based on narrative, reference consistency and available cloud budget. "
                        "execution_ready is configuration admission only, not a quality benchmark. "
                        "Prefer ready routes when equally suitable; missing media permission does not prevent planning. "
                        "Explain in Vietnamese.",
@@ -31,7 +31,9 @@ def choose(brief, candidates, infer):
             raise ValueError("AI selected an unapproved route or invalid reason.")
     selected = options[key]
     plan = {"method": selected["method"], "motion_ref": selected["id"],
-            "reason": reason.strip(), "max_cloud_seconds": brief["max_cloud_seconds"]}
+            "reason": reason.strip(), "max_cloud_seconds": brief.get("max_cloud_seconds", 0)}
+    if "max_cloud_seconds" not in brief:
+        plan["cloud_budget_mode"] = "timeline"
     if "billable_durations_seconds" in selected:
         plan["billable_durations_seconds"] = selected["billable_durations_seconds"]
         plan["native_audio"] = selected.get("native_audio", True)
