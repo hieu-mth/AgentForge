@@ -164,7 +164,10 @@ class OrchestratorTests(unittest.TestCase):
         self.seed()
         snapshot = model_hub.catalog(db_path=self.db)
         methods = {row["id"]: row["available"] for row in snapshot["production_options"]["methods"]}
-        self.assertEqual(methods, {"assigned": True, "auto": False, "local": False, "hybrid": False, "cloud": False})
+        self.assertEqual(methods, {"assigned": True, "auto": True, "local": False, "hybrid": False, "cloud": False})
+        self.assertFalse(any(row["execution_ready"] for row in snapshot["production_options"]["methods"]))
+        _, candidates = model_hub.production_candidates("assigned", db_path=self.db)
+        self.assertEqual(candidates, [])
         video = {"id": "cloud_video", "provider": "ltx_cloud", "model": "ltx-2-3-fast",
                  "enabled": True, **model_hub.ADAPTERS["ltx_cloud"]["environment_defaults"]}
         model_hub.change("SAVE_MODEL_PROFILE", expected_revision=2, db_path=self.db, profile=video)
@@ -176,7 +179,12 @@ class OrchestratorTests(unittest.TestCase):
         self.assign("film.motion", "cloud_video", revision=5)
         snapshot = self.save(p, revision=6)
         self.assertEqual({row["id"]: row["available"] for row in snapshot["production_options"]["methods"]},
-                         {"assigned": False, "auto": True, "local": False, "hybrid": True, "cloud": True})
+                         {"assigned": True, "auto": True, "local": False, "hybrid": True, "cloud": True})
+        readiness = {row["id"]: row["execution_ready"] for row in snapshot["production_options"]["methods"]}
+        self.assertEqual(readiness, {"assigned": True, "auto": True, "local": False, "hybrid": False, "cloud": True})
+        _, candidates = model_hub.production_candidates("assigned", db_path=self.db)
+        self.assertEqual({(c["id"], c["method"]) for c in candidates},
+                         {("cloud_video", "cloud"), ("cloud_video", "hybrid")})
         self.assertEqual(snapshot["production_options"]["auto_min_cloud_seconds"], 12)
 
     def test_video_routes_follow_declared_input_modes(self):
