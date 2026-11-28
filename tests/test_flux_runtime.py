@@ -116,10 +116,18 @@ class FluxRuntimeTests(unittest.TestCase):
                   patch.object(flux_runtime, "_json", side_effect=provider),
                   patch.object(flux_runtime.comfyui, "request_image_bytes",
                                side_effect=lambda *args, sink, **kwargs: sink.write(png.getvalue()) and b"")):
-                result = flux_runtime.generate("cat", profile_id=row["id"], expected_revision=2,
-                                               width=256, height=256, seed=7, hub_db=hub, db_path=db)
-                self.assertEqual(result["status"], "ASSET_READY")
-                self.assertEqual(visual_jobs.image_for_job(result["job_id"], db_path=db)[0], png.getvalue())
+                from agentforge.features.film_studio import media_probe
+                request = {"ack": "RUN_MEDIA_MODEL_PROBE", "profile_id": row["id"], "expected_revision": 2,
+                           "probe_id": "a"*32, "prompt": "cat", "width": 256, "height": 256, "seed": 7}
+                with (patch.object(model_hub, "DB_PATH", hub), patch.object(visual_jobs, "DB", db)):
+                    result = media_probe.handle(request)
+                    self.assertEqual(result["status"], "ASSET_READY")
+                    self.assertEqual(media_probe.handle(request), result)
+                    poll = {k: request[k] for k in ("profile_id", "expected_revision", "probe_id")}
+                    self.assertEqual(media_probe.handle({**poll, "ack": "POLL_MEDIA_MODEL_PROBE"}), result)
+                    with self.assertRaisesRegex(ValueError, "another request"):
+                        media_probe.handle({**request, "seed": 8})
+                    self.assertEqual(visual_jobs.image_for_job(result["probe_id"], db_path=db)[0], png.getvalue())
             self.assertEqual(calls.count("/prompt"), 1)
             self.assertIn("/object_info/CheckpointLoaderSimple", calls)
             self.assertIn("/object_info/KSampler", calls)

@@ -131,7 +131,7 @@ def _collect(provider_id, ident, port, config, metadata, *, sink=None):
 def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=None,
              automated=False, hub_db=None, db_path=None, profile_id=None, expected_revision=None,
              production_job=None, production_revision=None, production_profile=None,
-             dispatch_guard=nullcontext):
+             dispatch_guard=nullcontext, probe_request_sha=None):
     """Entry point for Studio and trusted Orchestrator callers."""
     ops_control.require_active()
     if production_profile is not None:
@@ -188,6 +188,10 @@ def generate(prompt, *, width=None, height=None, steps=None, seed=None, scene=No
         "workflow_sha256": hashlib.sha256(json.dumps(bound, sort_keys=True).encode()).hexdigest(),
         "output_dir": config["output_dir"], "duration_seconds": None,
     }
+    if profile_id is not None:
+        metadata["profile_sha"] = hashlib.sha256(json.dumps(profile, sort_keys=True).encode()).hexdigest()
+        if probe_request_sha is not None:
+            metadata["probe_request_sha"] = probe_request_sha
     def snapshot():
         return json.dumps(metadata, ensure_ascii=False, allow_nan=False)
 

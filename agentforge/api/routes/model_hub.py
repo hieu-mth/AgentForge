@@ -127,17 +127,6 @@ def handle(server, path, request, session=None):
             require_active()
             return model_hub.probe_cloud_profile(request["profile_id"],
                                                  expected_revision=request["expected_revision"])
-        if request.get("ack") == "RUN_FLUX_MODEL_PROBE":
-            fields = {"ack", "profile_id", "expected_revision", "prompt"}
-            options = {"width", "height", "steps", "seed"}
-            if (set(request) - options != fields or not server.allow_external_actions
-                    or not isinstance(request.get("profile_id"), str)):
-                raise PermissionError("Explicit local inference approval and external-tools mode required")
-            from agentforge.features.media.flux_runtime import generate
-            with model_hub.local_inference_slot():
-                return generate(request["prompt"], profile_id=request["profile_id"],
-                                expected_revision=request["expected_revision"],
-                                **{key: request[key] for key in options & request.keys()})
         if (set(request) != {"ack", "profile_id", "expected_revision"} or
                 request["ack"] != "RUN_LOCAL_MODEL_PROBE" or not server.allow_external_actions):
             raise PermissionError("Explicit local inference approval and external-tools mode required")

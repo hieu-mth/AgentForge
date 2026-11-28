@@ -11,7 +11,7 @@ from agentforge.features.film_studio import draft_motion_cloud as motion, studio
 from agentforge.features.film_studio import draft_motion, long_form, motion_comfy, motion_verify
 from agentforge.features.film_studio.studio_contracts import ProviderRequestError
 from agentforge.features.film_studio.draft_resources import NeedsReconciliation
-from agentforge.features.media import visual_jobs
+from agentforge.features.media import flux_runtime, visual_jobs
 from agentforge.paths import ensure_local_root
 
 MAX_VIDEO = max(motion.MAX_CLIP_BYTES, motion_verify.MAX_MP4_BYTES)
@@ -46,19 +46,38 @@ def _video_reply(row):
             **({"error": detail["message"]} if detail else {})}
 
 
-def _image_reply(ident, profile):
+IMAGE_OPTIONS = frozenset({"width", "height", "steps", "seed"})
+
+
+def _image_reply(ident, profile, prompt=None, options=None):
     row = visual_jobs._row(ident)
     metadata = visual_jobs.runtime_details(ident)
     if not metadata or not metadata.get("probe") or metadata.get("profile_sha") != _fingerprint(profile):
         raise ValueError("Image probe does not match this profile.")
+    local = not model_hub.is_cloud(profile)
+    if prompt is not None:
+        if local:
+            if metadata.get("probe_request_sha") != _fingerprint({"prompt": prompt, "options": options or {}}):
+                raise ValueError("Probe ID already belongs to another request.")
+        elif metadata.get("prompt") != prompt:
+            raise ValueError("Probe ID already belongs to another request.")
     ready = row["status"] == "ASSET_READY"
     if ready:
         with visual_jobs.open_image_for_job(ident):
             pass
-    return {"probe_id": ident, "status": "ASSET_READY" if ready else
-            ("REJECTED" if row["status"] == "REJECTED" else "NEEDS_RECONCILIATION"),
-            "preview_url": "/api/visuals/" + ident + "/preview" if ready else None,
-            **({"error": metadata["error"]} if "error" in metadata else {})}
+    state = row["status"]
+    status = ("ASSET_READY" if ready else "REJECTED" if state in {"REJECTED", "WORKFLOW_REJECTED"} else
+              "FAILED" if state in {"EXECUTION_FAILED", "GPU_RESOURCE_FAILURE", "CANCELLED"} else "NEEDS_RECONCILIATION")
+    result = {"probe_id": ident, "status": status,
+              "preview_url": "/api/visuals/" + ident + "/preview" if ready else None,
+              **({"error": metadata["error"]} if "error" in metadata else {})}
+    if local:
+        result.update({key: metadata[key] for key in ("width", "height", "steps", "seed", "duration_seconds")})
+        if ready:
+            result["workspace_path"] = f"workspace/{metadata['output_dir']}/{ident}.png"
+        else:
+            result["error"] = state
+    return result
 
 
 def _video_input(profile, source):
@@ -232,7 +251,7 @@ def handle(request):
     common = {"ack", "profile_id", "expected_revision", "probe_id"}
     fields = set(request)
     if (action not in {"RUN_MEDIA_MODEL_PROBE", "POLL_MEDIA_MODEL_PROBE"} or
-            (fields - {"source_image_job"} if action == "RUN_MEDIA_MODEL_PROBE" else fields) !=
+            (fields - (IMAGE_OPTIONS | {"source_image_job"}) if action == "RUN_MEDIA_MODEL_PROBE" else fields) !=
             (common | {"prompt"} if action == "RUN_MEDIA_MODEL_PROBE" else common)):
         raise ValueError("Invalid media probe request.")
     ident = visual_jobs._id(request["probe_id"])
@@ -244,21 +263,33 @@ def handle(request):
             prompt = request["prompt"]
             if not isinstance(prompt, str) or not 1 <= len(prompt.strip()) <= 2000:
                 raise ValueError("Enter a prompt of up to 2000 characters.")
+        options = {key: request[key] for key in IMAGE_OPTIONS & fields}
         if model_hub.orchestrator_policy.compatible("image", profile):
             if "source_image_job" in request:
                 raise ValueError("Image probe does not accept a video source.")
+            local = not model_hub.is_cloud(profile)
+            if options and not local:
+                raise ValueError("Image options are only supported by local workflows.")
             if action == "RUN_MEDIA_MODEL_PROBE":
                 try:
-                    return _image_reply(ident, profile)
+                    return _image_reply(ident, profile, prompt, options)
                 except KeyError:
                     pass
-                request_data = studio_runtime.ImageRequest(prompt, "16:9", "", ident, request["expected_revision"])
-                try:
-                    studio_runtime.image_adapter(profile).generate(profile, request_data)
-                except (NeedsReconciliation, ProviderRequestError):
-                    pass
+                if local:
+                    with model_hub.local_inference_slot():
+                        flux_runtime.generate(prompt, profile_id=profile["id"],
+                            expected_revision=request["expected_revision"], production_job=ident,
+                            probe_request_sha=_fingerprint({"prompt": prompt, "options": options}), **options)
+                else:
+                    request_data = studio_runtime.ImageRequest(prompt, "16:9", "", ident, request["expected_revision"])
+                    try:
+                        studio_runtime.image_adapter(profile).generate(profile, request_data)
+                    except (NeedsReconciliation, ProviderRequestError):
+                        pass
             return _image_reply(ident, profile)
         if model_hub.orchestrator_policy.compatible("video", profile):
+            if options:
+                raise ValueError("Video probe does not accept image workflow options.")
             source = request.get("source_image_job")
             if not model_hub.is_cloud(profile):
                 return _local_video(ident, profile, prompt if action == "RUN_MEDIA_MODEL_PROBE" else None, source)

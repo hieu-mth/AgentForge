@@ -7,7 +7,6 @@ import {SectionTitle,SettingsHeading,SettingsStatus,Stat} from '../components/se
 import {useResource, ResourceStatus} from '../use_resource.jsx';
 import {displayStatus} from '../environment_format.js';
 import {ModelProfileDialog} from './ModelProfileDialog.jsx';
-import {FluxProbeDialog} from './FluxProbeDialog.jsx';
 import {MediaProbeDialog} from './MediaProbeDialog.jsx';
 import {outputSummary,profileCapability,readinessLabels,readinessReason} from '../model_hub_ui.js';
 import {requestError} from '../api.js';
@@ -25,7 +24,6 @@ export function ModelHub({mutate}) {
   const [checked,setChecked]=useState({});
   const [probes,setProbes]=useState({});
   const [editor,setEditor]=useState(null);
-  const [fluxProbe,setFluxProbe]=useState(null);
   const [mediaProbe,setMediaProbe]=useState(null);
 
   const reload=hubResource.reload;
@@ -115,9 +113,7 @@ export function ModelHub({mutate}) {
           aria-label={checkResult(row)?.error?'Thử lại':'Kiểm tra'}
           onClick={()=>checkProfile(row)}>{checkResult(row)?.error?'Thử lại':'Kiểm tra'}</Button>
       </AppTooltip>}
-    {(row.flux||row.comfy_image)&&<Button size="small" disabled={!row.enabled}
-      onClick={()=>setFluxProbe({profile:row,revision:hub.revision})}>Chạy thử</Button>}
-    {byAdapter[row.provider]?.media_probe&&!(row.flux||row.comfy_image)&&profileCapability(row)?.runtime_compatible&&
+    {byAdapter[row.provider]?.media_probe&&profileCapability(row)?.runtime_compatible&&
       <Button size="small" disabled={!row.enabled}
         onClick={()=>setMediaProbe({profile:row,revision:hub.revision})}>Chạy thử</Button>}
     {byAdapter[row.provider]?.local_probe&&<>
@@ -212,7 +208,6 @@ export function ModelHub({mutate}) {
       onPreview={(profile,revision)=>mutate('/api/model-hub/profile/preview',{
         ack:'PREVIEW_MODEL_PROFILE',expected_revision:revision,profile,
       },{inlineError:true})}/>}
-    {fluxProbe&&<FluxProbeDialog {...fluxProbe} mutate={mutate} onCancel={()=>setFluxProbe(null)}/>}
     {mediaProbe&&<MediaProbeDialog {...mediaProbe} mutate={mutate} onCancel={()=>setMediaProbe(null)}/>}
   </div>;
 }
