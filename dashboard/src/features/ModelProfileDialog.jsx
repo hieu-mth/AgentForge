@@ -266,7 +266,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
             <Input placeholder="t5xxl_fp8_e4m3fn.safetensors" spellCheck={false}/>
           </Form.Item>}
         {!fluxEnabled&&adapter.video_workflow_max_bytes&&
-          <Form.Item name="comfy_video_json" label="Workflow I2V có cấu hình (JSON)"
+          <Form.Item name="comfy_video_json" label="Workflow video local (I2V/T2V JSON)"
             extra="Để trống nếu dùng preset LTX cũ. Backend kiểm tra graph, SHA-256 weights và giới hạn tài nguyên."
             rules={[{validator:(_,value)=>{
               if(!value?.trim())return Promise.resolve();
@@ -334,7 +334,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
       </dl>
       {supported.length?<ul className="model-contract-list">{supported.map(item=><li key={item.capability}>
         <strong>{labels[item.capability]??item.capability}</strong>
-        {item.capability==='film.motion'&&review.motion_encoder&&<div>{review.comfy_video?'Workflow I2V đã cấu hình':'Preset LTX cũ'}</div>}
+        {item.capability==='film.motion'&&review.motion_encoder&&<div>{review.comfy_video?'Workflow video đã cấu hình':'Preset LTX cũ'}</div>}
         <div>{outputSummary(item.output_limits)??readinessReason(item.reason)}</div>
         {item.workflow_sha256&&<details className="model-workflow-details"><summary>Workflow SHA-256</summary>
           <code>{item.workflow_sha256}</code></details>}
