@@ -18,6 +18,22 @@ from tests.test_flux_runtime import profile as flux_profile
 
 
 class ModelHubTests(unittest.TestCase):
+    def test_catalog_profile_schema_matches_registered_option_variants(self):
+        from agentforge.ai import registry
+        with tempfile.TemporaryDirectory() as folder:
+            adapters = model_hub.catalog(db_path=Path(folder) / "hub.db")["adapters"]
+        for adapter in adapters:
+            schema = adapter["profile_schema"]
+            variants = tuple(frozenset(field["path"][0] for field in item["fields"])
+                             for item in schema["option_variants"])
+            self.assertEqual(variants, registry.profile_options(adapter["id"]).variants)
+            self.assertIn(schema["credential_mode"], {"local", "oauth", "api_key"})
+            self.assertEqual(len({item["id"] for item in schema["option_variants"]}), len(variants))
+            for item in schema["option_variants"]:
+                for field in item["fields"]:
+                    self.assertIn(field["kind"], {"text", "integer", "json"})
+                    self.assertTrue(field["required"])
+
     def test_ollama_metadata_preflight_rejects_redirects(self):
         paths = []
 

@@ -1,17 +1,43 @@
-// Serialize only fields declared by the selected backend adapter.
+// Serialize only paths declared by the selected backend adapter.
+const getPath=(object,path)=>path.reduce((value,key)=>value?.[key],object);
+function setPath(object,path,value){
+  let target=object;
+  for(const key of path.slice(0,-1))target=target[key]??={};
+  target[path.at(-1)]=value;
+}
+export function optionVariants(adapter){
+  return adapter?.profile_schema?.option_variants??[];
+}
+export function optionValues(adapter,profile){
+  const variants=optionVariants(adapter);
+  const roots=new Set(variants.flatMap(v=>v.fields.map(f=>f.path[0])));
+  const saved=[...roots].filter(key=>Object.hasOwn(profile??{},key));
+  const selected=variants.find(v=>{
+    const keys=[...new Set(v.fields.map(f=>f.path[0]))];
+    return keys.length===saved.length&&keys.every(k=>saved.includes(k));
+  })??variants[0];
+  const options={};
+  for(const variant of variants)for(const field of variant.fields){
+    const value=getPath(profile,field.path)??field.default;
+    if(value!==undefined)setPath(options,field.path,field.kind==='json'?JSON.stringify(value,null,2):value);
+  }
+  return {option_variant:selected?.id,adapter_options:options};
+}
 export function profilePayload(values,adapter) {
   const profile={id:values.id?.trim(),provider:adapter.id,
     model:values.model?.trim(),enabled:values.enabled===true};
   for(const key of Object.keys(adapter.defaults))profile[key]=values[key]?.trim();
-  if(adapter.id==='comfyui'&&adapter.flux_workflow_max_bytes&&values.flux_enabled) {
-    const {workflow,max_resolution,max_steps,timeout_seconds,output_dir}=values.flux_settings;
-    const graph=JSON.parse(workflow);
-    const key=adapter.image_workflow_max_bytes&&Object.values(graph).some(node=>node?.class_type==='CheckpointLoaderSimple')?'comfy_image':'flux';
-    profile[key]={workflow:graph,max_resolution,max_steps,timeout_seconds,output_dir};
-  } else if(adapter.id==='comfyui'&&adapter.motion_encoder_supported) {
-    if(values.motion_encoder?.trim())profile.motion_encoder=values.motion_encoder.trim();
-    if(adapter.video_workflow_max_bytes&&values.comfy_video_json?.trim())
-      profile.comfy_video=JSON.parse(values.comfy_video_json);
+  const variants=optionVariants(adapter);
+  const selected=variants.find(v=>v.id===values.option_variant)??(values.option_variant==null&&variants.length===1?variants[0]:undefined);
+  if(variants.length&&!selected)throw new Error('Chọn loại cấu hình runtime.');
+  for(const field of selected?.fields??[]){
+    const raw=getPath(values.adapter_options,field.path);
+    if(raw===undefined||raw===null||(typeof raw==='string'&&!raw.trim())){
+      if(field.required)throw new Error('Hãy điền '+field.label+'.');
+      continue;
+    }
+    const value=field.kind==='json'?JSON.parse(raw):field.kind==='text'?raw.trim():raw;
+    setPath(profile,field.path,value);
   }
   return profile;
 }

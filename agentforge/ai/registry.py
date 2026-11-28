@@ -8,8 +8,6 @@ from importlib import import_module
 from typing import Any, Callable
 
 from agentforge.ai.orchestrator_policy import ModelConfigError
-from agentforge.features.media import flux_workflow
-from agentforge.features.film_studio import motion_ltx
 from agentforge.integrations import comfy_profile
 
 # These are the profile adapters accepted by Model Hub. Registration is
@@ -26,10 +24,7 @@ ADAPTERS = {
         "model_example": "ltxv-2b-0.9.8-distilled-fp8.safetensors",
         "description": "Hồ sơ ảnh hoặc video. Đăng ký chỉ lưu cấu hình cho ComfyUI.",
         "defaults": {"base_url": "http://127.0.0.1:8188"}, "local_probe": False,
-        "flux_workflow_max_bytes": flux_workflow.MAX_WORKFLOW_BYTES,
-        "image_workflow_max_bytes": flux_workflow.MAX_WORKFLOW_BYTES,
-        "motion_encoder_supported": True,
-        "video_workflow_max_bytes": motion_ltx.MAX_CONFIG_BYTES, "media_probe": True,
+        "media_probe": True,
     },
     "chatgpt": {
         "label": "ChatGPT", "connection": "cloud", "model_label": "Model slug",
@@ -82,8 +77,12 @@ ADAPTERS = {
 @dataclass(frozen=True)
 class ProfileOptions:
     """Registered adapter option sets, independent of credential mode."""
-    variants: tuple[frozenset[str], ...] = (frozenset(),)
+    ui_variants: tuple[dict, ...] = ({"id": "metadata", "label": "Cấu hình kết nối", "fields": []},)
     validator: Callable | None = None
+
+    @property
+    def variants(self):
+        return tuple(frozenset(field["path"][0] for field in variant["fields"]) for variant in self.ui_variants)
 
     @property
     def fields(self):
@@ -108,8 +107,7 @@ def _endpoint_options(path):
 
 
 PROFILE_OPTIONS = {
-    "comfyui": ProfileOptions((frozenset(), frozenset({"flux"}), frozenset({"comfy_image"}), frozenset({"motion_encoder"}), frozenset({"motion_encoder", "comfy_video"})),
-                              comfy_profile.validate_settings),
+    "comfyui": ProfileOptions(comfy_profile.OPTION_VARIANTS, comfy_profile.validate_settings),
     "ltx_cloud": _endpoint_options("agentforge.features.film_studio.studio_ltx_cloud"),
     "agnes": _endpoint_options("agentforge.features.film_studio.studio_agnes"),
 }
@@ -117,6 +115,14 @@ PROFILE_OPTIONS = {
 
 def profile_options(provider):
     return PROFILE_OPTIONS.get(provider, ProfileOptions())
+
+
+def profile_schema(provider):
+    """Data-only UI contract; executable validators stay in the registry."""
+    descriptor = ADAPTERS[provider]
+    mode = ("oauth" if "account_ref" in descriptor["defaults"] else
+            "local" if descriptor["connection"] == "local" else "api_key")
+    return {"credential_mode": mode, "option_variants": profile_options(provider).ui_variants}
 
 
 @dataclass(frozen=True)

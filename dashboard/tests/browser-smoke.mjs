@@ -797,10 +797,21 @@ try {
   if(await registerDialog.getByLabel('Địa chỉ runtime local',{exact:true}).count())
     throw new Error('Cloud registration exposed the local endpoint field');
   await registerDialog.getByText('Local',{exact:true}).click();
-  await registerDialog.getByRole('combobox',{name:'Runtime'}).click();
+  await registerDialog.getByRole('combobox',{name:'Runtime',exact:true}).click();
   await openOptions.filter({hasText:/^ComfyUI$/}).evaluate(option=>option.click());
   await registerDialog.getByLabel('Mã checkpoint',{exact:true}).waitFor();
-  await registerDialog.getByRole('combobox',{name:'Runtime'}).click();
+  const runtimeVariant=registerDialog.getByRole('combobox',{name:'Loại cấu hình runtime',exact:true});
+  await runtimeVariant.click();
+  await settings.getByRole('option',{name:'Ảnh · Checkpoint API',exact:true}).click();
+  await registerDialog.getByLabel('Workflow API JSON',{exact:true}).waitFor();
+  await registerDialog.getByLabel('Cạnh ảnh tối đa (px)',{exact:true}).waitFor();
+  await runtimeVariant.click();
+  await settings.getByRole('option',{name:'Video · Workflow I2V/T2V',exact:true}).click();
+  await registerDialog.getByLabel('Workflow video local (I2V/T2V JSON)',{exact:true}).waitFor();
+  await registerDialog.getByLabel('Đường dẫn tuyệt đối tới encoder video',{exact:true}).waitFor();
+  if(await registerDialog.getByLabel('Workflow API JSON',{exact:true}).count())
+    throw new Error('Inactive image configuration fields remain mounted');
+  await registerDialog.getByRole('combobox',{name:'Runtime',exact:true}).click();
   await openOptions.filter({hasText:/^Ollama$/}).evaluate(option=>option.click());
   await registerDialog.getByLabel('Tên model',{exact:true}).fill('synthetic-local:8b');
   await registerDialog.getByLabel('Mã hồ sơ',{exact:true}).fill('local_primary');

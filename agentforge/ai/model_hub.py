@@ -569,7 +569,9 @@ def _catalog(revision, state):
                        })
     return {
         "revision": revision,
-        "adapters": [{"id": key, **copy.deepcopy(adapter)} for key, adapter in ADAPTERS.items()],
+        "adapters": [{"id": key, **copy.deepcopy(adapter),
+                      "profile_schema": copy.deepcopy(registry.profile_schema(key))}
+                     for key, adapter in ADAPTERS.items()],
         "profiles": [{"id": k, **{field: value for field, value in v.items()
                                  if field != "api_key_protected"},
             "has_api_key": "api_key_protected" in v, "source": (
