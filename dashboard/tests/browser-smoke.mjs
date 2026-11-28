@@ -1199,6 +1199,7 @@ try {
   const characterDialog=characterPage.getByRole('dialog',{name:'Tạo nhân vật'});
   await characterDialog.getByLabel('Tên nhân vật',{exact:true}).fill('Mực fixture');
   for(const label of ['Chính diện / chân dung','Bên trái','Bản thiết kế tổng hợp']){
+    if(label==='Bên trái')await characterDialog.getByText(/Ảnh tham chiếu bổ sung/).click();
     await characterDialog.getByLabel('Nhập ảnh '+label,{exact:true}).setInputFiles({name:'fixture.png',mimeType:'image/png',buffer:picture});
     await characterDialog.getByRole('img',{name:label,exact:true}).waitFor();
   }
