@@ -1061,7 +1061,7 @@ def _work(job, slot, retry_motion_job=None):
                 if _release_idle_image(image_profile):
                     used_image = False
         if moving:
-            prepared = motion.prepare(job, folder)
+            prepared = motion.prepare(job, folder, motion_profile)
             if prepared[3] != identity["workflow_sha"]:
                 raise ValueError("Prepared motion workflow differs from the approved workflow.")
             for index, scene in enumerate(job["board"]["scenes"]):

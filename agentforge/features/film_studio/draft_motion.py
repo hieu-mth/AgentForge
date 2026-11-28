@@ -23,10 +23,12 @@ ADAPTER_ID = motion_ltx.FORMAT
 
 
 def workflow_sha(profile=None):
-    return hashlib.sha256(_workflow_bytes()).hexdigest()
+    return hashlib.sha256(_workflow_bytes(profile)).hexdigest()
 
 
 def weights_identity(profile=None):
+    if profile and "comfy_video" in profile:
+        return motion_ltx.configured_weights(profile["comfy_video"])
     return {motion_ltx.CHECKPOINT: motion_ltx.CHECKPOINT_SHA, motion_ltx.ENCODER: motion_ltx.ENCODER_SHA}
 
 
@@ -36,8 +38,12 @@ def check_legacy_workflow(folder):
         raise ValueError("Stored motion workflow differs from the original runtime; create a new production.")
 
 
-def _workflow_bytes():
-    return (json.dumps(motion_ltx.workflow(FRAMES), indent=2) + "\n").encode()
+def _workflow_bytes(profile=None):
+    record = (motion_ltx.configured_workflow(profile["comfy_video"], profile["model"])
+              if profile and "comfy_video" in profile else motion_ltx.workflow(FRAMES))
+    if profile and "comfy_video" in profile:
+        return (json.dumps(record, sort_keys=True, indent=2) + "\n").encode()
+    return (json.dumps(record, indent=2) + "\n").encode()
 
 
 def input_modes(profile):
@@ -45,21 +51,29 @@ def input_modes(profile):
 
 
 def output_profile(profile):
-    preset = motion_ltx.profile(FRAMES)
+    preset = (motion_ltx.configured_output(profile["comfy_video"])
+              if profile and "comfy_video" in profile else motion_ltx.profile(FRAMES))
     return MotionOutput(preset["fps"], preset["frames"], (preset["width"], preset["height"]))
 
 
 def supports(profile):
-    return (profile.get("provider") == "comfyui"
-            and profile.get("model") in (motion_ltx.CHECKPOINT, motion_ltx.MODEL_ID)
-            and bool(profile.get("motion_encoder")) and "flux" not in profile)
+    if (profile.get("provider") != "comfyui" or not profile.get("motion_encoder")
+            or "flux" in profile or "comfy_image" in profile):
+        return False
+    if "comfy_video" in profile:
+        try:
+            motion_ltx.configured_workflow(profile["comfy_video"], profile["model"])
+            return True
+        except (ValueError, KeyError, TypeError):
+            return False
+    return profile.get("model") in (motion_ltx.CHECKPOINT, motion_ltx.MODEL_ID)
 
 
 def bind(profile):
     endpoint = urlsplit(profile.get("base_url", ""))
     if (not supports(profile) or endpoint.port != motion_comfy.PORT
             or endpoint.hostname not in {"localhost", "127.0.0.1"}):
-        raise ValueError("Hãy gán checkpoint và encoder LTX 2B FP8 đúng endpoint Motion cho film.motion.")
+        raise ValueError("Hãy gán workflow video, checkpoint và encoder tương thích đúng endpoint Motion cho film.motion.")
     config = comfy_service._settings()
     if not config or config["port"] != endpoint.port:
         raise ValueError("Hãy đăng ký ComfyUI Portable cho endpoint Motion trong Môi trường & Tài nguyên.")
@@ -86,7 +100,10 @@ def registry_readiness(profile):
     except (OSError, http.client.HTTPException, comfyui.ComfyUITransportError, comfyui.ComfyHTTPError) as exc:
         return comfyui.failure_status(exc)
     try:
-        motion_ltx.check_runtime(port, require_models=True, frames=FRAMES)
+        if "comfy_video" in profile:
+            motion_ltx.check_runtime(port, require_models=True, record=profile["comfy_video"])
+        else:
+            motion_ltx.check_runtime(port, require_models=True, frames=FRAMES)
     except (OSError, http.client.HTTPException, comfyui.ComfyUITransportError, comfyui.ComfyHTTPError) as exc:
         return comfyui.failure_status(exc)
     except (ValueError, KeyError, TypeError, IndexError, AttributeError, RuntimeError):
@@ -99,7 +116,11 @@ def registry_readiness(profile):
     if not all(render.find_media_tool(tool) for tool in ("ffmpeg", "ffprobe")):
         return "MEDIA_TOOLS_UNAVAILABLE"
     try:
-        motion_ltx.verify_weights(config["install_root"], profile["motion_encoder"], metadata_only=True)
+        if "comfy_video" in profile:
+            motion_ltx.verify_configured_weights(profile["comfy_video"], config["install_root"],
+                                                 profile["motion_encoder"], metadata_only=True)
+        else:
+            motion_ltx.verify_weights(config["install_root"], profile["motion_encoder"], metadata_only=True)
     except (OSError, ValueError):
         return "MOTION_WEIGHTS_UNAVAILABLE"
     return "READY"
@@ -115,13 +136,13 @@ def verify_clip(scene, stream):
 MAX_CLIP_BYTES = motion_verify.MAX_MP4_BYTES
 
 
-def prepare(job, folder):
+def prepare(job, folder, profile=None):
     slug = "draft-" + job["id"]
     if "storyboard_version" in job:
         slug = f"d-{job['id']}-v{job['storyboard_version']}"
     shot_count = job["brief"]["scene_count"]
     plan = long_form.build_plan(title=job["board"]["title"], genre="Studio",
-        style="LTX motion draft", chapters=[{"id": "draft", "title": job["board"]["title"],
+        style=("Configured motion draft" if profile and "comfy_video" in profile else "LTX motion draft"), chapters=[{"id": "draft", "title": job["board"]["title"],
         "synopsis": "Motion draft from the approved storyboard.", "duration_seconds": shot_count*4,
         "character_ids": []}], shot_seconds=4)
     try:
@@ -130,7 +151,7 @@ def prepare(job, folder):
         if long_form.load_plan(motion_comfy.FILMS, slug) != plan:
             raise ValueError("Motion plan changed; create a new draft") from None
     workflow = ensure_local_root(folder / "motion-workflow.json")
-    payload = _workflow_bytes()
+    payload = _workflow_bytes(profile)
     try:
         with workflow.open("xb") as stream:
             stream.write(payload)

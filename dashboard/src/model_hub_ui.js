@@ -8,8 +8,10 @@ export function profilePayload(values,adapter) {
     const graph=JSON.parse(workflow);
     const key=adapter.image_workflow_max_bytes&&Object.values(graph).some(node=>node?.class_type==='CheckpointLoaderSimple')?'comfy_image':'flux';
     profile[key]={workflow:graph,max_resolution,max_steps,timeout_seconds,output_dir};
-  } else if(adapter.id==='comfyui'&&adapter.motion_encoder_supported&&values.motion_encoder?.trim()) {
-    profile.motion_encoder=values.motion_encoder.trim();
+  } else if(adapter.id==='comfyui'&&adapter.motion_encoder_supported) {
+    if(values.motion_encoder?.trim())profile.motion_encoder=values.motion_encoder.trim();
+    if(adapter.video_workflow_max_bytes&&values.comfy_video_json?.trim())
+      profile.comfy_video=JSON.parse(values.comfy_video_json);
   }
   return profile;
 }

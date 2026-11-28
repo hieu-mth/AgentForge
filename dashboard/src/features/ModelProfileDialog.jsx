@@ -19,7 +19,7 @@ const fieldLabels={
 const localUrl=/^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):([0-9]{1,5})\/?$/;
 const envName=/^[A-Z_][A-Z0-9_]*$/;
 
-const comparisonFields=['id','provider','model','enabled','base_url','base_url_env','api_key_env','motion_encoder','flux','comfy_image','account_ref'];
+const comparisonFields=['id','provider','model','enabled','base_url','base_url_env','api_key_env','motion_encoder','flux','comfy_image','comfy_video','account_ref'];
 const comparisonData=profile=>Object.fromEntries(comparisonFields.filter(key=>key in profile)
   .map(key=>[key,profile[key]]));
 
@@ -30,6 +30,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
   const imageWorkflow=profile?.comfy_image??profile?.flux;
   const initial={connection:initialAdapter.connection,provider:initialAdapter.id,
     enabled:true,...initialAdapter.defaults,...profile,
+    comfy_video_json:profile?.comfy_video?JSON.stringify(profile.comfy_video,null,2):'',
     flux_enabled:Boolean(imageWorkflow),flux_settings:{
       max_resolution:1024,max_steps:4,timeout_seconds:180,output_dir:'visuals',
       ...imageWorkflow,workflow:imageWorkflow?JSON.stringify(imageWorkflow.workflow,null,2):'',
@@ -261,9 +262,22 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
       {provider==='comfyui'&&adapter.flux_workflow_max_bytes&&<>
         <Form.Item name="flux_enabled" label="Workflow tạo ảnh ComfyUI" valuePropName="checked"><Switch/></Form.Item>
         {!fluxEnabled&&adapter.motion_encoder_supported&&
-          <Form.Item name="motion_encoder" label="Đường dẫn tuyệt đối tới encoder LTX">
+          <Form.Item name="motion_encoder" label="Đường dẫn tuyệt đối tới encoder video">
             <Input placeholder="t5xxl_fp8_e4m3fn.safetensors" spellCheck={false}/>
           </Form.Item>}
+        {!fluxEnabled&&adapter.video_workflow_max_bytes&&
+          <Form.Item name="comfy_video_json" label="Workflow I2V có cấu hình (JSON)"
+            extra="Để trống nếu dùng preset LTX cũ. Backend kiểm tra graph, SHA-256 weights và giới hạn tài nguyên."
+            rules={[{validator:(_,value)=>{
+              if(!value?.trim())return Promise.resolve();
+              try {
+                const graph=JSON.parse(value);
+                if(graph&&typeof graph==='object'&&!Array.isArray(graph)&&
+                    new TextEncoder().encode(JSON.stringify(graph)).length<=adapter.video_workflow_max_bytes)
+                  return Promise.resolve();
+              }catch{ /* Backend validates the complete graph. */ }
+              return Promise.reject(new Error('Workflow video JSON không hợp lệ hoặc vượt giới hạn.'));
+            }}]}><Input.TextArea rows={6} spellCheck={false}/></Form.Item>}
         {fluxEnabled&&<>
           <Form.Item name={['flux_settings','workflow']} label="Workflow API JSON" rules={[
             {required:true},{validator:(_,value)=>{
@@ -320,7 +334,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
       </dl>
       {supported.length?<ul className="model-contract-list">{supported.map(item=><li key={item.capability}>
         <strong>{labels[item.capability]??item.capability}</strong>
-        {item.capability==='film.motion'&&review.motion_encoder&&<div>Preset LTX cố định</div>}
+        {item.capability==='film.motion'&&review.motion_encoder&&<div>{review.comfy_video?'Workflow I2V đã cấu hình':'Preset LTX cũ'}</div>}
         <div>{outputSummary(item.output_limits)??readinessReason(item.reason)}</div>
         {item.workflow_sha256&&<details className="model-workflow-details"><summary>Workflow SHA-256</summary>
           <code>{item.workflow_sha256}</code></details>}

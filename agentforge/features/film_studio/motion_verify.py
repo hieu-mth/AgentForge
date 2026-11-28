@@ -201,7 +201,7 @@ def continuation_marker(source):
     if (not isinstance(source, dict) or not isinstance(source.get("motion_job"), str)
             or not re.fullmatch(r"[0-9a-f]{32}", source["motion_job"])
             or not isinstance(source.get("motion_sha"), str) or not motion.SHA.fullmatch(source["motion_sha"])
-            or type(source.get("frames")) is not int or not 1 <= source["frames"] <= 49):
+            or type(source.get("frames")) is not int or not 1 <= source["frames"] <= 240):
         raise MotionVerificationError("Invalid continuation source")
     return f"motion-frame:{source['motion_job']}:{source['frames']-1}:{source['motion_sha']}"
 

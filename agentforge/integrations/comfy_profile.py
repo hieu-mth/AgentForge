@@ -3,6 +3,7 @@ from pathlib import Path
 
 from agentforge.ai.orchestrator_policy import ModelConfigError
 from agentforge.features.media import comfy_image_workflow, flux_workflow
+from agentforge.features.film_studio import motion_ltx
 
 
 def validate_settings(profile, options):
@@ -18,4 +19,9 @@ def validate_settings(profile, options):
                 or any(ord(char) < 32 for char in encoder)):
             raise ModelConfigError("Motion encoder must be a local absolute file path")
         result["motion_encoder"] = encoder
+    if "comfy_video" in options:
+        workflow = motion_ltx.configured_workflow(options["comfy_video"], profile["model"])
+        if Path(result["motion_encoder"]).name != workflow["api"]["2"]["inputs"]["clip_name"]:
+            raise ModelConfigError("Encoder filename must match the configured video workflow")
+        result["comfy_video"] = workflow
     return result

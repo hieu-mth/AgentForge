@@ -57,11 +57,11 @@ class MotionError(ValueError):
     """Invalid or unsupported motion request (no GPU inference started)."""
 
 
-_LEDGER_VERSION = 2
+_LEDGER_VERSION = 3
 
 
 def _require_current_ledger(conn):
-    if conn.execute("PRAGMA user_version").fetchone()[0] != _LEDGER_VERSION:
+    if conn.execute("PRAGMA user_version").fetchone()[0] not in (2, _LEDGER_VERSION):
         raise MotionError("Unsupported motion ledger schema; reconcile and archive the old ledger explicitly.")
 
 
@@ -70,6 +70,20 @@ def _init_ledger(conn):
         conn.execute("BEGIN IMMEDIATE")
         version = conn.execute("PRAGMA user_version").fetchone()[0]
         if version == _LEDGER_VERSION:
+            return
+        if version == 2:
+            # Atomic additive receipt migration; existing job IDs, hashes and
+            # unresolved provider states are copied unchanged.
+            conn.execute("ALTER TABLE motion_sources RENAME TO motion_sources_v2")
+            conn.execute("""CREATE TABLE motion_sources(
+                job_id TEXT PRIMARY KEY, model_id TEXT NOT NULL, image_job TEXT NOT NULL,
+                image_sha TEXT NOT NULL, frames INTEGER NOT NULL DEFAULT 33
+                CHECK (frames BETWEEN 1 AND 97),
+                width INTEGER, height INTEGER, fps INTEGER)""")
+            conn.execute("""INSERT INTO motion_sources(job_id,model_id,image_job,image_sha,frames)
+                SELECT job_id,model_id,image_job,image_sha,frames FROM motion_sources_v2""")
+            conn.execute("DROP TABLE motion_sources_v2")
+            conn.execute(f"PRAGMA user_version={_LEDGER_VERSION}")
             return
         if version != 0 or conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone():
             _require_current_ledger(conn)
@@ -81,7 +95,8 @@ def _init_ledger(conn):
         conn.execute("""CREATE TABLE motion_sources(
             job_id TEXT PRIMARY KEY, model_id TEXT NOT NULL, image_job TEXT NOT NULL,
             image_sha TEXT NOT NULL, frames INTEGER NOT NULL DEFAULT 33
-            CHECK (frames IN (33, 49)))""")
+            CHECK (frames BETWEEN 1 AND 97),
+            width INTEGER, height INTEGER, fps INTEGER)""")
         conn.execute("CREATE INDEX motion_jobs_shot ON motion_jobs(film_slug, shot_id, plan_sha)")
         conn.execute(f"PRAGMA user_version={_LEDGER_VERSION}")
 
@@ -95,9 +110,9 @@ def _check_attempt(conn, film_slug, shot_id, plan_sha, confirmed):
         state, provider_id, model_id = row
         if state == "COMPLETE_UNVERIFIED":
             raise PermissionError("A completed motion attempt already exists for this shot")
-        # Only the LTX pre-dispatch error
-        # path sets FAILED without a provider ID. An ambiguous POST remains SUBMITTING.
-        if state == "FAILED" and provider_id is None and model_id == motion_ltx.MODEL_ID:
+        # Only the I2V pre-dispatch error path sets FAILED without a provider
+        # ID and with a source receipt. Ambiguous POST remains SUBMITTING.
+        if state == "FAILED" and provider_id is None and model_id is not None:
             continue
         if (state in {"FAILED", "FAILED_RESOURCE"} and provider_id is not None
                 and re.fullmatch(r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", provider_id)):
@@ -110,9 +125,18 @@ def _check_attempt(conn, film_slug, shot_id, plan_sha, confirmed):
 def receipt_contract(source):
     """Interpret the existing local-motion ledger's historical output dialects."""
     if source:
-        if source.get("model_id") != motion_ltx.MODEL_ID:
-            raise MotionError("Unknown local motion receipt model")
-        profile = motion_ltx.profile(source["frames"])
+        values = [source.get(key) for key in ("width", "height", "fps")]
+        if all(value is None for value in values):
+            if source.get("model_id") != motion_ltx.MODEL_ID:
+                raise MotionError("Unknown historical local motion receipt model")
+            profile = motion_ltx.profile(source["frames"])
+        else:
+            profile = {"width": values[0], "height": values[1], "fps": values[2],
+                       "frames": source["frames"], "batch_size": 1}
+            try:
+                motion_ltx.validate_output(profile)
+            except ValueError as exc:
+                raise MotionError("Invalid persisted motion output contract") from exc
         seconds = profile["frames"] / profile["fps"]
         return {"model_id": source["model_id"], "profile": profile,
                 "duration_range": (seconds - 0.15, seconds + 0.15), "filename_suffix": "_"}
@@ -150,6 +174,14 @@ def inspect_workflow(path: Path):
         record = json.loads(raw)
     except (UnicodeError, ValueError) as exc:
         raise MotionError("Invalid workflow JSON") from exc
+    if isinstance(record, dict) and record.get("format") == motion_ltx.CONFIGURED_FORMAT:
+        try:
+            motion_ltx.configured_workflow(record)
+        except ValueError as exc:
+            raise MotionError(str(exc)) from None
+        return {"sha256": _sha(raw), "workflow": record, "profile": motion_ltx.configured_output(record),
+                "model_id": record["api"]["1"]["inputs"]["ckpt_name"],
+                "validated_structure_only": True, "model_installed": False}
     if isinstance(record, dict) and record.get("format") == motion_ltx.FORMAT:
         encoded = json.dumps(record, sort_keys=True)
         for frames in motion_ltx.FRAME_PRESETS:
@@ -322,30 +354,34 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
     if not isinstance(workflow_sha, str) or template["sha256"] != workflow_sha:
         raise PermissionError("Trusted workflow SHA is stale; inspect it again")
     model_id = template["model_id"]
-    is_ltx = model_id == motion_ltx.MODEL_ID
+    configured = template["workflow"]["format"] == motion_ltx.CONFIGURED_FORMAT
+    is_i2v = configured or template["workflow"]["format"] == motion_ltx.FORMAT
     if model_id in BLOCKED_MODELS:
         raise MotionError("WAN_FP16_BLOCKED: preset disabled after Windows commit exhaustion")
-    if is_ltx and (confirm_ltx_gate_b is not True or not isinstance(image_job, str)
+    if is_i2v and (confirm_ltx_gate_b is not True or not isinstance(image_job, str)
                    or not isinstance(image_sha, str) or not SHA.fullmatch(image_sha) or ltx_encoder is None):
         raise PermissionError("LTX requires Gate B confirmation, a verified image ID/SHA and encoder path")
-    if previous_motion is not None and not is_ltx:
+    if previous_motion is not None and not is_i2v:
         raise MotionError("This motion adapter does not support frame continuation")
     with model_hub.local_inference_slot():
         with closing(_db(db_path, write=True)) as conn:
             _check_attempt(conn, film_slug, shot_id, plan_sha, confirm_new_attempt)
-        operation = "ltx" if is_ltx else "motion"
+        operation = "ltx" if is_i2v else "motion"
         min_commit = (motion_ltx.EXTENDED_MIN_COMMIT_MIB
-                      if is_ltx and template["profile"]["frames"] == 49 else 0)
+                      if is_i2v and (configured or template["profile"]["frames"] == 49) else 0)
         draft_resources.require_gpu(operation, min_commit_mib=min_commit)
-        if is_ltx:
+        if is_i2v:
             comfy_service.require_other_queue_idle(PORT, include_profiles=True)
         else:
             comfy_service.require_other_queue_idle(PORT)
-        if is_ltx:
+        if is_i2v:
             config = comfy_service._settings()
             if not config or config["port"] != PORT:
                 raise MotionError("Register the Portable launcher on the Motion endpoint")
-            motion_ltx.verify_weights(config["install_root"], ltx_encoder)
+            if configured:
+                motion_ltx.verify_configured_weights(template["workflow"], config["install_root"], ltx_encoder)
+            else:
+                motion_ltx.verify_weights(config["install_root"], ltx_encoder)
             if previous_motion is not None:
                 from agentforge.features.film_studio import motion_verify
                 image_job, image = motion_verify.read_continuation_frame(
@@ -354,7 +390,10 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
             else:
                 image = visual_jobs.read_motion_source(image_job, image_sha)
             comfy_service.ensure_running(PORT)
-            motion_ltx.check_runtime(PORT, require_models=True, frames=template["profile"]["frames"])
+            if configured:
+                motion_ltx.check_runtime(PORT, require_models=True, record=template["workflow"])
+            else:
+                motion_ltx.check_runtime(PORT, require_models=True, frames=template["profile"]["frames"])
         comfy_service.require_idle_queue(PORT)
         environment = health()
         if environment["status"] != "GPU_DETECTED_UNBENCHMARKED":
@@ -362,7 +401,7 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
         graph = copy.deepcopy(template["workflow"]["api"])
         bindings = template["workflow"]
         graph[bindings["positive_node"]]["inputs"]["text"] = prompt.strip()
-        graph[bindings["seed_node"]]["inputs"]["noise_seed" if is_ltx else "seed"] = seed
+        graph[bindings["seed_node"]]["inputs"]["noise_seed" if is_i2v else "seed"] = seed
         job_id = uuid4().hex
         graph[bindings["output_node"]]["inputs"]["filename_prefix"] = "af_motion_" + job_id
         now = _now()
@@ -380,11 +419,14 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
                     VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'SUBMITTING', ?, ?)""",
                     (job_id, film_slug, shot_id, plan_sha, workflow_sha,
                      _sha(prompt.strip().encode("utf-8")), seed, now, now))
-                if is_ltx:
-                    conn.execute("INSERT INTO motion_sources (job_id, model_id, image_job, image_sha, frames) "
-                                 "VALUES (?,?,?,?,?)",
-                                 (job_id, model_id, image_job, image_sha, template["profile"]["frames"]))
-            if is_ltx:
+                if is_i2v:
+                    output = template["profile"]
+                    conn.execute("""INSERT INTO motion_sources
+                        (job_id, model_id, image_job, image_sha, frames, width, height, fps)
+                        VALUES (?,?,?,?,?,?,?,?)""",
+                        (job_id, model_id, image_job, image_sha, output["frames"],
+                         output["width"], output["height"], output["fps"]))
+            if is_i2v:
                 try:
                     if on_reserved:
                         on_reserved(job_id)

@@ -336,7 +336,7 @@ def remaining_seconds(job):
                for scene in job["board"]["scenes"] if not scene.get("motion_job"))
 
 
-def prepare(job, folder):
+def prepare(job, folder, profile=None):
     plan = job.get("production_plan") or {}
     if plan.get("method") not in {"cloud", "hybrid"} or job.get("approved_storyboard_sha") is None:
         raise ValueError("Cloud motion requires an explicitly approved production route and budget.")
