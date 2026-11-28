@@ -133,6 +133,87 @@ class MotionAdapterTests(unittest.TestCase):
             self.submit()
         self.assertFalse(self.db.exists())
 
+    def test_configured_i2v_profile_routes_and_dispatches_through_shared_ledger(self):
+        import hashlib
+        from contextlib import ExitStack
+        from agentforge.ai import model_hub
+        from agentforge.features.film_studio import studio_runtime, motion_verify
+
+        ltx = motion.motion_ltx
+        record = ltx.workflow(49)
+        record.update(format=ltx.CONFIGURED_FORMAT)
+        checkpoint = "alternate.safetensors"
+        encoder = "alternate_encoder.safetensors"
+        install = self.root / "portable"
+        weights = install / "ComfyUI" / "models" / "checkpoints"
+        weights.mkdir(parents=True)
+        (weights / checkpoint).write_bytes(b"fixture checkpoint")
+        encoder_path = self.root / encoder
+        encoder_path.write_bytes(b"fixture encoder")
+        record["weights_sha256"] = {"checkpoint": hashlib.sha256(b"fixture checkpoint").hexdigest(),
+                                   "encoder": hashlib.sha256(b"fixture encoder").hexdigest()}
+        record["api"]["1"]["inputs"]["ckpt_name"] = checkpoint
+        record["api"]["2"]["inputs"]["clip_name"] = encoder
+        record["api"]["6"]["inputs"].update(width=320, height=256, length=41)
+        record["api"]["7"]["inputs"]["frame_rate"] = 20
+        record["api"]["12"]["inputs"]["fps"] = 20
+        profile = {"id": "alternate_video", "provider": "comfyui", "model": checkpoint,
+                   "enabled": True, "base_url": "http://127.0.0.1:8188",
+                   "motion_encoder": str(encoder_path), "comfy_video": record}
+        hub = self.root / "hub.db"
+        saved = model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0, db_path=hub, profile=profile)
+        self.assertTrue(next(c for c in saved["profiles"][0]["capability_contracts"]
+                             if c["capability"] == "film.motion")["runtime_compatible"])
+        adapter = studio_runtime.motion_adapter(profile)
+        self.assertEqual(adapter.output_profile(profile), studio_runtime.MotionOutput(20, 41, (320, 256)))
+        self.workflow.write_bytes(adapter._workflow_bytes(profile))
+        self.assertEqual(motion.inspect_workflow(self.workflow)["sha256"], adapter.workflow_sha(profile))
+        for node, field, value in (("6", "length", 97), ("10", "cfg", 4), ("5", "image", "../x.png")):
+            invalid = json.loads(json.dumps(profile))
+            invalid["comfy_video"]["api"][node]["inputs"][field] = value
+            with self.assertRaises(ValueError):
+                model_hub.validate_profile(invalid)
+        with ExitStack() as mocks:
+            for target, name, value in (
+                (motion.comfy_service, "_settings", {"port": motion.PORT, "install_root": install}),
+                (motion.comfy_service, "ensure_running", True),
+                (motion.comfy_service, "require_other_queue_idle", None),
+                (motion.visual_jobs, "read_motion_source", b"fixture image"),
+                (motion._comfyui, "upload_motion_source", "fixture.png"),
+                (ltx, "check_runtime", []),
+            ):
+                mocks.enter_context(patch.object(target, name, return_value=value))
+            result, transport = self.submit(confirm_ltx_gate_b=True, image_job="a"*32,
+                                            image_sha="b"*64, ltx_encoder=encoder_path)
+            transport.assert_called_once()
+            self.assertEqual(transport.call_args.kwargs["body"]["prompt"]["6"]["inputs"]["length"], 41)
+            self.assertEqual(result["model_id"], checkpoint)
+            self.assertEqual(motion_verify._job(result["job_id"], self.db)["profile"],
+                             {"width": 320, "height": 256, "fps": 20, "frames": 41, "batch_size": 1})
+            encoder_path.write_bytes(b"tampered")
+            with self.assertRaisesRegex(ValueError, "SHA-256 mismatch"):
+                ltx.verify_configured_weights(record, install, encoder_path)
+
+    def test_v2_ledger_upgrade_preserves_unresolved_and_source_receipts(self):
+        self.db.parent.mkdir(parents=True)
+        ident = "d"*32
+        with closing(sqlite3.connect(self.db)) as conn, conn:
+            conn.execute("""CREATE TABLE motion_jobs(job_id TEXT PRIMARY KEY, state TEXT)""")
+            conn.execute("""CREATE TABLE motion_sources(job_id TEXT PRIMARY KEY, model_id TEXT,
+                image_job TEXT,image_sha TEXT,frames INTEGER CHECK(frames IN (33,49)))""")
+            conn.execute("INSERT INTO motion_jobs VALUES (?,?)", (ident,"SUBMITTING"))
+            conn.execute("INSERT INTO motion_sources VALUES (?,?,?,?,?)",
+                         (ident,motion.motion_ltx.MODEL_ID,"e"*32,"f"*64,49))
+            conn.execute("PRAGMA user_version=2")
+        with closing(motion._db(self.db)) as conn:
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],2)
+        with closing(motion._db(self.db,write=True)) as conn:
+            self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0],3)
+            self.assertEqual(tuple(conn.execute("SELECT * FROM motion_jobs").fetchone()),(ident,"SUBMITTING"))
+            source = dict(conn.execute("SELECT * FROM motion_sources").fetchone())
+            self.assertEqual(source["image_sha"],"f"*64)
+            self.assertEqual(motion.receipt_contract(source)["profile"]["frames"],49)
+
     def test_ltx_requires_gate_b_and_binds_only_reviewed_inputs(self):
         from contextlib import ExitStack, closing
         from agentforge.features.film_studio import motion_ltx as ltx
@@ -268,7 +349,7 @@ class MotionAdapterTests(unittest.TestCase):
             conn.execute("INSERT INTO motion_jobs VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                          (old_id, "pilot", "sh-00001", plan_sha, "b"*64, "a"*64,
                           7, None, "FAILED", "old-created", "old-updated"))
-            conn.execute("INSERT INTO motion_sources VALUES (?,?,?,?,?)",
+            conn.execute("INSERT INTO motion_sources(job_id,model_id,image_job,image_sha,frames) VALUES (?,?,?,?,?)",
                          (old_id, motion.motion_ltx.MODEL_ID, "d"*32, "e"*64, 33))
         with self.assertRaisesRegex(PermissionError, "explicitly confirm"):
             self.submit()

@@ -158,3 +158,24 @@ visual-job ledger, output filename binding and verified PNG import.
 Unsupported topology, custom nodes and mismatched model IDs are rejected.
 This is not arbitrary ComfyUI graph support or runtime certification of every
 checkpoint. Local motion retains its existing reviewed LTX path.
+
+### Configured local I2V profiles
+
+The `comfy_video` option and absolute `motion_encoder` path register a
+bounded checkpoint-based I2V graph using the existing supported LTX-style
+node topology. Use the legacy inspected graph as a template; change its
+wrapper format to `agentforge.film.comfy.i2v.v2` and add
+`weights_sha256: {checkpoint: <64 hex>, encoder: <64 hex>}`. The registered
+model must equal the checkpoint filename; the encoder path must match the
+graph's encoder basename. Both files are verified before GPU dispatch.
+The checkpoint is under the registered Portable installation's
+`ComfyUI/models/checkpoints` directory. The graph may vary its checkpoint,
+encoder, resolution (256–640, multiples of 32), frames (9–97, 8n+1), and FPS
+(8–30) within the original pixel-frame budget and five-second limit.
+Sampling and topology remain fixed. No arbitrary graph/custom node is
+accepted; unsupported topology requires a separate reviewed dialect.
+This does not establish that every checkpoint runs or fits on the Owner GPU.
+The blocked Wan FP16 path remains blocked. Existing legacy profiles and
+receipts retain their original interpretation; the local motion ledger
+upgrades version 2 to 3 transactionally on write, preserving unresolved
+jobs and all existing source evidence.

@@ -254,7 +254,7 @@ class MotionRuntimeTests(unittest.TestCase):
         path.rename(self.outputs / filename)
         job_id = info["job_id"]
         with closing(motion._db(self.db)) as conn, conn:
-            conn.execute("INSERT INTO motion_sources VALUES (?,?,?,?,?)",
+            conn.execute("INSERT INTO motion_sources(job_id,model_id,image_job,image_sha,frames) VALUES (?,?,?,?,?)",
                          (job_id, motion.motion_ltx.MODEL_ID, "b"*32, "d"*64, 33))
         self.assertEqual(verify._job(job_id, self.db)["profile"]["frames"], 33)
         with closing(motion._db(self.db)) as conn, conn:

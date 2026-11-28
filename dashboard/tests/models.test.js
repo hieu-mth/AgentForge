@@ -63,6 +63,16 @@ test('LTX encoder is sent only for a compatible ComfyUI adapter',()=>{
     'C:/models/t5.safetensors');
 });
 
+test('configured I2V workflow is only sent when advertised',()=>{
+  const values={id:'motion_profile',model:'alternate.safetensors',enabled:true,
+    base_url:'http://127.0.0.1:8188',motion_encoder:'C:/models/encoder.safetensors',
+    comfy_video_json:'{"format":"agentforge.film.comfy.i2v.v2"}'};
+  const adapter={id:'comfyui',defaults:{base_url:''},motion_encoder_supported:true};
+  assert.ok(!('comfy_video' in profilePayload(values,adapter)));
+  assert.deepEqual(profilePayload(values,{...adapter,video_workflow_max_bytes:16000}).comfy_video,
+    {format:'agentforge.film.comfy.i2v.v2'});
+});
+
 test('routing follows revision catalog contracts and preserves cloud configuration-only routes',()=>{
   const cloud={id:'cloud',capability_contracts:[
     {capability:'general.text',route_configurable:true,local_runtime_compatible:false},
