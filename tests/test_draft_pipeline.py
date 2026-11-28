@@ -280,6 +280,18 @@ class DraftTests(unittest.TestCase):
                 flux_runtime.generate("A cat", production_profile=image, production_revision=old_revision)
             gate.assert_called_once_with("image")
 
+    def test_casting_includes_older_characters_and_complete_identity(self):
+        rows = [{"id": str(i), "name": str(i), "species": "cat",
+                 "appearance": "x"*600, "personality": "curious", "version": 1} for i in range(11)]
+        with (patch.object(draft.characters, "list_characters", return_value={"characters": rows}),
+              patch.object(draft, "_activity"),
+              patch.object(draft, "_measured", return_value=nullcontext()),
+              patch.object(draft, "_ask", return_value={"ids": ["10"]}) as ask):
+            selected = draft._select_cast({}, {"film.storyboard": {}}, "A cat")
+            self.assertEqual(selected["10"]["appearance"], "x"*600)
+            self.assertEqual(selected["10"]["personality"], "curious")
+            self.assertEqual(len(ask.call_args.args[2]["candidates"]), 11)
+
     def test_casting_uses_pinned_storyboard_unless_owner_assigns_local_cast_route(self):
         self.seed_registry(flux_profile(), {**self.motion_profile(), "enabled": True})
         _, bindings = draft.model_hub.draft_routes()
