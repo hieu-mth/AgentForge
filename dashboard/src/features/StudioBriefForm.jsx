@@ -48,7 +48,7 @@ export function StudioBriefForm({hub,pending,waiting,onCharacters,onSubmit}){
   return (
     <Card className="env-panel" title="Tạo video mới"
       extra={<Button onClick={onCharacters}>Thư viện nhân vật</Button>}>
-    <Form form={form} layout="vertical" onFinish={values=>onSubmit(values,resetBrief)} initialValues={initialBrief}
+    <Form aria-label="Tạo video mới" form={form} layout="vertical" onFinish={values=>onSubmit(values,resetBrief)} initialValues={initialBrief}
       onValuesChange={(_,next)=>{
         try {
           localStorage.setItem(editorKey,JSON.stringify(next));
@@ -71,14 +71,14 @@ export function StudioBriefForm({hub,pending,waiting,onCharacters,onSubmit}){
       {saveFailed&&<Alert type="warning" showIcon message="Trình duyệt không lưu được nội dung để khôi phục khi tải lại."/>}
       <Space wrap align="start" size="middle">
         <Form.Item name="casting" label="Nhân vật">
-          <Select style={{width:240}} options={[
+          <Select aria-label="Nhân vật" style={{width:240}} options={[
             {value:'auto',label:'AI tự chọn nhân vật'},
             {value:'manual',label:'Chọn từ thư viện'},
             {value:'none',label:'Không dùng nhân vật đã đăng ký'},
           ]}/>
         </Form.Item>
         <Form.Item name="durationMode" label="Thời lượng" rules={[{required:true}]}>
-          <Select style={{width:180}} options={[{value:'auto',label:'AI tự xác định'},{value:'manual',label:'Nhập thủ công'}]}/>
+          <Select aria-label="Thời lượng" style={{width:180}} options={[{value:'auto',label:'AI tự xác định'},{value:'manual',label:'Nhập thủ công'}]}/>
         </Form.Item>
         {manual&&<Form.Item name="targetSeconds" label="Số giây mong muốn"
           rules={[{required:true,type:'integer',...targetBounds}]}>
@@ -86,13 +86,13 @@ export function StudioBriefForm({hub,pending,waiting,onCharacters,onSubmit}){
         </Form.Item>}
         {moving?<Form.Item label="Tỷ lệ khung hình"><span>16:9 · Ngang</span></Form.Item>:
           <Form.Item name="ratio" label="Tỷ lệ khung hình">
-            <Select style={{width:160}} options={['9:16','16:9'].map(value=>({value,label:value}))}/>
+            <Select aria-label="Tỷ lệ khung hình" style={{width:160}} options={['9:16','16:9'].map(value=>({value,label:value}))}/>
           </Form.Item>}
       </Space>
       {casting==='manual'&&<Form.Item name="characterIds" label="Nhân vật từ thư viện"
         rules={[{validator:(_,ids)=>Array.isArray(ids)&&ids.length>=1&&ids.length<=2&&ids.every(id=>activeCharacters.some(item=>item.id===id))
           ?Promise.resolve():Promise.reject(new Error('Chọn 1–2 nhân vật đang hoạt động.'))}]}>
-        <Select mode="multiple" maxCount={2} loading={characters.loading} placeholder="Chọn tối đa hai nhân vật"
+        <Select aria-label="Nhân vật từ thư viện" mode="multiple" maxCount={2} loading={characters.loading} placeholder="Chọn tối đa hai nhân vật"
           options={activeCharacters.map(item=>({value:item.id,label:item.name}))}
           notFoundContent={characters.error?'Không đọc được thư viện':'Chưa có nhân vật'}/>
       </Form.Item>}
@@ -102,10 +102,10 @@ export function StudioBriefForm({hub,pending,waiting,onCharacters,onSubmit}){
         <summary>Tùy chọn nâng cao</summary>
         <Space wrap align="start">
           <Form.Item name="mode" label="Kiểu video" rules={[{required:true}]}>
-            <Select style={{width:220}} options={Object.entries(videoModes).map(([value,label])=>({value,label}))}/>
+            <Select aria-label="Kiểu video" style={{width:220}} options={Object.entries(videoModes).map(([value,label])=>({value,label}))}/>
           </Form.Item>
           {moving&&<Form.Item name="routeStrategy" label="Điều phối sản xuất">
-            <Select style={{width:260}} options={[{value:'assigned',label:'Theo model đã phân công'},{value:'auto',label:'AI tự chọn model phù hợp'}]}/>
+            <Select aria-label="Điều phối sản xuất" style={{width:260}} options={[{value:'assigned',label:'Theo model đã phân công'},{value:'auto',label:'AI tự chọn model phù hợp'}]}/>
           </Form.Item>}
         </Space>
         <p className="env-muted">Model, quyền cloud và giới hạn lượt gọi được quản lý tại AI điều phối. Studio tự tính số giây cloud theo storyboard.</p>
