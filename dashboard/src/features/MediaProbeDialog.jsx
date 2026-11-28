@@ -38,7 +38,7 @@ export function MediaProbeDialog({profile,revision,mutate,onCancel}){
       description={video?'Tạo một video thử ngắn. Kiểm tra kết quả không gửi lại yêu cầu tạo video.':
         'Tạo một ảnh thử 1K. Không tự gửi lại nếu chưa xác định kết quả.'}/>
     <Form layout="vertical" onFinish={run} disabled={pending||Boolean(id)}>
-      <Form.Item name="prompt" label="Prompt" rules={[{required:true,whitespace:true}]}>
+      <Form.Item name="prompt" label="Prompt" rules={[{required:true,whitespace:true},{min:local?30:1}]}>
         <Input.TextArea rows={4} maxLength={local?1100:2000}/>
       </Form.Item>
       {imageInput&&<Form.Item name="source" label="Mã ảnh nguồn đã xác minh (I2V)"
@@ -49,7 +49,7 @@ export function MediaProbeDialog({profile,revision,mutate,onCancel}){
       <Button type="primary" htmlType="submit" loading={pending}>{video?'Tạo video':'Tạo ảnh'}</Button>
     </Form>
     <Space direction="vertical" style={{marginTop:16,width:'100%'}}>
-      {id&&<Typography.Text copyable>Mã kiểm tra: {id}</Typography.Text>}
+      {id&&<Typography.Text copyable={{text:id}}>Mã kiểm tra: {id}</Typography.Text>}
       {pending&&<Alert type="info" showIcon message="Đang xử lý yêu cầu đã xác nhận…"/>}
       {error&&<Alert type="error" showIcon message={error}/>}
       {result?.status==='NEEDS_RECONCILIATION'&&<Alert type="warning" showIcon message="Chưa xác định kết quả gửi. Kiểm tra nhà cung cấp, không tạo lại tự động."/>}
