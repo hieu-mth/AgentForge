@@ -190,3 +190,14 @@ fields for T2V (no image provenance), with the actual output metadata;
 existing I2V and archived pilot receipts are unchanged. Runtime node and
 weight checks still apply. This is one reviewed topology, not support for
 arbitrary video graphs or certification of real inference.
+
+### Video model probes
+
+Model Hub supports explicit cloud T2V/I2V and local video probes using the same
+production transport or managed ComfyUI workflow. The optional `source_image_job`
+selects I2V and must refer to a verified generated PNG receipt; omit it for T2V.
+Unsupported input modes are rejected before reservation. Local probes use an
+isolated single-shot plan under `probe-<id>` and the existing motion ledger,
+resource checks and MP4 verifier. Polling an existing ID never submits a new
+provider job. Cloud requests may cost money; no automatic retries are authorized.
+The existing advanced local image probe retains resolution/steps/seed controls.
