@@ -1,3 +1,4 @@
+import './CharacterLibrary.css';
 import { useState } from 'react';
 import { Alert, Button, Card, Col, Collapse, Empty, Form, Image, Input, Modal, Popconfirm, Row, Space, Tag, Typography } from 'antd';
 import { useResource, ResourceStatus } from '../use_resource.jsx';
@@ -186,31 +187,30 @@ function CharacterEditor({character,resource,mutate,onClose,onSaved}){
       '. Species/type: '+(values.species||'[type]')+'. Fixed identity: '+(values.appearance||'[describe identity]')+
       '. Use the attached real reference photos as the source of truth. Show front, three-quarter, left profile, right profile and rear full-body views, same scale, neutral pose, plain background, neutral lighting. Preserve face, proportions, markings, colors and distinctive features exactly. Do not add accessories or invent unseen markings. Keep each view separate and clearly labeled. The result is a design reference, not a scene. Also provide separate single-view images if supported. Owner must verify against the original photos.');
   }
-  return <Modal open width={840} title={character.id?'Chỉnh sửa nhân vật':'Tạo nhân vật'} footer={null}
-    onCancel={()=>{if(!busy)onClose();}} closable={!busy} maskClosable={!busy}>
-    <Form form={form} layout="vertical" onFinish={save}
-      initialValues={Object.fromEntries(FIELDS.map(([key])=>[key,character[key]||'']))}>
-      <Space direction="vertical" size="middle" style={{width:'100%'}}>
-        <div><Text strong>1. Bộ ảnh nhận diện</Text><Paragraph type="secondary" style={{margin:0}}>
-          Ảnh chính là nền tảng; các góc khác tùy chọn. PNG/JPEG tối đa 20 MiB đầu vào, tự giảm xuống tối đa 1 MiB khi cần. Giữ ảnh gốc riêng.
-        </Paragraph></div>
-        <Row gutter={[12,12]}>{ROLES.map(([role,label,hint])=>{
+  const imageSlots=roles=>(
+        <Row gutter={[12,12]}>{roles.map(([role,label,hint])=>{
           const src=files[role]||existing(role)?.preview_url;
-          return <Col key={role} xs={12} sm={8} md={6}><Card size="small">
+          return <Col key={role} xs={24} sm={roles.length===1?24:12}><Card size="small" style={{height:"100%"}}>
             <Space direction="vertical" style={{width:'100%'}}>
               <Text strong>{label}</Text>
-              {src?<Image alt={label} src={src} width="100%" height={100} style={{objectFit:'contain'}}/>:
-                <div style={{height:100,display:'grid',placeItems:'center',background:'rgba(128,128,128,.08)'}}><Text type="secondary">Chưa có ảnh</Text></div>}
+              {src?<Image alt={label} src={src} width="100%" height={100} style={{objectFit:'contain'}}/>:null}
               <Text type="secondary" style={{fontSize:12}}>{hint}</Text>
-              <input aria-label={'Nhập ảnh '+label} type="file" accept="image/png,image/jpeg" disabled={busy}
-                style={{width:'100%'}} onChange={event=>{const file=event.target.files?.[0];event.target.value='';void choose(role,file);}}/>
+              <label className='character-image-picker'>{src?'Đổi ảnh':'Chọn ảnh'}<input aria-label={'Nhập ảnh '+label} type="file" accept="image/png,image/jpeg" disabled={busy}
+                style={{width:'100%'}} onChange={event=>{const file=event.target.files?.[0];event.target.value='';void choose(role,file);}}/></label>
               {src&&<Button size="small" disabled={busy} onClick={()=>remove(role)}>Bỏ ảnh</Button>}
             </Space>
           </Card></Col>;
         })}</Row>
-        <Alert type="info" showIcon message="Ảnh đa góc là tài sản tham chiếu, không phải model 3D hoặc LoRA."
-          description="Dùng ảnh thật làm chuẩn. Nếu tạo sheet bằng AI, hãy kiểm tra từng góc; model video có thể cần ảnh riêng thay vì ảnh tổng hợp."/>
-        <div><Text strong>2. Thông tin nhân vật</Text></div>
+  );
+  return <Modal open centered width={720} styles={{body:{maxHeight:'calc(100dvh - 160px)',overflowY:'auto',paddingInlineEnd:8}}} title={character.id?'Chỉnh sửa nhân vật':'Tạo nhân vật'} footer={<Space><Button disabled={busy} onClick={onClose}>Hủy</Button><Button type="primary" form="character-editor" htmlType="submit" loading={saving} disabled={processing||analyzing}>Lưu nhân vật</Button></Space>}
+    onCancel={()=>{if(!busy)onClose();}} closable={!busy} maskClosable={!busy}>
+    <Form id="character-editor" scrollToFirstError form={form} layout="vertical" onFinish={save}
+      initialValues={Object.fromEntries(FIELDS.map(([key])=>[key,character[key]||'']))}>
+      <Space direction="vertical" size="middle" style={{width:'100%'}}>
+        <Row gutter={12}><Col xs={24} sm={12}>{field(FIELDS[0])}</Col><Col xs={24} sm={12}>{field(FIELDS[1])}</Col></Row>
+        {imageSlots(ROLES.slice(0,1))}
+        <Text type="secondary">Chọn ảnh PNG hoặc JPEG tối đa 20 MiB. Ảnh lớn sẽ được giảm xuống tối đa 1 MiB.</Text>
+        <Collapse items={[{key:'angles',label:'Ảnh tham chiếu bổ sung ('+ROLES.slice(1).filter(([role])=>has(role)).length+'/'+(ROLES.length-1)+')',children:imageSlots(ROLES.slice(1))}]}/>
         <Popconfirm title="Phân tích ảnh chính bằng AI?"
           description="Dùng model Vision đã phân công. Nếu là cloud, ảnh sẽ được gửi ra ngoài và có thể phát sinh phí."
           onConfirm={analyze} okText="Đồng ý gọi AI" cancelText="Hủy">
@@ -222,7 +222,7 @@ function CharacterEditor({character,resource,mutate,onClose,onSaved}){
             {suggestion.uncertainties&&<Text type="secondary">{suggestion.uncertainties}</Text>}
             <Button onClick={()=>form.setFieldValue('appearance',suggestion.appearance)}>Dùng mô tả này</Button>
           </Space>}/>}
-        <Row gutter={12}><Col xs={24} sm={12}>{field(FIELDS[0])}</Col><Col xs={24} sm={12}>{field(FIELDS[1])}</Col></Row>
+
         {FIELDS.slice(2,4).map(field)}
         <Collapse items={[{key:'sheet',label:'Chuẩn bị bản thiết kế bằng AI (tùy chọn)',children:<Space direction="vertical" style={{width:'100%'}}>
           <Paragraph>Đính kèm ảnh gốc vào công cụ tạo ảnh hỗ trợ tham chiếu. Dùng prompt dưới đây, kiểm tra kết quả rồi nhập sheet và từng góc vào hồ sơ. AgentForge không tự gọi API.</Paragraph>
@@ -235,7 +235,7 @@ function CharacterEditor({character,resource,mutate,onClose,onSaved}){
               alt={ROLES.find(([role])=>role===item.role)?.[1]||item.role}/>)}</Space></details>)}
         </Space>}]:[])]}/>
         {error&&<Alert type="error" showIcon message={error}/>}
-        <Button type="primary" block htmlType="submit" loading={saving} disabled={processing||analyzing}>Lưu nhân vật</Button>
+        
       </Space>
     </Form>
   </Modal>;

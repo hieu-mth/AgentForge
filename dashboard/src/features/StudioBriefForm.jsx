@@ -74,7 +74,7 @@ export function StudioBriefForm({hub,pending,waiting,onCharacters,onSubmit}){
         <Button className="draft-submit" type="primary" htmlType="submit"
           loading={pending} disabled={waiting>0||!Number.isInteger(limit)||characterCount>limit||(manual&&!targetBounds)||(moving&&needsCloudBudget&&!cloudBounds)}>Tạo storyboard</Button>
       </div>
-      {methodUnavailable&&<Alert type="warning" showIcon message="Phương pháp đang chọn không tương thích với model video." description="Mở phần phương pháp sản xuất và chọn tuyến khả dụng. Không cần đổi model để lập storyboard nếu chưa phân công video."/>}
+      {methodUnavailable&&<Alert style={{marginBlockStart:16}} type="warning" showIcon message="Phương pháp đang chọn không tương thích với model video." description="Mở phần phương pháp sản xuất và chọn tuyến khả dụng. Không cần đổi model để lập storyboard nếu chưa phân công video."/>}
       {moving&&<details className="draft-resource-details" open={methodUnavailable||undefined}>
         <summary>Phương pháp sản xuất · {productionMethodLabels[method]??'Chưa chọn'}</summary>
         <Space wrap align="start">
