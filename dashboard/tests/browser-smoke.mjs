@@ -659,8 +659,9 @@ try {
   await editor.waitFor();
   if(await editor.inputValue()!==longScript||await editor.count()!==1||await settings.getByRole('radio').count())
     throw new Error('Long Vietnamese script was not restored after refreshing');
-  const composer=settings.locator('.env-panel').filter({has:editor});
+  const composer=settings.getByRole('form',{name:'Tạo video mới',exact:true});
   await composer.getByRole('combobox',{name:'Thời lượng',exact:true}).waitFor();
+  await composer.getByRole('combobox',{name:'Nhân vật',exact:true}).waitFor();
   await composer.getByText('AI tự xác định',{exact:true}).waitFor();
   await composer.getByText('AI tự chọn nhân vật',{exact:true}).waitFor();
   const advanced=composer.locator('details').filter({hasText:'Tùy chọn nâng cao'});
@@ -668,7 +669,7 @@ try {
     throw new Error('Advanced production options should be collapsed by default');
   await advanced.locator('summary').click();
   const routing=advanced.getByRole('combobox',{name:'Điều phối sản xuất',exact:true});
-  await routing.click();
+  await routing.press('ArrowDown');
   const routeOptions=settings.locator('.ant-select-dropdown:visible .ant-select-item-option-content');
   await routeOptions.filter({hasText:'AI tự chọn model phù hợp'}).waitFor();
   if(await routeOptions.count()!==2||await composer.getByText('Tối đa giây video cloud',{exact:true}).count())
