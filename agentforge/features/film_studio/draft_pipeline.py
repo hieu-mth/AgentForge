@@ -684,9 +684,13 @@ def _direct_authored_plan(job, plan, profile):
 
 def _select_cast(job, bindings, outline):
     selector = bindings.get("character.select", bindings["film.storyboard"])
-    rows = characters.list_characters()["characters"][:10]
-    candidates = {row["id"]: {"name": row["name"], "appearance": row["appearance"][:220]}
+    rows = characters.list_characters()["characters"]
+    candidates = {row["id"]: {key: row.get(key, "") for key in ("name", "species", "appearance", "personality")}
                   for row in rows}
+    # Do not silently omit older characters. A very large library needs an
+    # explicit casting shortlist instead of overflowing small text runtimes.
+    if len(json.dumps(candidates, ensure_ascii=False)) > 48000:
+        raise ValueError("Thư viện nhân vật vượt ngân sách ngữ cảnh casting; lưu trữ nhân vật không dùng trước khi lập storyboard.")
     if not candidates:
         return {}
     comfy = bindings.get("image.generate")
@@ -765,7 +769,7 @@ def _image(job, index, scene, revision, profile):
         scene["attempts"] += 1
         _save(job)
         cast = job["cast"]
-        identity = ". ".join(cast[key]["name"] + ": " + cast[key]["appearance"] for key in scene["character_ids"])
+        identity = ". ".join(cast[key]["name"] + ": " + cast[key]["appearance"][:220] for key in scene["character_ids"])
         start_state = scene.get("continuity_plan", {}).get("start_state", "")
         prompt = ". ".join((scene.get("continuity", job["board"]["continuity"]), identity,
                             *((start_state,) if start_state else ()),

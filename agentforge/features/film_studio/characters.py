@@ -64,34 +64,73 @@ def _validate(data):
         ("name",100),("species",80),("appearance",2000),("personality",2000),
         ("voice",300),("model_ref",200),("reference_notes",2000)]}
 
-def list_characters(path=None):
+def _archive_exists(conn):
+    return bool(conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='character_archives'").fetchone())
+
+
+def list_characters(path=None, *, include_archived=False):
     with _LOCK, _db(path) as conn:
         if conn is None:
             return {"characters": []}
-        return {"characters": [dict(row) for row in conn.execute(
-            "SELECT * FROM characters ORDER BY updated_at DESC, id DESC LIMIT 500")]}
+        archive = _archive_exists(conn)
+        if archive:
+            query = ("SELECT c.*, a.character_id IS NOT NULL AS archived FROM characters c "
+                     "LEFT JOIN character_archives a ON a.character_id=c.id "
+                     + ("" if include_archived else "WHERE a.character_id IS NULL ")
+                     + "ORDER BY c.updated_at DESC, c.id DESC")
+        else:
+            query = "SELECT *, 0 AS archived FROM characters ORDER BY updated_at DESC, id DESC"
+        return {"characters": [dict(row) for row in conn.execute(query)]}
+
+
+def _save_record(conn, data, values):
+    now = datetime.now(timezone.utc).isoformat()
+    identifier = data.get("id")
+    if identifier is None:
+        identifier = uuid.uuid4().hex
+        conn.execute("""INSERT INTO characters
+            (id,name,species,appearance,personality,voice,model_ref,reference_notes,version,created_at,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,1,?,?)""",
+            (identifier, *(values[k] for k in values), now, now))
+    else:
+        if not isinstance(identifier, str) or not _ID.fullmatch(identifier):
+            raise ValueError("Invalid character id")
+        expected = data.get("expected_version")
+        if type(expected) is not int or expected < 1:
+            raise ValueError("Expected version required")
+        if _archive_exists(conn) and conn.execute(
+                "SELECT 1 FROM character_archives WHERE character_id=?", (identifier,)).fetchone():
+            raise ValueError("Restore archived character before editing")
+        cursor = conn.execute("""UPDATE characters SET
+            name=?,species=?,appearance=?,personality=?,voice=?,model_ref=?,reference_notes=?,
+            version=version+1,updated_at=? WHERE id=? AND version=?""",
+            (*(values[k] for k in values),now,identifier,expected))
+        if cursor.rowcount != 1:
+            raise ValueError("Character changed or not found; refresh before editing")
+    return dict(conn.execute("SELECT * FROM characters WHERE id=?", (identifier,)).fetchone())
+
 
 def save_character(data, path=None):
     values = _validate(data)
-    now = datetime.now(timezone.utc).isoformat()
-    identifier = data.get("id")
     with _LOCK, _db(path, create=True) as conn:
-        if identifier is None:
-            identifier = uuid.uuid4().hex
-            conn.execute("""INSERT INTO characters
-                (id,name,species,appearance,personality,voice,model_ref,reference_notes,version,created_at,updated_at)
-                VALUES (?,?,?,?,?,?,?,?,1,?,?)""",
-                (identifier, *(values[k] for k in values), now, now))
+        conn.execute("BEGIN IMMEDIATE")
+        return _save_record(conn, data, values)
+
+
+def set_archived(identifier, expected_version, archived, path=None):
+    if (not isinstance(identifier, str) or not _ID.fullmatch(identifier)
+            or type(expected_version) is not int or expected_version < 1 or type(archived) is not bool):
+        raise ValueError("Invalid character archive request")
+    with _LOCK, _db(path, create=True) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT version FROM characters WHERE id=?", (identifier,)).fetchone()
+        if row is None or row["version"] != expected_version:
+            raise ValueError("Character changed or not found; refresh before editing")
+        conn.execute("CREATE TABLE IF NOT EXISTS character_archives (character_id TEXT PRIMARY KEY)")
+        if archived:
+            conn.execute("INSERT OR IGNORE INTO character_archives VALUES (?)", (identifier,))
         else:
-            if not isinstance(identifier,str) or not _ID.fullmatch(identifier):
-                raise ValueError("Invalid character id")
-            expected = data.get("expected_version")
-            if type(expected) is not int or expected < 1:
-                raise ValueError("Expected version required")
-            cursor = conn.execute("""UPDATE characters SET
-                name=?,species=?,appearance=?,personality=?,voice=?,model_ref=?,reference_notes=?,
-                version=version+1,updated_at=? WHERE id=? AND version=?""",
-                (*(values[k] for k in values),now,identifier,expected))
-            if cursor.rowcount != 1:
-                raise ValueError("Character changed or not found; refresh before editing")
-        return dict(conn.execute("SELECT * FROM characters WHERE id=?", (identifier,)).fetchone())
+            conn.execute("DELETE FROM character_archives WHERE character_id=?", (identifier,))
+        conn.execute("UPDATE characters SET version=version+1, updated_at=? WHERE id=?",
+                     (datetime.now(timezone.utc).isoformat(), identifier))
+    return {"id": identifier, "archived": archived}

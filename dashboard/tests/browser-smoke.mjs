@@ -1167,6 +1167,52 @@ try {
   if(agnesCalls!==1)throw new Error('Agnes probe was not exactly one explicit submission');
   await agnesPage.close();
   console.log('Agnes Model Hub explicit probe and verified preview UI: PASS');
+
+  const characterPage=await browser.newPage({viewport:{width:1280,height:850}});
+  const characterId='a'.repeat(32);
+  const picture=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aL4sAAAAASUVORK5CYII=','base64');
+  let characterRows=[], analysisCalls=0, characterSaves=0;
+  await characterPage.route('**/api/session',route=>route.fulfill({json:{csrf:'fixture'}}));
+  await characterPage.route('**/api/characters',route=>route.fulfill({json:{characters:characterRows}}));
+  await characterPage.route('**/api/characters/analyze',route=>{
+    const data=route.request().postDataJSON();
+    if(data.ack!=='ANALYZE_CHARACTER_PRIMARY'||data.allow_cloud!==true||
+       !data.reference.data_base64)throw new Error('Character vision request lacks explicit consent or image');
+    analysisCalls++;
+    return route.fulfill({json:{appearance:'Mèo lông đen',uncertainties:'Chưa thấy mặt sau'}});
+  });
+  await characterPage.route('**/api/characters/save',route=>{
+    const data=route.request().postDataJSON();
+    if(data.ack!=='SAVE_CHARACTER'||data.character.name!=='Mực fixture'||
+       data.character.appearance!=='Mèo lông đen'||data.pack.expected_revision!==0||
+       data.pack.images.map(item=>item.role).sort().join(',')!=='left,primary,sheet')
+      throw new Error('Invalid atomic character save payload');
+    characterSaves++;
+    const character={...data.character,id:characterId,version:1,archived:0};
+    characterRows=[{...character,reference_pack:{revision:1,roles:['primary','left','sheet'],
+      preview_url:'/api/characters/'+characterId+'/references/1/primary'}}];
+    return route.fulfill({json:{character}});
+  });
+  await characterPage.route('**/api/characters/'+characterId+'/references/1/primary',route=>route.fulfill({contentType:'image/png',body:picture}));
+  await characterPage.goto(origin+'/dashboard/#/characters');
+  await characterPage.getByRole('button',{name:'Tạo nhân vật',exact:true}).click();
+  const characterDialog=characterPage.getByRole('dialog',{name:'Tạo nhân vật'});
+  await characterDialog.getByLabel('Tên nhân vật',{exact:true}).fill('Mực fixture');
+  for(const label of ['Chính diện / chân dung','Bên trái','Bản thiết kế tổng hợp']){
+    await characterDialog.getByLabel('Nhập ảnh '+label,{exact:true}).setInputFiles({name:'fixture.png',mimeType:'image/png',buffer:picture});
+    await characterDialog.getByRole('img',{name:label,exact:true}).waitFor();
+  }
+  if(analysisCalls||characterSaves)throw new Error('Character import caused external side effects');
+  await characterDialog.getByRole('button',{name:'AI phân tích ngoại hình',exact:true}).click();
+  await characterPage.getByRole('button',{name:'Đồng ý gọi AI',exact:true}).click();
+  await characterDialog.getByRole('button',{name:'Dùng mô tả này',exact:true}).click();
+  await characterDialog.getByRole('button',{name:'Lưu nhân vật',exact:true}).click();
+  await characterDialog.waitFor({state:'hidden'});
+  await characterPage.getByText('Mực fixture',{exact:true}).waitFor();
+  await characterPage.getByText('Có bản thiết kế',{exact:true}).waitFor();
+  if(analysisCalls!==1||characterSaves!==1)throw new Error('Unexpected number of character requests');
+  await characterPage.close();
+  console.log('Character Library multi-view import, explicit vision and atomic save UI: PASS');
 } finally {
   if (browser) await browser.close();
   vite.kill();
