@@ -403,7 +403,7 @@ try {
     const {id,...brief}=route.request().postDataJSON();
     if(!/^[0-9a-f]{32}$/.test(id)||![formattedBrief,'Ý tưởng mới'].includes(brief.idea)||
         brief.seconds!==null||brief.scene_count!==null||brief.duration_mode!=='auto'||brief.ratio!=='16:9'||
-        brief.mode!=='motion'||'motion_approved' in brief)
+        brief.mode!=='motion'||brief.route_strategy!=='assigned'||'max_cloud_seconds' in brief||'character_ids' in brief||'motion_approved' in brief)
       throw new Error('Unexpected draft submission');
     draftFixture={id,brief:{...brief,seconds:6,scene_count:3},status:'RUNNING',stage:'PLANNING',worker_active:true,
       activity:{operation:'plan',provider:'ollama',model:'fixture-planner'}};
@@ -659,10 +659,34 @@ try {
   await editor.waitFor();
   if(await editor.inputValue()!==longScript||await editor.count()!==1||await settings.getByRole('radio').count())
     throw new Error('Long Vietnamese script was not restored after refreshing');
-  await settings.getByText('Thời lượng · AI tự đề xuất',{exact:true}).waitFor();
+  const composer=settings.getByRole('form',{name:'Tạo video mới',exact:true});
+  await composer.getByRole('combobox',{name:'Thời lượng',exact:true}).waitFor();
+  await composer.getByRole('combobox',{name:'Nhân vật',exact:true}).waitFor();
+  await composer.getByText('AI tự xác định',{exact:true}).waitFor();
+  await composer.getByText('AI tự chọn nhân vật',{exact:true}).waitFor();
+  const advanced=composer.locator('details').filter({hasText:'Tùy chọn nâng cao'});
+  if(await advanced.getAttribute('open')!==null)
+    throw new Error('Advanced production options should be collapsed by default');
+  await advanced.locator('summary').click();
+  const routing=advanced.getByRole('combobox',{name:'Điều phối sản xuất',exact:true});
+  await routing.press('ArrowDown');
+  const listId=await routing.getAttribute('aria-controls');
+  if(!listId)throw new Error('Routing combobox is missing its controlled listbox');
+  const routeList=settings.locator('[id='+JSON.stringify(listId)+']');
+  await routeList.waitFor({state:'visible'});
+  const routeOptions=routeList.getByRole('option');
+  await routeOptions.filter({hasText:'AI tự chọn model phù hợp'}).waitFor();
+  const actualOptions=(await routeOptions.allTextContents()).map(label=>label.trim()).sort();
+  const expectedOptions=['Theo model đã phân công','AI tự chọn model phù hợp'].sort();
+  if(JSON.stringify(actualOptions)!==JSON.stringify(expectedOptions))
+    throw new Error('Unexpected routing choices: '+JSON.stringify(actualOptions));
+  if(await composer.getByText('Tối đa giây video cloud',{exact:true}).count())
+    throw new Error('Retired cloud duration field still exposed');
+  await routing.press('Escape');
+  await advanced.locator('summary').click();
   await settings.route('**/api/film/drafts/start',route=>{
     const {id,...brief}=route.request().postDataJSON();
-    if(brief.idea!==longScript||Object.keys(brief).sort().join()!=='duration_mode,idea,mode,ratio,scene_count,seconds')
+    if(brief.idea!==longScript||brief.route_strategy!=='assigned'||Object.keys(brief).sort().join()!=='duration_mode,idea,mode,ratio,route_strategy,scene_count,seconds')
       throw new Error('Studio did not submit the single content field unchanged');
     return route.fulfill({json:{id,brief,status:'QUEUED'}});
   });
@@ -1199,6 +1223,7 @@ try {
   const characterDialog=characterPage.getByRole('dialog',{name:'Tạo nhân vật'});
   await characterDialog.getByLabel('Tên nhân vật',{exact:true}).fill('Mực fixture');
   for(const label of ['Chính diện / chân dung','Bên trái','Bản thiết kế tổng hợp']){
+    if(label==='Bên trái')await characterDialog.getByText(/Ảnh tham chiếu bổ sung/).click();
     await characterDialog.getByLabel('Nhập ảnh '+label,{exact:true}).setInputFiles({name:'fixture.png',mimeType:'image/png',buffer:picture});
     await characterDialog.getByRole('img',{name:label,exact:true}).waitFor();
   }

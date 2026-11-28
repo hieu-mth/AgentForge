@@ -170,12 +170,18 @@ def _plan_production(job, bindings):
     if job.get("production_plan") or not job["brief"].get("route_strategy"):
         return
     strategy = job["brief"]["route_strategy"]
-    cap = job["brief"]["max_cloud_seconds"]
+    cap = job["brief"].get("max_cloud_seconds")
     _, candidates = model_hub.production_candidates(strategy)
-    candidates = [c for c in candidates if c["method"] == "local" or
-                  cap >= max(2 * c["min_billable_seconds"], job["brief"].get("seconds") or 0)]
+    if cap is not None:
+        candidates = [c for c in candidates if c["method"] == "local" or
+                      cap >= max(2 * c["min_billable_seconds"], job["brief"].get("seconds") or 0)]
     if not candidates:
+        if cap is None and strategy in {"assigned", "auto"}:
+            return  # Text-only storyboard remains available without a media route.
         raise ValueError("Không có model video phù hợp quyền và ngân sách. Đăng ký model hoặc chọn tuyến đã gán.")
+    if cap is None:
+        ready = [candidate for candidate in candidates if candidate["execution_ready"]]
+        candidates = ready or candidates
     planner = bindings["general.text"]
     _activity(job, "PLANNING", "plan", planner)
     with _measured(job, "plan", bindings.get("image.generate")):
@@ -689,18 +695,24 @@ def _select_cast(job, bindings, outline):
                   for row in rows}
     # Do not silently omit older characters. A very large library needs an
     # explicit casting shortlist instead of overflowing small text runtimes.
-    if len(json.dumps(candidates, ensure_ascii=False)) > 48000:
+    if job.get("brief", {}).get("character_ids") is None and len(json.dumps(candidates, ensure_ascii=False)) > 48000:
         raise ValueError("Thư viện nhân vật vượt ngân sách ngữ cảnh casting; lưu trữ nhân vật không dùng trước khi lập storyboard.")
-    if not candidates:
-        return {}
-    comfy = bindings.get("image.generate")
-    _activity(job, "STORYBOARD", "cast", selector)
-    with _measured(job, "cast", comfy):
-        selection = _ask(selector, "Select up to two relevant registered characters. Return empty if none fit.",
-                         {"outline": outline, "candidates": candidates},
-                         _object(ids={"type": "array", "items": {**STRING, "enum": list(candidates)},
-                                      "maxItems": 2}), comfy, job=job)
-    ids = selection["ids"]
+    requested = job.get("brief", {}).get("character_ids")
+    if requested is not None:
+        if any(key not in candidates for key in requested):
+            raise ValueError("Nhân vật đã chọn không còn hoạt động; hãy tạo storyboard mới.")
+        ids = requested
+    else:
+        if not candidates:
+            return {}
+        comfy = bindings.get("image.generate")
+        _activity(job, "STORYBOARD", "cast", selector)
+        with _measured(job, "cast", comfy):
+            selection = _ask(selector, "Select up to two relevant registered characters. Return empty if none fit.",
+                             {"outline": outline, "candidates": candidates},
+                             _object(ids={"type": "array", "items": {**STRING, "enum": list(candidates)},
+                                          "maxItems": 2}), comfy, job=job)
+        ids = selection["ids"]
     if not isinstance(ids, list) or len(ids) > 2 or any(not isinstance(x, str) or x not in candidates for x in ids):
         raise ValueError("Invalid character selection")
     versions = {row["id"]: row["version"] for row in rows if type(row.get("version")) is int}
@@ -729,6 +741,15 @@ def _scene_path(job, index):
     return ensure_local_root(_folder(job["id"]) / name)
 
 
+def _refresh_cloud_budget(job):
+    plan = job.get("production_plan") or {}
+    if plan.get("cloud_budget_mode") != "timeline" or plan.get("method") not in {"cloud", "hybrid"}:
+        return
+    from agentforge.features.film_studio import draft_motion_cloud, production_router
+    needed = job.get("cloud_motion_seconds", 0) + draft_motion_cloud.remaining_seconds(job)
+    plan["max_cloud_seconds"] = min(needed, production_router.MAX_CLOUD_SECONDS)
+
+
 def _stamp_storyboard(job):
     board = job["board"]
     weight_key = "suggested_seconds" if "duration_mode" in job["brief"] else "duration_weight"
@@ -739,6 +760,7 @@ def _stamp_storyboard(job):
         scene.setdefault("shot_id", uuid4().hex)
         scene.setdefault("motion_prompt", scene["description"])
         scene.update(frames=frames, seconds=frames / fps if moving or scene.get("content_scene") else frames // fps)
+    _refresh_cloud_budget(job)
     job["storyboard_sha"] = draft_timeline.digest(job)
     job.update(status="STORYBOARD_REVIEW", stage="STORYBOARD", error=None)
     job.pop("approved_storyboard_sha", None)
@@ -1187,8 +1209,10 @@ def _dispatch():
 def validate_submission_shape(data):
     """The current Studio brief is the only supported creation contract."""
     required = {"id", "idea", "seconds", "ratio", "scene_count", "mode", "duration_mode"}
+    optional = {"route_strategy", "max_cloud_seconds", "character_ids"}
     if (not isinstance(data, dict)
-            or data.keys() not in (required, required | {"route_strategy", "max_cloud_seconds"})
+            or not required <= data.keys() or data.keys() - required - optional
+            or ("max_cloud_seconds" in data and "route_strategy" not in data)
             or data["duration_mode"] not in ("auto", "manual")
             or data["scene_count"] is not None):
         raise ValueError("Use the current Studio brief: auto or manual duration, with AI-planned scenes.")
@@ -1222,18 +1246,27 @@ def submit(data):
         if brief["ratio"] != "16:9":
             raise ValueError("Phim chuyển động hiện hỗ trợ khung hình 16:9.")
         brief["mode"] = mode
-    if "route_strategy" in data or "max_cloud_seconds" in data:
-        if not motion_mode or data.get("route_strategy") not in {"auto", "local", "hybrid", "cloud"}:
+    if "character_ids" in data:
+        ids = data["character_ids"]
+        if (not isinstance(ids, list) or len(ids) > 2
+                or any(not isinstance(item, str) or not re.fullmatch(r"[a-f0-9]{32}", item) for item in ids)
+                or len(set(ids)) != len(ids)):
+            raise ValueError("Chọn tối đa hai nhân vật đã đăng ký.")
+        brief["character_ids"] = ids
+    if "route_strategy" in data:
+        if not motion_mode or data.get("route_strategy") not in {"assigned", "auto", "local", "hybrid", "cloud"}:
             raise ValueError("Chọn tuyến sản xuất chỉ áp dụng storyboard motion mới.")
         from agentforge.features.film_studio import production_router
-        cap = _number(data.get("max_cloud_seconds"), 0, production_router.MAX_CLOUD_SECONDS)
-        if data["route_strategy"] in {"hybrid", "cloud"}:
-            _, candidates = model_hub.production_candidates(data["route_strategy"])
-            minimum = min((2 * candidate["min_billable_seconds"] for candidate in candidates),
-                          default=production_router.MIN_CLOUD_SECONDS)
-            if cap < minimum:
-                raise ValueError(f"Cloud video cần ngân sách ít nhất {minimum} giây cho hai shot.")
-        brief.update(route_strategy=data["route_strategy"], max_cloud_seconds=cap)
+        brief["route_strategy"] = data["route_strategy"]
+        if "max_cloud_seconds" in data:
+            cap = _number(data["max_cloud_seconds"], 0, production_router.MAX_CLOUD_SECONDS)
+            if data["route_strategy"] in {"hybrid", "cloud"}:
+                _, candidates = model_hub.production_candidates(data["route_strategy"])
+                minimum = min((2 * candidate["min_billable_seconds"] for candidate in candidates),
+                              default=production_router.MIN_CLOUD_SECONDS)
+                if cap < minimum:
+                    raise ValueError(f"Cloud video cần ngân sách ít nhất {minimum} giây cho hai shot.")
+            brief["max_cloud_seconds"] = cap
     try:
         prior = _read(ident)
     except KeyError:
@@ -1319,7 +1352,7 @@ def _approve_storyboard(job):
             from agentforge.features.film_studio import draft_motion_cloud
             plan = job.get("production_plan")
             if not plan or plan["method"] not in {"hybrid", "cloud"}:
-                raise ValueError("Cloud video requires an approved production route and explicit budget.")
+                raise ValueError("Chưa có tuyến cloud trong storyboard đã xem. Hãy lập storyboard mới theo model đã phân công.")
             missing = draft_motion_cloud.remaining_seconds(job)
             if job.get("cloud_motion_seconds", 0) + missing > plan["max_cloud_seconds"]:
                 raise ValueError("Ngân sách giây cloud không đủ cho timeline đã duyệt.")
@@ -1546,6 +1579,8 @@ def _storyboard_action(job, action, data):
     draft_continuity.clear_stale_boundaries(scenes)
     _stamp_storyboard(job)
     draft_continuity.invalidate_dependencies(scenes, original["scenes"], checkpoints)
+    _refresh_cloud_budget(job)
+    job["storyboard_sha"] = draft_timeline.digest(job)
     draft_continuity.validate(job)
     _save(job)
     return job

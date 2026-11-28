@@ -41,7 +41,7 @@ export function StoryboardReview({job,modelRoutes,busy,error,onClose,onApprove,o
     </div>}>
     {error&&<Alert type="error" showIcon message={error}/>}
     {job.production_plan&&<Alert showIcon type="info" message={"Phương pháp: "+productionMethodLabels[job.production_plan.method]+" · "+job.production_plan.motion_ref}
-      description={<><p>{job.production_plan.reason}</p>{job.production_plan.method!=="local"&&<p>Giây đã giữ ngân sách: {job.cloud_motion_seconds??0}/{job.production_plan.max_cloud_seconds}. Cần thêm dự kiến {cloudSecondsRemainingEstimate(job)??'—'} giây. Có âm thanh native nếu chưa có Audio Director.</p>}</>}/>}
+      description={<><p>{job.production_plan.reason}</p>{job.production_plan.method!=="local"&&<p>Cloud đã giữ ngân sách: {job.cloud_motion_seconds??0} giây. Dự kiến cần thêm {cloudSecondsRemainingEstimate(job)??'—'} giây; giới hạn đã lập kế hoạch {job.production_plan.max_cloud_seconds} giây. Cloud có thể tính phí theo toàn bộ clip được sinh, kể cả phần bị cắt. {job.production_plan.native_audio!==false?'Có âm thanh native nếu chưa có Audio Director.':''}</p>}</>}/>}
     {reviewing&&job.deferred_media_binding&&<Alert type="info" showIcon
       message="Storyboard chưa khóa model media"
       description="Bạn có thể xem và chỉnh nội dung trước khi duyệt. Khi duyệt sản xuất, hệ thống kiểm tra và khóa các model media theo tuyến đã chọn."/>}

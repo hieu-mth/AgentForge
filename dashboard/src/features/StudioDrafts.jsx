@@ -219,7 +219,9 @@ export function StudioDrafts({mutate,onCharacters}) {
     const payload={idea:values.idea,mode:values.mode,duration_mode:values.durationMode,
       seconds:values.durationMode==='manual'?values.targetSeconds:null,scene_count:null,
       ratio:motion?'16:9':values.ratio};
-    if(motion&&values.routeStrategy&&values.routeStrategy!=='assigned')Object.assign(payload,{route_strategy:values.routeStrategy,max_cloud_seconds:values.cloudSeconds??0});
+    if(motion)payload.route_strategy=values.routeStrategy??'assigned';
+    if(values.casting==='manual')payload.character_ids=values.characterIds;
+    else if(values.casting==='none')payload.character_ids=[];
     const brief=JSON.stringify(payload);
     if(request.current?.brief!==brief)request.current={brief,id:crypto.randomUUID().replaceAll('-','')};
     return run('/start',{...payload,id:request.current.id},result=>{

@@ -1,16 +1,21 @@
 import {useState} from 'react';
 import {Alert,Button,Card,Form,Input,Select,Space} from 'antd';
 import {NumberField} from '../components/NumberField.jsx';
-import {videoModes,durationBounds,productionMethodOptions,productionMethodLabels,cloudSecondsBounds} from './studioDuration.js';
+import {useResource} from '../use_resource.jsx';
+import {videoModes,durationBounds} from './studioDuration.js';
 
 const editorKey='agentforge.studio.video-brief.v1';
-const briefDefaults={idea:'',durationMode:'auto',targetSeconds:12,ratio:'9:16',mode:'motion',routeStrategy:'assigned',cloudSeconds:0};
+const briefDefaults={idea:'',durationMode:'auto',targetSeconds:12,ratio:'9:16',mode:'motion',routeStrategy:'assigned',casting:'auto',characterIds:[]};
 function savedBrief(){
   try {
     const saved=JSON.parse(localStorage.getItem(editorKey));
-    return Object.fromEntries(Object.entries(briefDefaults).map(([key,value])=>[
+    const next=Object.fromEntries(Object.entries(briefDefaults).map(([key,value])=>[
       key,typeof saved?.[key]===typeof value?saved[key]:value,
     ]));
+    if(!['assigned','auto'].includes(next.routeStrategy))next.routeStrategy='assigned';
+    if(!['auto','manual','none'].includes(next.casting))next.casting='auto';
+    if(!Array.isArray(next.characterIds))next.characterIds=[];
+    return next;
   } catch {
     return briefDefaults;
   }
@@ -20,17 +25,17 @@ export function StudioBriefForm({hub,pending,waiting,onCharacters,onSubmit}){
   const [form]=Form.useForm();
   const [initialBrief]=useState(savedBrief);
   const [saveFailed,setSaveFailed]=useState(false);
+  const characters=useResource('/api/characters');
   const values=Form.useWatch([],form)??initialBrief;
   const moving=(Form.useWatch('mode',form)??initialBrief.mode)==='motion';
+  const casting=Form.useWatch('casting',form)??initialBrief.casting;
   const limit=hub.data?.production_options?.brief_limit;
   const characterCount=Array.from(values.idea??'').length;
   const manual=(Form.useWatch('durationMode',form)??initialBrief.durationMode)==='manual';
   const method=values.routeStrategy??'assigned';
-  const methodOptions=productionMethodOptions(hub.data);
-  const cloudBounds=cloudSecondsBounds(hub.data,method);
+  const ready=hub.data?.production_options?.methods?.find(option=>option.id===method)?.execution_ready;
   const targetBounds=durationBounds(hub.data,moving?'motion':'still');
-  const needsCloudBudget=['auto','hybrid','cloud'].includes(method);
-  const methodUnavailable=moving&&!methodOptions.some(option=>option.value===method&&!option.disabled);
+  const activeCharacters=(characters.data?.characters??[]).filter(item=>!item.archived);
   function resetBrief(){
     form.setFieldsValue(briefDefaults);
     try {
@@ -43,7 +48,7 @@ export function StudioBriefForm({hub,pending,waiting,onCharacters,onSubmit}){
   return (
     <Card className="env-panel" title="Tạo video mới"
       extra={<Button onClick={onCharacters}>Thư viện nhân vật</Button>}>
-    <Form form={form} layout="vertical" onFinish={values=>onSubmit(values,resetBrief)} initialValues={initialBrief}
+    <Form aria-label="Tạo video mới" form={form} layout="vertical" onFinish={values=>onSubmit(values,resetBrief)} initialValues={initialBrief}
       onValuesChange={(_,next)=>{
         try {
           localStorage.setItem(editorKey,JSON.stringify(next));
@@ -62,48 +67,56 @@ export function StudioBriefForm({hub,pending,waiting,onCharacters,onSubmit}){
         <Input.TextArea autoSize={{minRows:7,maxRows:20}} spellCheck={false}
           placeholder="Mô tả ý tưởng hoặc nhập kịch bản bạn muốn AI thực hiện..."/>
       </Form.Item>
-      {hub.error&&!moving&&<Alert type="warning" showIcon message="Chưa đọc được giới hạn sản xuất" action={<Button onClick={hub.reload}>Thử lại</Button>}/>}
+      {hub.error&&<Alert type="warning" showIcon message="Chưa đọc được giới hạn sản xuất" action={<Button onClick={hub.reload}>Thử lại</Button>}/>}
       {saveFailed&&<Alert type="warning" showIcon message="Trình duyệt không lưu được nội dung để khôi phục khi tải lại."/>}
-      <div className="draft-form-options">
-        <Form.Item className="draft-video-mode" name="mode" label="Kiểu video" rules={[{required:true}]}>
-          <Select options={Object.entries(videoModes).map(([value,label])=>({value,label}))}/>
+      <Space wrap align="start" size="middle">
+        <Form.Item name="casting" label="Nhân vật">
+          <Select aria-label="Nhân vật" style={{width:240}} options={[
+            {value:'auto',label:'AI tự chọn nhân vật'},
+            {value:'manual',label:'Chọn từ thư viện'},
+            {value:'none',label:'Không dùng nhân vật đã đăng ký'},
+          ]}/>
         </Form.Item>
-        {!moving&&<Form.Item name="ratio" label="Tỷ lệ khung hình">
-          <Select options={['9:16','16:9'].map(value=>({value,label:value}))}/>
+        <Form.Item name="durationMode" label="Thời lượng" rules={[{required:true}]}>
+          <Select aria-label="Thời lượng" style={{width:180}} options={[{value:'auto',label:'AI tự xác định'},{value:'manual',label:'Nhập thủ công'}]}/>
+        </Form.Item>
+        {manual&&<Form.Item name="targetSeconds" label="Số giây mong muốn"
+          rules={[{required:true,type:'integer',...targetBounds}]}>
+          <NumberField min={targetBounds?.min} max={targetBounds?.max} precision={0} suffix="giây"/>
         </Form.Item>}
-        <Button className="draft-submit" type="primary" htmlType="submit"
-          loading={pending} disabled={waiting>0||!Number.isInteger(limit)||characterCount>limit||(manual&&!targetBounds)||(moving&&needsCloudBudget&&!cloudBounds)}>Tạo storyboard</Button>
-      </div>
-      {methodUnavailable&&<Alert style={{marginBlockStart:16}} type="warning" showIcon message="Phương pháp đang chọn không tương thích với model video." description="Mở phần phương pháp sản xuất và chọn tuyến khả dụng. Không cần đổi model để lập storyboard nếu chưa phân công video."/>}
-      {moving&&<details className="draft-resource-details" open={methodUnavailable||undefined}>
-        <summary>Phương pháp sản xuất · {productionMethodLabels[method]??'Chưa chọn'}</summary>
-        <Space wrap align="start">
-          <Form.Item name="routeStrategy" label="Phương pháp" rules={[{validator:(_,value)=>
-            methodOptions.some(option=>option.value===value&&!option.disabled)?Promise.resolve():
-              Promise.reject(new Error('Phương pháp chưa có model video tương thích. Kiểm tra Model AI.'))}]}>
-            <Select style={{width:280,maxWidth:'100%'}} loading={hub.loading} options={methodOptions}/>
-          </Form.Item>
-          {needsCloudBudget&&<Form.Item name="cloudSeconds" label="Tối đa giây video cloud" rules={[{required:true,type:'integer',...cloudBounds}]}>
-            <NumberField min={cloudBounds?.min} max={cloudBounds?.max} precision={0} suffix="giây"/>
+        {moving?<Form.Item label="Tỷ lệ khung hình"><span>16:9 · Ngang</span></Form.Item>:
+          <Form.Item name="ratio" label="Tỷ lệ khung hình">
+            <Select aria-label="Tỷ lệ khung hình" style={{width:160}} options={['9:16','16:9'].map(value=>({value,label:value}))}/>
           </Form.Item>}
-        </Space>
-        {hub.error&&<Alert type="warning" showIcon message="Chưa đọc được phương pháp sản xuất" action={<Button onClick={hub.reload}>Thử lại</Button>}/>}
-        <p className="env-muted">Có thể lập storyboard theo model video đã đăng ký dù chưa cấp quyền tạo media hoặc FFmpeg. Khi duyệt mới kiểm tra đầy đủ quyền, cấu hình và công cụ. Cloud có thể tính phí cả phần clip bị cắt.</p>
-      </details>}
+      </Space>
+      {casting==='manual'&&<Form.Item name="characterIds" label="Nhân vật từ thư viện"
+        rules={[{validator:(_,ids)=>Array.isArray(ids)&&ids.length>=1&&ids.length<=2&&ids.every(id=>activeCharacters.some(item=>item.id===id))
+          ?Promise.resolve():Promise.reject(new Error('Chọn 1–2 nhân vật đang hoạt động.'))}]}>
+        <Select aria-label="Nhân vật từ thư viện" mode="multiple" maxCount={2} loading={characters.loading} placeholder="Chọn tối đa hai nhân vật"
+          options={activeCharacters.map(item=>({value:item.id,label:item.name}))}
+          notFoundContent={characters.error?'Không đọc được thư viện':'Chưa có nhân vật'}/>
+      </Form.Item>}
+      {casting==='manual'&&characters.error&&<Alert type="warning" showIcon message="Không đọc được thư viện nhân vật"
+        action={<Button onClick={characters.reload}>Thử lại</Button>}/>}
       <details className="draft-resource-details">
-        <summary>Thời lượng · {manual?(values.targetSeconds??'—')+' giây':'AI tự đề xuất'}</summary>
+        <summary>Tùy chọn nâng cao</summary>
         <Space wrap align="start">
-          <Form.Item name="durationMode" label="Cách chọn thời lượng" rules={[{required:true}]}>
-            <Select style={{width:180}} options={[{value:'auto',label:'AI tự đề xuất'},{value:'manual',label:'Nhập thủ công'}]}/>
+          <Form.Item name="mode" label="Kiểu video" rules={[{required:true}]}>
+            <Select aria-label="Kiểu video" style={{width:220}} options={Object.entries(videoModes).map(([value,label])=>({value,label}))}/>
           </Form.Item>
-          {manual&&<Form.Item name="targetSeconds" label="Thời lượng"
-            rules={[{required:true,type:'integer',...targetBounds}]}>
-            <NumberField min={targetBounds?.min} max={targetBounds?.max} precision={0} suffix="giây"/>
+          {moving&&<Form.Item name="routeStrategy" label="Điều phối sản xuất">
+            <Select aria-label="Điều phối sản xuất" virtual={false} style={{width:260}} options={[{value:'assigned',label:'Theo model đã phân công'},{value:'auto',label:'AI tự chọn model phù hợp'}]}/>
           </Form.Item>}
         </Space>
+        <p className="env-muted">Model, quyền cloud và giới hạn lượt gọi được quản lý tại AI điều phối. Studio tự tính số giây cloud theo storyboard.</p>
       </details>
+      {moving&&ready===false&&<p className="env-muted">Bạn vẫn có thể lập storyboard. Kiểm tra model và quyền sản xuất trước khi duyệt.</p>}
+      <Space wrap style={{marginTop:12}}>
+        <Button className="draft-submit" type="primary" htmlType="submit"
+          loading={pending} disabled={waiting>0||!Number.isInteger(limit)||characterCount>limit||(manual&&!targetBounds)}>Tạo storyboard</Button>
+        <span className="env-muted">AI lập kế hoạch; chỉ sinh media sau khi bạn duyệt storyboard.</span>
+      </Space>
     </Form>
-    <p className="env-muted">AI đề xuất số cảnh. Studio tạo {moving?'video theo phương pháp đã chọn':'ảnh'} sau khi bạn duyệt storyboard.</p>
     </Card>
   );
 }

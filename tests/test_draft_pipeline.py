@@ -126,7 +126,8 @@ class DraftTests(unittest.TestCase):
             job.update(board=draft._story(self.board(), 2, 4, {"cat": {}}), cast={})
         with (patch.object(draft, "_dispatch"), patch.object(draft, "_write_board", side_effect=storyboard),
               patch.object(studio_runtime, "motion_adapter", side_effect=AssertionError("motion before review"))):
-            job = draft.submit({"id": self.ident, **self.submission, "mode": "motion", "seconds": 4})
+            job = draft.submit({"id": self.ident, **self.submission, "mode": "motion", "seconds": 4,
+                                "route_strategy": "assigned"})
             draft._work(job, nullcontext())
         saved = draft._read(self.ident)
         self.assertEqual(saved["status"], "STORYBOARD_REVIEW", saved.get("error"))
@@ -220,6 +221,67 @@ class DraftTests(unittest.TestCase):
             self.assertNotIn("cloud_motion_seconds", saved)
             with self.assertRaises(PermissionError):
                 draft.act(self.ident, "storyboard-approve", {"sha256": saved["storyboard_sha"]})
+
+    def test_assigned_cloud_automatic_budget_without_media_dispatch(self):
+        writer = {"id": "owner_writer", "provider": "ollama", "enabled": True,
+                  "model": "writer:8b", "base_url": "http://127.0.0.1:11434"}
+        video = {"id": "cloud_video", "provider": "ltx_cloud", "enabled": True,
+                 "model": "ltx-2-3-fast", "base_url_env": "LTX_BASE_URL", "api_key_env": "LTX_API_KEY"}
+        for profile in (writer, video):
+            self.registry_change("SAVE_MODEL_PROFILE", profile=profile)
+        for task in ("general.text", "film.storyboard", "film.motion"):
+            self.registry_change("SET_MODEL_ROUTE", task_id=task,
+                                 model_ref=video["id"] if task == "film.motion" else writer["id"])
+        policy = draft.model_hub.orchestrator_policy.defaults()
+        policy["permissions"].update(plan=True, assign_models=True, call_local=True)
+        self.registry_change("SAVE_ORCHESTRATOR", policy=policy)
+        from agentforge.features.film_studio import draft_motion_cloud
+        def storyboard(job, bindings):
+            self.assertNotIn("film.motion", bindings)
+            job.update(board=draft._story(self.board(), 2, 4, {"cat": {}}), cast={})
+        with (patch.object(draft, "_dispatch"),
+              patch.object(draft, "_write_board", side_effect=storyboard),
+              patch.object(draft, "_ask", return_value={"choice": "cloud:cloud_video", "reason": "Direct video"}),
+              patch.object(draft_motion_cloud, "bind", side_effect=AssertionError("video readiness")),
+              patch.object(studio_ltx_cloud, "_request", side_effect=AssertionError("cloud video API"))):
+            job = draft.submit({"id": self.ident, **self.submission, "mode": "motion", "seconds": 4,
+                                "route_strategy": "assigned"})
+            draft._work(job, nullcontext())
+        saved = draft._read(self.ident)
+        self.assertEqual(saved["status"], "STORYBOARD_REVIEW", saved.get("error"))
+        self.assertEqual(saved["production_plan"]["motion_ref"], video["id"])
+        self.assertEqual(saved["production_plan"]["cloud_budget_mode"], "timeline")
+        self.assertEqual(saved["production_plan"]["max_cloud_seconds"], draft_motion_cloud.remaining_seconds(saved))
+        self.assertEqual(saved["storyboard_sha"], draft.draft_timeline.digest(saved))
+        self.assertNotIn("max_cloud_seconds", saved["submitted_brief"])
+        with self.assertRaises(PermissionError):
+            draft.act(self.ident, "storyboard-approve", {"sha256": saved["storyboard_sha"]})
+
+    def test_automatic_cloud_budget_uses_billable_seconds_and_reserved_history(self):
+        job = {"production_plan": {"method": "cloud", "cloud_budget_mode": "timeline",
+                                  "billable_durations_seconds": [6, 8], "max_cloud_seconds": 0},
+               "motion_plan": {"output": {"fps": 24, "max_frames": 192}},
+               "cloud_motion_seconds": 6,
+               "board": {"scenes": [{"frames": 48, "motion_job": "existing"},
+                                    {"frames": 168}, {"frames": 48}]}}
+        draft._refresh_cloud_budget(job)
+        self.assertEqual(job["production_plan"]["max_cloud_seconds"], 20)
+        job["board"]["scenes"][1]["frames"] = 24
+        draft._refresh_cloud_budget(job)
+        self.assertEqual(job["production_plan"]["max_cloud_seconds"], 18)
+        job["production_plan"].pop("cloud_budget_mode")
+        draft._refresh_cloud_budget(job)
+        self.assertEqual(job["production_plan"]["max_cloud_seconds"], 18)
+
+    def test_explicit_cast_does_not_invoke_ai(self):
+        rows = [{"id": "cat", "name": "Miu", "appearance": "Orange cat", "version": 1}]
+        with (patch.object(draft.characters, "list_characters", return_value={"characters": rows}),
+              patch.object(draft, "_ask", side_effect=AssertionError("unexpected inference"))):
+            bindings = {"film.storyboard": {}}
+            self.assertIn("cat", draft._select_cast({"brief": {"character_ids": ["cat"]}}, bindings, "Story"))
+            self.assertEqual(draft._select_cast({"brief": {"character_ids": []}}, bindings, "Story"), {})
+            with self.assertRaisesRegex(ValueError, "không còn hoạt động"):
+                draft._select_cast({"brief": {"character_ids": ["missing"]}}, bindings, "Story")
 
     def test_unexpected_error_has_safe_diagnostic_code(self):
         job = {"id": self.ident, "stage": "PLANNING", "status": "RUNNING",

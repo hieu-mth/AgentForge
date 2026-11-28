@@ -69,26 +69,14 @@ test('routing follows revision catalog contracts and preserves cloud configurati
   assert.equal(readinessLabels.METADATA_COMPATIBLE,'Metadata tương thích');
 });
 
-import { productionMethodOptions, cloudSecondsBounds, durationBounds, storyboardShotLimits, cloudSecondsRemainingEstimate } from '../src/features/studioDuration.js';
+import { durationBounds, storyboardShotLimits, cloudSecondsRemainingEstimate } from '../src/features/studioDuration.js';
 test('production options follow backend capability snapshot rather than version names',()=>{
-  const hub={production_options:{methods:[{id:'assigned',available:false},{id:'auto',available:true},
-    {id:'cloud',available:true},{id:'hybrid',available:false}],min_cloud_seconds:12,
-    max_cloud_seconds:240,auto_min_cloud_seconds:12,duration_bounds:{motion:{min:5,max:55}}}};
-  assert.deepEqual(productionMethodOptions(hub).map(x=>[x.value,x.disabled]),
-    [['assigned',true],['auto',false],['cloud',false],['hybrid',true]]);
-  assert.deepEqual(cloudSecondsBounds(hub,'auto'),{min:12,max:240});
+  const hub={production_options:{duration_bounds:{motion:{min:5,max:55}}}};
   assert.deepEqual(durationBounds(hub,'motion'),{min:5,max:55});
   assert.equal(durationBounds({},'motion'),null);
-  assert.equal(cloudSecondsBounds({},'cloud'),null);
   assert.deepEqual(storyboardShotLimits({brief:{mode:'motion',seconds:15}}),[0,0]);
   assert.deepEqual(storyboardShotLimits({editor_constraints:{layout_editable:true,min_scenes:3,max_scenes:12}}),[3,12]);
   assert.equal(cloudSecondsRemainingEstimate({cloud_seconds_remaining:14}),14);
   assert.equal(cloudSecondsRemainingEstimate({}),null);
   assert.equal(cloudSecondsRemainingEstimate({cloud_seconds_remaining:0}),0);
-});
-
-test('planning-only method stays selectable and is distinguished from execution readiness',()=>{
-  const [option]=productionMethodOptions({production_options:{methods:[{id:'cloud',available:true,execution_ready:false}]}});
-  assert.equal(option.disabled,false);
-  assert.match(option.label,/Chỉ lập storyboard/);
 });
