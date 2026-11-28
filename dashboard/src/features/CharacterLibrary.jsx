@@ -130,15 +130,18 @@ function CharacterEditor({character,resource,mutate,onClose,onSaved}){
   const [saving,setSaving]=useState(false);
   const [error,setError]=useState(null);
   const [sheetPrompt,setSheetPrompt]=useState('');
+  const [analyzing,setAnalyzing]=useState(false);
+  const [suggestion,setSuggestion]=useState(null);
   const latest=resource?.packs?.[0];
   const previous=Object.fromEntries((latest?.images||[]).map(item=>[item.role,item]));
   const existing=role=>!removed.includes(role)&&previous[role];
   const has=role=>Boolean(files[role]||existing(role));
   const changed=Object.keys(files).length>0||removed.length>0;
-  const busy=processing||saving;
+  const busy=processing||saving||analyzing;
   async function choose(role,file){
     if(!file)return;
     setProcessing(true);setError(null);
+    if(role==='primary')setSuggestion(null);
     try{
       const src=await normalizeImage(file);
       setFiles(old=>({...old,[role]:src}));
@@ -147,6 +150,7 @@ function CharacterEditor({character,resource,mutate,onClose,onSaved}){
     finally{setProcessing(false);}
   }
   function remove(role){
+    if(role==='primary')setSuggestion(null);
     setFiles(old=>Object.fromEntries(Object.entries(old).filter(([key])=>key!==role)));
     if(previous[role])setRemoved(old=>[...new Set([...old,role])]);
   }
@@ -164,6 +168,17 @@ function CharacterEditor({character,resource,mutate,onClose,onSaved}){
       if(result?.character)await onSaved();
       else setError('Chưa lưu được hồ sơ. Hãy kiểm tra thông báo hoặc tải lại hồ sơ nếu đã bị thay đổi.');
     }finally{setSaving(false);}
+  }
+  async function analyze(){
+    if(busy||!has('primary'))return;
+    setAnalyzing(true);setError(null);setSuggestion(null);
+    try{
+      const reference=files.primary?{data_base64:files.primary.split(',')[1]}:
+        {character_id:character.id,revision:latest.revision};
+      const result=await mutate('/api/characters/analyze',{ack:'ANALYZE_CHARACTER_PRIMARY',reference,allow_cloud:true});
+      if(result?.appearance)setSuggestion(result);
+      else setError('Không nhận được mô tả AI. Kiểm tra phân công Vision và quyền gọi model.');
+    }finally{setAnalyzing(false);}
   }
   function buildPrompt(){
     const values=form.getFieldsValue(true);
@@ -196,6 +211,17 @@ function CharacterEditor({character,resource,mutate,onClose,onSaved}){
         <Alert type="info" showIcon message="Ảnh đa góc là tài sản tham chiếu, không phải model 3D hoặc LoRA."
           description="Dùng ảnh thật làm chuẩn. Nếu tạo sheet bằng AI, hãy kiểm tra từng góc; model video có thể cần ảnh riêng thay vì ảnh tổng hợp."/>
         <div><Text strong>2. Thông tin nhân vật</Text></div>
+        <Popconfirm title="Phân tích ảnh chính bằng AI?"
+          description="Dùng model Vision đã phân công. Nếu là cloud, ảnh sẽ được gửi ra ngoài và có thể phát sinh phí."
+          onConfirm={analyze} okText="Đồng ý gọi AI" cancelText="Hủy">
+          <Button loading={analyzing} disabled={busy||!has('primary')}>AI phân tích ngoại hình</Button>
+        </Popconfirm>
+        {suggestion&&<Alert type="info" showIcon message="Mô tả AI đề xuất · chưa lưu"
+          description={<Space direction="vertical">
+            <Text>{suggestion.appearance}</Text>
+            {suggestion.uncertainties&&<Text type="secondary">{suggestion.uncertainties}</Text>}
+            <Button onClick={()=>form.setFieldValue('appearance',suggestion.appearance)}>Dùng mô tả này</Button>
+          </Space>}/>}
         <Row gutter={12}><Col xs={24} sm={12}>{field(FIELDS[0])}</Col><Col xs={24} sm={12}>{field(FIELDS[1])}</Col></Row>
         {FIELDS.slice(2,4).map(field)}
         <Collapse items={[{key:'sheet',label:'Chuẩn bị bản thiết kế bằng AI (tùy chọn)',children:<Space direction="vertical" style={{width:'100%'}}>
@@ -209,7 +235,7 @@ function CharacterEditor({character,resource,mutate,onClose,onSaved}){
               alt={ROLES.find(([role])=>role===item.role)?.[1]||item.role}/>)}</Space></details>)}
         </Space>}]:[])]}/>
         {error&&<Alert type="error" showIcon message={error}/>}
-        <Button type="primary" block htmlType="submit" loading={saving} disabled={processing}>Lưu nhân vật</Button>
+        <Button type="primary" block htmlType="submit" loading={saving} disabled={processing||analyzing}>Lưu nhân vật</Button>
       </Space>
     </Form>
   </Modal>;
