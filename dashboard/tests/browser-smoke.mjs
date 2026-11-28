@@ -803,7 +803,7 @@ try {
     throw new Error('Explicit catalog request missing or obsolete OAuth actions remain');
   const cloudAdapter=registerDialog.getByRole('combobox',{name:'Chuẩn kết nối'});
   await cloudAdapter.click();
-  const cloudLabels=['ChatGPT','OpenAI API','Anthropic API','LTX Video API','Agnes AI','ElevenLabs API'];
+  const cloudLabels=['ChatGPT','OpenAI API','Anthropic API','LTX Video API','Agnes AI','BigModel (Zhipu AI)','ElevenLabs API'];
   await settings.waitForFunction(expected=>{
     const combo=document.querySelector('.model-profile-dialog [aria-expanded="true"][role="combobox"]');
     if(!combo)return false;
