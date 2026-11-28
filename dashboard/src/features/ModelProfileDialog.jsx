@@ -3,7 +3,7 @@ import {Alert,Button,Form,Input,Modal,Radio,Select,Space,Switch} from 'antd';
 import {NumberField} from '../components/NumberField.jsx';
 import {ApiOutlined,CloudOutlined,DesktopOutlined} from '@ant-design/icons';
 import {SectionTitle} from '../components/settings.jsx';
-import {outputSummary,profilePayload,readinessReason} from '../model_hub_ui.js';
+import {optionVariants,optionValues,outputSummary,profilePayload,readinessReason} from '../model_hub_ui.js';
 import {requestError} from '../api.js';
 
 const connectionOptions=[
@@ -19,25 +19,18 @@ const fieldLabels={
 const localUrl=/^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):([0-9]{1,5})\/?$/;
 const envName=/^[A-Z_][A-Z0-9_]*$/;
 
-const comparisonFields=['id','provider','model','enabled','base_url','base_url_env','api_key_env','motion_encoder','flux','comfy_image','comfy_video','account_ref'];
-const comparisonData=profile=>Object.fromEntries(comparisonFields.filter(key=>key in profile)
-  .map(key=>[key,profile[key]]));
+const comparisonData=(profile,adapter)=>Object.fromEntries([...new Set(['id','provider','model','enabled',
+  ...Object.keys(adapter.defaults),...Object.keys(adapter.environment_defaults??{}),
+  ...optionVariants(adapter).flatMap(v=>v.fields.map(f=>f.path[0]))])].filter(key=>key in profile).map(key=>[key,profile[key]]));
 
 export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,onSave,onPreview,onReload,onUseRevision,labels,onChatGPTAction}){
   const [form]=Form.useForm();
-  const limitsPanel=useRef(null);
   const initialAdapter=adapters.find(item=>item.id===profile?.provider)??adapters[0];
-  const imageWorkflow=profile?.comfy_image??profile?.flux;
   const initial={connection:initialAdapter.connection,provider:initialAdapter.id,
-    enabled:true,...initialAdapter.defaults,...profile,
-    comfy_video_json:profile?.comfy_video?JSON.stringify(profile.comfy_video,null,2):'',
-    flux_enabled:Boolean(imageWorkflow),flux_settings:{
-      max_resolution:1024,max_steps:4,timeout_seconds:180,output_dir:'visuals',
-      ...imageWorkflow,workflow:imageWorkflow?JSON.stringify(imageWorkflow.workflow,null,2):'',
-    }};
+    enabled:true,...initialAdapter.defaults,...profile,...optionValues(initialAdapter,profile)};
   const connection=Form.useWatch('connection',form)??initial.connection;
   const provider=Form.useWatch('provider',form)??initial.provider;
-  const fluxEnabled=Form.useWatch('flux_enabled',form)??initial.flux_enabled;
+  const optionVariant=Form.useWatch('option_variant',form)??initial.option_variant;
   const accountRef=Form.useWatch('account_ref',form)??initial.account_ref;
   const [chatgpt,setChatgpt]=useState(null);
   const [chatgptError,setChatgptError]=useState(null);
@@ -46,7 +39,10 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
   const catalogActionLabel=catalogLoaded?'Cập nhật danh sách model':'Lấy danh sách model';
   const adapter=adapters.find(item=>item.id===provider);
   const [useEnv,setUseEnv]=useState(Boolean(profile?.api_key_env));
-  const directCloud=connection==='cloud'&&!useEnv&&provider!=='chatgpt';
+  const oauth=adapter.profile_schema?.credential_mode==='oauth'||Object.hasOwn(adapter.defaults,'account_ref');
+  const variants=optionVariants(adapter);
+  const variant=variants.find(item=>item.id===optionVariant);
+  const directCloud=connection==='cloud'&&!useEnv&&!oauth;
   const fields=useEnv&&adapter.environment_defaults?adapter.environment_defaults:adapter.defaults;
   const [review,setReview]=useState(null);
   const [contracts,setContracts]=useState([]);
@@ -79,7 +75,8 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
     setUseEnv(false);
     setChatgpt(null);
     setChatgptError(null);
-    form.setFieldsValue({provider:next.id,...next.defaults});
+    form.setFieldValue('adapter_options',{});
+    form.setFieldsValue({provider:next.id,...next.defaults,...optionValues(next)});
   }
 
   async function chatgptAction(ack){
@@ -173,10 +170,6 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
     </Space>}>
     <Form hidden={Boolean(review)} form={form} layout="vertical" initialValues={initial} disabled={saving||conflict}
       requiredMark={false} onValuesChange={changeAdapter}
-      onFinishFailed={({errorFields})=>{
-        if(limitsPanel.current&&errorFields.some(({name})=>name[0]==='flux_settings'&&name[1]!=='workflow'))
-          limitsPanel.current.open=true;
-      }}
       onFinish={preview}>
       <div className="model-dialog-grid">
         <Form.Item name="connection" label="Loại kết nối">
@@ -190,13 +183,14 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         </Form.Item>
       </div>
       <p className="model-dialog-help">{adapter.description}</p>
-      {provider!=='chatgpt'&&<Form.Item name="model" label={adapter.model_label}
+      {!adapter.profile_schema&&<Alert type="warning" showIcon message="Backend chưa công bố schema cấu hình. Hãy cập nhật backend trước khi chỉnh sửa workflow."/>}
+      {!oauth&&<Form.Item name="model" label={adapter.model_label}
         rules={[{required:true,max:160,pattern:/^[A-Za-z0-9][A-Za-z0-9._:/+-]*$/,
           message:'Nhập tên model hoặc mã checkpoint hợp lệ.'}]}>
         <Input placeholder={adapter.model_example}/>
       </Form.Item>}
       <div className="model-dialog-divider"/>
-      {connection==='cloud'&&provider!=='chatgpt'&&<Button type="link" className="model-dialog-mode" onClick={()=>{
+      {connection==='cloud'&&!oauth&&<Button type="link" className="model-dialog-mode" onClick={()=>{
         form.setFieldsValue({...(useEnv?adapter.defaults:adapter.environment_defaults),api_key:undefined});
         setUseEnv(!useEnv);
       }}>{useEnv?'Nhập trực tiếp':'Dùng biến môi trường'}</Button>}
@@ -213,7 +207,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         }}]}>
         <Input placeholder={directCloud?'https://api.example.com':example} spellCheck={false}/>
       </Form.Item>)}
-      {provider==='chatgpt'&&<>
+      {oauth&&<>
         <Alert type={currentChatGPT?.connected?'success':'info'} showIcon message={currentChatGPT?.connected?'Đã kết nối tài khoản ChatGPT':currentChatGPT?'Chưa kết nối tài khoản ChatGPT':'Kết nối ChatGPT qua OAuth'} style={{marginBottom:12}}
           description={<div style={{display:'grid',gridTemplateColumns:'minmax(0, 1fr)',gap:8}}>
             {!currentChatGPT?.connected&&<p style={{margin:0}}>Liên kết mở trình duyệt OpenAI trên máy chạy AgentForge. Không nhập mật khẩu, cookie hoặc token tại đây.</p>}
@@ -257,54 +251,28 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
             ?Promise.resolve():Promise.reject(new Error('Nhập API key hợp lệ cho endpoint này.'))})]}>
         <Input.Password autoComplete="new-password"/>
       </Form.Item>}
-      {provider==='comfyui'&&!adapter.flux_workflow_max_bytes&&
-        <Alert type="warning" showIcon message="Backend đang chạy chưa hỗ trợ đăng ký workflow ảnh."/>}
-      {provider==='comfyui'&&adapter.flux_workflow_max_bytes&&<>
-        <Form.Item name="flux_enabled" label="Workflow tạo ảnh ComfyUI" valuePropName="checked"><Switch/></Form.Item>
-        {!fluxEnabled&&adapter.motion_encoder_supported&&
-          <Form.Item name="motion_encoder" label="Đường dẫn tuyệt đối tới encoder video">
-            <Input placeholder="t5xxl_fp8_e4m3fn.safetensors" spellCheck={false}/>
-          </Form.Item>}
-        {!fluxEnabled&&adapter.video_workflow_max_bytes&&
-          <Form.Item name="comfy_video_json" label="Workflow video local (I2V/T2V JSON)"
-            extra="Để trống nếu dùng preset LTX cũ. Backend kiểm tra graph, SHA-256 weights và giới hạn tài nguyên."
-            rules={[{validator:(_,value)=>{
-              if(!value?.trim())return Promise.resolve();
-              try {
-                const graph=JSON.parse(value);
-                if(graph&&typeof graph==='object'&&!Array.isArray(graph)&&
-                    new TextEncoder().encode(JSON.stringify(graph)).length<=adapter.video_workflow_max_bytes)
-                  return Promise.resolve();
-              }catch{ /* Backend validates the complete graph. */ }
-              return Promise.reject(new Error('Workflow video JSON không hợp lệ hoặc vượt giới hạn.'));
-            }}]}><Input.TextArea rows={6} spellCheck={false}/></Form.Item>}
-        {fluxEnabled&&<>
-          <Form.Item name={['flux_settings','workflow']} label="Workflow API JSON" rules={[
-            {required:true},{validator:(_,value)=>{
-              try {
-                const graph=JSON.parse(value);
-                if(graph&&typeof graph==='object'&&!Array.isArray(graph)&&Object.keys(graph).length>0) {
-                  if(new TextEncoder().encode(JSON.stringify(graph)).length<=adapter.flux_workflow_max_bytes)
-                    return Promise.resolve();
-                  return Promise.reject(new Error('Workflow vượt giới hạn '+adapter.flux_workflow_max_bytes+' byte.'));
-                }
-              } catch { /* Show validation below. */ }
-              return Promise.reject(new Error('Dán workflow ảnh ở định dạng ComfyUI API JSON.'));
-            }},
-           ]}><Input.TextArea rows={6} spellCheck={false}/></Form.Item>
-          <details ref={limitsPanel} className="model-workflow-details"><summary>Giới hạn và thư mục đầu ra</summary>
-          <div className="model-dialog-grid">
-            {[
-              ['max_resolution','Cạnh ảnh tối đa (px)',256,1536],
-              ['max_steps','Số bước tối đa',1,20],
-              ['timeout_seconds','Thời gian chờ (giây)',5,600],
-            ].map(([key,label,min,max])=><Form.Item key={key} name={['flux_settings',key]} label={label}
-              rules={[{required:true,type:'integer',min,max}]}><NumberField min={min} max={max}/></Form.Item>)}
-            <Form.Item name={['flux_settings','output_dir']} label="Thư mục con trong workspace"
-              rules={[{required:true}]}><Input spellCheck={false}/></Form.Item>
-          </div></details>
-        </>}
-      </>}
+      {variants.length>1&&<Form.Item name="option_variant" label="Loại cấu hình runtime" rules={[{required:true}]}>
+        <Select options={variants.map(item=>({value:item.id,label:item.label}))}/>
+      </Form.Item>}
+      {variant?.fields.map(field=>{
+        const name=['adapter_options',...field.path];
+        const rules=[{required:field.required}];
+        if(field.kind==='integer')rules.push({type:'integer',min:field.min,max:field.max});
+        if(field.kind==='json')rules.push({validator:(_,value)=>{
+          if(!value?.trim()&&!field.required)return Promise.resolve();
+          try {
+            const graph=JSON.parse(value);
+            if(graph&&typeof graph==='object'&&!Array.isArray(graph)&&Object.keys(graph).length&&
+                new TextEncoder().encode(JSON.stringify(graph)).length<=field.max_bytes)return Promise.resolve();
+          }catch{ /* Backend validates graph semantics. */ }
+          return Promise.reject(new Error('JSON không hợp lệ hoặc vượt giới hạn '+field.max_bytes+' byte.'));
+        }});
+        return <Form.Item key={field.path.join('.')} name={name} label={field.label} extra={field.help} rules={rules}>
+          {field.kind==='integer'?<NumberField min={field.min} max={field.max}/>:
+            field.kind==='json'?<Input.TextArea rows={6} spellCheck={false}/>:
+            <Input placeholder={field.placeholder} maxLength={field.max_length} spellCheck={false}/>}
+        </Form.Item>;
+      })}
       <div className="model-dialog-divider"/>
       <Form.Item name="id" label="Mã hồ sơ"
         rules={[{required:true,pattern:/^[a-z][a-z0-9_]{2,39}$/,
@@ -339,9 +307,7 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
         {item.workflow_sha256&&<details className="model-workflow-details"><summary>Workflow SHA-256</summary>
           <code>{item.workflow_sha256}</code></details>}
       </li>)}</ul>:<Alert showIcon type="warning" message="Chưa có capability tương thích"
-        description={review.provider==='comfyui'
-          ?readinessReason(contracts.find(item=>item.capability===(review.motion_encoder?'film.motion':'image.generate'))?.reason)
-          :undefined}/>}
+        description={readinessReason(contracts.find(item=>item.reason)?.reason)}/>}
       <p className="model-dialog-help">Hồ sơ được lưu vào SQLite trên máy này. Lượt lưu chỉ cập nhật cấu hình.</p>
     </>}
     {(saveError||conflict)&&<Alert className="model-dialog-error" showIcon type="error"
@@ -350,10 +316,10 @@ export function ModelProfileDialog({adapters,profile,profiles,revision,onCancel,
       action={conflict&&<Button size="small" loading={saving} onClick={reloadRevision}>Tải lại cấu hình</Button>}/>}
     {comparison&&<section className="model-conflict" aria-label="Đối chiếu hồ sơ model">
       <div className="model-conflict-grid">
-        <div><strong>Bản nháp của bạn</strong><pre>{JSON.stringify(comparisonData(comparison.draft),null,2)}</pre></div>
+        <div><strong>Bản nháp của bạn</strong><pre>{JSON.stringify(comparisonData(comparison.draft,adapter),null,2)}</pre></div>
         <div><strong>Bản trên máy chủ · Phiên bản {comparison.revision}</strong>
           {comparison.profile
-            ?<pre>{JSON.stringify(comparisonData(comparison.profile),null,2)}</pre>
+            ?<pre>{JSON.stringify(comparisonData(comparison.profile,adapter),null,2)}</pre>
             :<p>Phiên bản này chưa có hồ sơ mang mã {comparison.draft.id}.</p>}</div>
       </div>
       {editing&&!comparison.profile
