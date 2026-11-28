@@ -76,7 +76,7 @@ export function CharacterLibrary({mutate,onNavigate}) {
   }
   return <Space direction="vertical" size="large" style={{width:'100%'}}>
     <Alert type="info" showIcon message="Thư viện nhân vật · ảnh nhận diện"
-      description="Lưu ảnh gốc, góc nhìn và bản thiết kế đã duyệt trên máy. Chưa tự gửi ảnh cho model hoặc bảo đảm giữ ngoại hình khi tạo video."/>
+      description="Lưu ảnh nhận diện, góc nhìn và bản thiết kế đã duyệt trên máy. Chưa tự gửi ảnh cho model hoặc bảo đảm giữ ngoại hình khi tạo video."/>
     <Card title={'Nhân vật của tôi · '+active.length} extra={<Space wrap>
       <Button onClick={()=>setArchived(!archived)}>{archived?'Đang xem lưu trữ · về thư viện':'Đã lưu trữ ('+(all.length-active.length)+')'}</Button>
       <Button onClick={registry.reload} loading={registry.loading}>Làm mới</Button>
@@ -156,7 +156,7 @@ function CharacterEditor({character,resource,mutate,onClose,onSaved}){
     setSaving(true);setError(null);
     try{
       const data={ack:'SAVE_CHARACTER',character:{...values}};
-      if(character.id)Object.assign(data.character,{id:character.id,expected_version:resource.character_version});
+      if(character.id)Object.assign(data.character,{id:character.id,expected_version:character.version});
       if(changed)data.pack={expected_revision:resource?.latest_revision||0,
         images:Object.entries(files).map(([role,src])=>({role,data_base64:src.split(',')[1]})),
         keep_roles:ROLES.map(([role])=>role).filter(role=>!files[role]&&existing(role))};
