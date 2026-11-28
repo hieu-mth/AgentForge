@@ -20,6 +20,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+from agentforge import ops_control
 from agentforge.ai import cloud_credentials, orchestrator_policy, registry
 from agentforge.ai.profile_config import local_url, cloud_url
 from agentforge.ai.registry import ADAPTERS
@@ -454,12 +455,8 @@ def draft_routes(*, db_path=None, moving=None, planning=False, motion_ref=None, 
 
 
 @contextmanager
-def studio_dispatch(*, moving, validate, db_path=None, motion_ref=None, direct_cloud=False):
-    """Serialize final Studio admission with registry changes, across processes.
-
-    Acquire after GPU admission. The caller releases on POST return, before
-    history polling, output import, or any next job.
-    """
+def _dispatch_state(db_path=None):
+    """Hold the registry write boundary during external dispatch admission."""
     path = ensure_local_root(_database(db_path))
     if not path.is_file():
         raise ModelConfigError("Chưa có cấu hình Model Hub để gửi tác vụ Studio.")
@@ -471,15 +468,31 @@ def studio_dispatch(*, moving, validate, db_path=None, motion_ref=None, direct_c
                 raise
             raise ModelConfigError("Model Hub đang cập nhật cấu hình. Hãy tiếp tục lại sau khi cập nhật xong.") from None
         try:
-            revision, state = _read_record(conn)
-            try:
-                bindings = _draft_bindings(state, moving=moving, motion_ref=motion_ref, direct_cloud=direct_cloud)
-            except PermissionError as exc:
-                raise ModelConfigError(str(exc)) from None
-            validate(revision, bindings)
-            yield revision
+            yield _read_record(conn)
         finally:
             conn.rollback()
+
+
+@contextmanager
+def studio_dispatch(*, moving, validate, db_path=None, motion_ref=None, direct_cloud=False):
+    """Acquire after GPU admission; release after POST, before polling."""
+    with _dispatch_state(db_path) as (revision, state):
+        try:
+            bindings = _draft_bindings(state, moving=moving, motion_ref=motion_ref, direct_cloud=direct_cloud)
+        except PermissionError as exc:
+            raise ModelConfigError(str(exc)) from None
+        validate(revision, bindings)
+        yield revision
+
+
+@contextmanager
+def media_probe_dispatch(profile, expected_revision, *, db_path=None):
+    """Reject a stale Owner probe before reservation or external submission."""
+    with _dispatch_state(db_path) as (revision, state):
+        if revision != expected_revision or _profiles(state=state).get(profile["id"]) != profile:
+            raise ModelConfigError("MODEL_HUB_REVISION_CONFLICT")
+        ops_control.require_active()
+        yield revision
 
 
 def draft_routes_at(revision, *, db_path=None, moving=None):

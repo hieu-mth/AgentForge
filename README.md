@@ -2,7 +2,7 @@
 
 Nền tảng sản xuất phim AI lấy nhân vật và tài sản tái sử dụng làm trung tâm, với điều phối, dữ liệu và hậu kỳ local-first trên Windows. Chất lượng đầu ra quyết định lựa chọn model, không phải yêu cầu mọi inference đều chạy local.
 
-Studio hỗ trợ ChatGPT Plan (OAuth), Ollama và các API cloud tương thích cho văn bản/vision; FLUX/ComfyUI cho ảnh local; LTX local và LTX Cloud cho video; FFmpeg cho hậu kỳ. Audio Director hỗ trợ WAV local, Windows SAPI, Piper, speech cloud và model nhạc/hiệu ứng đã gán. Cloud tạo ảnh và tự động gắn bộ ảnh nhận diện nhân vật chưa được tích hợp. Khả năng gọi API, chất lượng và chi phí thực tế cần Owner nghiệm thu. Owner đăng ký model, duyệt storyboard và kiểm tra thành phẩm trước khi xuất bản.
+Studio hỗ trợ ChatGPT Plan (OAuth), Ollama và các API cloud tương thích cho văn bản/vision; ComfyUI (FLUX GGUF hoặc checkpoint tương thích) cho ảnh local, Agnes cho ảnh cloud; workflow LTX-compatible local và LTX/Agnes cloud cho video; FFmpeg cho hậu kỳ. Audio Director hỗ trợ WAV local, Windows SAPI, Piper, speech cloud và model nhạc/hiệu ứng đã gán. Cloud tạo ảnh đã có adapter; tự động gắn bộ ảnh nhận diện nhân vật chưa được tích hợp. Khả năng gọi API, chất lượng và chi phí thực tế cần Owner nghiệm thu. Owner đăng ký model, duyệt storyboard và kiểm tra thành phẩm trước khi xuất bản.
 
 ## Khởi động
 
@@ -21,7 +21,7 @@ Mở http://127.0.0.1:8780/dashboard/ và đăng nhập bằng mã Owner in tạ
 
 ## Quy trình sử dụng
 
-1. Đăng ký model và kiểm tra metadata tại Cài đặt → Model AI.
+1. Đăng ký model theo loại cấu hình backend công bố, kiểm tra metadata hoặc chủ động chạy thử tại Cài đặt → Model AI.
 2. Phân công model cho từng năng lực tại AI điều phối, cùng quyền, công cụ và ngân sách. FFmpeg chỉ bắt buộc khi duyệt sản xuất.
 3. Nhập nội dung, phương pháp sản xuất và thời lượng tại Studio video; AI chọn nhân vật từ hồ sơ đã đăng ký. Thư viện nhân vật cho phép lưu bộ ảnh nhận diện local theo phiên bản; Studio chưa tự gửi bộ ảnh đó vào pipeline tạo media.
 4. Kiểm tra, chỉnh sửa storyboard; tùy chọn AI lập liên tục chuyển động và kế hoạch âm thanh; duyệt phiên bản trước khi tạo media.
