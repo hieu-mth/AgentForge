@@ -219,3 +219,46 @@ def image_bytes(ident, revision, role, path=None):
                 or row["mime"] not in {"image/png", "image/jpeg"}):
             raise ValueError("Reference image integrity check failed")
         return payload, row["mime"]
+
+
+def analyze_primary(reference, *, allow_cloud):
+    """One explicit advisory vision call; never mutate the character or its pack."""
+    from contextlib import nullcontext
+    from agentforge import ops_control
+    from agentforge.ai import model_hub
+    from agentforge.features.film_studio import studio_vision
+    from PIL import Image, ImageOps
+
+    if not isinstance(reference, dict) or type(allow_cloud) is not bool:
+        raise ValueError("Invalid character analysis request")
+    if set(reference) == {"data_base64"}:
+        payload = _image({"role": "primary", **reference})[-1]
+    elif set(reference) == {"character_id", "revision"}:
+        payload, _ = image_bytes(reference["character_id"], reference["revision"], "primary")
+    else:
+        raise ValueError("Supply one primary image or a saved reference")
+    ops_control.require_active()
+    revision, profile, limit = model_hub.vision_binding(require_ffmpeg=False)
+    cloud = model_hub.is_cloud(profile)
+    if cloud and (not allow_cloud or limit < 1):
+        raise PermissionError("Cần xác nhận gửi ảnh và cho phép lượt gọi AI cloud.")
+    # Only send a bounded JPEG of the subject; never send the original metadata.
+    with Image.open(io.BytesIO(payload)) as source:
+        image = ImageOps.exif_transpose(source).convert("RGB")
+    sheet = None
+    for size in (768, 512, 384):
+        image.thumbnail((size, size))
+        for quality in (85, 65, 45):
+            output = io.BytesIO()
+            image.save(output, "JPEG", quality=quality)
+            if len(output.getvalue()) <= studio_vision.MAX_SHEET_BYTES:
+                sheet = output.getvalue()
+                break
+        if sheet is not None:
+            break
+    if sheet is None:
+        raise ValueError("Cannot prepare bounded reference image")
+    with (nullcontext() if cloud else model_hub.local_inference_slot()):
+        with model_hub.media_probe_dispatch(profile, revision):
+            result = studio_vision.describe_identity(profile, sheet)
+    return {**result, "model_id": profile["id"], "scope": "PRIMARY_IMAGE_ADVISORY"}
