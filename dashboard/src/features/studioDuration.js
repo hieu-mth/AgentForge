@@ -11,7 +11,7 @@ export function durationBounds(catalog,mode){
 
 export const productionMethodLabels={
   assigned:'Theo model đã phân công',auto:'AI chọn phương pháp',
-  local:'Local',hybrid:'Kết hợp ảnh và video cloud',cloud:'Video cloud trực tiếp',
+  local:'Video local',hybrid:'Video từ ảnh (cloud)',cloud:'Video từ kịch bản (cloud)',
 };
 export function productionMethodOptions(catalog){
   const advertised=catalog?.production_options?.methods??[{id:'assigned',available:true}];
