@@ -77,8 +77,12 @@ ADAPTERS = {
 @dataclass(frozen=True)
 class ProfileOptions:
     """Registered adapter option sets, independent of credential mode."""
-    variants: tuple[frozenset[str], ...] = (frozenset(),)
+    ui_variants: tuple[dict, ...] = ({"id": "metadata", "label": "Cấu hình kết nối", "fields": []},)
     validator: Callable | None = None
+
+    @property
+    def variants(self):
+        return tuple(frozenset(field["path"][0] for field in variant["fields"]) for variant in self.ui_variants)
 
     @property
     def fields(self):
@@ -103,8 +107,7 @@ def _endpoint_options(path):
 
 
 PROFILE_OPTIONS = {
-    "comfyui": ProfileOptions(tuple(frozenset(field["path"][0] for field in variant["fields"])
-                                    for variant in comfy_profile.OPTION_VARIANTS), comfy_profile.validate_settings),
+    "comfyui": ProfileOptions(comfy_profile.OPTION_VARIANTS, comfy_profile.validate_settings),
     "ltx_cloud": _endpoint_options("agentforge.features.film_studio.studio_ltx_cloud"),
     "agnes": _endpoint_options("agentforge.features.film_studio.studio_agnes"),
 }
@@ -119,9 +122,7 @@ def profile_schema(provider):
     descriptor = ADAPTERS[provider]
     mode = ("oauth" if "account_ref" in descriptor["defaults"] else
             "local" if descriptor["connection"] == "local" else "api_key")
-    variants = (comfy_profile.OPTION_VARIANTS if provider == "comfyui" else
-                ({"id": "metadata", "label": "Cấu hình kết nối", "fields": []},))
-    return {"credential_mode": mode, "option_variants": variants}
+    return {"credential_mode": mode, "option_variants": profile_options(provider).ui_variants}
 
 
 @dataclass(frozen=True)
