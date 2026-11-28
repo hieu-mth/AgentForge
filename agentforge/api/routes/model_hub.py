@@ -117,7 +117,7 @@ def handle(server, path, request, session=None):
     if path == "/api/model-hub/probe":
         if request.get("ack") in {"RUN_MEDIA_MODEL_PROBE", "POLL_MEDIA_MODEL_PROBE"}:
             if not server.allow_external_actions or session is None:
-                raise PermissionError("Explicit Owner cloud media approval required")
+                raise PermissionError("Explicit Owner media inference approval required")
             from agentforge.features.film_studio import media_probe
             return media_probe.handle(request)
         if request.get("ack") == "RUN_CLOUD_MODEL_PROBE":
