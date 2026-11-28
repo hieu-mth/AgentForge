@@ -34,8 +34,8 @@ export function CharacterLibrary({mutate,onNavigate}) {
     <Alert showIcon type="info" message="Character Registry · Lưu local"
       description="Hồ sơ và bộ ảnh tham chiếu được lưu trong SQLite trên máy. Model/LoRA chỉ là thông tin tham chiếu; chưa tự huấn luyện hoặc gửi ảnh cho model."/>
     <Row gutter={[16,16]}>
-      <Col xs={24} sm={12}><Card><Text type="secondary">Nhân vật đã lưu</Text><h2 style={{margin:0}}>{registry.data?items.length:'—'}</h2></Card></Col>
-      <Col xs={24} sm={12}><Card><Text type="secondary">Kho lưu trữ</Text><h3 style={{margin:0}}>SQLite local</h3><Text type="secondary">Không tự đồng bộ cloud</Text></Card></Col>
+      <Col xs={24} sm={12}><Card style={{height:'100%'}}><Text type="secondary">Nhân vật đã lưu</Text><h2 style={{margin:0}}>{registry.data?items.length:'—'}</h2></Card></Col>
+      <Col xs={24} sm={12}><Card style={{height:'100%'}}><Text type="secondary">Kho lưu trữ</Text><h3 style={{margin:0}}>SQLite local</h3><Text type="secondary">Không tự đồng bộ cloud</Text></Card></Col>
     </Row>
     <Card title="Nhân vật của tôi" extra={<Space><Button onClick={refresh} loading={registry.loading}>Làm mới</Button><Button type="primary" onClick={()=>open(null)}>Tạo nhân vật</Button></Space>}>
       <ResourceStatus resource={registry} label="danh sách nhân vật"/>
