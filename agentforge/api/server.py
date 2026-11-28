@@ -138,7 +138,8 @@ class _Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         try:
             limits = {"/api/film/drafts/start": 256 * 1024,
-                      "/api/characters/references/save": 3 * 1024 * 1024}
+                      "/api/characters/references/save": 10 * 1024 * 1024,
+                      "/api/characters/save": 10 * 1024 * 1024}
             data = self._read_json(limits.get(path, MAX_BODY))
         except (UnicodeError, json.JSONDecodeError, ValueError):
             return self._blocked(400, "bad_json")
