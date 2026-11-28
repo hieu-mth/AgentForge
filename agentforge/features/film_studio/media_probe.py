@@ -179,16 +179,7 @@ def _collect_local(ident, row):
             if motion_comfy.job_status(job_id, db_path=motion_comfy.DB)["status"] in {"PROVIDER_FAILED", "GPU_RESOURCE_FAILURE"}:
                 return _local_reply(ident, "FAILED")
             raise
-        try:
-            local_video_record(ident)
-        except KeyError:
-            from uuid import UUID
-            provider = str(UUID(row["provider_id"]))
-            history = motion_comfy._json_request("/history/" + provider)[provider]
-            entries = history["outputs"]["13"]["images"]
-            if len(entries) != 1 or entries[0]["type"] != "output" or entries[0]["subfolder"] != "":
-                raise ValueError("Motion output metadata is invalid")
-            draft_motion._collect_clip(job_id, entries[0]["filename"], motion_comfy.FILMS / row["film_slug"])
+        draft_motion.collect_verified_clip(job_id, motion_comfy.FILMS / row["film_slug"])
         return _local_reply(ident, "ASSET_READY")
 
 
