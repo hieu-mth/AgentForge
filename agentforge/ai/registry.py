@@ -29,7 +29,7 @@ ADAPTERS = {
         "flux_workflow_max_bytes": flux_workflow.MAX_WORKFLOW_BYTES,
         "image_workflow_max_bytes": flux_workflow.MAX_WORKFLOW_BYTES,
         "motion_encoder_supported": True,
-        "video_workflow_max_bytes": motion_ltx.MAX_CONFIG_BYTES,
+        "video_workflow_max_bytes": motion_ltx.MAX_CONFIG_BYTES, "media_probe": True,
     },
     "chatgpt": {
         "label": "ChatGPT", "connection": "cloud", "model_label": "Model slug",
@@ -58,7 +58,7 @@ ADAPTERS = {
         "model_example": "ltx-2-3-fast", "description": "LTX V2 video; 720p, 24 fps, 6/8/10 giây. Chỉ gửi sau duyệt ngân sách.",
         "defaults": {"base_url": "https://api.ltx.io"},
         "environment_defaults": {"base_url_env": "LTX_BASE_URL", "api_key_env": "LTX_API_KEY"},
-        "local_probe": False, "cloud_probe": False,
+        "local_probe": False, "cloud_probe": False, "media_probe": True,
     },
     "agnes": {
         "label": "Agnes AI", "connection": "cloud", "model_label": "Model ID",
