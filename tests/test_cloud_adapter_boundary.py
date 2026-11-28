@@ -51,6 +51,21 @@ class CloudBoundaryTests(unittest.TestCase):
                 media_probe._start_video("a" * 32, {}, "Cat")
             db.assert_not_called()
 
+    def test_media_probe_accepts_only_verified_image_for_i2v(self):
+        from agentforge.features.film_studio import media_probe
+        adapter = SimpleNamespace(input_modes=lambda profile: ("image-to-video",))
+        ident = "a" * 32
+        with (patch.object(media_probe.studio_runtime, "motion_adapter", return_value=adapter),
+              patch.object(media_probe.visual_jobs, "_row", return_value={"asset_sha": "b"*64}),
+              patch.object(media_probe.visual_jobs, "read_motion_source", return_value=b"verified") as source):
+            self.assertEqual(media_probe._video_input({}, ident), ("image-to-video", b"verified"))
+            source.assert_called_once_with(ident, "b"*64)
+        with (patch.object(media_probe.studio_runtime, "motion_adapter", return_value=adapter),
+              patch.object(media_probe.visual_jobs, "_row") as row):
+            with self.assertRaisesRegex(ValueError, "text-to-video"):
+                media_probe._video_input({}, None)
+            row.assert_not_called()
+
     def test_unknown_provider_error_cannot_authorize_retry(self):
         with self.assertRaises(ValueError):
             ProviderRequestError("unknown", retryable=True)
