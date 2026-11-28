@@ -200,6 +200,53 @@ class MotionAdapterTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "SHA-256 mismatch"):
                 ltx.verify_configured_weights(record, install, encoder_path)
 
+    def test_configured_t2v_dispatch_has_no_image_source(self):
+        from contextlib import ExitStack
+        from agentforge.features.film_studio import motion_verify, studio_runtime
+
+        ltx = motion.motion_ltx
+        record = ltx.text_workflow()
+        record["weights_sha256"] = {"checkpoint": "a"*64, "encoder": "b"*64}
+        profile = {"provider": "comfyui", "model": ltx.CHECKPOINT, "motion_encoder": str(self.root / ltx.ENCODER),
+                   "comfy_video": record}
+        adapter = studio_runtime.motion_adapter(profile)
+        self.assertEqual(adapter.input_modes(profile), ("text-to-video",))
+        self.workflow.write_bytes(adapter._workflow_bytes(profile))
+        self.assertEqual(motion.inspect_workflow(self.workflow)["model_id"], ltx.CHECKPOINT)
+        invalid = json.loads(json.dumps(record))
+        invalid["api"]["6"]["inputs"]["batch_size"] = 2
+        with self.assertRaises(ValueError):
+            ltx.configured_workflow(invalid)
+        with self.assertRaisesRegex(ValueError, "no image source"):
+            self.submit(ltx_encoder=Path(profile["motion_encoder"]), image_job="c"*32, image_sha="d"*64)
+        with ExitStack() as mocks:
+            for target, name, value in (
+                (motion.comfy_service, "_settings", {"port": motion.PORT, "install_root": self.root}),
+                (motion.comfy_service, "ensure_running", True),
+                (motion.comfy_service, "require_other_queue_idle", None),
+                (ltx, "verify_configured_weights", None),
+                (ltx, "check_runtime", []),
+            ):
+                mocks.enter_context(patch.object(target, name, return_value=value))
+            upload = mocks.enter_context(patch.object(motion._comfyui, "upload_motion_source"))
+            read = mocks.enter_context(patch.object(motion.visual_jobs, "read_motion_source"))
+            reserved = []
+            result, transport = self.submit(ltx_encoder=Path(profile["motion_encoder"]), on_reserved=reserved.append)
+            upload.assert_not_called()
+            read.assert_not_called()
+            self.assertEqual(reserved, [result["job_id"]])
+            graph = transport.call_args.kwargs["body"]["prompt"]
+            self.assertEqual(graph["6"]["class_type"], "EmptyLTXVLatentVideo")
+            self.assertNotIn("5", graph)
+            self.assertEqual(graph["10"]["inputs"]["noise_seed"], 7)
+            self.assertEqual(motion_verify._job(result["job_id"], self.db)["profile"], ltx.profile(49))
+            with closing(motion._db(self.db)) as conn:
+                source = conn.execute("SELECT image_job,image_sha FROM motion_sources WHERE job_id=?",
+                                      (result["job_id"],)).fetchone()
+                self.assertEqual(tuple(source), ("", ""))
+            with self.assertRaises(PermissionError):
+                self.submit(ltx_encoder=Path(profile["motion_encoder"]))
+
     def test_v2_ledger_upgrade_preserves_unresolved_and_source_receipts(self):
         self.db.parent.mkdir(parents=True)
         ident = "d"*32
