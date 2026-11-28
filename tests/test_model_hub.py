@@ -18,6 +18,24 @@ from tests.test_flux_runtime import profile as flux_profile
 
 
 class ModelHubTests(unittest.TestCase):
+    def test_probe_dispatch_revalidates_registry_revision_before_external_call(self):
+        with tempfile.TemporaryDirectory() as folder:
+            db = Path(folder) / "hub.db"
+            profile = flux_profile()
+            model_hub.change("SAVE_MODEL_PROFILE", expected_revision=0, profile=profile, db_path=db)
+            binding = model_hub.media_probe_profile(profile["id"], expected_revision=1, db_path=db)
+            with model_hub.media_probe_dispatch(binding, 1, db_path=db) as revision:
+                self.assertEqual(revision, 1)
+            model_hub.change("SAVE_MODEL_PROFILE", expected_revision=1,
+                             profile={**profile, "enabled": False}, db_path=db)
+            with self.assertRaisesRegex(model_hub.ModelConfigError, "MODEL_HUB_REVISION_CONFLICT"):
+                with model_hub.media_probe_dispatch(binding, 1, db_path=db):
+                    self.fail("Stale probe reached external dispatch")
+            with self.assertRaisesRegex(model_hub.ModelConfigError, "MODEL_HUB_REVISION_CONFLICT"):
+                with model_hub.media_probe_dispatch(binding, 2, db_path=db):
+                    self.fail("Changed probe profile reached external dispatch")
+
+
     def test_catalog_profile_schema_matches_registered_option_variants(self):
         from agentforge.ai import registry
         with tempfile.TemporaryDirectory() as folder:
