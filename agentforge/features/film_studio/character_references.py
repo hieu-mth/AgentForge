@@ -227,7 +227,10 @@ def analyze_primary(reference, *, allow_cloud):
     from agentforge import ops_control
     from agentforge.ai import model_hub
     from agentforge.features.film_studio import studio_vision
-    from PIL import Image, ImageOps
+    try:
+        from PIL import Image, ImageOps
+    except ImportError:
+        raise ValueError("Install AgentForge with the media extra to analyze references") from None
 
     if not isinstance(reference, dict) or type(allow_cloud) is not bool:
         raise ValueError("Invalid character analysis request")
