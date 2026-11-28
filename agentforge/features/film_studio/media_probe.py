@@ -2,7 +2,7 @@
 import hashlib
 import json
 import sqlite3
-from contextlib import closing
+from contextlib import closing, nullcontext
 from pathlib import Path
 
 from agentforge import ops_control
@@ -92,7 +92,7 @@ def _video_input(profile, source):
     return mode, visual_jobs.read_motion_source(ident, row["asset_sha"])
 
 
-def _start_video(ident, profile, prompt, source=None):
+def _start_video(ident, profile, prompt, source=None, *, dispatch_guard=nullcontext):
     adapter = studio_runtime.motion_adapter(profile)
     endpoint, image = _video_input(profile, source)
     adapter.bind(profile)
@@ -102,25 +102,26 @@ def _start_video(ident, profile, prompt, source=None):
     token = motion._key(profile)
     marker = "probe:" + _fingerprint(profile)
     digest = hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
-    with closing(motion._db(True)) as db, db:
-        db.execute("BEGIN IMMEDIATE")
-        row = db.execute("SELECT * FROM jobs WHERE id=?", (ident,)).fetchone()
-        if row:
-            if row["production"] != marker or row["request_sha"] != digest or row["endpoint"] != endpoint:
-                raise ValueError("Probe ID already belongs to another request.")
-            return _video_reply(dict(row))
-        db.execute("INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?,?)",
-                   (ident, marker, endpoint, profile["model"], seconds, digest, "SUBMITTING", None, None))
-    try:
-        remote = transport.submit_video(body, token, endpoint)
-        motion._state(ident, "SUBMITTED", provider_id=remote)
-    except ProviderRequestError as exc:
-        if exc.rejected:
-            motion.reject_submission(ident, exc)
-            return _video_reply(video_record(ident))
-        return {"probe_id": ident, "status": "NEEDS_RECONCILIATION", "preview_url": None, "error": str(exc)}
-    except (ValueError, OSError, TypeError, sqlite3.Error):
-        return {"probe_id": ident, "status": "NEEDS_RECONCILIATION", "preview_url": None}
+    with dispatch_guard():
+        with closing(motion._db(True)) as db, db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT * FROM jobs WHERE id=?", (ident,)).fetchone()
+            if row:
+                if row["production"] != marker or row["request_sha"] != digest or row["endpoint"] != endpoint:
+                    raise ValueError("Probe ID already belongs to another request.")
+                return _video_reply(dict(row))
+            db.execute("INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?,?)",
+                       (ident, marker, endpoint, profile["model"], seconds, digest, "SUBMITTING", None, None))
+        try:
+            remote = transport.submit_video(body, token, endpoint)
+            motion._state(ident, "SUBMITTED", provider_id=remote)
+        except ProviderRequestError as exc:
+            if exc.rejected:
+                motion.reject_submission(ident, exc)
+                return _video_reply(video_record(ident))
+            return {"probe_id": ident, "status": "NEEDS_RECONCILIATION", "preview_url": None, "error": str(exc)}
+        except (ValueError, OSError, TypeError, sqlite3.Error):
+            return {"probe_id": ident, "status": "NEEDS_RECONCILIATION", "preview_url": None}
     return _video_reply(video_record(ident))
 
 
@@ -187,9 +188,16 @@ def _collect_local(ident, row):
     job_id = row["job_id"]
     if row["state"] == "SUBMITTING":
         return _local_reply(ident, "NEEDS_RECONCILIATION")
+    if row["state"] in {"FAILED", "FAILED_RESOURCE"}:
+        return _local_reply(ident, "FAILED")
+    # A verified receipt is independent of GPU availability and provider history.
+    try:
+        motion_verify.inspect_receipt(job_id, db_path=motion_comfy.DB, film_root=motion_comfy.FILMS)
+    except KeyError:
+        pass
+    else:
+        return _local_reply(ident, "ASSET_READY")
     with model_hub.local_inference_slot():
-        if row["state"] in {"FAILED", "FAILED_RESOURCE"}:
-            return _local_reply(ident, "FAILED")
         try:
             draft_motion._provider(job_id, lambda: False)
         except NeedsReconciliation:
@@ -202,7 +210,7 @@ def _collect_local(ident, row):
         return _local_reply(ident, "ASSET_READY")
 
 
-def _local_video(ident, profile, prompt=None, source=None):
+def _local_video(ident, profile, prompt=None, source=None, *, dispatch_guard=nullcontext):
     slug = "probe-" + visual_jobs._id(ident)
     row = _local_row(ident)
     if prompt is not None:
@@ -231,7 +239,7 @@ def _local_video(ident, profile, prompt=None, source=None):
                     prompt=prompt, workflow_path=workflow, workflow_sha=draft_motion.workflow_sha(profile),
                     seed=42, confirmed=True, ltx_encoder=Path(profile["motion_encoder"]),
                     confirm_ltx_gate_b=mode == "image-to-video", image_job=source, image_sha=digest,
-                    db_path=motion_comfy.DB, film_root=motion_comfy.FILMS)
+                    db_path=motion_comfy.DB, film_root=motion_comfy.FILMS, dispatch_guard=dispatch_guard)
             except (ValueError, OSError, RuntimeError):
                 row = _local_row(ident)
                 if row is None:
@@ -257,6 +265,10 @@ def handle(request):
     ident = visual_jobs._id(request["probe_id"])
     profile = model_hub.media_probe_profile(request["profile_id"], expected_revision=request["expected_revision"])
     ops_control.require_active()
+
+    def dispatch_guard():
+        return model_hub.media_probe_dispatch(profile, request["expected_revision"])
+
     # Serialize explicit polls/submissions across local backend processes.
     with model_hub.local_process_slot(model_hub.DB_PATH.parent / "media_probe.worker", "MEDIA_PROBE_BUSY"):
         if action == "RUN_MEDIA_MODEL_PROBE":
@@ -279,9 +291,10 @@ def handle(request):
                     with model_hub.local_inference_slot():
                         flux_runtime.generate(prompt, profile_id=profile["id"],
                             expected_revision=request["expected_revision"], production_job=ident,
+                            dispatch_guard=dispatch_guard,
                             probe_request_sha=_fingerprint({"prompt": prompt, "options": options}), **options)
                 else:
-                    request_data = studio_runtime.ImageRequest(prompt, "16:9", "", ident, request["expected_revision"])
+                    request_data = studio_runtime.ImageRequest(prompt, "16:9", "", ident, request["expected_revision"], dispatch_guard)
                     try:
                         studio_runtime.image_adapter(profile).generate(profile, request_data)
                     except (NeedsReconciliation, ProviderRequestError):
@@ -292,6 +305,8 @@ def handle(request):
                 raise ValueError("Video probe does not accept image workflow options.")
             source = request.get("source_image_job")
             if not model_hub.is_cloud(profile):
-                return _local_video(ident, profile, prompt if action == "RUN_MEDIA_MODEL_PROBE" else None, source)
-            return _start_video(ident, profile, prompt, source) if action == "RUN_MEDIA_MODEL_PROBE" else _poll_video(ident, profile)
+                return _local_video(ident, profile, prompt if action == "RUN_MEDIA_MODEL_PROBE" else None,
+                                    source, dispatch_guard=dispatch_guard)
+            return (_start_video(ident, profile, prompt, source, dispatch_guard=dispatch_guard)
+                    if action == "RUN_MEDIA_MODEL_PROBE" else _poll_video(ident, profile))
         raise ValueError("Unsupported media probe capability.")
