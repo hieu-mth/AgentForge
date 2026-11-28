@@ -63,6 +63,14 @@ ADAPTERS = {
         "environment_defaults": {"base_url_env": "AGNES_BASE_URL", "api_key_env": "AGNES_API_KEY"},
         "local_probe": False, "cloud_probe": False, "media_probe": True,
     },
+    "bigmodel": {
+        "label": "BigModel (Zhipu AI)", "connection": "cloud", "model_label": "Model ID",
+        "model_example": "cogvideox-flash",
+        "description": "CogVideoX-Flash video. Clip 5 giây; kiểm tra hạn mức tài khoản trước khi chạy.",
+        "defaults": {"base_url": "https://open.bigmodel.cn/api/paas/v4"},
+        "environment_defaults": {"base_url_env": "BIGMODEL_BASE_URL", "api_key_env": "BIGMODEL_API_KEY"},
+        "local_probe": False, "cloud_probe": False, "media_probe": True,
+    },
     "elevenlabs": {
         "label": "ElevenLabs API", "connection": "cloud", "model_label": "Model ID",
         "model_example": "model-id-da-cap",
@@ -110,6 +118,7 @@ PROFILE_OPTIONS = {
     "comfyui": ProfileOptions(comfy_profile.OPTION_VARIANTS, comfy_profile.validate_settings),
     "ltx_cloud": _endpoint_options("agentforge.features.film_studio.studio_ltx_cloud"),
     "agnes": _endpoint_options("agentforge.features.film_studio.studio_agnes"),
+    "bigmodel": _endpoint_options("agentforge.features.film_studio.studio_bigmodel"),
 }
 
 
@@ -154,6 +163,7 @@ REGISTRATIONS = (
     _module("video", _STUDIO + "draft_motion_cloud"),
     _module("cloud_video_transport", _STUDIO + "studio_ltx_cloud", predicate="supports_video"),
     _module("cloud_video_transport", _STUDIO + "studio_agnes", predicate="supports_video"),
+    _module("cloud_video_transport", _STUDIO + "studio_bigmodel", predicate="supports_video"),
     _module("vision", _STUDIO + "studio_vision"),
     _module("audio", _STUDIO + "studio_speech"),
     _module("sound", _STUDIO + "studio_audio_generation"),

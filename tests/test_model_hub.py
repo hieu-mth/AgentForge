@@ -241,7 +241,7 @@ class ModelHubTests(unittest.TestCase):
             self.assertEqual(options["duration_bounds"], {"motion": duration_bounds(True), "still": duration_bounds(False)})
 
     def test_adapter_catalog_matches_persisted_profile_validation(self):
-        expected = {"ollama": "local", "comfyui": "local", "anthropic": "cloud", "openai": "cloud", "elevenlabs": "cloud", "chatgpt": "cloud", "ltx_cloud": "cloud", "agnes": "cloud"}
+        expected = {"ollama": "local", "comfyui": "local", "anthropic": "cloud", "openai": "cloud", "elevenlabs": "cloud", "chatgpt": "cloud", "ltx_cloud": "cloud", "agnes": "cloud", "bigmodel": "cloud"}
         with tempfile.TemporaryDirectory() as folder:
             db = Path(folder) / "hub.sqlite3"
             catalog = model_hub.catalog(db_path=db)["adapters"]
@@ -249,7 +249,7 @@ class ModelHubTests(unittest.TestCase):
             self.assertEqual({row["id"]: row["connection"] for row in catalog}, expected)
             self.assertEqual([(row["id"], row["label"]) for row in catalog if row["connection"] == "cloud"],
                              [("chatgpt", "ChatGPT"), ("openai", "OpenAI API"), ("anthropic", "Anthropic API"),
-                              ("ltx_cloud", "LTX Video API"), ("agnes", "Agnes AI"), ("elevenlabs", "ElevenLabs API")])
+                              ("ltx_cloud", "LTX Video API"), ("agnes", "Agnes AI"), ("bigmodel", "BigModel (Zhipu AI)"), ("elevenlabs", "ElevenLabs API")])
             with patch("urllib.request.urlopen", side_effect=AssertionError("network")):
                 for revision, adapter in enumerate(catalog):
                     profile = {"id": f"owner_{revision}", "provider": adapter["id"],

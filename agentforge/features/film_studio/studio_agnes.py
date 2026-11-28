@@ -2,19 +2,14 @@
 import base64
 import http.client
 import io
-import ipaddress
 import json
 import os
 import re
-import socket
-import ssl
-from urllib.parse import urlencode, urlsplit
-from uuid import uuid4
+from urllib.parse import urlencode
 
 from agentforge.ai import cloud_credentials
-from agentforge.features.media import mp4, render
+from agentforge.features.film_studio.cloud_media_assets import download_to, download_normalized
 from agentforge.features.film_studio.studio_contracts import MotionOutput, ProviderRequestError
-from agentforge.paths import ensure_local_root
 
 HOST = "apihub.agnes-ai.com"
 BASE = "https://" + HOST + "/v1"
@@ -151,7 +146,7 @@ def image_bytes(body, token, max_bytes):
         raw = base64.b64decode(encoded, validate=True)
     else:
         sink = io.BytesIO()
-        _download_to(item["url"], sink, max_bytes)
+        download_to(item["url"], sink, max_bytes)
         raw = sink.getvalue()
     with Image.open(io.BytesIO(raw)) as image:
         if image.format not in {"PNG", "JPEG", "WEBP"} or image.width * image.height > 12_000_000:
@@ -219,62 +214,3 @@ poll_video = poll
 
 def download_video(result, target, seconds):
     download_normalized(result["url"], target, seconds)
-
-
-def _public_addresses(host):
-    addresses = {item[4][0] for item in socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)}
-    if not addresses or any(not ipaddress.ip_address(ip).is_global or ipaddress.ip_address(ip).is_multicast
-                            for ip in addresses):
-        raise ValueError("Agnes download host must resolve exclusively to public addresses.")
-    return sorted(addresses)
-
-
-def _download_to(url, stream, max_bytes):
-    if not isinstance(url, str):
-        raise ValueError("Invalid Agnes download URL.")
-    parsed = urlsplit(url)
-    if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
-            or parsed.port not in {None, 443} or not parsed.path or parsed.fragment
-            or any(ord(c) < 33 for c in url)):
-        raise ValueError("Unsafe Agnes download URL.")
-    # Pin the validated address, but verify TLS against the original host.
-    # No authorization header and no redirects to arbitrary destinations.
-    address = _public_addresses(parsed.hostname)[0]
-    conn = http.client.HTTPSConnection(parsed.hostname, timeout=30)
-    try:
-        with socket.create_connection((address, 443), timeout=30) as sock:
-            conn.sock = ssl.create_default_context().wrap_socket(sock, server_hostname=parsed.hostname)
-            conn.request("GET", parsed.path + ("?" + parsed.query if parsed.query else ""))
-            response = conn.getresponse()
-            if response.status != 200:
-                raise ValueError("Agnes download unavailable.")
-            total = 0
-            while chunk := response.read(1024 * 1024):
-                total += len(chunk)
-                if total > max_bytes:
-                    raise ValueError("Agnes output exceeds size limit.")
-                stream.write(chunk)
-    except (OSError, http.client.HTTPException):
-        raise ValueError("Agnes download failed.") from None
-    finally:
-        conn.close()
-
-
-def _download(url, target):
-    with target.open("xb") as stream:
-        _download_to(url, stream, mp4.MAX_VIDEO_BYTES)
-
-
-def download_normalized(url, target, seconds):
-    raw = ensure_local_root(target.with_name(uuid4().hex + ".raw.mp4"))
-    try:
-        _download(url, raw)
-        # Normalize provider FPS / dimensions; never synthesize missing duration.
-        # Native audio is not advertised until verified against the real provider.
-        render._run_process([render._ffmpeg(), "-nostdin", "-n", "-v", "error", "-xerror",
-            "-protocol_whitelist", "file,pipe", "-f", "mov", "-i", str(raw), "-map", "0:v:0", "-an",
-            "-vf", "fps=24,scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,setsar=1",
-            "-frames:v", str(seconds * 24), "-c:v", "libx264", "-threads", "2",
-            "-pix_fmt", "yuv420p", str(target)], cwd=target.parent, timeout=150)
-    finally:
-        raw.unlink(missing_ok=True)
