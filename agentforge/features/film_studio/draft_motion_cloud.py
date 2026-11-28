@@ -462,6 +462,15 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
         prompt = (scene["image_prompt"] + ". " + draft_continuity.prompt(scene) +
                   "\nAudio direction: " + scene.get("audio", "") +
                   ". Keep the original actions; do not invent dialogue.")[:5000]
+        limit = getattr(transport, "MAX_PROMPT_CHARS", None)
+        if limit is not None:
+            # Preserve the action instead of losing it behind a long image prompt.
+            action = draft_continuity.prompt(scene, image_input=image is not None)
+            if image is None:
+                visual = scene["image_prompt"][:limit * 2 // 5]
+                prompt = (visual + ". " + action)[:limit]
+            else:
+                prompt = action[:limit]
         body = transport.payload(profile["model"], prompt, seconds, image=image, audio=native_audio(profile))
         request_sha = hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
         ident = existing["id"] if existing else uuid4().hex

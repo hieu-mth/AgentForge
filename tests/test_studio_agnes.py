@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch, Mock
 
 from agentforge.ai import model_hub
-from agentforge.features.film_studio import draft_motion_cloud, studio_agnes, studio_runtime
+from agentforge.features.film_studio import cloud_media_assets, draft_motion_cloud, studio_agnes, studio_runtime
 from agentforge.features.media import studio_agnes_image, visual_jobs
 from agentforge.features.film_studio import media_probe
 
@@ -45,9 +45,9 @@ class AgnesContractTests(unittest.TestCase):
         with patch.dict(os.environ, {"AGNES_BASE_URL": "https://example.com/v1", "AGNES_API_KEY": "fixture"}):
             with self.assertRaises(ValueError):
                 studio_agnes.key(profile)
-        with patch.object(studio_agnes.socket, "getaddrinfo", return_value=[(2, 1, 6, "", ("127.0.0.1", 443))]):
+        with patch.object(cloud_media_assets.socket, "getaddrinfo", return_value=[(2, 1, 6, "", ("127.0.0.1", 443))]):
             with self.assertRaises(ValueError):
-                studio_agnes._public_addresses("example.com")
+                cloud_media_assets._public_addresses("example.com")
 
     def test_cloud_generated_image_can_feed_local_motion_source(self):
         from PIL import Image
