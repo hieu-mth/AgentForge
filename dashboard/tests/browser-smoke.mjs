@@ -403,7 +403,7 @@ try {
     const {id,...brief}=route.request().postDataJSON();
     if(!/^[0-9a-f]{32}$/.test(id)||![formattedBrief,'Ý tưởng mới'].includes(brief.idea)||
         brief.seconds!==null||brief.scene_count!==null||brief.duration_mode!=='auto'||brief.ratio!=='16:9'||
-        brief.mode!=='motion'||'motion_approved' in brief)
+        brief.mode!=='motion'||brief.route_strategy!=='assigned'||'max_cloud_seconds' in brief||'character_ids' in brief||'motion_approved' in brief)
       throw new Error('Unexpected draft submission');
     draftFixture={id,brief:{...brief,seconds:6,scene_count:3},status:'RUNNING',stage:'PLANNING',worker_active:true,
       activity:{operation:'plan',provider:'ollama',model:'fixture-planner'}};
