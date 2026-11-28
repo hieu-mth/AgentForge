@@ -77,6 +77,7 @@ export function FluxProbeDialog({profile,revision,mutate,onCancel}) {
       {result&&<Typography.Text>Thời gian: {result.duration_seconds} giây</Typography.Text>}
       {result?.status==='ASSET_READY'&&<>
         <Image width="100%" alt={profile.comfy_image?"Ảnh chạy thử ComfyUI":"Ảnh chạy thử FLUX"} src={result.preview_url}/>
+        {result.job_id&&<Typography.Text copyable={{text:result.job_id}}>Mã ảnh nguồn: {result.job_id}</Typography.Text>}
         <Typography.Text className="env-break" copyable>{result.workspace_path}</Typography.Text>
         <Typography.Text type="secondary">{result.width}×{result.height} · {result.steps} bước · seed {result.seed}</Typography.Text>
       </>}

@@ -292,6 +292,20 @@ def _collect_clip(job_id, name, folder):
             confirmed=True, db_path=motion_comfy.DB, film_root=motion_comfy.FILMS)
 
 
+def collect_verified_clip(job_id, folder):
+    """Shared receipt-first collection for production and explicit probes."""
+    try:
+        return motion_verify.inspect_receipt(job_id, db_path=motion_comfy.DB, film_root=motion_comfy.FILMS)
+    except KeyError:
+        row = motion_verify._job(job_id, motion_comfy.DB)
+        provider_id = str(UUID(row["provider_id"]))
+        history = motion_comfy._json_request("/history/" + provider_id)[provider_id]
+        entries = history["outputs"]["13"]["images"]
+        if len(entries) != 1 or entries[0]["type"] != "output" or entries[0]["subfolder"] != "":
+            raise ValueError("Motion output metadata is invalid")
+        return _collect_clip(job_id, entries[0]["filename"], folder)
+
+
 def retryable_motion_job(job_id):
     row = motion_verify._job(job_id, motion_comfy.DB)
     if row["state"] not in {"FAILED", "FAILED_RESOURCE"}:
@@ -344,16 +358,7 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
         _provider(job_id, cancelled)
         if cancelled():
             return
-        try:
-            receipt = motion_verify.inspect_receipt(job_id, db_path=motion_comfy.DB, film_root=motion_comfy.FILMS)
-        except KeyError:
-            row = motion_verify._job(job_id, motion_comfy.DB)
-            provider_id = str(UUID(row["provider_id"]))
-            history = motion_comfy._json_request("/history/" + provider_id)[provider_id]
-            entries = history["outputs"]["13"]["images"]
-            if len(entries) != 1 or entries[0]["type"] != "output" or entries[0]["subfolder"] != "":
-                raise ValueError("Motion output metadata is invalid")
-            receipt = _collect_clip(job_id, entries[0]["filename"], workflow.parent)
+        receipt = collect_verified_clip(job_id, workflow.parent)
         if previous_motion is not None:
             _record_continuation(scene, previous_motion)
         scene["motion_sha"] = receipt["clip_sha256"]

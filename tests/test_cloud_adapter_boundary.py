@@ -51,6 +51,52 @@ class CloudBoundaryTests(unittest.TestCase):
                 media_probe._start_video("a" * 32, {}, "Cat")
             db.assert_not_called()
 
+    def test_media_probe_accepts_only_verified_image_for_i2v(self):
+        from agentforge.features.film_studio import media_probe
+        adapter = SimpleNamespace(input_modes=lambda profile: ("image-to-video",))
+        ident = "a" * 32
+        with (patch.object(media_probe.studio_runtime, "motion_adapter", return_value=adapter),
+              patch.object(media_probe.visual_jobs, "_row", return_value={"asset_sha": "b"*64}),
+              patch.object(media_probe.visual_jobs, "read_motion_source", return_value=b"verified") as source):
+            self.assertEqual(media_probe._video_input({}, ident), ("image-to-video", b"verified"))
+            source.assert_called_once_with(ident, "b"*64)
+        with (patch.object(media_probe.studio_runtime, "motion_adapter", return_value=adapter),
+              patch.object(media_probe.visual_jobs, "_row") as row):
+            with self.assertRaisesRegex(ValueError, "text-to-video"):
+                media_probe._video_input({}, None)
+            row.assert_not_called()
+
+    def test_local_probe_reserves_once_and_polls_existing_ledger(self):
+        from contextlib import closing
+        from agentforge.features.film_studio import media_probe, motion_comfy, motion_ltx
+        from agentforge.features.film_studio import draft_motion
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            record = motion_ltx.text_workflow()
+            record["weights_sha256"] = {"checkpoint": "a"*64, "encoder": "b"*64}
+            profile = {"provider": "comfyui", "model": motion_ltx.CHECKPOINT,
+                       "motion_encoder": str(root / motion_ltx.ENCODER), "comfy_video": record}
+            ident = "c"*32
+            prompt = "A cat walks slowly across the quiet room."
+            def reserve(**kw):
+                with closing(motion_comfy._db(motion_comfy.DB, write=True)) as conn, conn:
+                    conn.execute("INSERT INTO motion_jobs VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                        ("d"*32, kw["film_slug"], kw["shot_id"], kw["plan_sha"], kw["workflow_sha"],
+                         "e"*64, 42, None, "SUBMITTING", "created", "updated"))
+            with (patch.object(motion_comfy, "DB", root / "motion.db"),
+                  patch.object(motion_comfy, "FILMS", root / "films"),
+                  patch.object(draft_motion, "bind", return_value=profile),
+                  patch.object(motion_comfy, "submit_shot", side_effect=reserve) as submit):
+                first = media_probe._local_video(ident, profile, prompt)
+                self.assertEqual(first["status"], "NEEDS_RECONCILIATION")
+                self.assertEqual(media_probe._local_video(ident, profile, prompt), first)
+                self.assertEqual(media_probe._local_video(ident, profile), first)
+                submit.assert_called_once()
+                with self.assertRaisesRegex(ValueError, "another request"):
+                    media_probe._local_video(ident, profile, prompt + " Different.")
+                submit.assert_called_once()
+
     def test_unknown_provider_error_cannot_authorize_retry(self):
         with self.assertRaises(ValueError):
             ProviderRequestError("unknown", retryable=True)

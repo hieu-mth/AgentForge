@@ -117,7 +117,7 @@ export function ModelHub({mutate}) {
       </AppTooltip>}
     {(row.flux||row.comfy_image)&&<Button size="small" disabled={!row.enabled}
       onClick={()=>setFluxProbe({profile:row,revision:hub.revision})}>Chạy thử</Button>}
-    {byAdapter[row.provider]?.media_probe&&profileCapability(row)?.runtime_compatible&&
+    {byAdapter[row.provider]?.media_probe&&!(row.flux||row.comfy_image)&&profileCapability(row)?.runtime_compatible&&
       <Button size="small" disabled={!row.enabled}
         onClick={()=>setMediaProbe({profile:row,revision:hub.revision})}>Chạy thử</Button>}
     {byAdapter[row.provider]?.local_probe&&<>

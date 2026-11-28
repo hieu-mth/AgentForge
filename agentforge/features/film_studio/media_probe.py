@@ -3,16 +3,18 @@ import hashlib
 import json
 import sqlite3
 from contextlib import closing
+from pathlib import Path
 
 from agentforge import ops_control
 from agentforge.ai import model_hub
 from agentforge.features.film_studio import draft_motion_cloud as motion, studio_runtime
+from agentforge.features.film_studio import draft_motion, long_form, motion_comfy, motion_verify
 from agentforge.features.film_studio.studio_contracts import ProviderRequestError
 from agentforge.features.film_studio.draft_resources import NeedsReconciliation
 from agentforge.features.media import visual_jobs
 from agentforge.paths import ensure_local_root
 
-MAX_VIDEO = motion.MAX_CLIP_BYTES
+MAX_VIDEO = max(motion.MAX_CLIP_BYTES, motion_verify.MAX_MP4_BYTES)
 
 
 def _fingerprint(profile):
@@ -59,14 +61,25 @@ def _image_reply(ident, profile):
             **({"error": metadata["error"]} if "error" in metadata else {})}
 
 
-def _start_video(ident, profile, prompt):
+def _video_input(profile, source):
     adapter = studio_runtime.motion_adapter(profile)
-    if "text-to-video" not in adapter.input_modes(profile):
-        raise ValueError("Video probe currently requires a text-to-video model; image input is not implemented in this probe.")
+    mode = "image-to-video" if source is not None else "text-to-video"
+    if mode not in adapter.input_modes(profile):
+        raise ValueError("Video probe does not support " + mode + " for this profile.")
+    if source is None:
+        return mode, None
+    ident = visual_jobs._id(source)
+    row = visual_jobs._row(ident)
+    return mode, visual_jobs.read_motion_source(ident, row["asset_sha"])
+
+
+def _start_video(ident, profile, prompt, source=None):
+    adapter = studio_runtime.motion_adapter(profile)
+    endpoint, image = _video_input(profile, source)
     adapter.bind(profile)
     transport = motion._transport(profile)
     seconds = min(adapter.billable_durations(profile))
-    body = transport.payload(profile["model"], prompt, seconds, audio=adapter.native_audio(profile))
+    body = transport.payload(profile["model"], prompt, seconds, image=image, audio=adapter.native_audio(profile))
     token = motion._key(profile)
     marker = "probe:" + _fingerprint(profile)
     digest = hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()
@@ -74,13 +87,13 @@ def _start_video(ident, profile, prompt):
         db.execute("BEGIN IMMEDIATE")
         row = db.execute("SELECT * FROM jobs WHERE id=?", (ident,)).fetchone()
         if row:
-            if row["production"] != marker or row["request_sha"] != digest:
+            if row["production"] != marker or row["request_sha"] != digest or row["endpoint"] != endpoint:
                 raise ValueError("Probe ID already belongs to another request.")
             return _video_reply(dict(row))
         db.execute("INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?,?)",
-                   (ident, marker, "text-to-video", profile["model"], seconds, digest, "SUBMITTING", None, None))
+                   (ident, marker, endpoint, profile["model"], seconds, digest, "SUBMITTING", None, None))
     try:
-        remote = transport.submit_video(body, token, "text-to-video")
+        remote = transport.submit_video(body, token, endpoint)
         motion._state(ident, "SUBMITTED", provider_id=remote)
     except ProviderRequestError as exc:
         if exc.rejected:
@@ -119,11 +132,108 @@ def _poll_video(ident, profile):
     return _video_reply(video_record(ident))
 
 
+def _local_row(ident):
+    slug = "probe-" + visual_jobs._id(ident)
+    conn = motion_comfy._db(motion_comfy.DB)
+    if conn is None:
+        return None
+    with closing(conn):
+        rows = conn.execute("SELECT * FROM motion_jobs WHERE film_slug=?", (slug,)).fetchall()
+    if len(rows) > 1:
+        raise NeedsReconciliation("Multiple local probe attempts; review ledger.")
+    return dict(rows[0]) if rows else None
+
+
+def local_video_record(ident):
+    row = _local_row(ident)
+    if row is None:
+        raise KeyError("Local video probe not found.")
+    return motion_verify.inspect_receipt(row["job_id"], db_path=motion_comfy.DB, film_root=motion_comfy.FILMS)
+
+
+def local_video_path(receipt):
+    return draft_motion.clip_path({"motion_job": receipt["job_id"], "motion_sha": receipt["clip_sha256"]})
+
+
+def verify_local_video(receipt, stream):
+    draft_motion.verify_clip({"motion_job": receipt["job_id"], "motion_sha": receipt["clip_sha256"]}, stream)
+
+
+def _local_reply(ident, status):
+    return {"probe_id": ident, "status": status,
+            "preview_url": "/api/model-hub/media-probe/" + ident + "/local-preview" if status == "ASSET_READY" else None}
+
+
+def _collect_local(ident, row):
+    job_id = row["job_id"]
+    if row["state"] == "SUBMITTING":
+        return _local_reply(ident, "NEEDS_RECONCILIATION")
+    with model_hub.local_inference_slot():
+        if row["state"] in {"FAILED", "FAILED_RESOURCE"}:
+            return _local_reply(ident, "FAILED")
+        try:
+            draft_motion._provider(job_id, lambda: False)
+        except NeedsReconciliation:
+            return _local_reply(ident, "NEEDS_RECONCILIATION")
+        except ValueError:
+            if motion_comfy.job_status(job_id, db_path=motion_comfy.DB)["status"] in {"PROVIDER_FAILED", "GPU_RESOURCE_FAILURE"}:
+                return _local_reply(ident, "FAILED")
+            raise
+        draft_motion.collect_verified_clip(job_id, motion_comfy.FILMS / row["film_slug"])
+        return _local_reply(ident, "ASSET_READY")
+
+
+def _local_video(ident, profile, prompt=None, source=None):
+    slug = "probe-" + visual_jobs._id(ident)
+    row = _local_row(ident)
+    if prompt is not None:
+        mode, image = _video_input(profile, source)
+        digest = hashlib.sha256(image).hexdigest() if image is not None else None
+        request_sha = _fingerprint({"prompt": prompt, "source": source, "sha": digest})
+        plan = long_form.build_plan(title=_fingerprint(profile), genre="Probe", style="Local model probe",
+            chapters=[{"id": "probe", "title": "Probe", "synopsis": request_sha,
+                       "duration_seconds": 4, "character_ids": []}], shot_seconds=4)
+        try:
+            long_form.save_plan(motion_comfy.FILMS, slug, plan)
+        except FileExistsError:
+            if long_form.load_plan(motion_comfy.FILMS, slug) != plan:
+                raise ValueError("Probe ID already belongs to another request.")
+        if row is None:
+            draft_motion.bind(profile)
+            workflow = ensure_local_root(motion_comfy.FILMS / slug / "motion-workflow.json")
+            payload = draft_motion._workflow_bytes(profile)
+            try:
+                with workflow.open("xb") as stream:
+                    stream.write(payload)
+            except FileExistsError:
+                pass
+            try:
+                motion_comfy.submit_shot(film_slug=slug, shot_id="sh-00001", plan_sha=plan["plan_sha256"],
+                    prompt=prompt, workflow_path=workflow, workflow_sha=draft_motion.workflow_sha(profile),
+                    seed=42, confirmed=True, ltx_encoder=Path(profile["motion_encoder"]),
+                    confirm_ltx_gate_b=mode == "image-to-video", image_job=source, image_sha=digest,
+                    db_path=motion_comfy.DB, film_root=motion_comfy.FILMS)
+            except (ValueError, OSError, RuntimeError):
+                row = _local_row(ident)
+                if row is None:
+                    raise
+            row = _local_row(ident)
+    if row is None:
+        raise KeyError("Local video probe not found.")
+    plan = long_form.load_plan(motion_comfy.FILMS, slug)
+    if (plan["title"] != _fingerprint(profile) or plan["plan_sha256"] != row["plan_sha"]
+            or row["workflow_sha"] != draft_motion.workflow_sha(profile)):
+        raise ValueError("Media probe profile changed.")
+    return _collect_local(ident, row)
+
+
 def handle(request):
     action = request.get("ack")
     common = {"ack", "profile_id", "expected_revision", "probe_id"}
-    if action not in {"RUN_MEDIA_MODEL_PROBE", "POLL_MEDIA_MODEL_PROBE"} or set(request) != (
-            common | {"prompt"} if action == "RUN_MEDIA_MODEL_PROBE" else common):
+    fields = set(request)
+    if (action not in {"RUN_MEDIA_MODEL_PROBE", "POLL_MEDIA_MODEL_PROBE"} or
+            (fields - {"source_image_job"} if action == "RUN_MEDIA_MODEL_PROBE" else fields) !=
+            (common | {"prompt"} if action == "RUN_MEDIA_MODEL_PROBE" else common)):
         raise ValueError("Invalid media probe request.")
     ident = visual_jobs._id(request["probe_id"])
     profile = model_hub.media_probe_profile(request["profile_id"], expected_revision=request["expected_revision"])
@@ -135,6 +245,8 @@ def handle(request):
             if not isinstance(prompt, str) or not 1 <= len(prompt.strip()) <= 2000:
                 raise ValueError("Enter a prompt of up to 2000 characters.")
         if model_hub.orchestrator_policy.compatible("image", profile):
+            if "source_image_job" in request:
+                raise ValueError("Image probe does not accept a video source.")
             if action == "RUN_MEDIA_MODEL_PROBE":
                 try:
                     return _image_reply(ident, profile)
@@ -147,5 +259,8 @@ def handle(request):
                     pass
             return _image_reply(ident, profile)
         if model_hub.orchestrator_policy.compatible("video", profile):
-            return _start_video(ident, profile, prompt) if action == "RUN_MEDIA_MODEL_PROBE" else _poll_video(ident, profile)
+            source = request.get("source_image_job")
+            if not model_hub.is_cloud(profile):
+                return _local_video(ident, profile, prompt if action == "RUN_MEDIA_MODEL_PROBE" else None, source)
+            return _start_video(ident, profile, prompt, source) if action == "RUN_MEDIA_MODEL_PROBE" else _poll_video(ident, profile)
         raise ValueError("Unsupported media probe capability.")
