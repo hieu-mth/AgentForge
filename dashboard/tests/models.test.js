@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { configurableProfiles, outputSummary, profileCapability, profilePayload, readinessLabels } from '../src/model_hub_ui.js';
+import { configurableProfiles, outputSummary, profileCapability, profilePayload, optionValues, readinessLabels } from '../src/model_hub_ui.js';
 import { groupFor, hashFor, parseSection } from '../src/navigation.js';
 
 test('profile form never sends unrelated fields or token values',()=>{
@@ -21,56 +21,37 @@ test('profile form never sends unrelated fields or token values',()=>{
   assert.equal(local.enabled,false);
   assert.ok(!('api_key_env' in local));
 });
-test('FLUX workflow is sent only for an advertising ComfyUI backend',()=>{
-  const values={id:'flux_schnell_gguf',model:'flux1-schnell-Q4_K_S.gguf',enabled:true,
-    base_url:'http://127.0.0.1:8188',flux_enabled:true,flux_settings:{
-      workflow:'{"38":{"class_type":"UnetLoaderGGUF"}}',max_resolution:1024,max_steps:4,
-      timeout_seconds:180,output_dir:'visuals',api_key:'fixture-key',
-    }};
-  const adapter={id:'comfyui',defaults:{base_url:''}};
-  assert.ok(!('flux' in profilePayload(values,adapter)));
-  assert.deepEqual(profilePayload(values,{...adapter,flux_workflow_max_bytes:16000}).flux,{
-    workflow:{38:{class_type:'UnetLoaderGGUF'}},max_resolution:1024,max_steps:4,
-    timeout_seconds:180,output_dir:'visuals',
-  });
+test('profile option fields follow advertised variant without inspecting graph class or provider name',()=>{
+  const adapter={id:'future_runtime',defaults:{base_url:''},profile_schema:{option_variants:[
+    {id:'metadata',fields:[]},
+    {id:'image',fields:[
+      {path:['custom_image','workflow'],kind:'json',required:true,label:'Graph'},
+      {path:['custom_image','max_steps'],kind:'integer',default:4,required:true,label:'Steps'},
+    ]},
+    {id:'video',fields:[{path:['encoder'],kind:'text',required:true,label:'Encoder'},{path:['video'],kind:'json',required:true,label:'Video'}]},
+  ]}};
+  const saved={id:'fixture',model:'alternate.safetensors',enabled:true,base_url:'http://127.0.0.1:8188',
+    custom_image:{workflow:{38:{class_type:'CheckpointLoaderSimple'}},max_steps:7}};
+  const form={...saved,...optionValues(adapter,saved)};
+  assert.equal(form.option_variant,'image');
+  form.adapter_options.encoder='should not leak';
+  assert.deepEqual(profilePayload(form,adapter),{...saved,provider:adapter.id});
+  assert.deepEqual(profilePayload({...form,option_variant:'metadata'},adapter),
+    {id:saved.id,model:saved.model,enabled:true,base_url:saved.base_url,provider:adapter.id});
+  assert.throws(()=>profilePayload({...form,option_variant:'video'},adapter),/Hãy điền/);
+  assert.throws(()=>profilePayload({...form,option_variant:'unknown'},adapter),/Chọn loại/);
+  assert.deepEqual(profilePayload({...form,option_variant:'video',adapter_options:{encoder:' C:/encoder.safetensors ',video:'{"format":"test"}'}},adapter),
+    {id:saved.id,model:saved.model,enabled:true,base_url:saved.base_url,provider:adapter.id,encoder:'C:/encoder.safetensors',video:{format:'test'}});
 });
-
-test('checkpoint image workflow is serialized through the advertised backend capability',()=>{
-  const adapter={id:'comfyui',defaults:{base_url:''},flux_workflow_max_bytes:16000,image_workflow_max_bytes:16000};
-  const values={id:'checkpoint_image',model:'alternate.safetensors',enabled:true,
-    base_url:'http://127.0.0.1:8188',flux_enabled:true,flux_settings:{
-      workflow:'{"38":{"class_type":"CheckpointLoaderSimple"}}',max_resolution:1024,max_steps:20,
-      timeout_seconds:180,output_dir:'visuals',secret:'not sent',
-    }};
-  const profile=profilePayload(values,adapter);
-  assert.ok(!('flux' in profile));
-  assert.deepEqual(profile.comfy_image,{workflow:{38:{class_type:'CheckpointLoaderSimple'}},
-    max_resolution:1024,max_steps:20,timeout_seconds:180,output_dir:'visuals'});
+test('single metadata variant does not require a hidden selector value',()=>{
+  const adapter={id:'fixture',defaults:{base_url:''},profile_schema:{option_variants:[{id:'metadata',fields:[]}]}};
+  assert.deepEqual(profilePayload({id:'fixture',model:'test',enabled:true,base_url:'http://127.0.0.1:8188'},adapter),
+    {id:'fixture',model:'test',provider:'fixture',enabled:true,base_url:'http://127.0.0.1:8188'});
 });
-
 test('Owner settings deep-link includes Model Hub',()=>{
   assert.equal(groupFor('models'),'settings');
   assert.equal(hashFor('models'),'#/models');
   assert.equal(parseSection('#/models'),'models');
-});
-
-test('LTX encoder is sent only for a compatible ComfyUI adapter',()=>{
-  const values={id:'motion_profile',model:'ltxv-2b-0.9.8-distilled-fp8.safetensors',
-    enabled:true,base_url:'http://127.0.0.1:8188',motion_encoder:' C:/models/t5.safetensors '};
-  const adapter={id:'comfyui',defaults:{base_url:''}};
-  assert.ok(!('motion_encoder' in profilePayload(values,adapter)));
-  assert.equal(profilePayload(values,{...adapter,motion_encoder_supported:true}).motion_encoder,
-    'C:/models/t5.safetensors');
-});
-
-test('configured I2V workflow is only sent when advertised',()=>{
-  const values={id:'motion_profile',model:'alternate.safetensors',enabled:true,
-    base_url:'http://127.0.0.1:8188',motion_encoder:'C:/models/encoder.safetensors',
-    comfy_video_json:'{"format":"agentforge.film.comfy.i2v.v2"}'};
-  const adapter={id:'comfyui',defaults:{base_url:''},motion_encoder_supported:true};
-  assert.ok(!('comfy_video' in profilePayload(values,adapter)));
-  assert.deepEqual(profilePayload(values,{...adapter,video_workflow_max_bytes:16000}).comfy_video,
-    {format:'agentforge.film.comfy.i2v.v2'});
 });
 
 test('routing follows revision catalog contracts and preserves cloud configuration-only routes',()=>{
