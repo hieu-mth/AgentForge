@@ -7,6 +7,7 @@ import http.client
 import json
 import re
 from urllib.parse import parse_qs, urlsplit
+from uuid import uuid4
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8188
@@ -154,3 +155,42 @@ def request_image_bytes(path, *, body=None, timeout=5, port=DEFAULT_PORT,
     if len(raw) > max_response_bytes:
         raise ComfyUITransportError("ComfyUI image response exceeds safe size limit")
     return raw
+
+
+MAX_MOTION_INPUT_BYTES = 8 * 1024 * 1024
+
+
+def upload_motion_source(port, job_id, data):
+    """One bounded loopback upload with a generated basename and no overwrite."""
+    if (type(port) is not int or not 1 <= port <= 65535
+            or not isinstance(job_id, str) or not re.fullmatch(r"[0-9a-f]{32}", job_id)
+            or not isinstance(data, bytes) or not 0 < len(data) <= MAX_MOTION_INPUT_BYTES):
+        raise ValueError("Invalid motion input upload")
+    name = "af_motion_source_" + job_id + ".png"
+    boundary = uuid4().hex
+    prefix = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"{name}\"\r\n"
+              "Content-Type: image/png\r\n\r\n").encode("ascii")
+    body = prefix + data + f"\r\n--{boundary}--\r\n".encode("ascii")
+    with_connection = http.client.HTTPConnection(HOST, port, timeout=10)
+    try:
+        with_connection.request("POST", "/upload/image", body=body, headers={
+            "Content-Type": "multipart/form-data; boundary=" + boundary,
+        })
+        response = with_connection.getresponse()
+        if response.status != 200:
+            raise ValueError("ComfyUI did not accept the motion input")
+        raw = response.read(4097)
+        if len(raw) > 4096:
+            raise ValueError("Invalid ComfyUI upload response")
+        try:
+            saved = json.loads(raw)
+        except (ValueError, RecursionError):
+            raise ValueError("Invalid ComfyUI upload response") from None
+        if not isinstance(saved, dict) or ("asset" in saved and not isinstance(saved["asset"], dict)):
+            raise ValueError("Invalid ComfyUI upload response")
+        # ComfyUI may include asset metadata. Only the upload identity binds the graph.
+        if saved.get("name") != name or saved.get("subfolder") != "" or saved.get("type") != "input":
+            raise ValueError("ComfyUI returned an unexpected input filename")
+    finally:
+        with_connection.close()
+    return name

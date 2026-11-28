@@ -49,6 +49,34 @@ class AgnesContractTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 studio_agnes._public_addresses("example.com")
 
+    def test_cloud_generated_image_can_feed_local_motion_source(self):
+        from PIL import Image
+        import hashlib
+
+        buffer = io.BytesIO()
+        Image.new("RGB", (256, 256), "orange").save(buffer, format="PNG")
+        png = buffer.getvalue()
+        profile = self.profile(studio_agnes.IMAGE_MODEL)
+        ident = "b"*32
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            with (patch.object(visual_jobs, "DB", root/"visuals.db"),
+                  patch.object(visual_jobs, "OUTPUTS", root/"images"),
+                  patch.object(studio_agnes, "key", return_value="fixture"),
+                  patch.object(studio_agnes, "image_bytes", return_value=png),
+                  patch.object(studio_agnes_image.ops_control, "require_active")):
+                request = studio_runtime.ImageRequest("Cat", "16:9", "production/scene-01", ident, 1)
+                result = studio_agnes_image.generate(profile, request)
+                self.assertEqual(result["status"], "ASSET_READY")
+                self.assertNotIn("workflow_sha256", visual_jobs.runtime_details(ident))
+                self.assertEqual(visual_jobs.read_motion_source(ident, result["sha256"]), png)
+                with self.assertRaises(PermissionError):
+                    visual_jobs.read_motion_source(ident, "f"*64)
+                target = root/"images"/(ident+".png")
+                target.write_bytes(png + b"changed")
+                with self.assertRaises(PermissionError):
+                    visual_jobs.read_motion_source(ident, hashlib.sha256(png).hexdigest())
+
     def test_explicit_image_probe_persists_verified_asset_and_never_resubmits(self):
         from PIL import Image
         profile = self.profile(studio_agnes.IMAGE_MODEL)

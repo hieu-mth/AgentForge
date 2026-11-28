@@ -61,7 +61,7 @@ class FilmProductionTests(unittest.TestCase):
                 "plan_sha": self.plan["plan_sha256"],
                 "workflow_sha": WORKFLOW_SHA, "prompt_sha": PROMPT_SHA,
                 "seed": index + 1, "provider_id": provider,
-                "model_id": motion_verify.MODEL_ID,
+                "model_id": motion_comfy.PILOT_MODEL_ID,
                 "state": motion_verify.TECHNICAL,
                 "clip_sha256": clip_sha, "bytes": len(payload),
                 "technical": {"codec": "h264", "width": 640, "height": 352,

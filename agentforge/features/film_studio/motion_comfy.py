@@ -22,6 +22,7 @@ from agentforge import ops_control
 from agentforge.ai import model_hub
 from agentforge.integrations import comfy_service, comfyui as _comfyui
 from agentforge.features.film_studio import draft_resources, long_form, motion_ltx
+from agentforge.features.media import visual_jobs
 from agentforge.paths import DATA_DIR, WORKSPACE_DIR
 
 FILMS = WORKSPACE_DIR / "films"
@@ -104,6 +105,19 @@ def _check_attempt(conn, film_slug, shot_id, plan_sha, confirmed):
         raise PermissionError("Motion attempt unresolved; reconcile it before starting a new attempt")
     if rows and confirmed is not True:
         raise PermissionError("Owner must explicitly confirm a new motion attempt")
+
+
+def receipt_contract(source):
+    """Interpret the existing local-motion ledger's historical output dialects."""
+    if source:
+        if source.get("model_id") != motion_ltx.MODEL_ID:
+            raise MotionError("Unknown local motion receipt model")
+        profile = motion_ltx.profile(source["frames"])
+        seconds = profile["frames"] / profile["fps"]
+        return {"model_id": source["model_id"], "profile": profile,
+                "duration_range": (seconds - 0.15, seconds + 0.15), "filename_suffix": "_"}
+    return {"model_id": PILOT_MODEL_ID, "profile": dict(PROFILE),
+            "duration_range": (3.8, 4.5), "filename_suffix": ""}
 
 
 def _now():
@@ -313,7 +327,7 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
         raise MotionError("WAN_FP16_BLOCKED: preset disabled after Windows commit exhaustion")
     if is_ltx and (confirm_ltx_gate_b is not True or not isinstance(image_job, str)
                    or not isinstance(image_sha, str) or not SHA.fullmatch(image_sha) or ltx_encoder is None):
-        raise PermissionError("LTX requires Gate B confirmation, a reviewed FLUX image ID/SHA and encoder path")
+        raise PermissionError("LTX requires Gate B confirmation, a verified image ID/SHA and encoder path")
     if previous_motion is not None and not is_ltx:
         raise MotionError("This motion adapter does not support frame continuation")
     with model_hub.local_inference_slot():
@@ -338,7 +352,7 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
                     previous_motion, film_slug, film_root=film_root, db_path=db_path)
                 image_sha = _sha(image)
             else:
-                image = motion_ltx.read_source(image_job, image_sha)
+                image = visual_jobs.read_motion_source(image_job, image_sha)
             comfy_service.ensure_running(PORT)
             motion_ltx.check_runtime(PORT, require_models=True, frames=template["profile"]["frames"])
         comfy_service.require_idle_queue(PORT)
@@ -374,7 +388,7 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
                 try:
                     if on_reserved:
                         on_reserved(job_id)
-                    graph[bindings["image_node"]]["inputs"]["image"] = motion_ltx.upload_source(PORT, job_id, image)
+                    graph[bindings["image_node"]]["inputs"]["image"] = _comfyui.upload_motion_source(PORT, job_id, image)
                     comfy_service.require_other_queue_idle(PORT, include_profiles=True)
                     comfy_service.require_idle_queue(PORT)
                     draft_resources.require_gpu(operation, min_commit_mib=min_commit)

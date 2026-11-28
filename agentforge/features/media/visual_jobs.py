@@ -269,6 +269,32 @@ def image_for_job(job_id, *, db_path=None, output_root=None):
         return data, "image/png"
 
 
+def read_motion_source(job_id, expected_sha, *, db_path=None, output_root=None):
+    """Read a verified generated PNG, irrespective of the image provider.
+
+    The visual receipt, expected storyboard SHA and actual file must agree.
+    The caller still owns dispatch authorization and same-production routing.
+    """
+    if not isinstance(expected_sha, str) or not SHA.fullmatch(expected_sha):
+        raise ValueError("Invalid motion source SHA")
+    if runtime_details(job_id, db_path=db_path) is None:
+        raise ValueError("Motion requires a generated image receipt")
+    with open_image_for_job(job_id, db_path=db_path, output_root=output_root) as (source, digest):
+        if digest != expected_sha:
+            raise PermissionError("Image source SHA does not match Owner review")
+        data = source.read(MAX_IMAGE + 1)
+    if not 0 < len(data) <= MAX_IMAGE or not data.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("Motion source must be a bounded PNG")
+    if hashlib.sha256(data).hexdigest() != expected_sha:
+        raise PermissionError("Image source changed during read")
+    from PIL import Image
+    with Image.open(io.BytesIO(data), formats=["PNG"]) as image:
+        if image.width * image.height > 12_000_000:
+            raise ValueError("Motion source dimensions exceed the image budget")
+        image.verify()
+    return data
+
+
 def report(*, db_path=None):
     db = _db(db_path)
     if db is None:

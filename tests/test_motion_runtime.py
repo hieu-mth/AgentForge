@@ -207,7 +207,7 @@ class MotionRuntimeTests(unittest.TestCase):
                     if "ffprobe" in args[0] else b"")
             with patch("shutil.which", side_effect=lambda name: name), \
                  patch("subprocess.run", side_effect=fake):
-                result = verify._probe(path)
+                result = verify._probe(path, profile=motion.PROFILE, duration_range=(3.8, 4.5))
             self.assertEqual(result["frames_decoded"], 49)
             self.assertEqual(len(commands), 2)
             self.assertIn("-count_frames", commands[0][0])
@@ -219,9 +219,9 @@ class MotionRuntimeTests(unittest.TestCase):
         job_id = "a" * 32
         path = self.outputs / f"af_motion_{job_id}_00001_.mp4"
         path.write_bytes(b"x" * 1024)
-        self.assertEqual(verify._output_source(self.outputs, path.name, job_id, ltx=True), path)
+        self.assertEqual(verify._output_source(self.outputs, path.name, job_id, filename_suffix="_"), path)
         with self.assertRaises(verify.MotionVerificationError):
-            verify._output_source(self.outputs, path.name, job_id)
+            verify._output_source(self.outputs, path.name, job_id, filename_suffix="")
         stream = {"codec_name":"h264", "width":512, "height":288,
                   "avg_frame_rate":"24/1", "nb_read_frames":"33"}
         metadata = {"streams":[stream], "format":{"duration":"1.375", "format_name":"mov,mp4"}}
@@ -230,10 +230,22 @@ class MotionRuntimeTests(unittest.TestCase):
                 stream["nb_read_frames"] = str(frames)
                 metadata["format"]["duration"] = str(frames / 24)
                 with patch.object(verify, "_run", return_value=json.dumps(metadata).encode()) as runner:
-                    self.assertEqual(verify._probe(path, ltx_frames=frames)["frames_decoded"], frames)
+                    self.assertEqual(verify._probe(path, profile=motion.motion_ltx.profile(frames), duration_range=(frames/24-0.15, frames/24+0.15))["frames_decoded"], frames)
                     self.assertEqual([call.args[0] for call in runner.call_args_list], ["ffprobe", "ffmpeg"])
                     with self.assertRaises(verify.MotionVerificationError):
-                        verify._probe(path, ltx_frames=other)
+                        verify._probe(path, profile=motion.motion_ltx.profile(other), duration_range=(other/24-0.15, other/24+0.15))
+
+    def test_mp4_probe_accepts_non_preset_contract_and_rejects_wrong_frames(self):
+        path = self.outputs / "alternate.mp4"
+        path.write_bytes(TEST_MP4)
+        profile = {"width": 320, "height": 192, "fps": 30, "frames": 150}
+        metadata = {"streams": [{"codec_name": "h264", "width": 320, "height": 192,
+                                 "avg_frame_rate": "30/1", "nb_read_frames": "150"}],
+                    "format": {"duration": "5.0", "format_name": "mov,mp4"}}
+        with patch.object(verify, "_run", return_value=json.dumps(metadata).encode()):
+            self.assertEqual(verify._probe(path, profile=profile, duration_range=(4.85, 5.15))["frames_decoded"], 150)
+            with self.assertRaises(verify.MotionVerificationError):
+                verify._probe(path, profile={**profile, "frames": 149}, duration_range=(4.85, 5.15))
 
     def test_ltx_source_profile_import_uses_exact_current_ledger_frames(self):
         info, filename = self.completed()
@@ -244,7 +256,7 @@ class MotionRuntimeTests(unittest.TestCase):
         with closing(motion._db(self.db)) as conn, conn:
             conn.execute("INSERT INTO motion_sources VALUES (?,?,?,?,?)",
                          (job_id, motion.motion_ltx.MODEL_ID, "b"*32, "d"*64, 33))
-        self.assertEqual(verify._job(job_id, self.db)["ltx_frames"], 33)
+        self.assertEqual(verify._job(job_id, self.db)["profile"]["frames"], 33)
         with closing(motion._db(self.db)) as conn, conn:
             conn.execute("UPDATE motion_sources SET frames=49 WHERE job_id=?", (job_id,))
         stream = {"codec_name":"h264", "width":512, "height":288,

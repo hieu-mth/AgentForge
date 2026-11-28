@@ -1,12 +1,8 @@
 """Pinned single-pass LTX-Video I2V pilot graph and input preparation."""
 import hashlib
-import http.client
 import json
-import re
 from pathlib import Path
-from uuid import uuid4
 
-from agentforge.features.media import visual_jobs
 from agentforge.integrations import comfyui
 from agentforge.paths import ensure_local_root
 
@@ -21,7 +17,6 @@ FRAME_PRESETS = (33, 49)
 EXTENDED_MIN_COMMIT_MIB = 20 * 1024
 # Lightricks 0.9.8 distilled first-pass knots, with Comfy's terminal zero.
 SIGMAS = "1.0, 0.9937, 0.9875, 0.9812, 0.9750, 0.9094, 0.7250, 0.0"
-MAX_INPUT_BYTES = 8 * 1024 * 1024
 
 
 def profile(frames):
@@ -57,21 +52,6 @@ def workflow(frames=33):
             "output_node": "13", "api": {
                 key: {"class_type": node, "inputs": inputs} for key, (node, inputs) in graph.items()
             }}
-
-
-def read_source(job_id, expected_sha):
-    details = visual_jobs.runtime_details(job_id)
-    if not details or not details.get("workflow_sha256"):
-        raise ValueError("LTX requires a saved FLUX image")
-    with visual_jobs.open_image_for_job(job_id) as (source, digest):
-        if digest != expected_sha:
-            raise PermissionError("FLUX source SHA does not match Owner review")
-        data = source.read(MAX_INPUT_BYTES + 1)
-    if len(data) > MAX_INPUT_BYTES or not data.startswith(b"\x89PNG\r\n\x1a\n"):
-        raise ValueError("LTX source must be a bounded PNG")
-    if hashlib.sha256(data).hexdigest() != expected_sha:
-        raise PermissionError("FLUX source changed during read")
-    return data
 
 
 def _weight_file(path, name, size):
@@ -134,37 +114,3 @@ def check_runtime(port, *, require_models=False, frames=33):
                 if type(minimum) is not int or type(step) is not int or step < 1 or (value - minimum) % step:
                     raise ValueError("LTX frame preset does not match runtime length step")
     return sorted(checked)
-
-
-def upload_source(port, job_id, data):
-    """One bounded loopback upload with a generated basename and no overwrite."""
-    if not re.fullmatch(r"[0-9a-f]{32}", job_id) or not 0 < len(data) <= MAX_INPUT_BYTES:
-        raise ValueError("Invalid LTX input upload")
-    name = "af_motion_source_" + job_id + ".png"
-    boundary = uuid4().hex
-    prefix = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"image\"; filename=\"{name}\"\r\n"
-              "Content-Type: image/png\r\n\r\n").encode("ascii")
-    body = prefix + data + f"\r\n--{boundary}--\r\n".encode("ascii")
-    with_connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
-    try:
-        with_connection.request("POST", "/upload/image", body=body, headers={
-            "Content-Type": "multipart/form-data; boundary=" + boundary,
-        })
-        response = with_connection.getresponse()
-        if response.status != 200:
-            raise ValueError("ComfyUI did not accept the LTX input")
-        raw = response.read(4097)
-        if len(raw) > 4096:
-            raise ValueError("Invalid ComfyUI upload response")
-        try:
-            saved = json.loads(raw)
-        except (ValueError, RecursionError):
-            raise ValueError("Invalid ComfyUI upload response") from None
-        if not isinstance(saved, dict) or ("asset" in saved and not isinstance(saved["asset"], dict)):
-            raise ValueError("Invalid ComfyUI upload response")
-        # ComfyUI may include asset metadata. Only the upload identity binds the graph.
-        if saved.get("name") != name or saved.get("subfolder") != "" or saved.get("type") != "input":
-            raise ValueError("ComfyUI returned an unexpected input filename")
-    finally:
-        with_connection.close()
-    return name
