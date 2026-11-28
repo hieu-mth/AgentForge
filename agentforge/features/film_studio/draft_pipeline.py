@@ -1463,7 +1463,11 @@ def _storyboard_action(job, action, data):
         moving = job["brief"].get("mode") == "motion"
         if scope not in ("image", "motion") or (scope == "motion" and not moving):
             raise ValueError("Phạm vi tạo lại cảnh không hợp lệ.")
-        direct = job.get("production_plan", {}).get("method") == "cloud"
+        direct = (job.get("production_plan", {}).get("method") == "cloud" or
+                  job.get("production_plan", {}).get("input_modes") == ["text-to-video"] or
+                  ("studio_plan" in job and "image.generate" not in job["studio_plan"]))
+        if direct and scope == "image":
+            raise ValueError("Tuyến video từ văn bản không sử dụng ảnh nguồn.")
         if (not direct and not scene.get("asset")) or (moving and not scene.get("motion_sha")):
             raise ValueError("Cảnh chưa có tài sản hoàn chỉnh để tạo phiên bản mới.")
         # Keep historical files; a replaced image also invalidates its dependent clip.
