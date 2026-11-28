@@ -126,7 +126,8 @@ class DraftTests(unittest.TestCase):
             job.update(board=draft._story(self.board(), 2, 4, {"cat": {}}), cast={})
         with (patch.object(draft, "_dispatch"), patch.object(draft, "_write_board", side_effect=storyboard),
               patch.object(studio_runtime, "motion_adapter", side_effect=AssertionError("motion before review"))):
-            job = draft.submit({"id": self.ident, **self.submission, "mode": "motion", "seconds": 4})
+            job = draft.submit({"id": self.ident, **self.submission, "mode": "motion", "seconds": 4,
+                                "route_strategy": "assigned"})
             draft._work(job, nullcontext())
         saved = draft._read(self.ident)
         self.assertEqual(saved["status"], "STORYBOARD_REVIEW", saved.get("error"))
@@ -220,6 +221,32 @@ class DraftTests(unittest.TestCase):
             self.assertNotIn("cloud_motion_seconds", saved)
             with self.assertRaises(PermissionError):
                 draft.act(self.ident, "storyboard-approve", {"sha256": saved["storyboard_sha"]})
+
+    def test_automatic_cloud_budget_uses_billable_seconds_and_reserved_history(self):
+        job = {"production_plan": {"method": "cloud", "cloud_budget_mode": "timeline",
+                                  "billable_durations_seconds": [6, 8], "max_cloud_seconds": 0},
+               "motion_plan": {"output": {"fps": 24, "max_frames": 192}},
+               "cloud_motion_seconds": 6,
+               "board": {"scenes": [{"frames": 48, "motion_job": "existing"},
+                                    {"frames": 168}, {"frames": 48}]}}
+        draft._refresh_cloud_budget(job)
+        self.assertEqual(job["production_plan"]["max_cloud_seconds"], 20)
+        job["board"]["scenes"][1]["frames"] = 24
+        draft._refresh_cloud_budget(job)
+        self.assertEqual(job["production_plan"]["max_cloud_seconds"], 18)
+        job["production_plan"].pop("cloud_budget_mode")
+        draft._refresh_cloud_budget(job)
+        self.assertEqual(job["production_plan"]["max_cloud_seconds"], 18)
+
+    def test_explicit_cast_does_not_invoke_ai(self):
+        rows = [{"id": "cat", "name": "Miu", "appearance": "Orange cat", "version": 1}]
+        with (patch.object(draft.characters, "list_characters", return_value={"characters": rows}),
+              patch.object(draft, "_ask", side_effect=AssertionError("unexpected inference"))):
+            bindings = {"film.storyboard": {}}
+            self.assertIn("cat", draft._select_cast({"brief": {"character_ids": ["cat"]}}, bindings, "Story"))
+            self.assertEqual(draft._select_cast({"brief": {"character_ids": []}}, bindings, "Story"), {})
+            with self.assertRaisesRegex(ValueError, "không còn hoạt động"):
+                draft._select_cast({"brief": {"character_ids": ["missing"]}}, bindings, "Story")
 
     def test_unexpected_error_has_safe_diagnostic_code(self):
         job = {"id": self.ident, "stage": "PLANNING", "status": "RUNNING",
