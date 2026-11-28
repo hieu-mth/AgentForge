@@ -1082,16 +1082,18 @@ try {
   const fluxPage=await browser.newPage({viewport:{width:1280,height:850}});
   await fluxPage.route('**/api/session',route=>route.fulfill({json:{csrf:'fixture'}}));
   await fluxPage.route('**/api/model-hub',route=>route.fulfill({json:{
-    revision:4,adapters:[{id:'comfyui',label:'ComfyUI',connection:'local'}],
+    revision:4,adapters:[{id:'comfyui',label:'ComfyUI',connection:'local',media_probe:true}],
     profiles:[{id:'fixture_flux',provider:'comfyui',model:'fixture.gguf',enabled:true,
-      flux:{max_resolution:768,max_steps:4,timeout_seconds:60}}],
+      flux:{max_resolution:768,max_steps:4,timeout_seconds:60},capability_contracts:[{capability:'image.generate',runtime_compatible:true}]}],
   }}));
-  let probes=0, finishProbe;
+  let probes=0, finishProbe, probeId;
   await fluxPage.route('**/api/model-hub/probe',async route=>{
     const body=route.request().postDataJSON();
-    if(body.ack!=='RUN_FLUX_MODEL_PROBE'||body.profile_id!=='fixture_flux'||
+    if(body.ack!=='RUN_MEDIA_MODEL_PROBE'||body.profile_id!=='fixture_flux'||!(/^[a-f0-9]{32}$/.test(body.probe_id))||
         body.expected_revision!==4||body.width!==768||body.height!==768||body.steps!==4||
         'seed' in body)throw new Error('Unexpected FLUX probe payload');
+    if(probeId&&probeId!==body.probe_id)throw new Error('Probe ID changed on explicit retry');
+    probeId=body.probe_id;
     probes++;
     if(probes===1)return route.fulfill({status:400,json:{message:'COMFYUI_TIMEOUT'}});
     await new Promise(resolve=>{finishProbe=resolve;});
@@ -1110,7 +1112,7 @@ try {
   const createImage=fluxDialog.locator('button[type="submit"]');
   await createImage.click();
   await fluxDialog.getByText('ComfyUI phản hồi quá chậm',{exact:true}).waitFor();
-  await createImage.click();
+  await fluxDialog.getByRole('button',{name:'Thử lại yêu cầu này',exact:true}).click();
   await fluxDialog.getByText(/Đang tạo và xác minh ảnh/).waitFor();
   if(await fluxDialog.getByLabel('Prompt',{exact:true}).isEnabled())
     throw new Error('FLUX form remains editable during dispatch');
