@@ -7,6 +7,8 @@ import tempfile
 import unittest
 from contextlib import closing
 from pathlib import Path
+from unittest.mock import patch
+from contextlib import nullcontext
 
 from agentforge.features.film_studio import character_references as refs, characters
 
@@ -88,6 +90,28 @@ class ReferenceTests(unittest.TestCase):
                 {"name": "No primary"},
                 {"expected_revision": 0, "images": [images[-1]], "keep_roles": []}, self.db)
         self.assertNotIn("No primary", [row["name"] for row in characters.list_characters(self.db)["characters"]])
+
+    def test_character_analysis_requires_cloud_consent_and_preserves_record(self):
+        from agentforge.ai import model_hub
+        from agentforge.features.film_studio import studio_vision
+
+        before = refs.save_pack(self.request(), self.db)
+        profile = {"id": "vision", "provider": "openai", "model": "fixture"}
+        reference = {"data_base64": base64.b64encode(self.payload).decode("ascii")}
+        suggestion = {"appearance": "Lông cam", "uncertainties": "Chưa thấy mặt sau"}
+        with (patch.object(model_hub, "vision_binding", return_value=(1, profile, 1)),
+              patch.object(model_hub, "media_probe_dispatch", return_value=nullcontext()),
+              patch.object(studio_vision, "describe_identity", return_value=suggestion) as describe):
+            with self.assertRaises(PermissionError):
+                refs.analyze_primary(reference, allow_cloud=False)
+            describe.assert_not_called()
+            result = refs.analyze_primary(reference, allow_cloud=True)
+            self.assertEqual(result["appearance"], suggestion["appearance"])
+            self.assertEqual(result["scope"], "PRIMARY_IMAGE_ADVISORY")
+            self.assertLessEqual(len(describe.call_args.args[1]), studio_vision.MAX_SHEET_BYTES)
+            describe.assert_called_once()
+        self.assertEqual(refs.list_packs(self.ident, self.db), before)
+        self.assertEqual(characters.list_characters(self.db)["characters"][0]["appearance"], "")
 
     def test_archive_keeps_pinned_reference_readable(self):
         refs.save_pack(self.request(), self.db)
