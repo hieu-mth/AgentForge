@@ -510,9 +510,17 @@ def _draft_bindings(state, *, moving, planning=False, motion_ref=None, direct_cl
     profiles = _profiles(state=state)
     refs = state["routes"]
     bindings = {}
+    local_direct = False
+    if not planning and moving is True and not direct_cloud:
+        selected = profiles.get(motion_ref or refs.get("film.motion"))
+        if selected and selected["enabled"] and not is_cloud(selected):
+            video = orchestrator_policy.runtime_adapter("video", selected)
+            if video:
+                modes = video.input_modes(selected)
+                local_direct = "text-to-video" in modes and "image-to-video" not in modes
     capabilities = PLANNING_CAPABILITIES if planning else (*PLANNING_CAPABILITIES, "image.generate", "film.motion")
     for capability in capabilities:
-        if (capability == "film.motion" and moving is False) or (capability == "image.generate" and direct_cloud):
+        if (capability == "film.motion" and moving is False) or (capability == "image.generate" and (direct_cloud or local_direct)):
             continue
         ref = motion_ref if capability == "film.motion" and motion_ref else refs.get(capability)
         if ref is None and (capability == "character.select" or (capability == "film.motion" and moving is None)):
@@ -531,7 +539,7 @@ def _draft_bindings(state, *, moving, planning=False, motion_ref=None, direct_cl
         if capability == "film.motion":
             if direct_cloud and not is_cloud(profile):
                 raise ModelConfigError("Cloud trực tiếp cần adapter cloud video.")
-            mode = "text-to-video" if direct_cloud else "image-to-video"
+            mode = "text-to-video" if direct_cloud or local_direct else "image-to-video"
             if mode not in adapter.input_modes(profile):
                 raise ModelConfigError(f"film.motion: adapter không hỗ trợ {mode}.")
         bindings[capability] = profile
@@ -834,8 +842,7 @@ def _video_methods(profile, adapter):
     if is_cloud(profile):
         return tuple(method for method, mode in (("cloud", "text-to-video"), ("hybrid", "image-to-video"))
                      if mode in modes)
-    # Local production currently implements I2V. Do not advertise unimplemented local T2V.
-    return ("local",) if "image-to-video" in modes else ()
+    return ("local",) if any(mode in modes for mode in ("image-to-video", "text-to-video")) else ()
 
 
 def _production_candidates(state, strategy):

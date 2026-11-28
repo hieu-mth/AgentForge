@@ -15,6 +15,8 @@ ENCODER = "t5xxl_fp8_e4m3fn.safetensors"
 ENCODER_SHA = "7d330da4816157540d6bb7838bf63a0f02f573fc48ca4d8de34bb0cbfd514f09"
 FORMAT = "agentforge.film.comfy.ltx_i2v.v1"
 CONFIGURED_FORMAT = "agentforge.film.comfy.i2v.v2"
+T2V_FORMAT = "agentforge.film.comfy.ltx_t2v.v1"
+CONFIGURED_FORMATS = (CONFIGURED_FORMAT, T2V_FORMAT)
 MAX_CONFIG_BYTES = 16000
 MAX_CONFIG_FRAMES = 97
 PROFILE = {"width": 512, "height": 288, "frames": 33, "fps": 24, "batch_size": 1}
@@ -59,8 +61,26 @@ def workflow(frames=33):
             }}
 
 
+def configured_input_mode(record):
+    return "text-to-video" if record["format"] == T2V_FORMAT else "image-to-video"
+
+
+def text_workflow():
+    """Reviewed prompt-only variant of the same checkpoint-based topology."""
+    record = workflow(49)
+    record["format"] = T2V_FORMAT
+    del record["image_node"]
+    graph = record["api"]
+    del graph["5"]
+    graph["6"] = {"class_type": "EmptyLTXVLatentVideo", "inputs": {
+        "width": PROFILE["width"], "height": PROFILE["height"], "length": 49, "batch_size": 1}}
+    graph["7"]["inputs"].update(positive=["3", 0], negative=["4", 0])
+    graph["10"]["inputs"]["latent_image"] = ["6", 0]
+    return record
+
+
 def configured_output(record):
-    """Bounded output of the supported I2V graph dialect, not a VRAM estimate."""
+    """Bounded output of supported local video dialects, not a VRAM estimate."""
     size = record["api"]["6"]["inputs"]
     result = {"width": size["width"], "height": size["height"], "frames": size["length"],
               "fps": record["api"]["12"]["inputs"]["fps"], "batch_size": 1}
@@ -75,7 +95,7 @@ def validate_output(result):
             or not 9 <= frames <= MAX_CONFIG_FRAMES or (frames - 1) % 8
             or not 8 <= fps <= 30 or frames > fps * 5
             or w * h * frames > 512 * 288 * 49):
-        raise ValueError("Video workflow exceeds the bounded I2V output budget")
+        raise ValueError("Video workflow exceeds the bounded video output budget")
 
 
 def _safe_weight(name):
@@ -92,8 +112,8 @@ def configured_workflow(record, model=None):
     Future graph dialects belong at this boundary, not in the production core.
     """
     try:
-        if not isinstance(record, dict) or record.get("format") != CONFIGURED_FORMAT:
-            raise ValueError("Expected configured I2V workflow wrapper")
+        if not isinstance(record, dict) or record.get("format") not in CONFIGURED_FORMATS:
+            raise ValueError("Expected configured video workflow wrapper")
         output = configured_output(record)
         checkpoint = record["api"]["1"]["inputs"]["ckpt_name"]
         encoder = record["api"]["2"]["inputs"]["clip_name"]
@@ -105,8 +125,8 @@ def configured_workflow(record, model=None):
                 or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value)
                        for value in hashes.values())):
             raise ValueError("Configured video requires both weight SHA-256 digests")
-        expected = workflow(49)
-        expected.update(format=CONFIGURED_FORMAT, weights_sha256=hashes)
+        expected = text_workflow() if record["format"] == T2V_FORMAT else workflow(49)
+        expected.update(format=record["format"], weights_sha256=hashes)
         graph = expected["api"]
         graph["1"]["inputs"]["ckpt_name"] = checkpoint
         graph["2"]["inputs"]["clip_name"] = encoder
@@ -119,7 +139,7 @@ def configured_workflow(record, model=None):
             raise ValueError("Unsupported video graph topology or sampling settings")
         return record
     except (KeyError, TypeError, IndexError, RecursionError) as exc:
-        raise ValueError("Invalid configured I2V workflow") from exc
+        raise ValueError("Invalid configured video workflow") from exc
 
 
 def configured_weights(record):
@@ -200,7 +220,7 @@ def check_runtime(port, *, require_models=False, frames=33, record=None):
             if isinstance(value, (int, float)) and (
                     value < bounds.get("min", value) or value > bounds.get("max", value)):
                 raise ValueError(f"LTX node value outside runtime range: {kind}.{field}")
-            if kind == "LTXVImgToVideo" and field == "length":
+            if kind in {"LTXVImgToVideo", "EmptyLTXVLatentVideo"} and field == "length":
                 minimum, step = bounds.get("min"), bounds.get("step")
                 if type(minimum) is not int or type(step) is not int or step < 1 or (value - minimum) % step:
                     raise ValueError("LTX frame preset does not match runtime length step")

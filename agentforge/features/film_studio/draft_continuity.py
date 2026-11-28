@@ -108,13 +108,16 @@ def invalidate_dependencies(scenes, old_scenes, old_checkpoints):
             clear_motion(scene)
 
 
-def prompt(scene):
+def prompt(scene, *, image_input=True):
     text = scene.get("motion_prompt", scene["description"])
     notes = scene.get("scene_notes", "")
     plan = scene.get("continuity_plan")
     prefix = "Animate this shot with natural movement, preserving character identity. "
+    if not image_input:
+        prefix = "Generate this video shot with natural movement. "
+        notes = (scene.get("image_prompt", "") + " " + notes).strip()
     if not plan:
-        return prefix + text + " " + notes
+        return (prefix + text + " " + notes)[:1100] if not image_input else prefix + text + " " + notes
     boundary = (" Start state: " + plan["start_state"] + ". End state: " + plan["end_state"] + ". ")
     if plan["transition"] == "CONTINUE":
         boundary += "Continue from supplied frame without replaying the previous action. "

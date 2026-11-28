@@ -213,6 +213,31 @@ class OrchestratorTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "text-to-video"):
                 model_hub.draft_routes(db_path=self.db, moving=True, motion_ref="image_video", direct_cloud=True)
 
+    def test_local_t2v_admission_does_not_require_an_image_route(self):
+        from agentforge.features.film_studio import motion_ltx
+
+        self.seed()
+        record = motion_ltx.text_workflow()
+        record["weights_sha256"] = {"checkpoint": "a"*64, "encoder": "b"*64}
+        video = {"id": "local_video", "provider": "comfyui", "model": motion_ltx.CHECKPOINT,
+                 "enabled": True, "base_url": "http://127.0.0.1:8188",
+                 "motion_encoder": str(self.db.parent / motion_ltx.ENCODER), "comfy_video": record}
+        model_hub.change("SAVE_MODEL_PROFILE", expected_revision=2, db_path=self.db, profile=video)
+        self.assign("general.text", "local_primary", revision=3)
+        self.assign("film.storyboard", "local_primary", revision=4)
+        self.assign("film.motion", "local_video", revision=5)
+        p = policy.defaults()
+        p.update(permissions=dict.fromkeys(p["permissions"], True), tools=["ffmpeg"])
+        self.save(p, revision=6)
+        _, bindings = model_hub.draft_routes(db_path=self.db, moving=True)
+        self.assertNotIn("image.generate", bindings)
+        self.assertEqual(bindings["film.motion"]["id"], "local_video")
+        _, candidates = model_hub.production_candidates("local", db_path=self.db)
+        self.assertEqual([(c["id"], c["execution_ready"], c["input_modes"]) for c in candidates],
+                         [("local_video", True, ["text-to-video"])])
+        with self.assertRaises(ValueError):
+            model_hub.draft_routes(db_path=self.db, moving=True, motion_ref="local_video", direct_cloud=True)
+
     def test_planning_candidates_do_not_require_media_permissions(self):
         self.seed()
         video = {"id": "cloud_video", "provider": "ltx_cloud", "model": "ltx-2-3-fast",

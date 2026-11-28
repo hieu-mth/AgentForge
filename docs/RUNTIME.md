@@ -179,3 +179,14 @@ The blocked Wan FP16 path remains blocked. Existing legacy profiles and
 receipts retain their original interpretation; the local motion ledger
 upgrades version 2 to 3 transactionally on write, preserving unresolved
 jobs and all existing source evidence.
+
+A second reviewed dialect, `agentforge.film.comfy.ltx_t2v.v1`, uses
+`motion_ltx.text_workflow()` as its template. It uses an empty LTX video
+latent instead of LoadImage and I2V conditioning, and the same explicit
+checkpoint/encoder hashes and output limits. A local prompt-only profile
+is admitted without an image route, does not upload or read an image,
+and rejects frame continuation. The v3 receipt records empty source
+fields for T2V (no image provenance), with the actual output metadata;
+existing I2V and archived pilot receipts are unchanged. Runtime node and
+weight checks still apply. This is one reviewed topology, not support for
+arbitrary video graphs or certification of real inference.
