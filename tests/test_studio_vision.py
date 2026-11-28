@@ -39,6 +39,18 @@ class VisionTests(unittest.TestCase):
             payload = call.call_args.kwargs["payload"]
             self.assertEqual(payload["messages"][1]["images"], [base64.b64encode(b"image").decode()])
 
+    def test_character_description_uses_separate_schema(self):
+        profile = {"provider": "ollama", "model": "fixture", "base_url": "http://127.0.0.1:11434"}
+        result = {"appearance": "Mèo lông đen", "uncertainties": "Chưa rõ màu mắt"}
+        with (patch.object(studio_vision.runtime, "_installed_local_model", return_value=True),
+              patch.object(studio_vision.runtime, "_http_json", return_value={
+                  "done": True, "message": {"content": json.dumps(result)}}) as call):
+            self.assertEqual(studio_vision.describe_identity(profile, b"image"), result)
+            self.assertEqual(call.call_args.kwargs["payload"]["format"], studio_vision.IDENTITY_SCHEMA)
+        with patch.object(studio_vision, "_infer_json", return_value=self.result):
+            with self.assertRaises(ValueError):
+                studio_vision.describe_identity(profile, b"image")
+
     def test_invalid_verdict_and_unsubstantiated_fail_rejected(self):
         for bad in (dict(self.result, verdict="unknown"), dict(self.result, issues=[]), {}):
             with self.assertRaises(ValueError):
