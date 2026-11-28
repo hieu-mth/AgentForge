@@ -177,6 +177,15 @@ def dispatch(self, route):
     if route == "/api/ops/preflight":
         from agentforge.ops.preflight import inspect
         return self._reply(200, inspect())
+    if route.startswith("/api/model-hub/media-probe/") and route.endswith("/local-preview"):
+        from agentforge.features.film_studio import media_probe
+        from agentforge.api.routes.film_preview import _serve
+        parts = route.split("/")
+        if len(parts) != 6:
+            raise ValueError("Invalid local media probe preview route")
+        receipt = media_probe.local_video_record(parts[4])
+        return _serve(self, media_probe.local_video_path(receipt), media_probe.MAX_VIDEO, "probe.mp4",
+                      lambda stream: media_probe.verify_local_video(receipt, stream))
     if route.startswith("/api/model-hub/media-probe/") and route.endswith("/preview"):
         from agentforge.features.film_studio import media_probe
         from agentforge.api.routes.film_preview import _serve
