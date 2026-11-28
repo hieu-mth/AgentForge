@@ -12,6 +12,12 @@ def handle(server, path, request, session=None):
                 or set(request) - {"ack", "character", "pack"} or "character" not in request):
             raise ValueError("Explicit character save acknowledgement required")
         return character_references.save_character_with_pack(request["character"], request.get("pack"))
+    if path == "/api/characters/analyze":
+        if session is None or not server.allow_external_actions:
+            raise PermissionError("Explicit Owner inference approval required")
+        if set(request) != {"ack", "reference", "allow_cloud"} or request["ack"] != "ANALYZE_CHARACTER_PRIMARY":
+            raise ValueError("Explicit character analysis acknowledgement required")
+        return character_references.analyze_primary(request["reference"], allow_cloud=request["allow_cloud"])
     if path == "/api/characters/archive":
         if set(request) != {"ack", "character_id", "expected_version", "archived"} or request["ack"] != "SET_CHARACTER_ARCHIVED":
             raise ValueError("Explicit character archive acknowledgement required")
