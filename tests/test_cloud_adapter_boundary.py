@@ -97,6 +97,21 @@ class CloudBoundaryTests(unittest.TestCase):
                     media_probe._local_video(ident, profile, prompt + " Different.")
                 submit.assert_called_once()
 
+    def test_verified_local_probe_does_not_require_gpu_or_provider(self):
+        from agentforge.features.film_studio import media_probe
+        row = {"job_id": "d"*32, "state": "COMPLETE_UNVERIFIED"}
+        with (patch.object(media_probe.motion_verify, "inspect_receipt", return_value={"clip_sha256": "a"*64}),
+              patch.object(media_probe.model_hub, "local_inference_slot") as slot,
+              patch.object(media_probe.draft_motion, "_provider") as provider):
+            self.assertEqual(media_probe._collect_local("c"*32, row)["status"], "ASSET_READY")
+            slot.assert_not_called()
+            provider.assert_not_called()
+        with (patch.object(media_probe.motion_verify, "inspect_receipt", side_effect=ValueError("Corrupt receipt")),
+              patch.object(media_probe.model_hub, "local_inference_slot") as slot):
+            with self.assertRaisesRegex(ValueError, "Corrupt receipt"):
+                media_probe._collect_local("c"*32, row)
+            slot.assert_not_called()
+
     def test_unknown_provider_error_cannot_authorize_retry(self):
         with self.assertRaises(ValueError):
             ProviderRequestError("unknown", retryable=True)
