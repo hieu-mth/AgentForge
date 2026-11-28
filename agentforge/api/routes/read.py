@@ -59,8 +59,8 @@ def dispatch(self, route):
                           lambda stream: motion.verify_clip(scene, stream))
         raise ValueError("Invalid draft asset route")
     if route == "/api/characters":
-        from agentforge.features.film_studio.characters import list_characters
-        return self._reply(200, list_characters())
+        from agentforge.features.film_studio.character_references import library
+        return self._reply(200, library())
     if route.startswith("/api/characters/"):
         from agentforge.features.film_studio import character_references
         parts = route.split("/")
