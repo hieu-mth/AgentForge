@@ -26,6 +26,7 @@ LINKS = {
 MODEL_FILE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_. -]{0,139}\.(?:gguf|safetensors)\Z", re.I)
 FOLDER = re.compile(r"[A-Za-z0-9_-]{1,48}(?:/[A-Za-z0-9_-]{1,48}){0,3}\Z")
 MAX_WORKFLOW_BYTES = 16_000
+IMAGE_OPTION_LIMITS = {"max_resolution": (256, 1536), "max_steps": (1, 20), "timeout_seconds": (5, 600)}
 
 
 def _integer(value, lower, upper, label):
@@ -79,9 +80,8 @@ def validate(config, model, endpoint):
         raise ValueError("Invalid FLUX runtime settings")
     if urlsplit(endpoint).hostname not in {"127.0.0.1", "localhost"}:
         raise ValueError("FLUX requires an IPv4 loopback endpoint")
-    _integer(config["max_resolution"], 256, 1536, "resolution limit")
-    _integer(config["max_steps"], 1, 20, "steps limit")
-    _integer(config["timeout_seconds"], 5, 600, "timeout")
+    for name, (lower, upper) in IMAGE_OPTION_LIMITS.items():
+        _integer(config[name], lower, upper, name)
     folder = config["output_dir"]
     if (not isinstance(folder, str) or not FOLDER.fullmatch(folder)
             or any(ntpath.isreserved(part) for part in folder.split("/"))):
