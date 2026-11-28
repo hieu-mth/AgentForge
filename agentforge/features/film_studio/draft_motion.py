@@ -47,7 +47,8 @@ def _workflow_bytes(profile=None):
 
 
 def input_modes(profile):
-    return ("image-to-video",)
+    record = profile.get("comfy_video")
+    return (motion_ltx.configured_input_mode(record),) if record else ("image-to-video",)
 
 
 def output_profile(profile):
@@ -301,6 +302,9 @@ def retryable_motion_job(job_id):
 def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard=nullcontext,
              retry_motion_job=None, previous_motion=None):
     slug, plan_sha, workflow, digest = prepared
+    is_i2v = "image-to-video" in input_modes(profile)
+    if previous_motion is not None and not is_i2v:
+        raise ValueError("Frame continuation requires an image-to-video workflow.")
     if previous_motion is not None:
         clip_path(previous_motion)
     if scene.get("motion_sha"):
@@ -324,9 +328,9 @@ def run_shot(scene, index, prepared, profile, save, cancelled, *, dispatch_guard
                 raise ValueError("Draft cancelled before motion dispatch")
         try:
             motion_comfy.submit_shot(film_slug=slug, shot_id=f"sh-{index+1:05d}", plan_sha=plan_sha,
-                prompt=draft_continuity.prompt(scene),
+                prompt=draft_continuity.prompt(scene, image_input=False) if not is_i2v else draft_continuity.prompt(scene),
                 workflow_path=workflow, workflow_sha=digest, seed=scene.get("motion_seed", 42+index), confirmed=True,
-                image_job=scene["job_id"], image_sha=scene["asset"],
+                **({"image_job": scene["job_id"], "image_sha": scene["asset"]} if is_i2v else {}),
                 ltx_encoder=Path(profile["motion_encoder"]), confirm_ltx_gate_b=True, on_reserved=reserve,
                 confirm_new_attempt=retry_motion_job is not None,
                 db_path=motion_comfy.DB, film_root=motion_comfy.FILMS, dispatch_guard=dispatch_guard,
