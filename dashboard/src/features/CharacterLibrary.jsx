@@ -86,7 +86,7 @@ export function CharacterLibrary({mutate,onNavigate}) {
       {!items.length&&!registry.loading&&!registry.error&&<Empty description={archived?'Chưa có nhân vật lưu trữ':'Chưa có nhân vật'}/>}
       <Row gutter={[16,16]}>{items.map(item=>{
         const pack=item.reference_pack;
-        return <Col key={item.id} xs={24} sm={12} lg={8} xl={6}><Card size="small"
+        return <Col key={item.id} xs={24} sm={12} lg={8} xl={6}><Card size="small" style={{height:'100%'}}
           cover={pack?.preview_url?<Image alt={'Ảnh nhận diện '+item.name} src={pack.preview_url} height={180}
             style={{objectFit:'contain',background:'rgba(128,128,128,.08)'}}/>:
             <div style={{height:180,display:'grid',placeItems:'center',background:'rgba(128,128,128,.08)'}}><Text type="secondary">Chưa có ảnh</Text></div>}>
