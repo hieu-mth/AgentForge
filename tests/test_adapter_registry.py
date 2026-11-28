@@ -31,7 +31,8 @@ class RegistryTests(unittest.TestCase):
                 raise ValueError("Invalid fixture variant")
             return options
 
-        profile_options = registry.ProfileOptions((frozenset({"variant"}),), validate_options)
+        profile_options = registry.ProfileOptions(({"id": "fixture", "label": "Fixture", "fields": [
+            {"path": ["variant"], "kind": "text", "label": "Variant", "required": True}]},), validate_options)
         with (tempfile.TemporaryDirectory() as directory,
               patch.dict(registry.PROFILE_OPTIONS, {provider: profile_options}),
               patch.dict(registry.ADAPTERS, {provider: descriptor}),
@@ -45,6 +46,8 @@ class RegistryTests(unittest.TestCase):
                 result = model_hub.change("SAVE_MODEL_PROFILE", expected_revision=revision * 2,
                                           db_path=db, profile=profile)
                 self.assertTrue(result["profiles"][0]["runtime_supported"])
+                advertised = next(item for item in result["adapters"] if item["id"] == provider)
+                self.assertEqual(advertised["profile_schema"]["option_variants"], profile_options.ui_variants)
                 model_hub.change("SET_MODEL_ROUTE", expected_revision=revision * 2 + 1,
                                  db_path=db, task_id="general.text", model_ref=profile["id"])
                 self.assertIs(orchestrator_policy.runtime_adapter("text", profile), adapter)
@@ -62,8 +65,9 @@ class RegistryTests(unittest.TestCase):
         descriptor = {"label": "Fixture Cloud", "connection": "cloud",
                       "model_label": "Model", "defaults": {"base_url": ""},
                       "environment_defaults": {"base_url_env": "FIXTURE_URL", "api_key_env": "FIXTURE_KEY"}}
-        options = registry.ProfileOptions((frozenset({"quality"}),),
-                                          lambda profile, fields: fields)
+        options = registry.ProfileOptions(({"id": "quality", "label": "Quality", "fields": [
+            {"path": ["quality"], "kind": "text", "label": "Quality", "required": True}]},),
+            lambda profile, fields: fields)
         with (patch.dict(registry.ADAPTERS, {provider: descriptor}),
               patch.dict(registry.PROFILE_OPTIONS, {provider: options})):
             base = {"id": "cloud_fixture", "provider": provider, "model": "demo",
