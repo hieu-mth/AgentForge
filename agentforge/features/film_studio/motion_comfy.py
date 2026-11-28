@@ -131,11 +131,12 @@ def receipt_contract(source):
                 raise MotionError("Unknown historical local motion receipt model")
             profile = motion_ltx.profile(source["frames"])
         else:
-            if (any(type(value) is not int or value <= 0 for value in values)
-                    or type(source["frames"]) is not int or not 1 <= source["frames"] <= motion_ltx.MAX_CONFIG_FRAMES):
-                raise MotionError("Invalid persisted motion output contract")
             profile = {"width": values[0], "height": values[1], "fps": values[2],
                        "frames": source["frames"], "batch_size": 1}
+            try:
+                motion_ltx.validate_output(profile)
+            except ValueError as exc:
+                raise MotionError("Invalid persisted motion output contract") from exc
         seconds = profile["frames"] / profile["fps"]
         return {"model_id": source["model_id"], "profile": profile,
                 "duration_range": (seconds - 0.15, seconds + 0.15), "filename_suffix": "_"}

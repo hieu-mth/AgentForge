@@ -173,6 +173,12 @@ class MotionAdapterTests(unittest.TestCase):
             invalid["comfy_video"]["api"][node]["inputs"][field] = value
             with self.assertRaises(ValueError):
                 model_hub.validate_profile(invalid)
+        for filename in ("CON.safetensors", "../outside.safetensors", "wan2.2_ti2v_5B_fp16.safetensors"):
+            invalid = json.loads(json.dumps(profile))
+            invalid["model"] = filename
+            invalid["comfy_video"]["api"]["1"]["inputs"]["ckpt_name"] = filename
+            with self.assertRaises(ValueError):
+                model_hub.validate_profile(invalid)
         with ExitStack() as mocks:
             for target, name, value in (
                 (motion.comfy_service, "_settings", {"port": motion.PORT, "install_root": install}),

@@ -1,6 +1,7 @@
 """Pinned single-pass LTX-Video I2V pilot graph and input preparation."""
 import hashlib
 import json
+import ntpath
 import re
 from pathlib import Path
 
@@ -63,6 +64,11 @@ def configured_output(record):
     size = record["api"]["6"]["inputs"]
     result = {"width": size["width"], "height": size["height"], "frames": size["length"],
               "fps": record["api"]["12"]["inputs"]["fps"], "batch_size": 1}
+    validate_output(result)
+    return result
+
+
+def validate_output(result):
     w, h, frames, fps = (result[key] for key in ("width", "height", "frames", "fps"))
     if (any(type(v) is not int for v in (w, h, frames, fps))
             or not (256 <= w <= 640 and 256 <= h <= 640 and w % 32 == h % 32 == 0)
@@ -70,12 +76,12 @@ def configured_output(record):
             or not 8 <= fps <= 30 or frames > fps * 5
             or w * h * frames > 512 * 288 * 49):
         raise ValueError("Video workflow exceeds the bounded I2V output budget")
-    return result
 
 
 def _safe_weight(name):
     return (isinstance(name, str)
-            and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_. -]{0,139}\\.safetensors", name, re.I)
+            and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_. -]{0,139}\.safetensors", name, re.I)
+            and not ntpath.isreserved(name)
             and name.casefold() != "wan2.2_ti2v_5b_fp16.safetensors")
 
 
