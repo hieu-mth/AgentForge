@@ -848,7 +848,7 @@ def assigned_motion_profile(*, db_path=None):
 
 def production_candidates(strategy, *, db_path=None):
     """Planning candidates: compatible profiles, with separate execution-admission metadata."""
-    if strategy not in {"auto", "local", "hybrid", "cloud"}:
+    if strategy not in {"assigned", "auto", "local", "hybrid", "cloud"}:
         raise ModelConfigError("Unknown production strategy.")
     revision, state = _read_state(db_path=db_path)
     return revision, _production_candidates(state, strategy)
@@ -865,11 +865,13 @@ def _video_methods(profile, adapter):
 def _production_candidates(state, strategy):
     candidates = []
     for ident, profile in _profiles(state=state).items():
+        if strategy == "assigned" and ident != state["routes"].get("film.motion"):
+            continue
         if not orchestrator_policy.compatible("video", profile):
             continue
         adapter = orchestrator_policy.runtime_adapter("video", profile)
         for method in _video_methods(profile, adapter):
-            if strategy not in {"auto", method}:
+            if strategy not in {"assigned", "auto", method}:
                 continue
             try:
                 _draft_bindings(state, moving=True, motion_ref=ident, direct_cloud=method == "cloud")
@@ -912,19 +914,13 @@ def _production_options(state):
                  for method in ("local", "hybrid", "cloud")}
     ready = {method: any(c["method"] == method and c["execution_ready"] for c in candidates)
              for method in by_method}
-    motion = state["profiles"].get(state["routes"].get("film.motion"), {})
-    try:
-        _draft_bindings(state, moving=True)
-    except (ValueError, PermissionError):
-        assigned_ready = False
-    else:
-        assigned_ready = not is_cloud(motion)
-    assigned_cloud = is_cloud(motion)
+    assigned_ready = any(c["execution_ready"] for c in candidates
+                         if c["id"] == state["routes"].get("film.motion"))
     cloud_minimum = min((2 * c["min_billable_seconds"] for c in candidates if c["method"] != "local"),
                         default=production_router.MIN_CLOUD_SECONDS)
     return {"methods": [
-        {"id": "assigned", "available": not assigned_cloud, "execution_ready": assigned_ready},
-        {"id": "auto", "available": bool(candidates), "execution_ready": any(ready.values())},
+        {"id": "assigned", "available": True, "execution_ready": assigned_ready},
+        {"id": "auto", "available": True, "execution_ready": any(ready.values())},
         *({"id": method, "available": bool(count), "execution_ready": ready[method]} for method, count in by_method.items()),
     ], "brief_limit": BRIEF_LIMIT,
         "duration_bounds": {"motion": draft_timeline.duration_bounds(True),
