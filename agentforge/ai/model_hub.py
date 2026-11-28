@@ -656,7 +656,7 @@ def speech_binding(*, db_path=None):
     return revision, profile, policy["cloud_call_limit"]
 
 
-def vision_binding(*, db_path=None):
+def vision_binding(*, db_path=None, require_ffmpeg=True):
     """Read one explicitly assigned review profile and its execution permissions."""
     revision, state = _read_state(db_path=db_path)
     profile = _profiles(state=state).get(state["routes"].get("vision.qa"))
@@ -666,7 +666,7 @@ def vision_binding(*, db_path=None):
     permissions = policy["permissions"]
     permission = "call_cloud" if is_cloud(profile) else "call_local"
     if (policy["mode"] == "MANUAL" or not permissions["assign_models"] or not permissions[permission]
-            or not permissions["run_tools"] or "ffmpeg" not in policy["tools"]):
+            or (require_ffmpeg and (not permissions["run_tools"] or "ffmpeg" not in policy["tools"]))):
         raise PermissionError("vision.qa: cần cấp quyền model và công cụ FFmpeg trong AI điều phối.")
     return revision, profile, policy["cloud_call_limit"]
 
