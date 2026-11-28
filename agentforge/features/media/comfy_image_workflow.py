@@ -86,8 +86,7 @@ def validate(config, model, endpoint):
         raise ValueError("Invalid ComfyUI image workflow settings")
     if urlsplit(endpoint).hostname not in {"127.0.0.1", "localhost"}:
         raise ValueError("ComfyUI image workflow requires IPv4 loopback")
-    for name, minimum, maximum in (("max_resolution", 256, 1536), ("max_steps", 1, 20),
-                                    ("timeout_seconds", 5, 600)):
+    for name, (minimum, maximum) in flux_workflow.IMAGE_OPTION_LIMITS.items():
         if type(config[name]) is not int or not minimum <= config[name] <= maximum:
             raise ValueError("Invalid ComfyUI " + name)
     folder = config["output_dir"]
