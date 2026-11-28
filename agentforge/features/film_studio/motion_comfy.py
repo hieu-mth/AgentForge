@@ -110,7 +110,7 @@ def _check_attempt(conn, film_slug, shot_id, plan_sha, confirmed):
         state, provider_id, model_id = row
         if state == "COMPLETE_UNVERIFIED":
             raise PermissionError("A completed motion attempt already exists for this shot")
-        # Only the I2V pre-dispatch error path sets FAILED without a provider
+        # Only the managed video pre-dispatch error path sets FAILED without a provider
         # ID and with a source receipt. Ambiguous POST remains SUBMITTING.
         if state == "FAILED" and provider_id is None and model_id is not None:
             continue
@@ -174,7 +174,7 @@ def inspect_workflow(path: Path):
         record = json.loads(raw)
     except (UnicodeError, ValueError) as exc:
         raise MotionError("Invalid workflow JSON") from exc
-    if isinstance(record, dict) and record.get("format") == motion_ltx.CONFIGURED_FORMAT:
+    if isinstance(record, dict) and record.get("format") in motion_ltx.CONFIGURED_FORMATS:
         try:
             motion_ltx.configured_workflow(record)
         except ValueError as exc:
@@ -354,27 +354,31 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
     if not isinstance(workflow_sha, str) or template["sha256"] != workflow_sha:
         raise PermissionError("Trusted workflow SHA is stale; inspect it again")
     model_id = template["model_id"]
-    configured = template["workflow"]["format"] == motion_ltx.CONFIGURED_FORMAT
-    is_i2v = configured or template["workflow"]["format"] == motion_ltx.FORMAT
+    dialect = template["workflow"]["format"]
+    configured = dialect in motion_ltx.CONFIGURED_FORMATS
+    is_i2v = dialect in {motion_ltx.CONFIGURED_FORMAT, motion_ltx.FORMAT}
+    managed_video = configured or is_i2v
     if model_id in BLOCKED_MODELS:
         raise MotionError("WAN_FP16_BLOCKED: preset disabled after Windows commit exhaustion")
     if is_i2v and (confirm_ltx_gate_b is not True or not isinstance(image_job, str)
                    or not isinstance(image_sha, str) or not SHA.fullmatch(image_sha) or ltx_encoder is None):
         raise PermissionError("LTX requires Gate B confirmation, a verified image ID/SHA and encoder path")
+    if dialect == motion_ltx.T2V_FORMAT and (ltx_encoder is None or image_job is not None or image_sha is not None):
+        raise MotionError("Configured T2V requires an encoder and no image source")
     if previous_motion is not None and not is_i2v:
         raise MotionError("This motion adapter does not support frame continuation")
     with model_hub.local_inference_slot():
         with closing(_db(db_path, write=True)) as conn:
             _check_attempt(conn, film_slug, shot_id, plan_sha, confirm_new_attempt)
-        operation = "ltx" if is_i2v else "motion"
+        operation = "ltx" if managed_video else "motion"
         min_commit = (motion_ltx.EXTENDED_MIN_COMMIT_MIB
-                      if is_i2v and (configured or template["profile"]["frames"] == 49) else 0)
+                      if managed_video and (configured or template["profile"]["frames"] == 49) else 0)
         draft_resources.require_gpu(operation, min_commit_mib=min_commit)
-        if is_i2v:
+        if managed_video:
             comfy_service.require_other_queue_idle(PORT, include_profiles=True)
         else:
             comfy_service.require_other_queue_idle(PORT)
-        if is_i2v:
+        if managed_video:
             config = comfy_service._settings()
             if not config or config["port"] != PORT:
                 raise MotionError("Register the Portable launcher on the Motion endpoint")
@@ -387,7 +391,7 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
                 image_job, image = motion_verify.read_continuation_frame(
                     previous_motion, film_slug, film_root=film_root, db_path=db_path)
                 image_sha = _sha(image)
-            else:
+            elif is_i2v:
                 image = visual_jobs.read_motion_source(image_job, image_sha)
             comfy_service.ensure_running(PORT)
             if configured:
@@ -401,7 +405,7 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
         graph = copy.deepcopy(template["workflow"]["api"])
         bindings = template["workflow"]
         graph[bindings["positive_node"]]["inputs"]["text"] = prompt.strip()
-        graph[bindings["seed_node"]]["inputs"]["noise_seed" if is_i2v else "seed"] = seed
+        graph[bindings["seed_node"]]["inputs"]["noise_seed" if managed_video else "seed"] = seed
         job_id = uuid4().hex
         graph[bindings["output_node"]]["inputs"]["filename_prefix"] = "af_motion_" + job_id
         now = _now()
@@ -419,18 +423,20 @@ def submit_shot(*, film_slug, shot_id, plan_sha, prompt, workflow_path,
                     VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'SUBMITTING', ?, ?)""",
                     (job_id, film_slug, shot_id, plan_sha, workflow_sha,
                      _sha(prompt.strip().encode("utf-8")), seed, now, now))
-                if is_i2v:
+                if managed_video:
                     output = template["profile"]
+                    # Empty source fields explicitly mean prompt-only T2V in the v3 ledger.
                     conn.execute("""INSERT INTO motion_sources
                         (job_id, model_id, image_job, image_sha, frames, width, height, fps)
                         VALUES (?,?,?,?,?,?,?,?)""",
-                        (job_id, model_id, image_job, image_sha, output["frames"],
+                        (job_id, model_id, image_job if is_i2v else "", image_sha if is_i2v else "", output["frames"],
                          output["width"], output["height"], output["fps"]))
-            if is_i2v:
+            if managed_video:
                 try:
                     if on_reserved:
                         on_reserved(job_id)
-                    graph[bindings["image_node"]]["inputs"]["image"] = _comfyui.upload_motion_source(PORT, job_id, image)
+                    if is_i2v:
+                        graph[bindings["image_node"]]["inputs"]["image"] = _comfyui.upload_motion_source(PORT, job_id, image)
                     comfy_service.require_other_queue_idle(PORT, include_profiles=True)
                     comfy_service.require_idle_queue(PORT)
                     draft_resources.require_gpu(operation, min_commit_mib=min_commit)
