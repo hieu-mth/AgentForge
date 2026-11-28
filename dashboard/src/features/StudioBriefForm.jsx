@@ -105,7 +105,7 @@ export function StudioBriefForm({hub,pending,waiting,onCharacters,onSubmit}){
             <Select aria-label="Kiểu video" style={{width:220}} options={Object.entries(videoModes).map(([value,label])=>({value,label}))}/>
           </Form.Item>
           {moving&&<Form.Item name="routeStrategy" label="Điều phối sản xuất">
-            <Select aria-label="Điều phối sản xuất" style={{width:260}} options={[{value:'assigned',label:'Theo model đã phân công'},{value:'auto',label:'AI tự chọn model phù hợp'}]}/>
+            <Select aria-label="Điều phối sản xuất" virtual={false} style={{width:260}} options={[{value:'assigned',label:'Theo model đã phân công'},{value:'auto',label:'AI tự chọn model phù hợp'}]}/>
           </Form.Item>}
         </Space>
         <p className="env-muted">Model, quyền cloud và giới hạn lượt gọi được quản lý tại AI điều phối. Studio tự tính số giây cloud theo storyboard.</p>
