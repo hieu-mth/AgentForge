@@ -25,7 +25,7 @@ Baseline main: `9db60df28f242abf9ed199c409409f422d4f89db`. Mục tiêu: một St
 
 ## Hợp đồng Studio hiện hành
 
-- Tạo production qua HTTP và Python chỉ dùng `duration_mode` là `auto` hoặc `manual`, `scene_count: null`, và `mode` rõ ràng. AI lập số cảnh; Owner duyệt storyboard trước khi sinh media. Kế hoạch 30 giây hiện hành không yêu cầu trường trọng số preset cũ. Nếu chọn tuyến sản xuất, gửi cả `route_strategy` và `max_cloud_seconds`.
+- Tạo production qua HTTP và Python chỉ dùng `duration_mode` là `auto` hoặc `manual`, `scene_count: null`, và `mode` rõ ràng. AI lập số cảnh; Owner duyệt storyboard trước khi sinh media. Kế hoạch 30 giây hiện hành không yêu cầu trường trọng số preset cũ. Studio gửi `route_strategy: assigned` (mặc định) hoặc `auto`; có thể lập storyboard chưa có model media. Backend tính giây cloud theo shot đã duyệt, giữ giới hạn an toàn 240 giây và quyền/lượt gọi tại Model Hub. API vẫn nhận giới hạn giây tường minh cho client cũ. Bỏ `character_ids` để AI casting, gửi danh sách rỗng để không dùng thư viện, hoặc chọn 1–2 ID đang hoạt động. Video motion vẫn chỉ hỗ trợ 16:9.
 - Không hỗ trợ trường `motion_approved` hay API sửa cảnh không có phiên bản. Mọi chỉnh sửa đi qua `storyboard-*` với SHA hiện tại.
 - Các bản ghi lịch sử vẫn có thể đọc, xác minh và đối soát theo checkpoint gốc; không tự chuyển đổi SHA hoặc xóa dữ liệu. Không tạo production mới bằng preset. Planner preset đã bị loại bỏ; bản ghi cũ chưa có storyboard phải tạo production mới từ nội dung gốc, không tự gọi model hoặc sửa dữ liệu. Timeline/receipt preset vẫn được giữ để xác minh, chỉnh sửa theo phiên bản và tiếp tục storyboard đã lưu; chưa đóng F05.
 
