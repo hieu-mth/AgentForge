@@ -193,6 +193,47 @@ class CloudMotionIntegrationTests(unittest.TestCase):
                     motion.recover_provider_id(job, data, {"model": "ltx-2-3-fast"})
                 request.assert_called_once()
 
+    def test_legacy_ledger_isolates_providers_without_discarding_receipts(self):
+        import tempfile
+        from pathlib import Path
+        from contextlib import closing
+        from unittest.mock import patch
+        from agentforge.features.film_studio.draft_resources import ResourceBlocked
+
+        old, new, ident = "a"*32, "b"*32, "c"*32
+        job = {"id": new, "motion_plan": {"model": "cogvideox-flash"}, "board": {"scenes": []}}
+        with tempfile.TemporaryDirectory() as tmp, patch.object(motion, "DB", Path(tmp)/"ledger.db"):
+            with closing(motion._db(True)) as conn, conn:
+                conn.execute("INSERT INTO jobs VALUES (?,?,?,?,?,?,?,?,?)",
+                    (ident, old, "image-to-video", "agnes-video-2.5-flash", 4,
+                     "d"*64, "SUBMITTING", None, None))
+            before = motion._row(ident)
+            motion.require_resolved_ledger(job)
+            self.assertEqual(motion._row(ident), before)
+            with self.assertRaises(ResourceBlocked):
+                motion.require_resolved_ledger({**job, "motion_plan": {"model": "agnes-video-2.5-flash"}})
+            with self.assertRaises(ResourceBlocked):
+                motion.require_resolved_ledger({**job, "id": old})
+            with self.assertRaises(ResourceBlocked):
+                motion.require_resolved_ledger({**job, "board": {"scenes": [{"motion_job": ident}]}})
+            with self.assertRaises(ResourceBlocked):
+                motion.require_resolved_ledger({})
+            with closing(motion._db(True)) as conn, conn:
+                conn.execute("UPDATE jobs SET model='ltx-2-3-pro' WHERE id=?", (ident,))
+            with self.assertRaises(ResourceBlocked):
+                motion.require_resolved_ledger({**job, "motion_plan": {"model": "ltx-2-3-fast"}})
+            with closing(motion._db(True)) as conn, conn:
+                conn.execute("UPDATE jobs SET model='unregistered-model' WHERE id=?", (ident,))
+            with self.assertRaises(ResourceBlocked):
+                motion.require_resolved_ledger(job)
+            with closing(motion._db(True)) as conn, conn:
+                conn.execute("UPDATE jobs SET model='cogvideox-flash', production=? WHERE id=?", (new, ident))
+            with self.assertRaises(ResourceBlocked):
+                motion.require_resolved_ledger(job)
+            motion.require_resolved_ledger({**job, "board": {"scenes": [{"motion_job": ident}]}})
+            with self.assertRaises(ResourceBlocked):
+                motion.require_resolved_ledger({**job, "id": old})
+
     def test_cancel_reconciliation_validates_all_shots_and_orphaned_jobs_before_polling(self):
         import tempfile
         from pathlib import Path
